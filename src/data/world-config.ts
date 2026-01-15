@@ -12,12 +12,10 @@ export interface WorldConfig {
   seed: number;
   jitter: number;
   elevationSeedRatio: number;
-  elevationSeaSeedRatio: number;
   elevationFalloff: number;
   elevationSpread: number;
   elevationSeaLevel: number;
   elevationRange: Range;
-  elevationSeaRange: Range;
   elevationLandRange: Range;
 }
 
@@ -35,12 +33,10 @@ export function createWorldConfig(width: number, height: number): WorldConfig {
     seed: DEFAULT_SEED,
     jitter: microRegion.jitter,
     elevationSeedRatio: elevation.seedRatio,
-    elevationSeaSeedRatio: elevation.seaSeedRatio,
     elevationFalloff: elevation.falloff,
     elevationSpread: elevation.spread,
     elevationSeaLevel: elevation.seaLevel,
     elevationRange: { ...elevation.range },
-    elevationSeaRange: { ...elevation.seaRange },
     elevationLandRange: { ...elevation.landRange },
   };
 }

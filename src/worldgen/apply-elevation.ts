@@ -16,48 +16,55 @@ export function applyElevation(
   const idToIndex = new Map<MicroRegionId, number>();
   for (let i = 0; i < count; i += 1) {
     idToIndex.set(microRegions[i].id, i);
-    microRegions[i].elevation = 0;
+    microRegions[i].elevation = config.elevationSeaLevel;
   }
 
   const seedCount = Math.min(count, Math.max(2, Math.floor(count * config.elevationSeedRatio)));
   const seedIndices = pickUniqueIndices(count, seedCount, rng);
   const assigned = new Array(count).fill(false);
-  const queue: number[] = [];
+  let frontier: number[] = [];
 
   for (const index of seedIndices) {
     microRegions[index].elevation = pickSeedElevation(config, rng);
     assigned[index] = true;
-    queue.push(index);
+    frontier.push(index);
   }
 
-  let head = 0;
-  while (head < queue.length) {
-    const currentIndex = queue[head];
-    head += 1;
-
-    const currentElevation = microRegions[currentIndex].elevation;
-    for (const neighborId of microRegions[currentIndex].neighbors) {
-      const neighborIndex = idToIndex.get(neighborId);
-      if (neighborIndex === undefined || assigned[neighborIndex]) {
+  while (frontier.length > 0) {
+    const nextFrontier: number[] = [];
+    for (const currentIndex of frontier) {
+      const currentElevation = microRegions[currentIndex].elevation;
+      if (currentElevation <= 0) {
         continue;
       }
 
-      const drift = rng.range(-config.elevationSpread, config.elevationSpread);
-      const nextElevation = clamp(
-        currentElevation * (1 - config.elevationFalloff) + drift,
-        config.elevationRange.min,
-        config.elevationRange.max,
-      );
+      const nextBase = currentElevation - config.elevationFalloff;
+      for (const neighborId of microRegions[currentIndex].neighbors) {
+        const neighborIndex = idToIndex.get(neighborId);
+        if (neighborIndex === undefined || assigned[neighborIndex]) {
+          continue;
+        }
 
-      microRegions[neighborIndex].elevation = nextElevation;
-      assigned[neighborIndex] = true;
-      queue.push(neighborIndex);
+        const drop = rng.range(0, config.elevationSpread);
+        const nextElevation = clamp(
+          nextBase - drop,
+          config.elevationRange.min,
+          config.elevationRange.max,
+        );
+
+        microRegions[neighborIndex].elevation = nextElevation;
+        assigned[neighborIndex] = true;
+        if (nextElevation > 0) {
+          nextFrontier.push(neighborIndex);
+        }
+      }
     }
+    frontier = nextFrontier;
   }
 
   for (let i = 0; i < count; i += 1) {
     if (!assigned[i]) {
-      microRegions[i].elevation = 0;
+      microRegions[i].elevation = config.elevationSeaLevel;
     }
   }
 }
@@ -72,9 +79,5 @@ function pickUniqueIndices(count: number, target: number, rng: SeededRng): numbe
 }
 
 function pickSeedElevation(config: WorldConfig, rng: SeededRng): number {
-  if (rng.nextFloat() < config.elevationSeaSeedRatio) {
-    return rng.range(config.elevationSeaRange.min, config.elevationSeaRange.max);
-  }
-
   return rng.range(config.elevationLandRange.min, config.elevationLandRange.max);
 }
