@@ -11,6 +11,7 @@ export const WORLD_BALANCE = {
     ridgeInertia: 0.75,
     centerBiasStrength: 0.3,
     edgeAvoidStrength: 1,
+    smoothingStrength: 0.5,
     falloff: 0.01,
     spread: 0.15,
     seaLevel: 0.05,

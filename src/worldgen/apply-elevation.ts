@@ -41,6 +41,7 @@ export function applyElevation(
   const centerScores = buildCenterScores(microRegions, config);
   const edgeScores = buildEdgeScores(microRegions, config);
   const startWeights = buildRidgeStartWeights(centerScores, edgeScores, config);
+  const smoothingStrength = clamp(config.elevationSmoothingStrength, 0, 1);
 
 
   for (let ridgeIndex = 0; ridgeIndex < ridgeCount; ridgeIndex += 1) {
@@ -110,6 +111,8 @@ export function applyElevation(
       microRegions[i].elevation = config.elevationSeaLevel;
     }
   }
+
+  applyElevationSmoothing(microRegions, neighborsByIndex, smoothingStrength, config.elevationRange);
 }
 
 function buildCenterScores(microRegions: MicroRegion[], config: WorldConfig): number[] {
@@ -346,4 +349,37 @@ function clampInt(value: number, min: number, max: number): number {
 function pickRidgeElevation(config: WorldConfig, rng: SeededRng): number {
   const peak = rng.range(config.elevationRidgePeakRange.min, config.elevationRidgePeakRange.max);
   return clamp(peak, config.elevationRange.min, config.elevationRange.max);
+}
+
+function applyElevationSmoothing(
+  microRegions: MicroRegion[],
+  neighborsByIndex: number[][],
+  strength: number,
+  range: { min: number; max: number },
+): void {
+  if (strength <= 0) {
+    return;
+  }
+
+  const smoothed = new Array<number>(microRegions.length);
+  for (let i = 0; i < microRegions.length; i += 1) {
+    const neighbors = neighborsByIndex[i];
+    if (neighbors.length === 0) {
+      smoothed[i] = microRegions[i].elevation;
+      continue;
+    }
+
+    let sum = 0;
+    for (const neighborIndex of neighbors) {
+      sum += microRegions[neighborIndex].elevation;
+    }
+    const average = sum / neighbors.length;
+    const current = microRegions[i].elevation;
+    const blended = current + (average - current) * strength;
+    smoothed[i] = clamp(blended, range.min, range.max);
+  }
+
+  for (let i = 0; i < microRegions.length; i += 1) {
+    microRegions[i].elevation = smoothed[i];
+  }
 }

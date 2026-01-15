@@ -17,6 +17,7 @@ export interface WorldConfig {
   elevationRidgeInertia: number;
   elevationCenterBiasStrength: number;
   elevationEdgeAvoidStrength: number;
+  elevationSmoothingStrength: number;
   elevationFalloff: number;
   elevationSpread: number;
   elevationSeaLevel: number;
@@ -44,6 +45,7 @@ export function createWorldConfig(width: number, height: number): WorldConfig {
     elevationRidgeInertia: elevation.ridgeInertia,
     elevationCenterBiasStrength: elevation.centerBiasStrength,
     elevationEdgeAvoidStrength: elevation.edgeAvoidStrength,
+    elevationSmoothingStrength: elevation.smoothingStrength,
     elevationFalloff: elevation.falloff,
     elevationSpread: elevation.spread,
     elevationSeaLevel: elevation.seaLevel,
