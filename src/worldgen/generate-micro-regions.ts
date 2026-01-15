@@ -9,19 +9,28 @@ export function generateMicroRegions(config: WorldConfig, rng: SeededRng): Micro
   const sites = createJitteredGridSites(config, rng);
   const delaunay = Delaunay.from(sites, (point) => point.x, (point) => point.y);
   const voronoi = delaunay.voronoi([0, 0, config.width, config.height]);
+  const ids = sites.map((_, index) => createMicroRegionId(index));
 
   const regions: MicroRegion[] = [];
   for (let i = 0; i < sites.length; i += 1) {
     const polygon = voronoi.cellPolygon(i);
     if (!polygon || polygon.length < 3) {
-      continue;
+      throw new Error(`Voronoi cell missing for site ${i}`);
     }
 
     const regionPolygon = polygon.map(([x, y]) => ({ x, y }));
+    const neighbors: MicroRegion["neighbors"] = [];
+    for (const neighborIndex of delaunay.neighbors(i)) {
+      neighbors.push(ids[neighborIndex]);
+    }
+
     regions.push({
-      id: createMicroRegionId(i),
+      id: ids[i],
       site: sites[i],
       polygon: regionPolygon,
+      neighbors,
+      elevation: 0,
+      isSea: false,
     });
   }
 

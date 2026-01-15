@@ -6,6 +6,9 @@ export interface MicroRegion {
   id: MicroRegionId;
   site: Vec2;
   polygon: Vec2[];
+  neighbors: MicroRegionId[];
+  elevation: number;
+  isSea: boolean;
 }
 
 export function createMicroRegionId(index: number): MicroRegionId {

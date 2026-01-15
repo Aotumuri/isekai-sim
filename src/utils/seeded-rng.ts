@@ -14,6 +14,10 @@ export class SeededRng {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   }
 
+  nextInt(maxExclusive: number): number {
+    return Math.floor(this.nextFloat() * maxExclusive);
+  }
+
   range(min: number, max: number): number {
     return min + (max - min) * this.nextFloat();
   }

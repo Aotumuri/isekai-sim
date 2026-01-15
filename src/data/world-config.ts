@@ -1,24 +1,46 @@
+import { WORLD_BALANCE } from "./balance";
+
+export interface Range {
+  min: number;
+  max: number;
+}
+
 export interface WorldConfig {
   width: number;
   height: number;
   microRegionCount: number;
   seed: number;
   jitter: number;
+  elevationSeedRatio: number;
+  elevationSeaSeedRatio: number;
+  elevationFalloff: number;
+  elevationSpread: number;
+  elevationSeaLevel: number;
+  elevationRange: Range;
+  elevationSeaRange: Range;
+  elevationLandRange: Range;
 }
 
-const MICRO_REGION_DENSITY = 1 / 50;
 const DEFAULT_SEED = 20250115;
-const DEFAULT_JITTER = 0.85;
 
 export function createWorldConfig(width: number, height: number): WorldConfig {
+  const { microRegion, elevation } = WORLD_BALANCE;
   const area = Math.max(1, width * height);
-  const microRegionCount = Math.max(120, Math.floor(area * MICRO_REGION_DENSITY));
+  const microRegionCount = Math.max(microRegion.minCount, Math.floor(area * microRegion.density));
 
   return {
     width,
     height,
     microRegionCount,
     seed: DEFAULT_SEED,
-    jitter: DEFAULT_JITTER,
+    jitter: microRegion.jitter,
+    elevationSeedRatio: elevation.seedRatio,
+    elevationSeaSeedRatio: elevation.seaSeedRatio,
+    elevationFalloff: elevation.falloff,
+    elevationSpread: elevation.spread,
+    elevationSeaLevel: elevation.seaLevel,
+    elevationRange: { ...elevation.range },
+    elevationSeaRange: { ...elevation.seaRange },
+    elevationLandRange: { ...elevation.landRange },
   };
 }
