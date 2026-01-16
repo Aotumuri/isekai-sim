@@ -28,4 +28,8 @@ export const WORLD_BALANCE = {
       max: 1,
     },
   },
+  river: {
+    sourceCountRatio: 0.0001,
+    minSourceCount: 3,
+  },
 } as const;

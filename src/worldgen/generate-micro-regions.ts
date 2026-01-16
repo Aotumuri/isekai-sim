@@ -31,6 +31,7 @@ export function generateMicroRegions(config: WorldConfig, rng: SeededRng): Micro
       neighbors,
       elevation: 0,
       isSea: false,
+      isRiver: false,
     });
   }
 

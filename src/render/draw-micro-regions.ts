@@ -4,6 +4,7 @@ import type { MicroRegion } from "../worldgen/micro-region";
 const SEA_COLOR = 0xc4c4e0;
 const LAND_LOW_COLOR = 0xf1f1f1;
 const LAND_HIGH_COLOR = 0xc4c4af;
+const RIVER_COLOR = 0xc4c4ff;
 
 export function drawMicroRegions(layer: Container, microRegions: MicroRegion[]): void {
   layer.removeChildren();
@@ -17,7 +18,7 @@ export function drawMicroRegions(layer: Container, microRegions: MicroRegion[]):
   let landMin = Infinity;
   let landMax = -Infinity;
   for (const region of microRegions) {
-    if (!region.isSea) {
+    if (!region.isSea && !region.isRiver) {
       landMin = Math.min(landMin, region.elevation);
       landMax = Math.max(landMax, region.elevation);
     }
@@ -32,13 +33,15 @@ export function drawMicroRegions(layer: Container, microRegions: MicroRegion[]):
   for (let i = 0; i < microRegions.length; i += 1) {
     const region = microRegions[i];
 
-    const fillColor = region.isSea
-      ? SEA_COLOR
-      : mixColor(
-          LAND_LOW_COLOR,
-          LAND_HIGH_COLOR,
-          landRange === 0 ? 1 : (region.elevation - landMin) / landRange,
-        );
+    const fillColor = region.isRiver
+      ? RIVER_COLOR
+      : region.isSea
+        ? SEA_COLOR
+        : mixColor(
+            LAND_LOW_COLOR,
+            LAND_HIGH_COLOR,
+            landRange === 0 ? 1 : (region.elevation - landMin) / landRange,
+          );
     graphics.beginFill(fillColor, 1);
 
     const [firstPoint, ...rest] = region.polygon;

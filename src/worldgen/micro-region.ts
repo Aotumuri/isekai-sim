@@ -9,6 +9,7 @@ export interface MicroRegion {
   neighbors: MicroRegionId[];
   elevation: number;
   isSea: boolean;
+  isRiver: boolean;
 }
 
 export function createMicroRegionId(index: number): MicroRegionId {
