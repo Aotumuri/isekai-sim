@@ -14,6 +14,8 @@ export function createRenderer(root: HTMLElement, config: WorldConfig): Renderer
     resizeTo: window,
     background: 0x0b1420,
     antialias: true,
+    autoDensity: true,
+    resolution: window.devicePixelRatio || 1,
   });
 
   root.appendChild(app.view as HTMLCanvasElement);
