@@ -1,5 +1,5 @@
-import type { WorldConfig } from "../data/world-config";
-import type { MicroRegion } from "./micro-region";
+import type { WorldConfig } from "../../data/world-config";
+import type { MicroRegion } from "../micro-region";
 
 export function applySeaLevel(microRegions: MicroRegion[], config: WorldConfig): void {
   for (const region of microRegions) {

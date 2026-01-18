@@ -1,7 +1,7 @@
 import { createWorldConfig } from "../data/world-config";
-import { drawMesoBorders } from "../render/draw-meso-borders";
-import { drawMicroRegions } from "../render/draw-micro-regions";
-import { attachRegionHoverUI } from "../render/region-hover-ui";
+import { drawMesoBorders } from "../render/draw/meso-borders";
+import { drawMicroRegions } from "../render/draw/micro-regions";
+import { attachRegionHoverUI } from "../render/region/hover-ui";
 import { createRenderer } from "../render/renderer";
 import { createWorld } from "../sim/create-world";
 

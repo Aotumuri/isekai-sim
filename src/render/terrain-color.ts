@@ -1,4 +1,3 @@
-import { Graphics, type Container } from "pixi.js";
 import type { MicroRegion } from "../worldgen/micro-region";
 
 const SEA_COLOR = 0xc4c4e0;
@@ -6,15 +5,9 @@ const LAND_LOW_COLOR = 0xf1f1f1;
 const LAND_HIGH_COLOR = 0xc4c4af;
 const RIVER_COLOR = 0xc4c4ff;
 
-export function drawMicroRegions(layer: Container, microRegions: MicroRegion[]): void {
-  layer.removeChildren();
-
-  const graphics = new Graphics();
-  
-  graphics.lineStyle(1, 0xffffff, 0);
-  // TODO: remove debug outline when terrain styling is finalized.
-  // graphics.lineStyle(1, 0x2b2d36, 0.4);
-
+export function createTerrainColorScale(
+  microRegions: MicroRegion[],
+): (region: MicroRegion) => number {
   let landMin = Infinity;
   let landMax = -Infinity;
   for (const region of microRegions) {
@@ -30,34 +23,17 @@ export function drawMicroRegions(layer: Container, microRegions: MicroRegion[]):
   }
   const landRange = landMax - landMin;
 
-  for (let i = 0; i < microRegions.length; i += 1) {
-    const region = microRegions[i];
-
-    const fillColor = region.isRiver
-      ? RIVER_COLOR
-      : region.isSea
-        ? SEA_COLOR
-        : mixColor(
-            LAND_LOW_COLOR,
-            LAND_HIGH_COLOR,
-            landRange === 0 ? 1 : (region.elevation - landMin) / landRange,
-          );
-    graphics.beginFill(fillColor, 1);
-
-    const [firstPoint, ...rest] = region.polygon;
-    if (!firstPoint) {
-      continue;
+  return (region: MicroRegion): number => {
+    if (region.isRiver) {
+      return RIVER_COLOR;
+    }
+    if (region.isSea) {
+      return SEA_COLOR;
     }
 
-    graphics.moveTo(firstPoint.x, firstPoint.y);
-    for (const point of rest) {
-      graphics.lineTo(point.x, point.y);
-    }
-    graphics.closePath();
-    graphics.endFill();
-  }
-
-  layer.addChild(graphics);
+    const t = landRange === 0 ? 1 : (region.elevation - landMin) / landRange;
+    return mixColor(LAND_LOW_COLOR, LAND_HIGH_COLOR, t);
+  };
 }
 
 function mixColor(colorA: number, colorB: number, t: number): number {

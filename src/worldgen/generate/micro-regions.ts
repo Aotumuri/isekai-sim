@@ -1,9 +1,9 @@
 import { Delaunay } from "d3-delaunay";
-import type { WorldConfig } from "../data/world-config";
-import type { Vec2 } from "../utils/vector";
-import { clamp } from "../utils/math";
-import { SeededRng } from "../utils/seeded-rng";
-import { createMicroRegionId, type MicroRegion } from "./micro-region";
+import type { WorldConfig } from "../../data/world-config";
+import type { Vec2 } from "../../utils/vector";
+import { clamp } from "../../utils/math";
+import { SeededRng } from "../../utils/seeded-rng";
+import { createMicroRegionId, type MicroRegion } from "../micro-region";
 
 export function generateMicroRegions(config: WorldConfig, rng: SeededRng): MicroRegion[] {
   const sites = createJitteredGridSites(config, rng);

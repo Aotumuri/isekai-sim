@@ -1,12 +1,13 @@
-import type { WorldConfig } from "../data/world-config";
-import { SeededRng } from "../utils/seeded-rng";
-import type { MicroRegion, MicroRegionId } from "./micro-region";
+import type { WorldConfig } from "../../data/world-config";
+import { SeededRng } from "../../utils/seeded-rng";
+import { buildMesoNeighbors } from "../build-meso-neighbors";
+import { mergeRiverMesoRegions } from "../merge-river-meso-regions";
+import type { MicroRegion, MicroRegionId } from "../micro-region";
 import {
   createMesoRegionId,
   type MesoRegion,
-  type MesoRegionNeighbor,
   type MesoRegionType,
-} from "./meso-region";
+} from "../meso-region";
 
 export function generateMesoRegions(
   microRegions: MicroRegion[],
@@ -201,150 +202,4 @@ function shuffleInPlace(values: number[], rng: SeededRng): void {
     const j = rng.nextInt(i + 1);
     [values[i], values[j]] = [values[j], values[i]];
   }
-}
-
-function mergeRiverMesoRegions(
-  microRegions: MicroRegion[],
-  mesoRegions: MesoRegion[],
-  neighborsByIndex: number[][],
-  idToIndex: Map<MicroRegionId, number>,
-): void {
-  const mesoById = new Map<MesoRegion["id"], MesoRegion>();
-  for (const region of mesoRegions) {
-    mesoById.set(region.id, region);
-  }
-
-  let merged = true;
-  while (merged) {
-    merged = false;
-
-    for (const riverRegion of mesoRegions) {
-      if (riverRegion.type !== "river" || riverRegion.microRegionIds.length === 0) {
-        continue;
-      }
-
-      const target = pickRiverMergeTarget(
-        riverRegion,
-        microRegions,
-        neighborsByIndex,
-        idToIndex,
-        mesoById,
-      );
-      if (!target) {
-        continue;
-      }
-
-      for (const microId of riverRegion.microRegionIds) {
-        const index = idToIndex.get(microId);
-        if (index === undefined) {
-          continue;
-        }
-        microRegions[index].mesoRegionId = target.id;
-        target.microRegionIds.push(microId);
-      }
-      riverRegion.microRegionIds = [];
-      merged = true;
-    }
-  }
-}
-
-function pickRiverMergeTarget(
-  riverRegion: MesoRegion,
-  microRegions: MicroRegion[],
-  neighborsByIndex: number[][],
-  idToIndex: Map<MicroRegionId, number>,
-  mesoById: Map<MesoRegion["id"], MesoRegion>,
-): MesoRegion | null {
-  const neighborCounts = new Map<MesoRegion["id"], number>();
-
-  for (const microId of riverRegion.microRegionIds) {
-    const index = idToIndex.get(microId);
-    if (index === undefined) {
-      continue;
-    }
-
-    for (const neighborIndex of neighborsByIndex[index]) {
-      const neighborMesoId = microRegions[neighborIndex].mesoRegionId;
-      if (!neighborMesoId || neighborMesoId === riverRegion.id) {
-        continue;
-      }
-
-      const neighborRegion = mesoById.get(neighborMesoId);
-      if (!neighborRegion || neighborRegion.microRegionIds.length === 0) {
-        continue;
-      }
-      if (neighborRegion.type === "river") {
-        continue;
-      }
-
-      neighborCounts.set(neighborMesoId, (neighborCounts.get(neighborMesoId) ?? 0) + 1);
-    }
-  }
-
-  let bestId: MesoRegion["id"] | null = null;
-  let bestCount = -1;
-  for (const [neighborId, count] of neighborCounts.entries()) {
-    if (count > bestCount || (count === bestCount && neighborId < (bestId ?? neighborId))) {
-      bestId = neighborId;
-      bestCount = count;
-    }
-  }
-
-  return bestId ? mesoById.get(bestId) ?? null : null;
-}
-
-function buildMesoNeighbors(
-  mesoRegions: MesoRegion[],
-  microRegions: MicroRegion[],
-  neighborsByIndex: number[][],
-): Map<MesoRegion["id"], MesoRegionNeighbor[]> {
-  const edgeMap = new Map<string, { a: MesoRegion["id"]; b: MesoRegion["id"]; hasRiver: boolean }>();
-  for (let i = 0; i < microRegions.length; i += 1) {
-    const region = microRegions[i];
-    const regionMesoId = region.mesoRegionId;
-    if (!regionMesoId) {
-      continue;
-    }
-
-    for (const neighborIndex of neighborsByIndex[i]) {
-      if (neighborIndex <= i) {
-        continue;
-      }
-
-      const neighbor = microRegions[neighborIndex];
-      const neighborMesoId = neighbor.mesoRegionId;
-      if (!neighborMesoId || neighborMesoId === regionMesoId) {
-        continue;
-      }
-
-      const key = regionMesoId < neighborMesoId ? `${regionMesoId}|${neighborMesoId}` : `${neighborMesoId}|${regionMesoId}`;
-      const hasRiver = region.isRiver || neighbor.isRiver;
-      const existing = edgeMap.get(key);
-      if (existing) {
-        existing.hasRiver ||= hasRiver;
-      } else {
-        edgeMap.set(key, {
-          a: regionMesoId < neighborMesoId ? regionMesoId : neighborMesoId,
-          b: regionMesoId < neighborMesoId ? neighborMesoId : regionMesoId,
-          hasRiver,
-        });
-      }
-    }
-  }
-
-  const neighborsById = new Map<MesoRegion["id"], MesoRegionNeighbor[]>();
-  for (const region of mesoRegions) {
-    neighborsById.set(region.id, []);
-  }
-
-  for (const edge of edgeMap.values()) {
-    neighborsById.get(edge.a)?.push({ id: edge.b, hasRiver: edge.hasRiver });
-    neighborsById.get(edge.b)?.push({ id: edge.a, hasRiver: edge.hasRiver });
-  }
-
-  for (const neighbors of neighborsById.values()) {
-    neighbors.sort((a, b) => a.id.localeCompare(b.id));
-  }
-
-  return neighborsById;
 }

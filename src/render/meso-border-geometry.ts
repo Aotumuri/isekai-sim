@@ -1,72 +1,16 @@
-import { Graphics, type Container } from "pixi.js";
 import type { Vec2 } from "../utils/vector";
 import type { MicroRegion } from "../worldgen/micro-region";
 
-const MESO_BORDER_COLOR = 0x000000;
-const MESO_BORDER_WIDTH = 1.5;
 const POINT_EPSILON = 1e-6;
 const LINE_DISTANCE_EPSILON = 1e-3;
 const OVERLAP_EPSILON = 1e-3;
 
-interface Segment {
+export interface Segment {
   a: Vec2;
   b: Vec2;
 }
 
-export function drawMesoBorders(layer: Container, microRegions: MicroRegion[]): void {
-  layer.removeChildren();
-
-  const graphics = new Graphics();
-  graphics.lineStyle({
-    width: MESO_BORDER_WIDTH,
-    color: MESO_BORDER_COLOR,
-    alpha: 0.9,
-    cap: "round",
-    join: "round",
-  });
-
-  const regionById = new Map<string, MicroRegion>();
-  for (const region of microRegions) {
-    regionById.set(region.id, region);
-  }
-
-  const seenPairs = new Set<string>();
-  for (const region of microRegions) {
-    for (const neighborId of region.neighbors) {
-      if (region.id >= neighborId) {
-        continue;
-      }
-
-      const pairKey = `${region.id}|${neighborId}`;
-      if (seenPairs.has(pairKey)) {
-        continue;
-      }
-      seenPairs.add(pairKey);
-
-      const neighbor = regionById.get(neighborId);
-      if (!neighbor) {
-        continue;
-      }
-
-      if (!region.mesoRegionId || !neighbor.mesoRegionId) {
-        continue;
-      }
-      if (region.mesoRegionId === neighbor.mesoRegionId) {
-        continue;
-      }
-
-      const segments = findSharedSegments(region, neighbor);
-      for (const segment of segments) {
-        graphics.moveTo(segment.a.x, segment.a.y);
-        graphics.lineTo(segment.b.x, segment.b.y);
-      }
-    }
-  }
-
-  layer.addChild(graphics);
-}
-
-function findSharedSegments(regionA: MicroRegion, regionB: MicroRegion): Segment[] {
+export function findSharedSegments(regionA: MicroRegion, regionB: MicroRegion): Segment[] {
   const segmentsA = buildSegments(regionA.polygon);
   const segmentsB = buildSegments(regionB.polygon);
   const results: Segment[] = [];
@@ -162,11 +106,7 @@ function pointNearLine(a: Vec2, b: Vec2, point: Vec2, length: number): boolean {
   return distance <= LINE_DISTANCE_EPSILON;
 }
 
-function pointOnSegmentAtValue(
-  segment: Segment,
-  axis: "x" | "y",
-  value: number,
-): Vec2 {
+function pointOnSegmentAtValue(segment: Segment, axis: "x" | "y", value: number): Vec2 {
   const dx = segment.b.x - segment.a.x;
   const dy = segment.b.y - segment.a.y;
 

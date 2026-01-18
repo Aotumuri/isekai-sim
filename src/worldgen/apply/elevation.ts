@@ -1,7 +1,7 @@
-import type { WorldConfig } from "../data/world-config";
-import { clamp } from "../utils/math";
-import { SeededRng } from "../utils/seeded-rng";
-import type { MicroRegion, MicroRegionId } from "./micro-region";
+import type { WorldConfig } from "../../data/world-config";
+import { clamp } from "../../utils/math";
+import { SeededRng } from "../../utils/seeded-rng";
+import type { MicroRegion, MicroRegionId } from "../micro-region";
 
 export function applyElevation(
   microRegions: MicroRegion[],

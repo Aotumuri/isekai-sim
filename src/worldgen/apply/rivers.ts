@@ -1,6 +1,6 @@
-import { SeededRng } from "../utils/seeded-rng";
-import type { MicroRegion, MicroRegionId } from "./micro-region";
-import { createMicroRegionEdgeKey, type MicroRegionEdge } from "./micro-region-edge";
+import { SeededRng } from "../../utils/seeded-rng";
+import type { MicroRegion, MicroRegionId } from "../micro-region";
+import { createMicroRegionEdgeKey, type MicroRegionEdge } from "../micro-region-edge";
 
 export function applyRivers(
   microRegions: MicroRegion[],
