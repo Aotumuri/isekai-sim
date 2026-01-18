@@ -32,6 +32,7 @@ export function generateMicroRegions(config: WorldConfig, rng: SeededRng): Micro
       elevation: 0,
       isSea: false,
       isRiver: false,
+      mesoRegionId: null,
     });
   }
 

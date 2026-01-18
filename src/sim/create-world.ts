@@ -5,6 +5,7 @@ import { applyRivers } from "../worldgen/apply-rivers";
 import { applySeaLevel } from "../worldgen/apply-sea-level";
 import { createMicroRegionEdges } from "../worldgen/create-micro-region-edges";
 import { generateMicroRegions } from "../worldgen/generate-micro-regions";
+import { generateMesoRegions } from "../worldgen/generate-meso-regions";
 import type { WorldState } from "./world-state";
 
 export function createWorld(config: WorldConfig): WorldState {
@@ -14,11 +15,13 @@ export function createWorld(config: WorldConfig): WorldState {
   applyElevation(microRegions, config, rng);
   applySeaLevel(microRegions, config);
   applyRivers(microRegions, microRegionEdges, rng, config.riverSourceCount);
+  const mesoRegions = generateMesoRegions(microRegions, config, rng);
 
   return {
     width: config.width,
     height: config.height,
     microRegions,
     microRegionEdges,
+    mesoRegions,
   };
 }

@@ -1,4 +1,5 @@
 import type { Vec2 } from "../utils/vector";
+import type { MesoRegionId } from "./meso-region";
 
 export type MicroRegionId = string & { __brand: "MicroRegionId" };
 
@@ -10,6 +11,7 @@ export interface MicroRegion {
   elevation: number;
   isSea: boolean;
   isRiver: boolean;
+  mesoRegionId: MesoRegionId | null;
 }
 
 export function createMicroRegionId(index: number): MicroRegionId {

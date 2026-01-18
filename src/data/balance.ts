@@ -32,4 +32,10 @@ export const WORLD_BALANCE = {
     sourceCountRatio: 0.0001,
     minSourceCount: 3,
   },
+  mesoRegion: {
+    landCenterRatio: 0.02,
+    seaCenterRatio: 0.001,
+    riverCenterRatio: 0.04,
+    minCenterCount: 1,
+  },
 } as const;

@@ -25,12 +25,16 @@ export interface WorldConfig {
   elevationLandRange: Range;
   elevationRidgePeakRange: Range;
   riverSourceCount: number;
+  mesoLandCenterRatio: number;
+  mesoSeaCenterRatio: number;
+  mesoRiverCenterRatio: number;
+  mesoMinCenterCount: number;
 }
 
 const DEFAULT_SEED = 20250115;
 
 export function createWorldConfig(width: number, height: number): WorldConfig {
-  const { microRegion, elevation, river } = WORLD_BALANCE;
+  const { microRegion, elevation, river, mesoRegion } = WORLD_BALANCE;
   const area = Math.max(1, width * height);
   const microRegionCount = Math.max(microRegion.minCount, Math.floor(area * microRegion.density));
   const riverSourceCount = Math.max(
@@ -58,5 +62,9 @@ export function createWorldConfig(width: number, height: number): WorldConfig {
     elevationLandRange: { ...elevation.landRange },
     elevationRidgePeakRange: { ...elevation.ridgePeakRange },
     riverSourceCount,
+    mesoLandCenterRatio: mesoRegion.landCenterRatio,
+    mesoSeaCenterRatio: mesoRegion.seaCenterRatio,
+    mesoRiverCenterRatio: mesoRegion.riverCenterRatio,
+    mesoMinCenterCount: mesoRegion.minCenterCount,
   };
 }
