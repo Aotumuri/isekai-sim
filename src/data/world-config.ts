@@ -31,7 +31,7 @@ export interface WorldConfig {
   mesoMinCenterCount: number;
 }
 
-const DEFAULT_SEED = 20250115;
+const DEFAULT_SEED = 621903618650;
 
 export function createWorldConfig(width: number, height: number): WorldConfig {
   const { microRegion, elevation, river, mesoRegion } = WORLD_BALANCE;
