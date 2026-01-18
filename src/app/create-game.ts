@@ -3,6 +3,7 @@ import { drawMesoBorders } from "../render/draw/meso-borders";
 import { drawMicroRegions } from "../render/draw/micro-regions";
 import { attachRegionHoverUI } from "../render/region/hover-ui";
 import { createRenderer } from "../render/renderer";
+import { attachViewControls } from "../render/view/controls";
 import { createWorld } from "../sim/create-world";
 
 export function createGame(root: HTMLElement): void {
@@ -12,5 +13,6 @@ export function createGame(root: HTMLElement): void {
 
   drawMicroRegions(renderer.worldLayers.layers.MicroTerrain, world.microRegions);
   drawMesoBorders(renderer.worldLayers.layers.MesoBorder, world.microRegions);
+  attachViewControls(renderer);
   attachRegionHoverUI(renderer, world);
 }

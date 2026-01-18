@@ -12,7 +12,7 @@ export interface Renderer {
 export function createRenderer(root: HTMLElement, config: WorldConfig): Renderer {
   const app = new Application({
     resizeTo: window,
-    background: 0x0b1420,
+    background: 0x000000,
     antialias: true,
     autoDensity: true,
     resolution: window.devicePixelRatio || 1,
