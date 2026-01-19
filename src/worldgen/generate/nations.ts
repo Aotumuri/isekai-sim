@@ -71,6 +71,10 @@ export function generateNations(
   const landComponents = buildLandComponents(landIndices, neighborsByIndex);
   const capitalIndices = ensureCapitalPerComponent(initialCapitals, landComponents, rng);
 
+  for (const capitalIndex of capitalIndices) {
+    mesoRegions[capitalIndex].building = "capital";
+  }
+
   const { ownerByIndex, distanceByIndex } = assignToCapitals(
     capitalIndices,
     neighborsByIndex,

@@ -34,7 +34,13 @@ export interface WorldConfig {
   nationMacroRegionSizeRange: Range;
 }
 
-const DEFAULT_SEED = 621903618650;
+// const DEFAULT_SEED = 621903618650; // 二つの島
+// const DEFAULT_SEED = 114693131459; // ドーナツ
+const DEFAULT_SEED = 695919685365; // 二つの大きな島
+
+// ランダムよう
+// const DEFAULT_SEED = Math.floor(Math.random() * 1_000_000_000_000);
+// console.log("World generation seed:", DEFAULT_SEED);
 
 export function createWorldConfig(width: number, height: number): WorldConfig {
   const { microRegion, elevation, river, mesoRegion, nation } = WORLD_BALANCE;

@@ -177,6 +177,7 @@ function createRegion(
     centerId: centerRegion.id,
     microRegionIds: [centerRegion.id],
     neighbors: [],
+    building: null,
   };
   mesoRegions.push(region);
   centerRegion.mesoRegionId = region.id;

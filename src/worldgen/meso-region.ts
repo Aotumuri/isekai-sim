@@ -4,6 +4,8 @@ export type MesoRegionId = string & { __brand: "MesoRegionId" };
 
 export type MesoRegionType = "land" | "sea" | "river";
 
+export type MesoRegionBuilding = "capital" | "city" | "port";
+
 export interface MesoRegionNeighbor {
   id: MesoRegionId;
   hasRiver: boolean;
@@ -15,6 +17,7 @@ export interface MesoRegion {
   centerId: MicroRegionId;
   microRegionIds: MicroRegionId[];
   neighbors: MesoRegionNeighbor[];
+  building: MesoRegionBuilding | null;
 }
 
 export function createMesoRegionId(index: number): MesoRegionId {
