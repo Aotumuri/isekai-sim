@@ -29,12 +29,15 @@ export interface WorldConfig {
   mesoSeaCenterRatio: number;
   mesoRiverCenterRatio: number;
   mesoMinCenterCount: number;
+  nationEnabled: boolean;
+  nationTargetMacroRegionsPerNation: number;
+  nationMacroRegionSizeRange: Range;
 }
 
 const DEFAULT_SEED = 621903618650;
 
 export function createWorldConfig(width: number, height: number): WorldConfig {
-  const { microRegion, elevation, river, mesoRegion } = WORLD_BALANCE;
+  const { microRegion, elevation, river, mesoRegion, nation } = WORLD_BALANCE;
   const area = Math.max(1, width * height);
   const microRegionCount = Math.max(microRegion.minCount, Math.floor(area * microRegion.density));
   const riverSourceCount = Math.max(
@@ -66,5 +69,8 @@ export function createWorldConfig(width: number, height: number): WorldConfig {
     mesoSeaCenterRatio: mesoRegion.seaCenterRatio,
     mesoRiverCenterRatio: mesoRegion.riverCenterRatio,
     mesoMinCenterCount: mesoRegion.minCenterCount,
+    nationEnabled: nation.enabled,
+    nationTargetMacroRegionsPerNation: nation.targetMacroRegionsPerNation,
+    nationMacroRegionSizeRange: { ...nation.macroRegionSizeRange },
   };
 }

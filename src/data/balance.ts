@@ -38,4 +38,12 @@ export const WORLD_BALANCE = {
     riverCenterRatio: 0.04,
     minCenterCount: 1,
   },
+  nation: {
+    enabled: true,
+    targetMacroRegionsPerNation: 10,
+    macroRegionSizeRange: {
+      min: 10,
+      max: 20,
+    },
+  },
 } as const;

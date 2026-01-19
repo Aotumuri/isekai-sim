@@ -1,6 +1,7 @@
 import { createWorldConfig } from "../data/world-config";
 import { drawMesoBorders } from "../render/draw/meso-borders";
 import { drawMicroRegions } from "../render/draw/micro-regions";
+import { drawNationBorders } from "../render/draw/nation-borders";
 import { attachRegionHoverUI } from "../render/region/hover-ui";
 import { createRenderer } from "../render/renderer";
 import { attachViewControls } from "../render/view/controls";
@@ -13,6 +14,12 @@ export function createGame(root: HTMLElement): void {
 
   drawMicroRegions(renderer.worldLayers.layers.MicroTerrain, world.microRegions);
   drawMesoBorders(renderer.worldLayers.layers.MesoBorder, world.microRegions);
+  drawNationBorders(
+    renderer.worldLayers.layers.NationFill,
+    world.microRegions,
+    world.macroRegions,
+    world.nations,
+  );
   attachViewControls(renderer);
   attachRegionHoverUI(renderer, world);
 }

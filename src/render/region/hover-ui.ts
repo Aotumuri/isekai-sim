@@ -1,11 +1,13 @@
 import { Container } from "pixi.js";
 import type { Vec2 } from "../../utils/vector";
+import type { MacroRegion } from "../../worldgen/macro-region";
 import type { MesoRegion } from "../../worldgen/meso-region";
 import type { WorldState } from "../../sim/world-state";
 import type { Renderer } from "../renderer";
 import { buildRegionBounds, findRegion } from "./hit-test";
 import { createRegionHoverPanel } from "./panel";
 import { formatRegionTooltip } from "./tooltip";
+import type { Nation } from "../../worldgen/nation";
 
 export function attachRegionHoverUI(renderer: Renderer, world: WorldState): void {
   const uiLayer = new Container();
@@ -19,6 +21,16 @@ export function attachRegionHoverUI(renderer: Renderer, world: WorldState): void
   const mesoById = new Map<string, MesoRegion>();
   for (const meso of world.mesoRegions) {
     mesoById.set(meso.id, meso);
+  }
+  const macroByMesoId = new Map<string, MacroRegion>();
+  for (const macro of world.macroRegions) {
+    for (const mesoId of macro.mesoRegionIds) {
+      macroByMesoId.set(mesoId, macro);
+    }
+  }
+  const nationById = new Map<string, Nation>();
+  for (const nation of world.nations) {
+    nationById.set(nation.id, nation);
   }
 
   let activeRegionId: string | null = null;
@@ -43,7 +55,9 @@ export function attachRegionHoverUI(renderer: Renderer, world: WorldState): void
     if (activeRegionId !== region.id) {
       activeRegionId = region.id;
       const meso = region.mesoRegionId ? mesoById.get(region.mesoRegionId) ?? null : null;
-      panel.setText(formatRegionTooltip(region, meso));
+      const macro = region.mesoRegionId ? macroByMesoId.get(region.mesoRegionId) ?? null : null;
+      const nation = macro ? nationById.get(macro.nationId) ?? null : null;
+      panel.setText(formatRegionTooltip(region, meso, macro, nation));
     }
 
     panel.position(screenPos, renderer.app.screen);

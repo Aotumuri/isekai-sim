@@ -6,6 +6,7 @@ import { applySeaLevel } from "../worldgen/apply/sea-level";
 import { createMicroRegionEdges } from "../worldgen/create-micro-region-edges";
 import { generateMicroRegions } from "../worldgen/generate/micro-regions";
 import { generateMesoRegions } from "../worldgen/generate/meso-regions";
+import { generateNations } from "../worldgen/generate/nations";
 import type { WorldState } from "./world-state";
 
 export function createWorld(config: WorldConfig): WorldState {
@@ -16,6 +17,7 @@ export function createWorld(config: WorldConfig): WorldState {
   applySeaLevel(microRegions, config);
   applyRivers(microRegions, microRegionEdges, rng, config.riverSourceCount);
   const mesoRegions = generateMesoRegions(microRegions, config, rng);
+  const { macroRegions, nations } = generateNations(mesoRegions, config, rng);
 
   return {
     width: config.width,
@@ -23,5 +25,7 @@ export function createWorld(config: WorldConfig): WorldState {
     microRegions,
     microRegionEdges,
     mesoRegions,
+    macroRegions,
+    nations,
   };
 }
