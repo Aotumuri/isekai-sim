@@ -1,3 +1,4 @@
+import type { Vec2 } from "../utils/vector";
 import type { MicroRegionId } from "./micro-region";
 
 export type MesoRegionId = string & { __brand: "MesoRegionId" };
@@ -15,6 +16,7 @@ export interface MesoRegion {
   id: MesoRegionId;
   type: MesoRegionType;
   centerId: MicroRegionId;
+  center: Vec2;
   microRegionIds: MicroRegionId[];
   neighbors: MesoRegionNeighbor[];
   building: MesoRegionBuilding | null;

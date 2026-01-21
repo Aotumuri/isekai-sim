@@ -175,6 +175,7 @@ function createRegion(
     id: createMesoRegionId(mesoRegions.length),
     type,
     centerId: centerRegion.id,
+    center: { x: centerRegion.site.x, y: centerRegion.site.y },
     microRegionIds: [centerRegion.id],
     neighbors: [],
     building: null,
