@@ -7,15 +7,26 @@ const DEFAULT_EQUIPMENT: UnitEquipmentSlot[] = [
 ];
 
 export function createInitialUnits(nations: Nation[]): UnitState[] {
-  return nations.map((nation, index) => ({
-    id: createUnitId(index),
-    nationId: nation.id,
-    regionId: nation.capitalMesoId,
-    type: "Infantry",
-    equipment: DEFAULT_EQUIPMENT.map((slot) => ({ ...slot })),
-    org: 0.75,
-    manpower: 1200,
-    moveTargetId: null,
-    moveProgressMs: 0,
-  }));
+  const units: UnitState[] = [];
+  let unitIndex = 0;
+
+  for (const nation of nations) {
+    const count = Math.max(1, Math.floor(nation.macroRegionIds.length / 1));
+    for (let i = 0; i < count; i += 1) {
+      units.push({
+        id: createUnitId(unitIndex),
+        nationId: nation.id,
+        regionId: nation.capitalMesoId,
+        type: "Infantry",
+        equipment: DEFAULT_EQUIPMENT.map((slot) => ({ ...slot })),
+        org: 0.75,
+        manpower: 1200,
+        moveTargetId: null,
+        moveProgressMs: 0,
+      });
+      unitIndex += 1;
+    }
+  }
+
+  return units;
 }
