@@ -14,7 +14,8 @@ export function drawUnits(
   mesoRegions: MesoRegion[],
   interpolationMs = 0,
 ): void {
-  layer.removeChildren();
+  const graphics = ensureGraphics(layer);
+  graphics.clear();
 
   if (units.length === 0 || mesoRegions.length === 0) {
     return;
@@ -25,7 +26,6 @@ export function drawUnits(
     mesoById.set(region.id, region);
   }
 
-  const graphics = new Graphics();
   graphics.lineStyle(UNIT_STROKE_WIDTH, UNIT_STROKE_COLOR, 1);
 
   for (const unit of units) {
@@ -40,7 +40,6 @@ export function drawUnits(
     graphics.endFill();
   }
 
-  layer.addChild(graphics);
 }
 
 function resolveUnitPosition(
@@ -74,4 +73,17 @@ function lerp(a: number, b: number, t: number): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function ensureGraphics(layer: Container): Graphics {
+  const existing = layer.getChildByName("UnitGraphics");
+  if (existing && existing instanceof Graphics) {
+    return existing;
+  }
+
+  layer.removeChildren();
+  const graphics = new Graphics();
+  graphics.name = "UnitGraphics";
+  layer.addChild(graphics);
+  return graphics;
 }
