@@ -83,9 +83,33 @@ function repositionNationUnits(
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
   ownerByMesoId: Map<MesoRegionId, NationId>,
 ): void {
-  const spreadTargets = selectTargetsForUnits(targets, units.length, mesoById);
-  const targetSet = new Set(spreadTargets);
-  if (targetSet.size === 0) {
+  const borderTargets = selectTargetsForUnits(
+    targets,
+    Math.min(units.length, targets.length),
+    mesoById,
+    "spread",
+  );
+  const borderTargetSet = new Set(borderTargets);
+  const borderAllSet = new Set(targets);
+  const ownedTargets = collectOwnedTargets(nationId, mesoById, ownerByMesoId);
+  let interiorCandidates = ownedTargets.filter(
+    (id) => !borderAllSet.has(id) && isCoastalById(id, mesoById),
+  );
+  if (interiorCandidates.length === 0) {
+    interiorCandidates = ownedTargets.filter((id) => !borderAllSet.has(id));
+  }
+  if (interiorCandidates.length === 0) {
+    interiorCandidates = ownedTargets;
+  }
+  const interiorTargetCount = Math.max(0, units.length - borderTargets.length);
+  const interiorTargets = selectTargetsForUnits(
+    interiorCandidates,
+    interiorTargetCount,
+    mesoById,
+    "even",
+  );
+  const interiorTargetSet = new Set(interiorTargets);
+  if (borderTargetSet.size === 0 && interiorTargetSet.size === 0) {
     for (const unit of units) {
       unit.moveTargetId = null;
       unit.moveFromId = null;
@@ -97,59 +121,55 @@ function repositionNationUnits(
 
   const orderedUnits = [...units].sort((a, b) => a.id.localeCompare(b.id));
   const assignedTargets = new Set<MesoRegionId>();
+  let remainingUnits = orderedUnits;
 
-  for (const unit of orderedUnits) {
-    if (!unit.moveTargetId) {
-      continue;
-    }
-    if (!targetSet.has(unit.moveTargetId)) {
-      unit.moveTargetId = null;
-      unit.moveFromId = null;
-      unit.moveToId = null;
-      continue;
-    }
-    if (ownerByMesoId.get(unit.moveTargetId) !== nationId) {
-      unit.moveTargetId = null;
-      unit.moveFromId = null;
-      unit.moveToId = null;
-      continue;
-    }
-    if (assignedTargets.has(unit.moveTargetId)) {
-      unit.moveTargetId = null;
-      unit.moveFromId = null;
-      unit.moveToId = null;
-      continue;
-    }
-    assignedTargets.add(unit.moveTargetId);
-  }
+  remainingUnits = keepExistingTargets(
+    remainingUnits,
+    borderTargetSet,
+    assignedTargets,
+    nationId,
+    ownerByMesoId,
+  );
+  remainingUnits = assignUnitsOnTarget(remainingUnits, borderTargetSet, assignedTargets);
+  remainingUnits = assignNearestTargets(
+    remainingUnits,
+    borderTargetSet,
+    assignedTargets,
+    neighborsById,
+    (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+  );
 
-  for (const unit of orderedUnits) {
-    if (unit.moveTargetId) {
-      continue;
-    }
-    if (targetSet.has(unit.regionId) && !assignedTargets.has(unit.regionId)) {
-      unit.moveTargetId = unit.regionId;
-      unit.moveFromId = null;
-      unit.moveToId = null;
-      assignedTargets.add(unit.regionId);
-    }
-  }
-
-  for (const unit of orderedUnits) {
-    if (unit.moveTargetId) {
-      continue;
-    }
-    const target = findNearestTarget(
-      unit.regionId,
-      targetSet,
+  if (interiorTargetSet.size > 0 && remainingUnits.length > 0) {
+    remainingUnits = keepExistingTargets(
+      remainingUnits,
+      interiorTargetSet,
+      assignedTargets,
+      nationId,
+      ownerByMesoId,
+    );
+    remainingUnits = assignUnitsOnTarget(remainingUnits, interiorTargetSet, assignedTargets);
+    remainingUnits = assignNearestTargets(
+      remainingUnits,
+      interiorTargetSet,
       assignedTargets,
       neighborsById,
       (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
     );
-    if (target) {
-      unit.moveTargetId = target;
-      assignedTargets.add(target);
+  }
+
+  if (remainingUnits.length > 0) {
+    const stackTargets = pickStackTargets(interiorTargets, borderTargets, ownedTargets);
+    if (stackTargets.length > 0) {
+      assignStackedTargets(remainingUnits, stackTargets);
+      remainingUnits = [];
     }
+  }
+
+  for (const unit of remainingUnits) {
+    unit.moveTargetId = null;
+    unit.moveFromId = null;
+    unit.moveToId = null;
+    unit.moveProgressMs = 0;
   }
 
   for (const unit of orderedUnits) {
@@ -329,10 +349,162 @@ function isPassable(meso: MesoRegion): boolean {
   return meso.type !== "sea";
 }
 
+function isCoastalById(
+  id: MesoRegionId,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+): boolean {
+  const meso = mesoById.get(id);
+  if (!meso || meso.type === "sea") {
+    return false;
+  }
+  for (const neighbor of meso.neighbors) {
+    const neighborMeso = mesoById.get(neighbor.id);
+    if (neighborMeso && neighborMeso.type === "sea") {
+      return true;
+    }
+  }
+  return false;
+}
+
+function collectOwnedTargets(
+  nationId: NationId,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+): MesoRegionId[] {
+  const targets: MesoRegionId[] = [];
+  for (const [mesoId, owner] of ownerByMesoId.entries()) {
+    if (owner !== nationId) {
+      continue;
+    }
+    const meso = mesoById.get(mesoId);
+    if (meso && isPassable(meso)) {
+      targets.push(mesoId);
+    }
+  }
+  return targets;
+}
+
+function keepExistingTargets(
+  units: UnitState[],
+  targetSet: Set<MesoRegionId>,
+  assignedTargets: Set<MesoRegionId>,
+  nationId: NationId,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+): UnitState[] {
+  const remaining: UnitState[] = [];
+  for (const unit of units) {
+    const targetId = unit.moveTargetId;
+    if (!targetId) {
+      remaining.push(unit);
+      continue;
+    }
+    if (!targetSet.has(targetId)) {
+      remaining.push(unit);
+      continue;
+    }
+    if (ownerByMesoId.get(targetId) !== nationId) {
+      remaining.push(unit);
+      continue;
+    }
+    if (assignedTargets.has(targetId)) {
+      remaining.push(unit);
+      continue;
+    }
+    assignedTargets.add(targetId);
+  }
+  return remaining;
+}
+
+function assignUnitsOnTarget(
+  units: UnitState[],
+  targetSet: Set<MesoRegionId>,
+  assignedTargets: Set<MesoRegionId>,
+): UnitState[] {
+  const remaining: UnitState[] = [];
+  for (const unit of units) {
+    if (targetSet.has(unit.regionId) && !assignedTargets.has(unit.regionId)) {
+      unit.moveTargetId = unit.regionId;
+      unit.moveFromId = null;
+      unit.moveToId = null;
+      assignedTargets.add(unit.regionId);
+    } else {
+      remaining.push(unit);
+    }
+  }
+  return remaining;
+}
+
+function assignNearestTargets(
+  units: UnitState[],
+  targetSet: Set<MesoRegionId>,
+  assignedTargets: Set<MesoRegionId>,
+  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
+  isAllowed: (id: MesoRegionId) => boolean,
+): UnitState[] {
+  if (targetSet.size === 0 || assignedTargets.size >= targetSet.size) {
+    return units;
+  }
+
+  const remaining: UnitState[] = [];
+  for (const unit of units) {
+    if (assignedTargets.size >= targetSet.size) {
+      remaining.push(unit);
+      continue;
+    }
+    const target = findNearestTarget(
+      unit.regionId,
+      targetSet,
+      assignedTargets,
+      neighborsById,
+      isAllowed,
+    );
+    if (target) {
+      unit.moveTargetId = target;
+      assignedTargets.add(target);
+    } else {
+      remaining.push(unit);
+    }
+  }
+  return remaining;
+}
+
+function pickStackTargets(
+  interiorTargets: MesoRegionId[],
+  borderTargets: MesoRegionId[],
+  ownedTargets: MesoRegionId[],
+): MesoRegionId[] {
+  if (interiorTargets.length > 0) {
+    return interiorTargets;
+  }
+  if (borderTargets.length > 0) {
+    return borderTargets;
+  }
+  return ownedTargets;
+}
+
+function assignStackedTargets(units: UnitState[], targets: MesoRegionId[]): void {
+  const orderedTargets = [...targets].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  if (orderedTargets.length === 0) {
+    return;
+  }
+  for (let i = 0; i < units.length; i += 1) {
+    const unit = units[i];
+    const nextTarget = orderedTargets[i % orderedTargets.length];
+    if (unit.moveTargetId === nextTarget) {
+      continue;
+    }
+    unit.moveTargetId = nextTarget;
+    unit.moveFromId = null;
+    unit.moveToId = null;
+    unit.moveProgressMs = 0;
+  }
+}
+
 function selectTargetsForUnits(
   targets: MesoRegionId[],
   unitCount: number,
   mesoById: Map<MesoRegionId, MesoRegion>,
+  mode: "spread" | "even",
 ): MesoRegionId[] {
   if (unitCount <= 0) {
     return [];
@@ -355,6 +527,9 @@ function selectTargetsForUnits(
     return selectEvenlyByIndex(uniqueTargets, unitCount);
   }
 
+  if (mode === "even") {
+    return selectEvenlyByAngle(uniqueTargets, unitCount, mesoById);
+  }
   return selectSpreadByDistance(uniqueTargets, unitCount, mesoById);
 }
 
@@ -465,6 +640,49 @@ function selectEvenlyByIndex(
   }
 
   return selected;
+}
+
+function selectEvenlyByAngle(
+  targets: MesoRegionId[],
+  unitCount: number,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+): MesoRegionId[] {
+  const centers = new Map<MesoRegionId, { x: number; y: number }>();
+  for (const target of targets) {
+    const meso = mesoById.get(target);
+    if (meso) {
+      centers.set(target, meso.center);
+    }
+  }
+
+  let sumX = 0;
+  let sumY = 0;
+  for (const center of centers.values()) {
+    sumX += center.x;
+    sumY += center.y;
+  }
+  const count = centers.size || 1;
+  const centroid = { x: sumX / count, y: sumY / count };
+
+  const ordered = targets
+    .map((target) => {
+      const center = centers.get(target) ?? centroid;
+      const angle = Math.atan2(center.y - centroid.y, center.x - centroid.x);
+      const radius = distanceSq(center, centroid);
+      return { target, angle, radius };
+    })
+    .sort((a, b) => {
+      if (a.angle !== b.angle) {
+        return a.angle - b.angle;
+      }
+      if (a.radius !== b.radius) {
+        return a.radius - b.radius;
+      }
+      return a.target < b.target ? -1 : a.target > b.target ? 1 : 0;
+    })
+    .map((entry) => entry.target);
+
+  return selectEvenlyByIndex(ordered, unitCount);
 }
 
 function distanceSq(a: { x: number; y: number }, b: { x: number; y: number }): number {
