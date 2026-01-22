@@ -8,6 +8,7 @@ import { generateMicroRegions } from "../worldgen/generate/micro-regions";
 import { generateMesoRegions } from "../worldgen/generate/meso-regions";
 import { generateNations } from "../worldgen/generate/nations";
 import { createInitialUnits } from "./create-units";
+import { createSimTime } from "./time";
 import type { WorldState } from "./world-state";
 
 export function createWorld(config: WorldConfig): WorldState {
@@ -20,6 +21,7 @@ export function createWorld(config: WorldConfig): WorldState {
   const mesoRegions = generateMesoRegions(microRegions, config, rng);
   const { macroRegions, nations } = generateNations(mesoRegions, config, rng);
   const units = createInitialUnits(nations);
+  const time = createSimTime();
 
   return {
     width: config.width,
@@ -30,5 +32,6 @@ export function createWorld(config: WorldConfig): WorldState {
     macroRegions,
     nations,
     units,
+    time,
   };
 }

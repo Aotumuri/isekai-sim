@@ -5,8 +5,12 @@ import { drawNationBorders } from "../render/draw/nation-borders";
 import { drawUnits } from "../render/draw/units";
 import { attachRegionHoverUI } from "../render/region/hover-ui";
 import { createRenderer } from "../render/renderer";
+import { attachTimeHud } from "../render/time-hud";
 import { attachViewControls } from "../render/view/controls";
 import { createWorld } from "../sim/create-world";
+import { createSimClock } from "../sim/time";
+import { updateSimulation } from "../sim/update";
+import { attachTimeControls } from "./time-controls";
 
 export function createGame(root: HTMLElement): void {
   const config = createWorldConfig(window.innerWidth, window.innerHeight);
@@ -29,4 +33,12 @@ export function createGame(root: HTMLElement): void {
   );
   attachViewControls(renderer);
   attachRegionHoverUI(renderer, world);
+  const clock = createSimClock();
+  attachTimeControls(clock);
+  const timeHud = attachTimeHud(renderer);
+
+  renderer.app.ticker.add(() => {
+    updateSimulation(world, clock, renderer.app.ticker.deltaMS);
+    timeHud.update(world.time, clock);
+  });
 }
