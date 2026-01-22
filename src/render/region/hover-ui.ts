@@ -2,6 +2,7 @@ import { Container } from "pixi.js";
 import type { Vec2 } from "../../utils/vector";
 import type { MacroRegion } from "../../worldgen/macro-region";
 import type { MesoRegion } from "../../worldgen/meso-region";
+import type { UnitState } from "../../sim/unit";
 import type { WorldState } from "../../sim/world-state";
 import type { Renderer } from "../renderer";
 import { buildRegionBounds, findRegion } from "./hit-test";
@@ -32,6 +33,15 @@ export function attachRegionHoverUI(renderer: Renderer, world: WorldState): void
   for (const nation of world.nations) {
     nationById.set(nation.id, nation);
   }
+  const unitsByMesoId = new Map<string, UnitState[]>();
+  for (const unit of world.units) {
+    const list = unitsByMesoId.get(unit.regionId);
+    if (list) {
+      list.push(unit);
+    } else {
+      unitsByMesoId.set(unit.regionId, [unit]);
+    }
+  }
 
   let activeRegionId: string | null = null;
   let isSpacePressed = false;
@@ -57,7 +67,8 @@ export function attachRegionHoverUI(renderer: Renderer, world: WorldState): void
       const meso = region.mesoRegionId ? mesoById.get(region.mesoRegionId) ?? null : null;
       const macro = region.mesoRegionId ? macroByMesoId.get(region.mesoRegionId) ?? null : null;
       const nation = macro ? nationById.get(macro.nationId) ?? null : null;
-      panel.setText(formatRegionTooltip(region, meso, macro, nation));
+      const units = region.mesoRegionId ? unitsByMesoId.get(region.mesoRegionId) ?? [] : [];
+      panel.setText(formatRegionTooltip(region, meso, macro, nation, units));
     }
 
     panel.position(screenPos, renderer.app.screen);
