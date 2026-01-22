@@ -20,6 +20,8 @@ export interface UnitState {
   org: number;
   manpower: number;
   moveTargetId: MesoRegionId | null;
+  moveFromId: MesoRegionId | null;
+  moveToId: MesoRegionId | null;
   moveProgressMs: number;
 }
 

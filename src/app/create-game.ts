@@ -29,26 +29,22 @@ export function createGame(root: HTMLElement): void {
     renderer.worldLayers.layers.Unit,
     world.units,
     world.mesoRegions,
-    world.nations,
+    0,
   );
   attachViewControls(renderer);
   attachRegionHoverUI(renderer, world);
   const clock = createSimClock();
   attachTimeControls(clock);
   const timeHud = attachTimeHud(renderer);
-  let lastFastTick = world.time.fastTick;
 
   renderer.app.ticker.add(() => {
     updateSimulation(world, clock, renderer.app.ticker.deltaMS);
     timeHud.update(world.time, clock);
-    if (world.time.fastTick !== lastFastTick) {
-      lastFastTick = world.time.fastTick;
-      drawUnits(
-        renderer.worldLayers.layers.Unit,
-        world.units,
-        world.mesoRegions,
-        world.nations,
-      );
-    }
+    drawUnits(
+      renderer.worldLayers.layers.Unit,
+      world.units,
+      world.mesoRegions,
+      clock.accumulatorMs,
+    );
   });
 }

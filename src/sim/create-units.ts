@@ -22,6 +22,8 @@ export function createInitialUnits(nations: Nation[]): UnitState[] {
         org: 0.75,
         manpower: 1200,
         moveTargetId: null,
+        moveFromId: null,
+        moveToId: null,
         moveProgressMs: 0,
       });
       unitIndex += 1;

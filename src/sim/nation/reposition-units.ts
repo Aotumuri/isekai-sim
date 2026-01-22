@@ -1,9 +1,8 @@
 import type { WorldState } from "../world-state";
 import type { UnitState } from "../unit";
+import { MOVE_MS_PER_REGION } from "../movement";
 import type { MesoRegion, MesoRegionId } from "../../worldgen/meso-region";
 import type { NationId } from "../../worldgen/nation";
-
-const MOVE_MS_PER_REGION = 600;
 
 export function repositionUnits(world: WorldState, dtMs: number): void {
   if (world.units.length === 0 || world.mesoRegions.length === 0) {
@@ -88,6 +87,8 @@ function repositionNationUnits(
   if (targetSet.size === 0) {
     for (const unit of units) {
       unit.moveTargetId = null;
+      unit.moveFromId = null;
+      unit.moveToId = null;
       unit.moveProgressMs = 0;
     }
     return;
@@ -102,14 +103,20 @@ function repositionNationUnits(
     }
     if (!targetSet.has(unit.moveTargetId)) {
       unit.moveTargetId = null;
+      unit.moveFromId = null;
+      unit.moveToId = null;
       continue;
     }
     if (ownerByMesoId.get(unit.moveTargetId) !== nationId) {
       unit.moveTargetId = null;
+      unit.moveFromId = null;
+      unit.moveToId = null;
       continue;
     }
     if (assignedTargets.has(unit.moveTargetId)) {
       unit.moveTargetId = null;
+      unit.moveFromId = null;
+      unit.moveToId = null;
       continue;
     }
     assignedTargets.add(unit.moveTargetId);
@@ -121,6 +128,8 @@ function repositionNationUnits(
     }
     if (targetSet.has(unit.regionId) && !assignedTargets.has(unit.regionId)) {
       unit.moveTargetId = unit.regionId;
+      unit.moveFromId = null;
+      unit.moveToId = null;
       assignedTargets.add(unit.regionId);
     }
   }
@@ -159,33 +168,46 @@ function moveUnitTowardTarget(
   isAllowed: (id: MesoRegionId) => boolean,
 ): void {
   if (!unit.moveTargetId || unit.regionId === unit.moveTargetId) {
+    unit.moveFromId = null;
+    unit.moveToId = null;
     unit.moveProgressMs = 0;
     return;
   }
 
   if (!isAllowed(unit.regionId)) {
     unit.moveTargetId = null;
+    unit.moveFromId = null;
+    unit.moveToId = null;
     unit.moveProgressMs = 0;
     return;
   }
 
   unit.moveProgressMs += dtMs;
+  if (!ensureMoveLeg(unit, neighborsById, isAllowed)) {
+    unit.moveTargetId = null;
+    unit.moveFromId = null;
+    unit.moveToId = null;
+    unit.moveProgressMs = 0;
+    return;
+  }
+
   while (unit.moveProgressMs >= MOVE_MS_PER_REGION) {
-    const nextStep = findNextStep(
-      unit.regionId,
-      unit.moveTargetId,
-      neighborsById,
-      isAllowed,
-    );
-    if (!nextStep) {
-      unit.moveTargetId = null;
+    unit.moveProgressMs -= MOVE_MS_PER_REGION;
+    unit.regionId = unit.moveToId ?? unit.regionId;
+
+    if (unit.regionId === unit.moveTargetId) {
+      unit.moveFromId = null;
+      unit.moveToId = null;
       unit.moveProgressMs = 0;
       return;
     }
 
-    unit.regionId = nextStep;
-    unit.moveProgressMs -= MOVE_MS_PER_REGION;
-    if (unit.regionId === unit.moveTargetId) {
+    unit.moveFromId = null;
+    unit.moveToId = null;
+    if (!ensureMoveLeg(unit, neighborsById, isAllowed)) {
+      unit.moveTargetId = null;
+      unit.moveFromId = null;
+      unit.moveToId = null;
       unit.moveProgressMs = 0;
       return;
     }
@@ -263,6 +285,29 @@ function findNextStep(
   }
 
   return null;
+}
+
+function ensureMoveLeg(
+  unit: UnitState,
+  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
+  isAllowed: (id: MesoRegionId) => boolean,
+): MesoRegionId | null {
+  if (unit.moveFromId === unit.regionId && unit.moveToId) {
+    if (isAllowed(unit.moveToId)) {
+      return unit.moveToId;
+    }
+    unit.moveFromId = null;
+    unit.moveToId = null;
+  }
+
+  const nextStep = findNextStep(unit.regionId, unit.moveTargetId, neighborsById, isAllowed);
+  if (!nextStep) {
+    return null;
+  }
+
+  unit.moveFromId = unit.regionId;
+  unit.moveToId = nextStep;
+  return nextStep;
 }
 
 function resolveFirstStep(
