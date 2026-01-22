@@ -33,19 +33,32 @@ export function attachRegionHoverUI(renderer: Renderer, world: WorldState): void
   for (const nation of world.nations) {
     nationById.set(nation.id, nation);
   }
-  const unitsByMesoId = new Map<string, UnitState[]>();
-  for (const unit of world.units) {
-    const list = unitsByMesoId.get(unit.regionId);
-    if (list) {
-      list.push(unit);
-    } else {
-      unitsByMesoId.set(unit.regionId, [unit]);
-    }
-  }
+  let unitsByMesoId = new Map<string, UnitState[]>();
+  let cachedUnitTick = -1;
 
   let activeRegionId: string | null = null;
   let isSpacePressed = false;
   let lastPointerGlobal: Vec2 | null = null;
+  let lastInfoTick = -1;
+
+  const getUnitsForMeso = (mesoId: string | null): UnitState[] => {
+    if (!mesoId) {
+      return [];
+    }
+    if (cachedUnitTick !== world.time.fastTick) {
+      unitsByMesoId = new Map<string, UnitState[]>();
+      for (const unit of world.units) {
+        const list = unitsByMesoId.get(unit.regionId);
+        if (list) {
+          list.push(unit);
+        } else {
+          unitsByMesoId.set(unit.regionId, [unit]);
+        }
+      }
+      cachedUnitTick = world.time.fastTick;
+    }
+    return unitsByMesoId.get(mesoId) ?? [];
+  };
 
   const updatePanel = (screenPos: Vec2 | null): void => {
     if (!screenPos || !isSpacePressed) {
@@ -62,12 +75,13 @@ export function attachRegionHoverUI(renderer: Renderer, world: WorldState): void
       return;
     }
 
-    if (activeRegionId !== region.id) {
+    if (activeRegionId !== region.id || lastInfoTick !== world.time.fastTick) {
       activeRegionId = region.id;
+      lastInfoTick = world.time.fastTick;
       const meso = region.mesoRegionId ? mesoById.get(region.mesoRegionId) ?? null : null;
       const macro = region.mesoRegionId ? macroByMesoId.get(region.mesoRegionId) ?? null : null;
       const nation = macro ? nationById.get(macro.nationId) ?? null : null;
-      const units = region.mesoRegionId ? unitsByMesoId.get(region.mesoRegionId) ?? [] : [];
+      const units = getUnitsForMeso(region.mesoRegionId);
       panel.setText(formatRegionTooltip(region, meso, macro, nation, units));
     }
 
