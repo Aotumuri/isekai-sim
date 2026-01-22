@@ -19,6 +19,8 @@ export interface UnitState {
   equipment: UnitEquipmentSlot[];
   org: number;
   manpower: number;
+  moveTargetId: MesoRegionId | null;
+  moveProgressMs: number;
 }
 
 export function createUnitId(index: number): UnitId {

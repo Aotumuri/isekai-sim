@@ -36,9 +36,19 @@ export function createGame(root: HTMLElement): void {
   const clock = createSimClock();
   attachTimeControls(clock);
   const timeHud = attachTimeHud(renderer);
+  let lastFastTick = world.time.fastTick;
 
   renderer.app.ticker.add(() => {
     updateSimulation(world, clock, renderer.app.ticker.deltaMS);
     timeHud.update(world.time, clock);
+    if (world.time.fastTick !== lastFastTick) {
+      lastFastTick = world.time.fastTick;
+      drawUnits(
+        renderer.worldLayers.layers.Unit,
+        world.units,
+        world.mesoRegions,
+        world.nations,
+      );
+    }
   });
 }

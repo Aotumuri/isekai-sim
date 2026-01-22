@@ -15,5 +15,7 @@ export function createInitialUnits(nations: Nation[]): UnitState[] {
     equipment: DEFAULT_EQUIPMENT.map((slot) => ({ ...slot })),
     org: 0.75,
     manpower: 1200,
+    moveTargetId: null,
+    moveProgressMs: 0,
   }));
 }

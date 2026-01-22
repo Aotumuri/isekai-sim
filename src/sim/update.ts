@@ -1,4 +1,5 @@
 import type { WorldState } from "./world-state";
+import { repositionUnits } from "./nation/reposition-units";
 import {
   FAST_TICK_MS,
   SLOW_TICK_MS,
@@ -32,7 +33,8 @@ export function updateSimulation(world: WorldState, clock: SimClock, deltaMs: nu
 function stepFastTick(world: WorldState, dtMs: number): void {
   world.time.fastTick += 1;
   world.time.elapsedMs += dtMs;
-  // TODO: movement/combat updates.
+  repositionUnits(world, dtMs);
+  // TODO: combat updates.
 }
 
 function stepSlowTick(world: WorldState, _dtMs: number): void {
