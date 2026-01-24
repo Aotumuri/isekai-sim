@@ -30,24 +30,19 @@ export function drawTerritoryEffects(
     }
   }
 
-  const occupierByMesoId = new Map<string, NationId>();
+  const macroOccupierByMesoId = new Map<string, NationId>();
   for (const macro of macroRegions) {
     const macroOccupier = occupation.macroById.get(macro.id);
     if (!macroOccupier) {
       continue;
     }
     for (const mesoId of macro.mesoRegionIds) {
-      occupierByMesoId.set(mesoId, macroOccupier);
+      macroOccupierByMesoId.set(mesoId, macroOccupier);
     }
   }
 
-  for (const [mesoId, occupier] of occupation.mesoById.entries()) {
-    if (!occupierByMesoId.has(mesoId)) {
-      occupierByMesoId.set(mesoId, occupier);
-    }
-  }
-
-  const regionsByNationId = new Map<NationId, MicroRegion[]>();
+  const macroRegionsByNationId = new Map<NationId, MicroRegion[]>();
+  const mesoRegionsByNationId = new Map<NationId, MicroRegion[]>();
   for (const region of microRegions) {
     if (!region.mesoRegionId) {
       continue;
@@ -56,43 +51,44 @@ export function drawTerritoryEffects(
     if (!macroId) {
       continue;
     }
-    const occupier = occupierByMesoId.get(region.mesoRegionId);
-    if (!occupier) {
+    const macroOccupier = macroOccupierByMesoId.get(region.mesoRegionId);
+    if (macroOccupier) {
+      const list = macroRegionsByNationId.get(macroOccupier);
+      if (list) {
+        list.push(region);
+      } else {
+        macroRegionsByNationId.set(macroOccupier, [region]);
+      }
       continue;
     }
-    const list = regionsByNationId.get(occupier);
+    const mesoOccupier = occupation.mesoById.get(region.mesoRegionId);
+    if (!mesoOccupier) {
+      continue;
+    }
+    const list = mesoRegionsByNationId.get(mesoOccupier);
     if (list) {
       list.push(region);
     } else {
-      regionsByNationId.set(occupier, [region]);
+      mesoRegionsByNationId.set(mesoOccupier, [region]);
     }
   }
 
   const bounds = { minX: 0, minY: 0, maxX: width, maxY: height };
 
-  for (const [nationId, regions] of regionsByNationId.entries()) {
+  for (const [nationId, regions] of macroRegionsByNationId.entries()) {
     if (regions.length === 0) {
       continue;
     }
 
-    const mask = new Graphics();
-    mask.beginFill(0xffffff, 1);
-    for (const region of regions) {
-      drawPolygon(mask, region);
-    }
-    mask.endFill();
-    mask.renderable = false;
-    layer.addChild(mask);
+    drawHatchedRegions(layer, nationId, regions, bounds, true);
+  }
 
-    const hatch = new Graphics();
-    hatch.lineStyle({
-      width: HATCH_WIDTH,
-      color: getNationColor(nationId),
-      alpha: HATCH_ALPHA,
-    });
-    drawHatchLines(hatch, bounds, HATCH_SPACING);
-    hatch.mask = mask;
-    layer.addChild(hatch);
+  for (const [nationId, regions] of mesoRegionsByNationId.entries()) {
+    if (regions.length === 0) {
+      continue;
+    }
+
+    drawHatchedRegions(layer, nationId, regions, bounds, false);
   }
 }
 
@@ -108,6 +104,50 @@ function drawHatchLines(
     graphics.moveTo(x, bounds.minY);
     graphics.lineTo(x + height, bounds.maxY);
   }
+}
+
+function drawHatchLinesReverse(
+  graphics: Graphics,
+  bounds: { minX: number; minY: number; maxX: number; maxY: number },
+  spacing: number,
+): void {
+  const height = bounds.maxY - bounds.minY;
+  let startX = bounds.minX;
+  const endX = bounds.maxX + height;
+  for (let x = startX; x <= endX; x += spacing) {
+    graphics.moveTo(x, bounds.minY);
+    graphics.lineTo(x - height, bounds.maxY);
+  }
+}
+
+function drawHatchedRegions(
+  layer: Container,
+  nationId: NationId,
+  regions: MicroRegion[],
+  bounds: { minX: number; minY: number; maxX: number; maxY: number },
+  crossHatch: boolean,
+): void {
+  const mask = new Graphics();
+  mask.beginFill(0xffffff, 1);
+  for (const region of regions) {
+    drawPolygon(mask, region);
+  }
+  mask.endFill();
+  mask.renderable = false;
+  layer.addChild(mask);
+
+  const hatch = new Graphics();
+  hatch.lineStyle({
+    width: HATCH_WIDTH,
+    color: getNationColor(nationId),
+    alpha: HATCH_ALPHA,
+  });
+  drawHatchLines(hatch, bounds, HATCH_SPACING);
+  if (crossHatch) {
+    drawHatchLinesReverse(hatch, bounds, HATCH_SPACING);
+  }
+  hatch.mask = mask;
+  layer.addChild(hatch);
 }
 
 function drawPolygon(graphics: Graphics, region: MicroRegion): void {
