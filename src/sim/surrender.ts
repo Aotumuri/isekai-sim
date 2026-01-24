@@ -86,11 +86,13 @@ export function updateSurrender(world: WorldState): void {
       world.macroRegions,
       nationById,
       occupationByMesoId,
+      mesoById,
     );
     occupationChanged ||= didChange.occupationChanged;
     territoryChanged ||= didChange.territoryChanged;
 
     if (didChange.territoryChanged) {
+      clearCapitalMarkerForNation(surrenderNationId, nationById, mesoById);
       surrenderedThisTick.push(surrenderNationId);
       const remainingMacroIds = nationById.get(surrenderNationId)?.macroRegionIds ?? [];
       if (remainingMacroIds.length === 0) {
@@ -386,6 +388,7 @@ function applyAssignments(
   macroRegions: MacroRegion[],
   nationById: Map<NationId, WorldState["nations"][number]>,
   occupationByMesoId: Map<MesoRegion["id"], NationId>,
+  mesoById: Map<MesoRegion["id"], MesoRegion>,
 ): { territoryChanged: boolean; occupationChanged: boolean } {
   if (assignments.size === 0) {
     return { territoryChanged: false, occupationChanged: false };
@@ -409,7 +412,17 @@ function applyAssignments(
     }
     const oldOwnerId = macro.nationId;
     macro.nationId = newOwnerId;
+    macro.isCore = false;
     territoryChanged = true;
+
+    if (oldOwnerId === surrenderedNationId) {
+      for (const mesoId of macro.mesoRegionIds) {
+        const meso = mesoById.get(mesoId);
+        if (meso && meso.building === "capital") {
+          meso.building = null;
+        }
+      }
+    }
 
     const newOwner = nationById.get(newOwnerId);
     if (newOwner && !newOwner.macroRegionIds.includes(macroId)) {
@@ -443,6 +456,21 @@ function sumValues(values: Map<NationId, number>): number {
     total += value;
   }
   return total;
+}
+
+function clearCapitalMarkerForNation(
+  nationId: NationId,
+  nationById: Map<NationId, WorldState["nations"][number]>,
+  mesoById: Map<MesoRegion["id"], MesoRegion>,
+): void {
+  const nation = nationById.get(nationId);
+  if (!nation) {
+    return;
+  }
+  const meso = mesoById.get(nation.capitalMesoId);
+  if (meso && meso.building === "capital") {
+    meso.building = null;
+  }
 }
 
 function collectUnitCountsByNation(units: UnitState[]): Map<NationId, number> {

@@ -1,4 +1,5 @@
 import { createWorldConfig } from "../data/world-config";
+import { drawCityCapitalIcons } from "../render/draw/city-capital-icons";
 import { drawMesoBorders } from "../render/draw/meso-borders";
 import { drawMicroRegions } from "../render/draw/micro-regions";
 import { drawNationBorders } from "../render/draw/nation-borders";
@@ -34,6 +35,10 @@ export function createGame(root: HTMLElement): void {
     config.width,
     config.height,
   );
+  drawCityCapitalIcons(
+    renderer.worldLayers.layers.CityCapitalResourceIcons,
+    world.mesoRegions,
+  );
   drawUnits(
     renderer.worldLayers.layers.Unit,
     world.units,
@@ -56,6 +61,10 @@ export function createGame(root: HTMLElement): void {
         world.microRegions,
         world.macroRegions,
         world.nations,
+      );
+      drawCityCapitalIcons(
+        renderer.worldLayers.layers.CityCapitalResourceIcons,
+        world.mesoRegions,
       );
       lastTerritoryVersion = world.territoryVersion;
     }
