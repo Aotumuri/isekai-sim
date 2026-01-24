@@ -7,7 +7,7 @@ import { buildWarAdjacency, isAtWar } from "./war-state";
 import type { WorldState } from "./world-state";
 
 export function updateSurrender(world: WorldState): void {
-  if (world.wars.length === 0 || world.nations.length === 0) {
+  if (world.nations.length === 0) {
     return;
   }
 
@@ -24,21 +24,62 @@ export function updateSurrender(world: WorldState): void {
   }
   const warAdjacency = buildWarAdjacency(world.wars);
   const unitCountsByNation = collectUnitCountsByNation(world.units);
+  const occupationCountsByNation = collectOccupationCountsByNation(
+    mesoByNation,
+    occupationByMesoId,
+  );
+  const cityCountsByNation = collectCityCountsByNation(
+    world.macroRegions,
+    mesoById,
+    occupationByMesoId,
+  );
+  const surrenderBalance = WORLD_BALANCE.war.surrender;
 
   const surrendering: NationId[] = [];
   for (const nation of world.nations) {
     const isAtWar = (warAdjacency.get(nation.id)?.size ?? 0) > 0;
     if (!isAtWar) {
+      nation.surrenderScore = 0;
       continue;
     }
 
     const unitCount = unitCountsByNation.get(nation.id) ?? 0;
+    const mesoIds = mesoByNation.get(nation.id) ?? [];
+    const occupiedCount = occupationCountsByNation.get(nation.id) ?? 0;
+    const occupationRatio = mesoIds.length > 0 ? occupiedCount / mesoIds.length : 0;
+    const capitalFallRatio = clamp(
+      nation.capitalFallCount / Math.max(1, surrenderBalance.capitalFallMax),
+      0,
+      1,
+    );
+    const currentCities = cityCountsByNation.get(nation.id) ?? 0;
+    const cityLossRatio = clamp(
+      1 - currentCities / Math.max(1, nation.initialCityCount),
+      0,
+      1,
+    );
+    const unitLossRatio = clamp(
+      1 - unitCount / Math.max(1, nation.initialUnitCount),
+      0,
+      1,
+    );
+    const surrenderScore =
+      occupationRatio * surrenderBalance.occupationWeight +
+      capitalFallRatio * surrenderBalance.capitalFallWeight +
+      cityLossRatio * surrenderBalance.cityLossWeight +
+      unitLossRatio * surrenderBalance.unitLossWeight;
+    nation.surrenderScore = surrenderScore;
+
     if (unitCount <= 0) {
       surrendering.push(nation.id);
       continue;
     }
 
-    const mesoIds = mesoByNation.get(nation.id) ?? [];
+    if (surrenderScore >= surrenderBalance.threshold) {
+      surrendering.push(nation.id);
+      continue;
+    }
+
     if (mesoIds.length === 0) {
       continue;
     }
@@ -458,6 +499,53 @@ function sumValues(values: Map<NationId, number>): number {
   return total;
 }
 
+function collectOccupationCountsByNation(
+  mesoByNation: Map<NationId, MesoRegion["id"][]>,
+  occupationByMesoId: Map<MesoRegion["id"], NationId>,
+): Map<NationId, number> {
+  const counts = new Map<NationId, number>();
+  for (const [nationId, mesoIds] of mesoByNation.entries()) {
+    let occupied = 0;
+    for (const mesoId of mesoIds) {
+      const occupier = occupationByMesoId.get(mesoId);
+      if (occupier && occupier !== nationId) {
+        occupied += 1;
+      }
+    }
+    counts.set(nationId, occupied);
+  }
+  return counts;
+}
+
+function collectCityCountsByNation(
+  macroRegions: MacroRegion[],
+  mesoById: Map<MesoRegion["id"], MesoRegion>,
+  occupationByMesoId: Map<MesoRegion["id"], NationId>,
+): Map<NationId, number> {
+  const counts = new Map<NationId, number>();
+  for (const macro of macroRegions) {
+    for (const mesoId of macro.mesoRegionIds) {
+      const meso = mesoById.get(mesoId);
+      if (!meso || meso.type === "sea") {
+        continue;
+      }
+      if (!isCityBuilding(meso.building)) {
+        continue;
+      }
+      const occupier = occupationByMesoId.get(mesoId);
+      if (occupier && occupier !== macro.nationId) {
+        continue;
+      }
+      counts.set(macro.nationId, (counts.get(macro.nationId) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+function isCityBuilding(building: MesoRegion["building"]): boolean {
+  return building === "city" || building === "capital";
+}
+
 function clearCapitalMarkerForNation(
   nationId: NationId,
   nationById: Map<NationId, WorldState["nations"][number]>,
@@ -479,6 +567,10 @@ function collectUnitCountsByNation(units: UnitState[]): Map<NationId, number> {
     counts.set(unit.nationId, (counts.get(unit.nationId) ?? 0) + 1);
   }
   return counts;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function releaseOccupationForEliminatedNations(

@@ -45,10 +45,18 @@ export const WORLD_BALANCE = {
       min: 10,
       max: 20,
     },
-    cityPerMacroRegion: 0.4,
+    cityPerMacroRegion: 0.3,
     minCitiesPerNation: 1,
   },
   war: {
     macroOccupationRatio: 0.6,
+    surrender: {
+      occupationWeight: 0.5,
+      capitalFallWeight: 1,
+      cityLossWeight: 0.3,
+      unitLossWeight: 0.1,
+      capitalFallMax: 3,
+      threshold: 1,
+    },
   },
 } as const;

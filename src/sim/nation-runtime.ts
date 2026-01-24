@@ -8,4 +8,8 @@ export interface NationUnitRoles {
 
 export type NationRuntime = Nation & {
   unitRoles: NationUnitRoles;
+  capitalFallCount: number;
+  surrenderScore: number;
+  initialUnitCount: number;
+  initialCityCount: number;
 };

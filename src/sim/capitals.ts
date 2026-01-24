@@ -23,8 +23,10 @@ export function updateCapitals(world: WorldState): void {
       continue;
     }
 
+    const owner = ownerByMesoId.get(capitalId);
     const occupier = occupationByMesoId.get(capitalId);
-    if (!occupier || occupier === nation.id) {
+    const isLost = owner !== nation.id || (!!occupier && occupier !== nation.id);
+    if (!isLost) {
       continue;
     }
 
@@ -35,18 +37,20 @@ export function updateCapitals(world: WorldState): void {
       ownerByMesoId,
       occupationByMesoId,
     );
-    if (!nextCapitalId) {
-      continue;
-    }
-
-    if (capital.building === "capital") {
+    const didFall = capital.building === "capital";
+    if (didFall) {
       capital.building = "city";
     }
-    const nextCapital = mesoById.get(nextCapitalId);
-    if (nextCapital) {
-      nextCapital.building = "capital";
+    if (nextCapitalId) {
+      const nextCapital = mesoById.get(nextCapitalId);
+      if (nextCapital) {
+        nextCapital.building = "capital";
+        nation.capitalMesoId = nextCapitalId;
+      }
     }
-    nation.capitalMesoId = nextCapitalId;
+    if (didFall) {
+      nation.capitalFallCount += 1;
+    }
   }
 }
 

@@ -7,12 +7,16 @@ import { createMicroRegionEdges } from "../worldgen/create-micro-region-edges";
 import { generateMicroRegions } from "../worldgen/generate/micro-regions";
 import { generateMesoRegions } from "../worldgen/generate/meso-regions";
 import { generateNations } from "../worldgen/generate/nations";
+import type { MacroRegion } from "../worldgen/macro-region";
+import type { MesoRegion } from "../worldgen/meso-region";
+import type { NationId } from "../worldgen/nation";
 import type { BattleState } from "./battles";
 import { createInitialUnits } from "./create-units";
 import type { NationRuntime } from "./nation-runtime";
 import { createOccupationState } from "./occupation";
 import { addTestWar } from "./test-war";
 import { createSimTime } from "./time";
+import type { UnitState } from "./unit";
 import type { WarState } from "./war-state";
 import type { WorldState } from "./world-state";
 
@@ -31,8 +35,21 @@ export function createWorld(config: WorldConfig): WorldState {
       defenseUnitIds: [],
       occupationUnitIds: [],
     },
+    capitalFallCount: 0,
+    surrenderScore: 0,
+    initialUnitCount: 0,
+    initialCityCount: 0,
   }));
+  const initialCityCounts = collectCityCountsByNation(mesoRegions, macroRegions);
+  for (const nation of runtimeNations) {
+    nation.initialCityCount = initialCityCounts.get(nation.id) ?? 0;
+  }
+
   const units = createInitialUnits(runtimeNations);
+  const initialUnitCounts = collectUnitCountsByNation(units);
+  for (const nation of runtimeNations) {
+    nation.initialUnitCount = initialUnitCounts.get(nation.id) ?? 0;
+  }
   const time = createSimTime();
   const wars: WarState[] = [];
   addTestWar(wars, mesoRegions, macroRegions, rng, time.fastTick);
@@ -60,4 +77,43 @@ export function createWorld(config: WorldConfig): WorldState {
     units,
     time,
   };
+}
+
+function collectCityCountsByNation(
+  mesoRegions: MesoRegion[],
+  macroRegions: MacroRegion[],
+): Map<NationId, number> {
+  const ownerByMesoId = new Map<MesoRegion["id"], NationId>();
+  for (const macro of macroRegions) {
+    for (const mesoId of macro.mesoRegionIds) {
+      ownerByMesoId.set(mesoId, macro.nationId);
+    }
+  }
+
+  const counts = new Map<NationId, number>();
+  for (const meso of mesoRegions) {
+    if (meso.type === "sea") {
+      continue;
+    }
+    if (meso.building !== "city" && meso.building !== "capital") {
+      continue;
+    }
+    const owner = ownerByMesoId.get(meso.id);
+    if (!owner) {
+      continue;
+    }
+    counts.set(owner, (counts.get(owner) ?? 0) + 1);
+  }
+
+  return counts;
+}
+
+function collectUnitCountsByNation(
+  units: UnitState[],
+): Map<NationId, number> {
+  const counts = new Map<NationId, number>();
+  for (const unit of units) {
+    counts.set(unit.nationId, (counts.get(unit.nationId) ?? 0) + 1);
+  }
+  return counts;
 }
