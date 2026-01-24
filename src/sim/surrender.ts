@@ -419,7 +419,7 @@ function applyAssignments(
       for (const mesoId of macro.mesoRegionIds) {
         const meso = mesoById.get(mesoId);
         if (meso && meso.building === "capital") {
-          meso.building = null;
+          meso.building = "city";
         }
       }
     }
@@ -469,7 +469,7 @@ function clearCapitalMarkerForNation(
   }
   const meso = mesoById.get(nation.capitalMesoId);
   if (meso && meso.building === "capital") {
-    meso.building = null;
+    meso.building = "city";
   }
 }
 

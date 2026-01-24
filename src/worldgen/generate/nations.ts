@@ -141,7 +141,66 @@ export function generateNations(
     }
   }
 
+  assignCities(mesoRegions, macroRegions, nations, idToIndex, config, rng);
+
   return { nations, macroRegions };
+}
+
+function assignCities(
+  mesoRegions: MesoRegion[],
+  macroRegions: MacroRegion[],
+  nations: Nation[],
+  idToIndex: Map<MesoRegionId, number>,
+  config: WorldConfig,
+  rng: SeededRng,
+): void {
+  const candidatesByNation = new Map<Nation["id"], number[]>();
+
+  for (const macro of macroRegions) {
+    for (const mesoId of macro.mesoRegionIds) {
+      const index = idToIndex.get(mesoId);
+      if (index === undefined) {
+        continue;
+      }
+      const meso = mesoRegions[index];
+      if (meso.type === "sea") {
+        continue;
+      }
+      if (meso.building === "capital") {
+        continue;
+      }
+      let list = candidatesByNation.get(macro.nationId);
+      if (!list) {
+        list = [];
+        candidatesByNation.set(macro.nationId, list);
+      }
+      list.push(index);
+    }
+  }
+
+  for (const nation of nations) {
+    const candidates = candidatesByNation.get(nation.id) ?? [];
+    if (candidates.length === 0) {
+      continue;
+    }
+    const baseCount = Math.round(
+      nation.macroRegionIds.length * config.nationCityPerMacroRegion,
+    );
+    const minCount = Math.max(0, Math.round(config.nationMinCitiesPerNation));
+    const targetCount = Math.min(
+      candidates.length,
+      Math.max(minCount, baseCount),
+    );
+    if (targetCount <= 0) {
+      continue;
+    }
+    const selected = pickRandomIndices(candidates, targetCount, rng);
+    for (const index of selected) {
+      if (mesoRegions[index].building === null) {
+        mesoRegions[index].building = "city";
+      }
+    }
+  }
 }
 
 function assignToCapitals(

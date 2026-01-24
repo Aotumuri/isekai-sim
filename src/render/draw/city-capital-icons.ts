@@ -7,6 +7,10 @@ const CAPITAL_STAR_INNER_RADIUS = 5.5;
 const CAPITAL_STAR_FILL = 0xffd200;
 const CAPITAL_STAR_STROKE = 0x000000;
 const CAPITAL_STAR_STROKE_WIDTH = 2;
+const CITY_MARKER_SIZE = 8;
+const CITY_MARKER_FILL = 0xffffff;
+const CITY_MARKER_STROKE = 0x000000;
+const CITY_MARKER_STROKE_WIDTH = 1.5;
 
 export function drawCityCapitalIcons(layer: Container, mesoRegions: MesoRegion[]): void {
   layer.removeChildren();
@@ -16,12 +20,22 @@ export function drawCityCapitalIcons(layer: Container, mesoRegions: MesoRegion[]
   }
 
   const graphics = new Graphics();
-  graphics.lineStyle(CAPITAL_STAR_STROKE_WIDTH, CAPITAL_STAR_STROKE, 1);
+
+  for (const meso of mesoRegions) {
+    if (meso.building !== "city") {
+      continue;
+    }
+    graphics.lineStyle(CITY_MARKER_STROKE_WIDTH, CITY_MARKER_STROKE, 1);
+    graphics.beginFill(CITY_MARKER_FILL, 1);
+    drawSquare(graphics, meso.center, CITY_MARKER_SIZE);
+    graphics.endFill();
+  }
 
   for (const meso of mesoRegions) {
     if (meso.building !== "capital") {
       continue;
     }
+    graphics.lineStyle(CAPITAL_STAR_STROKE_WIDTH, CAPITAL_STAR_STROKE, 1);
     graphics.beginFill(CAPITAL_STAR_FILL, 1);
     drawStar(
       graphics,
@@ -61,4 +75,13 @@ function drawStar(
   }
 
   graphics.closePath();
+}
+
+function drawSquare(
+  graphics: Graphics,
+  center: { x: number; y: number },
+  size: number,
+): void {
+  const half = size / 2;
+  graphics.drawRect(center.x - half, center.y - half, size, size);
 }

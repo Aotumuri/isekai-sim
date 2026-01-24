@@ -45,6 +45,8 @@ export const WORLD_BALANCE = {
       min: 10,
       max: 20,
     },
+    cityPerMacroRegion: 0.4,
+    minCitiesPerNation: 1,
   },
   war: {
     macroOccupationRatio: 0.6,

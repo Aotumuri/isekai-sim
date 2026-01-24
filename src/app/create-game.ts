@@ -55,6 +55,7 @@ export function createGame(root: HTMLElement): void {
 
   renderer.app.ticker.add(() => {
     updateSimulation(world, clock, renderer.app.ticker.deltaMS);
+    let shouldRedrawIcons = false;
     if (world.territoryVersion !== lastTerritoryVersion) {
       drawNationBorders(
         renderer.worldLayers.layers.NationFill,
@@ -62,11 +63,8 @@ export function createGame(root: HTMLElement): void {
         world.macroRegions,
         world.nations,
       );
-      drawCityCapitalIcons(
-        renderer.worldLayers.layers.CityCapitalResourceIcons,
-        world.mesoRegions,
-      );
       lastTerritoryVersion = world.territoryVersion;
+      shouldRedrawIcons = true;
     }
     if (world.occupation.version !== lastOccupationVersion) {
       drawTerritoryEffects(
@@ -78,6 +76,13 @@ export function createGame(root: HTMLElement): void {
         config.height,
       );
       lastOccupationVersion = world.occupation.version;
+      shouldRedrawIcons = true;
+    }
+    if (shouldRedrawIcons) {
+      drawCityCapitalIcons(
+        renderer.worldLayers.layers.CityCapitalResourceIcons,
+        world.mesoRegions,
+      );
     }
     timeHud.update(world.time, clock);
     drawUnits(

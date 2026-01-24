@@ -32,6 +32,8 @@ export interface WorldConfig {
   nationEnabled: boolean;
   nationTargetMacroRegionsPerNation: number;
   nationMacroRegionSizeRange: Range;
+  nationCityPerMacroRegion: number;
+  nationMinCitiesPerNation: number;
 }
 
 // const DEFAULT_SEED = 621903618650; // 二つの島
@@ -78,5 +80,7 @@ export function createWorldConfig(width: number, height: number): WorldConfig {
     nationEnabled: nation.enabled,
     nationTargetMacroRegionsPerNation: nation.targetMacroRegionsPerNation,
     nationMacroRegionSizeRange: { ...nation.macroRegionSizeRange },
+    nationCityPerMacroRegion: nation.cityPerMacroRegion,
+    nationMinCitiesPerNation: nation.minCitiesPerNation,
   };
 }

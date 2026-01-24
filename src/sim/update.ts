@@ -1,5 +1,6 @@
 import type { WorldState } from "./world-state";
 import { updateBattles } from "./battles";
+import { updateCapitals } from "./capitals";
 import { repositionUnits } from "./nation/reposition-units";
 import { updateOccupation } from "./occupation";
 import { updateSurrender } from "./surrender";
@@ -39,6 +40,7 @@ function stepFastTick(world: WorldState, dtMs: number): void {
   repositionUnits(world, dtMs);
   updateBattles(world);
   updateOccupation(world);
+  updateCapitals(world);
   updateSurrender(world);
 }
 
