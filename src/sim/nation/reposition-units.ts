@@ -1,7 +1,11 @@
 import type { WorldState } from "../world-state";
 import type { UnitState } from "../unit";
 import { MOVE_MS_PER_REGION } from "../movement";
-import type { MesoRegion, MesoRegionId } from "../../worldgen/meso-region";
+import type {
+  MesoRegion,
+  MesoRegionBuilding,
+  MesoRegionId,
+} from "../../worldgen/meso-region";
 import type { NationId } from "../../worldgen/nation";
 import { buildWarAdjacency, isAtWar, type WarAdjacency } from "../war-state";
 
@@ -402,6 +406,28 @@ function collectOwnedTargets(
   return targets;
 }
 
+function collectBuildingTargets(
+  nationId: NationId,
+  building: MesoRegionBuilding,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+): MesoRegionId[] {
+  const targets: MesoRegionId[] = [];
+  for (const [mesoId, owner] of ownerByMesoId.entries()) {
+    if (owner !== nationId) {
+      continue;
+    }
+    const meso = mesoById.get(mesoId);
+    if (!meso || !isPassable(meso)) {
+      continue;
+    }
+    if (meso.building === building) {
+      targets.push(mesoId);
+    }
+  }
+  return targets;
+}
+
 function collectIntrusionTargetsByNation(
   units: UnitState[],
   ownerByMesoId: Map<MesoRegionId, NationId>,
@@ -511,6 +537,13 @@ function assignDefenseTargets(
   );
   const borderSet = new Set(borderList);
   const ownedTargets = collectOwnedTargets(nationId, mesoById, ownerByMesoId);
+  const capitalTargets = collectBuildingTargets(
+    nationId,
+    "capital",
+    mesoById,
+    ownerByMesoId,
+  );
+  const cityTargets = collectBuildingTargets(nationId, "city", mesoById, ownerByMesoId);
 
   if (
     intrusionSet.size === 0 &&
@@ -526,7 +559,49 @@ function assignDefenseTargets(
   const assignedTargets = new Set<MesoRegionId>();
   let remainingUnits = orderedUnits;
 
-  if (intrusionSet.size > 0) {
+  if (capitalTargets.length > 0 && remainingUnits.length > 0) {
+    const capitalSet = new Set(capitalTargets);
+    remainingUnits = keepExistingTargets(
+      remainingUnits,
+      capitalSet,
+      assignedTargets,
+      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+    );
+    remainingUnits = assignUnitsOnTarget(remainingUnits, capitalSet, assignedTargets);
+    remainingUnits = assignNearestTargets(
+      remainingUnits,
+      capitalSet,
+      assignedTargets,
+      neighborsById,
+      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+    );
+  }
+
+  if (cityTargets.length > 0 && remainingUnits.length > 0) {
+    const cityList = selectTargetsForUnits(
+      cityTargets,
+      Math.min(remainingUnits.length, cityTargets.length),
+      mesoById,
+      "even",
+    );
+    const citySet = new Set(cityList);
+    remainingUnits = keepExistingTargets(
+      remainingUnits,
+      citySet,
+      assignedTargets,
+      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+    );
+    remainingUnits = assignUnitsOnTarget(remainingUnits, citySet, assignedTargets);
+    remainingUnits = assignNearestTargets(
+      remainingUnits,
+      citySet,
+      assignedTargets,
+      neighborsById,
+      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+    );
+  }
+
+  if (intrusionSet.size > 0 && remainingUnits.length > 0) {
     remainingUnits = keepExistingTargets(
       remainingUnits,
       intrusionSet,

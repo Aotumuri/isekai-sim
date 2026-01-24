@@ -11,7 +11,7 @@ export function createInitialUnits(nations: Nation[]): UnitState[] {
   let unitIndex = 0;
 
   for (const nation of nations) {
-    const count = Math.max(1, Math.floor(nation.macroRegionIds.length / 1));
+    const count = Math.max(1, Math.floor(nation.macroRegionIds.length / 0.5));
     for (let i = 0; i < count; i += 1) {
       units.push({
         id: createUnitId(unitIndex),
