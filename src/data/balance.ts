@@ -48,6 +48,12 @@ export const WORLD_BALANCE = {
     cityPerMacroRegion: 0.3,
     minCitiesPerNation: 1,
   },
+  production: {
+    unitSlowTickInterval: 10,
+    cityUnitsPerCycle: 1,
+    capitalUnitsPerOwnedMacro: 0.1,
+    maxUnitsPerNation: 100,
+  },
   war: {
     macroOccupationRatio: 0.6,
     surrender: {

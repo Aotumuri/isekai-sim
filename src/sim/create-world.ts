@@ -46,6 +46,7 @@ export function createWorld(config: WorldConfig): WorldState {
   }
 
   const units = createInitialUnits(runtimeNations);
+  const unitIdCounter = units.length;
   const initialUnitCounts = collectUnitCountsByNation(units);
   for (const nation of runtimeNations) {
     nation.initialUnitCount = initialUnitCounts.get(nation.id) ?? 0;
@@ -75,6 +76,7 @@ export function createWorld(config: WorldConfig): WorldState {
     occupation,
     territoryVersion,
     units,
+    unitIdCounter,
     time,
   };
 }

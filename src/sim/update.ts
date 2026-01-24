@@ -3,6 +3,7 @@ import { updateBattles } from "./battles";
 import { updateCapitals } from "./capitals";
 import { repositionUnits } from "./nation/reposition-units";
 import { updateOccupation } from "./occupation";
+import { updateProduction } from "./production";
 import { updateSurrender } from "./surrender";
 import {
   FAST_TICK_MS,
@@ -46,5 +47,5 @@ function stepFastTick(world: WorldState, dtMs: number): void {
 
 function stepSlowTick(world: WorldState, _dtMs: number): void {
   world.time.slowTick += 1;
-  // TODO: resource/production updates.
+  updateProduction(world);
 }

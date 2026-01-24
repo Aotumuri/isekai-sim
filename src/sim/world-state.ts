@@ -22,5 +22,6 @@ export interface WorldState {
   occupation: OccupationState;
   territoryVersion: number;
   units: UnitState[];
+  unitIdCounter: number;
   time: SimTime;
 }
