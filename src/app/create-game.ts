@@ -2,6 +2,7 @@ import { createWorldConfig } from "../data/world-config";
 import { drawMesoBorders } from "../render/draw/meso-borders";
 import { drawMicroRegions } from "../render/draw/micro-regions";
 import { drawNationBorders } from "../render/draw/nation-borders";
+import { drawTerritoryEffects } from "../render/draw/territory-effects";
 import { drawUnits } from "../render/draw/units";
 import { attachRegionHoverUI } from "../render/region/hover-ui";
 import { createRenderer } from "../render/renderer";
@@ -25,6 +26,14 @@ export function createGame(root: HTMLElement): void {
     world.macroRegions,
     world.nations,
   );
+  drawTerritoryEffects(
+    renderer.worldLayers.layers.TerritoryEffects,
+    world.microRegions,
+    world.macroRegions,
+    world.occupation,
+    config.width,
+    config.height,
+  );
   drawUnits(
     renderer.worldLayers.layers.Unit,
     world.units,
@@ -36,9 +45,31 @@ export function createGame(root: HTMLElement): void {
   const clock = createSimClock();
   attachTimeControls(clock);
   const timeHud = attachTimeHud(renderer);
+  let lastOccupationVersion = world.occupation.version;
+  let lastTerritoryVersion = world.territoryVersion;
 
   renderer.app.ticker.add(() => {
     updateSimulation(world, clock, renderer.app.ticker.deltaMS);
+    if (world.territoryVersion !== lastTerritoryVersion) {
+      drawNationBorders(
+        renderer.worldLayers.layers.NationFill,
+        world.microRegions,
+        world.macroRegions,
+        world.nations,
+      );
+      lastTerritoryVersion = world.territoryVersion;
+    }
+    if (world.occupation.version !== lastOccupationVersion) {
+      drawTerritoryEffects(
+        renderer.worldLayers.layers.TerritoryEffects,
+        world.microRegions,
+        world.macroRegions,
+        world.occupation,
+        config.width,
+        config.height,
+      );
+      lastOccupationVersion = world.occupation.version;
+    }
     timeHud.update(world.time, clock);
     drawUnits(
       renderer.worldLayers.layers.Unit,

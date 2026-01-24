@@ -7,8 +7,13 @@ import { createMicroRegionEdges } from "../worldgen/create-micro-region-edges";
 import { generateMicroRegions } from "../worldgen/generate/micro-regions";
 import { generateMesoRegions } from "../worldgen/generate/meso-regions";
 import { generateNations } from "../worldgen/generate/nations";
+import type { BattleState } from "./battles";
 import { createInitialUnits } from "./create-units";
+import type { NationRuntime } from "./nation-runtime";
+import { createOccupationState } from "./occupation";
+import { addTestWar } from "./test-war";
 import { createSimTime } from "./time";
+import type { WarState } from "./war-state";
 import type { WorldState } from "./world-state";
 
 export function createWorld(config: WorldConfig): WorldState {
@@ -20,8 +25,25 @@ export function createWorld(config: WorldConfig): WorldState {
   applyRivers(microRegions, microRegionEdges, rng, config.riverSourceCount);
   const mesoRegions = generateMesoRegions(microRegions, config, rng);
   const { macroRegions, nations } = generateNations(mesoRegions, config, rng);
-  const units = createInitialUnits(nations);
+  const runtimeNations: NationRuntime[] = nations.map((nation) => ({
+    ...nation,
+    unitRoles: {
+      defenseUnitIds: [],
+      occupationUnitIds: [],
+    },
+  }));
+  const units = createInitialUnits(runtimeNations);
   const time = createSimTime();
+  const wars: WarState[] = [];
+  addTestWar(wars, mesoRegions, macroRegions, rng, time.fastTick);
+  addTestWar(wars, mesoRegions, macroRegions, rng, time.fastTick);
+  addTestWar(wars, mesoRegions, macroRegions, rng, time.fastTick);
+  addTestWar(wars, mesoRegions, macroRegions, rng, time.fastTick);
+  addTestWar(wars, mesoRegions, macroRegions, rng, time.fastTick);
+  addTestWar(wars, mesoRegions, macroRegions, rng, time.fastTick);
+  const battles: BattleState[] = [];
+  const occupation = createOccupationState();
+  const territoryVersion = 0;
 
   return {
     width: config.width,
@@ -30,7 +52,11 @@ export function createWorld(config: WorldConfig): WorldState {
     microRegionEdges,
     mesoRegions,
     macroRegions,
-    nations,
+    nations: runtimeNations,
+    wars,
+    battles,
+    occupation,
+    territoryVersion,
     units,
     time,
   };

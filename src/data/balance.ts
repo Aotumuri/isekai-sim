@@ -46,4 +46,7 @@ export const WORLD_BALANCE = {
       max: 20,
     },
   },
+  war: {
+    macroOccupationRatio: 0.6,
+  },
 } as const;

@@ -3,6 +3,7 @@ import type { UnitState } from "../unit";
 import { MOVE_MS_PER_REGION } from "../movement";
 import type { MesoRegion, MesoRegionId } from "../../worldgen/meso-region";
 import type { NationId } from "../../worldgen/nation";
+import { buildWarAdjacency, isAtWar, type WarAdjacency } from "../war-state";
 
 export function repositionUnits(world: WorldState, dtMs: number): void {
   if (world.units.length === 0 || world.mesoRegions.length === 0) {
@@ -26,6 +27,37 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     }
   }
 
+  const warAdjacency = buildWarAdjacency(world.wars);
+  const occupationByMesoId = world.occupation.mesoById;
+  const hasEnemyUnits = (targetId: MesoRegionId, nationId: NationId): boolean => {
+    for (const unit of world.units) {
+      if (
+        unit.regionId === targetId &&
+        unit.nationId !== nationId &&
+        isAtWar(nationId, unit.nationId, warAdjacency)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+  const liberationTargetsByNationId = collectLiberationTargetsByNation(
+    occupationByMesoId,
+    ownerByMesoId,
+    mesoById,
+  );
+  const intrusionTargetsByNationId = collectIntrusionTargetsByNation(
+    world.units,
+    ownerByMesoId,
+    mesoById,
+    warAdjacency,
+  );
+  const occupationTargetsByNationId = collectOccupationTargetsByNation(
+    world.mesoRegions,
+    ownerByMesoId,
+    occupationByMesoId,
+    warAdjacency,
+  );
   const borderByNationId = new Map<NationId, MesoRegionId[]>();
   for (const meso of world.mesoRegions) {
     if (!isPassable(meso)) {
@@ -36,18 +68,30 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
       continue;
     }
 
+    let isBorder = false;
     for (const neighbor of meso.neighbors) {
       const neighborOwner = ownerByMesoId.get(neighbor.id);
-      if (neighborOwner && neighborOwner !== owner) {
-        const list = borderByNationId.get(owner);
-        if (list) {
-          list.push(meso.id);
-        } else {
-          borderByNationId.set(owner, [meso.id]);
-        }
-        break;
+      if (!neighborOwner || neighborOwner === owner) {
+        continue;
+      }
+      isBorder = true;
+    }
+
+    if (isBorder) {
+      const list = borderByNationId.get(owner);
+      if (list) {
+        list.push(meso.id);
+      } else {
+        borderByNationId.set(owner, [meso.id]);
       }
     }
+  }
+
+  const nationById = new Map<NationId, WorldState["nations"][number]>();
+  for (const nation of world.nations) {
+    nationById.set(nation.id, nation);
+    nation.unitRoles.defenseUnitIds = [];
+    nation.unitRoles.occupationUnitIds = [];
   }
 
   const unitsByNation = new Map<NationId, UnitState[]>();
@@ -61,123 +105,105 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
   }
 
   for (const [nationId, units] of unitsByNation.entries()) {
-    const targets = borderByNationId.get(nationId) ?? [];
+    const borderTargets = borderByNationId.get(nationId) ?? [];
+    const intrusionTargets = intrusionTargetsByNationId.get(nationId) ?? [];
+    const liberationTargets = liberationTargetsByNationId.get(nationId) ?? [];
+    const occupationTargets = occupationTargetsByNationId.get(nationId) ?? [];
+    const orderedUnits = [...units].sort((a, b) => a.id.localeCompare(b.id));
+    const defenseCount = determineDefenseUnitCount(
+      orderedUnits.length,
+      intrusionTargets.length,
+      liberationTargets.length,
+      occupationTargets.length,
+    );
+    const defenseUnits = orderedUnits.slice(0, defenseCount);
+    const occupationUnits = orderedUnits.slice(defenseCount);
+    const nation = nationById.get(nationId);
+    if (nation) {
+      nation.unitRoles.defenseUnitIds = defenseUnits.map((unit) => unit.id);
+      nation.unitRoles.occupationUnitIds = occupationUnits.map((unit) => unit.id);
+    }
+    const isBlockedByEnemy = (toId: MesoRegionId): boolean =>
+      hasEnemyUnits(toId, nationId);
     repositionNationUnits(
       nationId,
-      units,
-      targets,
+      defenseUnits,
+      occupationUnits,
+      intrusionTargets,
+      liberationTargets,
+      borderTargets,
+      occupationTargets,
       dtMs,
       mesoById,
       neighborsById,
       ownerByMesoId,
+      occupationByMesoId,
+      warAdjacency,
+      isBlockedByEnemy,
     );
   }
 }
 
 function repositionNationUnits(
   nationId: NationId,
-  units: UnitState[],
-  targets: MesoRegionId[],
+  defenseUnits: UnitState[],
+  occupationUnits: UnitState[],
+  intrusionTargets: MesoRegionId[],
+  liberationTargets: MesoRegionId[],
+  borderTargets: MesoRegionId[],
+  occupationTargets: MesoRegionId[],
   dtMs: number,
   mesoById: Map<MesoRegionId, MesoRegion>,
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
   ownerByMesoId: Map<MesoRegionId, NationId>,
+  occupationByMesoId: Map<MesoRegionId, NationId>,
+  warAdjacency: WarAdjacency,
+  isBlockedByEnemy: (toId: MesoRegionId) => boolean,
 ): void {
-  const borderTargets = selectTargetsForUnits(
-    targets,
-    Math.min(units.length, targets.length),
-    mesoById,
-    "spread",
-  );
-  const borderTargetSet = new Set(borderTargets);
-  const borderAllSet = new Set(targets);
-  const ownedTargets = collectOwnedTargets(nationId, mesoById, ownerByMesoId);
-  let interiorCandidates = ownedTargets.filter(
-    (id) => !borderAllSet.has(id) && isCoastalById(id, mesoById),
-  );
-  if (interiorCandidates.length === 0) {
-    interiorCandidates = ownedTargets.filter((id) => !borderAllSet.has(id));
-  }
-  if (interiorCandidates.length === 0) {
-    interiorCandidates = ownedTargets;
-  }
-  const interiorTargetCount = Math.max(0, units.length - borderTargets.length);
-  const interiorTargets = selectTargetsForUnits(
-    interiorCandidates,
-    interiorTargetCount,
-    mesoById,
-    "even",
-  );
-  const interiorTargetSet = new Set(interiorTargets);
-  if (borderTargetSet.size === 0 && interiorTargetSet.size === 0) {
-    for (const unit of units) {
-      unit.moveTargetId = null;
-      unit.moveFromId = null;
-      unit.moveToId = null;
-      unit.moveProgressMs = 0;
-    }
-    return;
-  }
-
-  const orderedUnits = [...units].sort((a, b) => a.id.localeCompare(b.id));
-  const assignedTargets = new Set<MesoRegionId>();
-  let remainingUnits = orderedUnits;
-
-  remainingUnits = keepExistingTargets(
-    remainingUnits,
-    borderTargetSet,
-    assignedTargets,
+  assignDefenseTargets(
+    defenseUnits,
     nationId,
-    ownerByMesoId,
-  );
-  remainingUnits = assignUnitsOnTarget(remainingUnits, borderTargetSet, assignedTargets);
-  remainingUnits = assignNearestTargets(
-    remainingUnits,
-    borderTargetSet,
-    assignedTargets,
+    intrusionTargets,
+    liberationTargets,
+    borderTargets,
+    mesoById,
     neighborsById,
-    (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+    ownerByMesoId,
+    occupationByMesoId,
+    warAdjacency,
+  );
+  assignOccupationTargets(
+    occupationUnits,
+    nationId,
+    occupationTargets,
+    mesoById,
+    neighborsById,
+    ownerByMesoId,
+    warAdjacency,
   );
 
-  if (interiorTargetSet.size > 0 && remainingUnits.length > 0) {
-    remainingUnits = keepExistingTargets(
-      remainingUnits,
-      interiorTargetSet,
-      assignedTargets,
-      nationId,
-      ownerByMesoId,
-    );
-    remainingUnits = assignUnitsOnTarget(remainingUnits, interiorTargetSet, assignedTargets);
-    remainingUnits = assignNearestTargets(
-      remainingUnits,
-      interiorTargetSet,
-      assignedTargets,
-      neighborsById,
-      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
-    );
-  }
-
-  if (remainingUnits.length > 0) {
-    const stackTargets = pickStackTargets(interiorTargets, borderTargets, ownedTargets);
-    if (stackTargets.length > 0) {
-      assignStackedTargets(remainingUnits, stackTargets);
-      remainingUnits = [];
-    }
-  }
-
-  for (const unit of remainingUnits) {
-    unit.moveTargetId = null;
-    unit.moveFromId = null;
-    unit.moveToId = null;
-    unit.moveProgressMs = 0;
-  }
+  const orderedUnits = [...defenseUnits, ...occupationUnits].sort((a, b) =>
+    a.id.localeCompare(b.id),
+  );
 
   for (const unit of orderedUnits) {
+    const useWarPath = shouldUseWarPath(
+      unit,
+      nationId,
+      ownerByMesoId,
+      occupationByMesoId,
+      mesoById,
+      warAdjacency,
+    );
     moveUnitTowardTarget(
       unit,
       dtMs,
       neighborsById,
-      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      (id) =>
+        useWarPath
+          ? isPassableForNation(id, nationId, mesoById, ownerByMesoId, warAdjacency)
+          : isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      isBlockedByEnemy,
     );
   }
 }
@@ -187,6 +213,7 @@ function moveUnitTowardTarget(
   dtMs: number,
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
   isAllowed: (id: MesoRegionId) => boolean,
+  isBlockedByEnemy: (toId: MesoRegionId) => boolean,
 ): void {
   if (!unit.moveTargetId || unit.regionId === unit.moveTargetId) {
     unit.moveFromId = null;
@@ -213,8 +240,16 @@ function moveUnitTowardTarget(
   }
 
   while (unit.moveProgressMs >= MOVE_MS_PER_REGION) {
+    const nextId = unit.moveToId ?? unit.regionId;
     unit.moveProgressMs -= MOVE_MS_PER_REGION;
-    unit.regionId = unit.moveToId ?? unit.regionId;
+    const previousId = unit.regionId;
+    unit.regionId = nextId;
+
+    if (nextId !== previousId && isBlockedByEnemy(nextId)) {
+      unit.regionId = previousId;
+      unit.moveProgressMs = 0;
+      return;
+    }
 
     if (unit.regionId === unit.moveTargetId) {
       unit.moveFromId = null;
@@ -349,23 +384,6 @@ function isPassable(meso: MesoRegion): boolean {
   return meso.type !== "sea";
 }
 
-function isCoastalById(
-  id: MesoRegionId,
-  mesoById: Map<MesoRegionId, MesoRegion>,
-): boolean {
-  const meso = mesoById.get(id);
-  if (!meso || meso.type === "sea") {
-    return false;
-  }
-  for (const neighbor of meso.neighbors) {
-    const neighborMeso = mesoById.get(neighbor.id);
-    if (neighborMeso && neighborMeso.type === "sea") {
-      return true;
-    }
-  }
-  return false;
-}
-
 function collectOwnedTargets(
   nationId: NationId,
   mesoById: Map<MesoRegionId, MesoRegion>,
@@ -384,12 +402,352 @@ function collectOwnedTargets(
   return targets;
 }
 
+function collectIntrusionTargetsByNation(
+  units: UnitState[],
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+  warAdjacency: WarAdjacency,
+): Map<NationId, MesoRegionId[]> {
+  const targets = new Map<NationId, Set<MesoRegionId>>();
+  for (const unit of units) {
+    const owner = ownerByMesoId.get(unit.regionId);
+    if (!owner || owner === unit.nationId) {
+      continue;
+    }
+    if (!isAtWar(unit.nationId, owner, warAdjacency)) {
+      continue;
+    }
+    const meso = mesoById.get(unit.regionId);
+    if (!meso || !isPassable(meso)) {
+      continue;
+    }
+    const set = targets.get(owner);
+    if (set) {
+      set.add(unit.regionId);
+    } else {
+      targets.set(owner, new Set([unit.regionId]));
+    }
+  }
+  const result = new Map<NationId, MesoRegionId[]>();
+  for (const [nationId, set] of targets.entries()) {
+    result.set(nationId, [...set]);
+  }
+  return result;
+}
+
+function collectOccupationTargetsByNation(
+  mesoRegions: MesoRegion[],
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+  occupationByMesoId: Map<MesoRegionId, NationId>,
+  warAdjacency: WarAdjacency,
+): Map<NationId, MesoRegionId[]> {
+  const targets = new Map<NationId, Set<MesoRegionId>>();
+  for (const meso of mesoRegions) {
+    if (!isPassable(meso)) {
+      continue;
+    }
+    const owner = ownerByMesoId.get(meso.id);
+    if (!owner) {
+      continue;
+    }
+    if (occupationByMesoId.has(meso.id)) {
+      continue;
+    }
+    const enemies = warAdjacency.get(owner);
+    if (!enemies || enemies.size === 0) {
+      continue;
+    }
+    for (const enemyId of enemies) {
+      const set = targets.get(enemyId);
+      if (set) {
+        set.add(meso.id);
+      } else {
+        targets.set(enemyId, new Set([meso.id]));
+      }
+    }
+  }
+  const result = new Map<NationId, MesoRegionId[]>();
+  for (const [nationId, set] of targets.entries()) {
+    result.set(nationId, [...set]);
+  }
+  return result;
+}
+
+function assignDefenseTargets(
+  units: UnitState[],
+  nationId: NationId,
+  intrusionTargets: MesoRegionId[],
+  liberationTargets: MesoRegionId[],
+  borderTargets: MesoRegionId[],
+  mesoById: Map<MesoRegionId, MesoRegion>,
+  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+  occupationByMesoId: Map<MesoRegionId, NationId>,
+  warAdjacency: WarAdjacency,
+): void {
+  if (units.length === 0) {
+    return;
+  }
+
+  const intrusionList = selectTargetsForUnits(
+    intrusionTargets,
+    Math.min(units.length, intrusionTargets.length),
+    mesoById,
+    "even",
+  );
+  const intrusionSet = new Set(intrusionList);
+  const liberationList = selectTargetsForUnits(
+    liberationTargets,
+    Math.min(units.length, liberationTargets.length),
+    mesoById,
+    "even",
+  );
+  const liberationSet = new Set(liberationList);
+  const borderList = selectTargetsForUnits(
+    borderTargets,
+    Math.min(units.length, borderTargets.length),
+    mesoById,
+    "spread",
+  );
+  const borderSet = new Set(borderList);
+  const ownedTargets = collectOwnedTargets(nationId, mesoById, ownerByMesoId);
+
+  if (
+    intrusionSet.size === 0 &&
+    liberationSet.size === 0 &&
+    borderSet.size === 0 &&
+    ownedTargets.length === 0
+  ) {
+    clearUnitMovement(units);
+    return;
+  }
+
+  const orderedUnits = [...units].sort((a, b) => a.id.localeCompare(b.id));
+  const assignedTargets = new Set<MesoRegionId>();
+  let remainingUnits = orderedUnits;
+
+  if (intrusionSet.size > 0) {
+    remainingUnits = keepExistingTargets(
+      remainingUnits,
+      intrusionSet,
+      assignedTargets,
+      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+    );
+    remainingUnits = assignUnitsOnTarget(remainingUnits, intrusionSet, assignedTargets);
+    remainingUnits = assignNearestTargets(
+      remainingUnits,
+      intrusionSet,
+      assignedTargets,
+      neighborsById,
+      (id) => isPassableForNation(id, nationId, mesoById, ownerByMesoId, warAdjacency),
+    );
+  }
+
+  if (liberationSet.size > 0 && remainingUnits.length > 0) {
+    remainingUnits = keepExistingTargets(
+      remainingUnits,
+      liberationSet,
+      assignedTargets,
+      (id) => isLiberationTarget(id, nationId, ownerByMesoId, occupationByMesoId, mesoById),
+    );
+    remainingUnits = assignUnitsOnTarget(remainingUnits, liberationSet, assignedTargets);
+    remainingUnits = assignNearestTargets(
+      remainingUnits,
+      liberationSet,
+      assignedTargets,
+      neighborsById,
+      (id) => isPassableForNation(id, nationId, mesoById, ownerByMesoId, warAdjacency),
+    );
+  }
+
+  if (borderSet.size > 0 && remainingUnits.length > 0) {
+    remainingUnits = keepExistingTargets(
+      remainingUnits,
+      borderSet,
+      assignedTargets,
+      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+    );
+    remainingUnits = assignUnitsOnTarget(remainingUnits, borderSet, assignedTargets);
+    remainingUnits = assignNearestTargets(
+      remainingUnits,
+      borderSet,
+      assignedTargets,
+      neighborsById,
+      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+    );
+  }
+
+  if (ownedTargets.length > 0 && remainingUnits.length > 0) {
+    const interiorTargets = selectTargetsForUnits(
+      ownedTargets,
+      Math.min(remainingUnits.length, ownedTargets.length),
+      mesoById,
+      "even",
+    );
+    const interiorSet = new Set(interiorTargets);
+    remainingUnits = keepExistingTargets(
+      remainingUnits,
+      interiorSet,
+      assignedTargets,
+      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+    );
+    remainingUnits = assignUnitsOnTarget(remainingUnits, interiorSet, assignedTargets);
+    remainingUnits = assignNearestTargets(
+      remainingUnits,
+      interiorSet,
+      assignedTargets,
+      neighborsById,
+      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+    );
+  }
+
+  if (remainingUnits.length > 0) {
+    const stackTargets = pickDefenseStackTargets(
+      intrusionTargets,
+      liberationTargets,
+      borderTargets,
+      ownedTargets,
+    );
+    if (stackTargets.length > 0) {
+      assignStackedTargets(remainingUnits, stackTargets);
+      remainingUnits = [];
+    }
+  }
+
+  clearUnitMovement(remainingUnits);
+}
+
+function assignOccupationTargets(
+  units: UnitState[],
+  nationId: NationId,
+  occupationTargets: MesoRegionId[],
+  mesoById: Map<MesoRegionId, MesoRegion>,
+  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+  warAdjacency: WarAdjacency,
+): void {
+  if (units.length === 0) {
+    return;
+  }
+  if (occupationTargets.length === 0) {
+    clearUnitMovement(units);
+    return;
+  }
+
+  const targetSet = new Set(occupationTargets);
+  const targetList = [...targetSet];
+  if (targetSet.size === 0) {
+    clearUnitMovement(units);
+    return;
+  }
+
+  const orderedUnits = [...units].sort((a, b) => a.id.localeCompare(b.id));
+  const assignedTargets = new Set<MesoRegionId>();
+  let remainingUnits = orderedUnits;
+
+  remainingUnits = keepExistingTargets(
+    remainingUnits,
+    targetSet,
+    assignedTargets,
+    (id) => isEnemyTarget(id, nationId, mesoById, ownerByMesoId, warAdjacency),
+  );
+  remainingUnits = assignUnitsOnTarget(remainingUnits, targetSet, assignedTargets);
+  remainingUnits = assignNearestTargets(
+    remainingUnits,
+    targetSet,
+    assignedTargets,
+    neighborsById,
+    (id) => isPassableForNation(id, nationId, mesoById, ownerByMesoId, warAdjacency),
+  );
+
+  if (remainingUnits.length > 0) {
+    assignStackedTargets(remainingUnits, targetList);
+    remainingUnits = [];
+  }
+
+  clearUnitMovement(remainingUnits);
+}
+
+function collectLiberationTargetsByNation(
+  occupationByMesoId: Map<MesoRegionId, NationId>,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+): Map<NationId, MesoRegionId[]> {
+  const result = new Map<NationId, MesoRegionId[]>();
+  for (const [mesoId, occupier] of occupationByMesoId.entries()) {
+    const owner = ownerByMesoId.get(mesoId);
+    if (!owner || occupier === owner) {
+      continue;
+    }
+    const meso = mesoById.get(mesoId);
+    if (!meso || !isPassable(meso)) {
+      continue;
+    }
+    const list = result.get(owner);
+    if (list) {
+      list.push(mesoId);
+    } else {
+      result.set(owner, [mesoId]);
+    }
+  }
+  return result;
+}
+
+function pickDefenseStackTargets(
+  intrusionTargets: MesoRegionId[],
+  liberationTargets: MesoRegionId[],
+  borderTargets: MesoRegionId[],
+  ownedTargets: MesoRegionId[],
+): MesoRegionId[] {
+  if (intrusionTargets.length > 0) {
+    return intrusionTargets;
+  }
+  if (liberationTargets.length > 0) {
+    return liberationTargets;
+  }
+  if (borderTargets.length > 0) {
+    return borderTargets;
+  }
+  return ownedTargets;
+}
+
+function determineDefenseUnitCount(
+  totalUnits: number,
+  intrusionCount: number,
+  liberationCount: number,
+  occupationCount: number,
+): number {
+  if (totalUnits <= 0) {
+    return 0;
+  }
+  let ratio = 0.4;
+  if (intrusionCount > 0) {
+    ratio = 0.7;
+  } else if (liberationCount > 0) {
+    ratio = 0.6;
+  } else if (occupationCount > 0) {
+    ratio = 0.4;
+  } else {
+    ratio = 1;
+  }
+  const minCount = intrusionCount > 0 || liberationCount > 0 || occupationCount > 0 ? 1 : 0;
+  return clamp(Math.round(totalUnits * ratio), minCount, totalUnits);
+}
+
+function clearUnitMovement(units: UnitState[]): void {
+  for (const unit of units) {
+    unit.moveTargetId = null;
+    unit.moveFromId = null;
+    unit.moveToId = null;
+    unit.moveProgressMs = 0;
+  }
+}
+
 function keepExistingTargets(
   units: UnitState[],
   targetSet: Set<MesoRegionId>,
   assignedTargets: Set<MesoRegionId>,
-  nationId: NationId,
-  ownerByMesoId: Map<MesoRegionId, NationId>,
+  isTargetStillValid: (id: MesoRegionId) => boolean,
 ): UnitState[] {
   const remaining: UnitState[] = [];
   for (const unit of units) {
@@ -402,7 +760,7 @@ function keepExistingTargets(
       remaining.push(unit);
       continue;
     }
-    if (ownerByMesoId.get(targetId) !== nationId) {
+    if (!isTargetStillValid(targetId)) {
       remaining.push(unit);
       continue;
     }
@@ -466,20 +824,6 @@ function assignNearestTargets(
     }
   }
   return remaining;
-}
-
-function pickStackTargets(
-  interiorTargets: MesoRegionId[],
-  borderTargets: MesoRegionId[],
-  ownedTargets: MesoRegionId[],
-): MesoRegionId[] {
-  if (interiorTargets.length > 0) {
-    return interiorTargets;
-  }
-  if (borderTargets.length > 0) {
-    return borderTargets;
-  }
-  return ownedTargets;
 }
 
 function assignStackedTargets(units: UnitState[], targets: MesoRegionId[]): void {
@@ -706,4 +1050,95 @@ function isOwnedPassable(
   }
   const meso = mesoById.get(id);
   return !!meso && isPassable(meso);
+}
+
+function isPassableForNation(
+  id: MesoRegionId,
+  nationId: NationId,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+  warAdjacency: WarAdjacency,
+): boolean {
+  const owner = ownerByMesoId.get(id);
+  if (!owner) {
+    return false;
+  }
+  const meso = mesoById.get(id);
+  if (!meso || !isPassable(meso)) {
+    return false;
+  }
+  if (owner === nationId) {
+    return true;
+  }
+  return isAtWar(nationId, owner, warAdjacency);
+}
+
+function isEnemyTarget(
+  id: MesoRegionId,
+  nationId: NationId,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+  warAdjacency: WarAdjacency,
+): boolean {
+  const owner = ownerByMesoId.get(id);
+  if (!owner || owner === nationId) {
+    return false;
+  }
+  const meso = mesoById.get(id);
+  if (!meso || !isPassable(meso)) {
+    return false;
+  }
+  return isAtWar(nationId, owner, warAdjacency);
+}
+
+function isLiberationTarget(
+  id: MesoRegionId,
+  nationId: NationId,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+  occupationByMesoId: Map<MesoRegionId, NationId>,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+): boolean {
+  const owner = ownerByMesoId.get(id);
+  if (!owner || owner !== nationId) {
+    return false;
+  }
+  const occupier = occupationByMesoId.get(id);
+  if (!occupier || occupier === nationId) {
+    return false;
+  }
+  const meso = mesoById.get(id);
+  return !!meso && isPassable(meso);
+}
+
+function shouldUseWarPath(
+  unit: UnitState,
+  nationId: NationId,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+  occupationByMesoId: Map<MesoRegionId, NationId>,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+  warAdjacency: WarAdjacency,
+): boolean {
+  const targetId = unit.moveTargetId;
+  if (targetId) {
+    if (isEnemyTarget(targetId, nationId, mesoById, ownerByMesoId, warAdjacency)) {
+      return true;
+    }
+    if (
+      isLiberationTarget(targetId, nationId, ownerByMesoId, occupationByMesoId, mesoById)
+    ) {
+      return true;
+    }
+  }
+
+  const owner = ownerByMesoId.get(unit.regionId);
+  if (owner && owner !== nationId) {
+    return isAtWar(nationId, owner, warAdjacency);
+  }
+
+  const occupier = occupationByMesoId.get(unit.regionId);
+  if (occupier && occupier !== nationId) {
+    return true;
+  }
+
+  return false;
 }

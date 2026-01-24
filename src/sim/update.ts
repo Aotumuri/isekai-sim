@@ -1,5 +1,8 @@
 import type { WorldState } from "./world-state";
+import { updateBattles } from "./battles";
 import { repositionUnits } from "./nation/reposition-units";
+import { updateOccupation } from "./occupation";
+import { updateSurrender } from "./surrender";
 import {
   FAST_TICK_MS,
   SLOW_TICK_MS,
@@ -34,7 +37,9 @@ function stepFastTick(world: WorldState, dtMs: number): void {
   world.time.fastTick += 1;
   world.time.elapsedMs += dtMs;
   repositionUnits(world, dtMs);
-  // TODO: combat updates.
+  updateBattles(world);
+  updateOccupation(world);
+  updateSurrender(world);
 }
 
 function stepSlowTick(world: WorldState, _dtMs: number): void {
