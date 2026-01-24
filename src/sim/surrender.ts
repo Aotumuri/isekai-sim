@@ -5,16 +5,14 @@ import { WORLD_BALANCE } from "../data/balance";
 import type { UnitState } from "./unit";
 import { buildWarAdjacency, isAtWar } from "./war-state";
 import type { WorldState } from "./world-state";
+import { getMesoById } from "./world-cache";
 
 export function updateSurrender(world: WorldState): void {
   if (world.nations.length === 0) {
     return;
   }
 
-  const mesoById = new Map<MesoRegion["id"], MesoRegion>();
-  for (const meso of world.mesoRegions) {
-    mesoById.set(meso.id, meso);
-  }
+  const mesoById = getMesoById(world);
 
   const mesoByNation = collectMesoByNation(world.macroRegions, mesoById);
   const occupationByMesoId = world.occupation.mesoById;
@@ -94,6 +92,7 @@ export function updateSurrender(world: WorldState): void {
 
   let occupationChanged = false;
   let territoryChanged = false;
+  let buildingChanged = false;
   const surrenderedThisTick: NationId[] = [];
   const eliminatedNationIds = new Set<NationId>();
 
@@ -131,9 +130,12 @@ export function updateSurrender(world: WorldState): void {
     );
     occupationChanged ||= didChange.occupationChanged;
     territoryChanged ||= didChange.territoryChanged;
+    buildingChanged ||= didChange.buildingChanged;
 
     if (didChange.territoryChanged) {
-      clearCapitalMarkerForNation(surrenderNationId, nationById, mesoById);
+      if (clearCapitalMarkerForNation(surrenderNationId, nationById, mesoById)) {
+        buildingChanged = true;
+      }
       surrenderedThisTick.push(surrenderNationId);
       const remainingMacroIds = nationById.get(surrenderNationId)?.macroRegionIds ?? [];
       if (remainingMacroIds.length === 0) {
@@ -161,6 +163,9 @@ export function updateSurrender(world: WorldState): void {
     occupationChanged ||= releasedOccupation;
   }
 
+  if (buildingChanged) {
+    world.buildingVersion += 1;
+  }
   if (occupationChanged) {
     world.occupation.version += 1;
   }
@@ -430,9 +435,9 @@ function applyAssignments(
   nationById: Map<NationId, WorldState["nations"][number]>,
   occupationByMesoId: Map<MesoRegion["id"], NationId>,
   mesoById: Map<MesoRegion["id"], MesoRegion>,
-): { territoryChanged: boolean; occupationChanged: boolean } {
+): { territoryChanged: boolean; occupationChanged: boolean; buildingChanged: boolean } {
   if (assignments.size === 0) {
-    return { territoryChanged: false, occupationChanged: false };
+    return { territoryChanged: false, occupationChanged: false, buildingChanged: false };
   }
 
   const macroById = new Map<MacroRegion["id"], MacroRegion>();
@@ -442,6 +447,7 @@ function applyAssignments(
 
   let territoryChanged = false;
   let occupationChanged = false;
+  let buildingChanged = false;
   const surrenderedNation = nationById.get(surrenderedNationId);
   for (const [macroId, newOwnerId] of assignments.entries()) {
     const macro = macroById.get(macroId);
@@ -461,6 +467,7 @@ function applyAssignments(
         const meso = mesoById.get(mesoId);
         if (meso && meso.building === "capital") {
           meso.building = "city";
+          buildingChanged = true;
         }
       }
     }
@@ -488,7 +495,7 @@ function applyAssignments(
     }
   }
 
-  return { territoryChanged, occupationChanged };
+  return { territoryChanged, occupationChanged, buildingChanged };
 }
 
 function sumValues(values: Map<NationId, number>): number {
@@ -550,15 +557,17 @@ function clearCapitalMarkerForNation(
   nationId: NationId,
   nationById: Map<NationId, WorldState["nations"][number]>,
   mesoById: Map<MesoRegion["id"], MesoRegion>,
-): void {
+): boolean {
   const nation = nationById.get(nationId);
   if (!nation) {
-    return;
+    return false;
   }
   const meso = mesoById.get(nation.capitalMesoId);
   if (meso && meso.building === "capital") {
     meso.building = "city";
+    return true;
   }
+  return false;
 }
 
 function collectUnitCountsByNation(units: UnitState[]): Map<NationId, number> {

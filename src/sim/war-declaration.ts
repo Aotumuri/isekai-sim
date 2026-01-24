@@ -1,9 +1,8 @@
 import { WORLD_BALANCE } from "../data/balance";
-import type { MacroRegion } from "../worldgen/macro-region";
-import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { UnitState } from "./unit";
 import type { WorldState } from "./world-state";
+import { getAdjacentNationPairs } from "./world-cache";
 import { buildWarAdjacency, declareWar, isAtWar } from "./war-state";
 
 export function updateWarDeclarations(world: WorldState): void {
@@ -18,7 +17,7 @@ export function updateWarDeclarations(world: WorldState): void {
     return;
   }
 
-  const adjacentPairs = collectAdjacentNationPairs(world.mesoRegions, world.macroRegions);
+  const adjacentPairs = getAdjacentNationPairs(world);
   if (adjacentPairs.length === 0) {
     return;
   }
@@ -84,68 +83,12 @@ export function updateWarDeclarations(world: WorldState): void {
   }
 }
 
-function collectAdjacentNationPairs(
-  mesoRegions: MesoRegion[],
-  macroRegions: MacroRegion[],
-): Array<[NationId, NationId]> {
-  const mesoById = new Map<MesoRegionId, MesoRegion>();
-  for (const meso of mesoRegions) {
-    mesoById.set(meso.id, meso);
-  }
-
-  const ownerByMesoId = new Map<MesoRegionId, NationId>();
-  for (const macro of macroRegions) {
-    for (const mesoId of macro.mesoRegionIds) {
-      ownerByMesoId.set(mesoId, macro.nationId);
-    }
-  }
-
-  const pairs: Array<[NationId, NationId]> = [];
-  const seen = new Set<string>();
-
-  for (const meso of mesoRegions) {
-    if (!isPassable(meso)) {
-      continue;
-    }
-    const owner = ownerByMesoId.get(meso.id);
-    if (!owner) {
-      continue;
-    }
-
-    for (const neighbor of meso.neighbors) {
-      const neighborMeso = mesoById.get(neighbor.id);
-      if (!neighborMeso || !isPassable(neighborMeso)) {
-        continue;
-      }
-      const neighborOwner = ownerByMesoId.get(neighbor.id);
-      if (!neighborOwner || neighborOwner === owner) {
-        continue;
-      }
-
-      const [nationA, nationB] =
-        owner < neighborOwner ? [owner, neighborOwner] : [neighborOwner, owner];
-      const key = `${nationA}::${nationB}`;
-      if (seen.has(key)) {
-        continue;
-      }
-      seen.add(key);
-      pairs.push([nationA, nationB]);
-    }
-  }
-
-  return pairs;
-}
-
 function collectUnitCountsByNation(units: UnitState[]): Map<NationId, number> {
   const counts = new Map<NationId, number>();
   for (const unit of units) {
     counts.set(unit.nationId, (counts.get(unit.nationId) ?? 0) + 1);
   }
   return counts;
-}
-
-function isPassable(meso: MesoRegion): boolean {
-  return meso.type !== "sea";
 }
 
 function clamp(value: number, min: number, max: number): number {

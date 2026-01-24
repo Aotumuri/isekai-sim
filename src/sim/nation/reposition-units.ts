@@ -8,28 +8,21 @@ import type {
 } from "../../worldgen/meso-region";
 import type { NationId } from "../../worldgen/nation";
 import { buildWarAdjacency, isAtWar, type WarAdjacency } from "../war-state";
+import {
+  getBorderTargetsByNation,
+  getMesoById,
+  getNeighborsById,
+  getOwnerByMesoId,
+} from "../world-cache";
 
 export function repositionUnits(world: WorldState, dtMs: number): void {
   if (world.units.length === 0 || world.mesoRegions.length === 0) {
     return;
   }
 
-  const mesoById = new Map<MesoRegionId, MesoRegion>();
-  const neighborsById = new Map<MesoRegionId, MesoRegionId[]>();
-  for (const meso of world.mesoRegions) {
-    mesoById.set(meso.id, meso);
-    neighborsById.set(
-      meso.id,
-      meso.neighbors.map((neighbor) => neighbor.id),
-    );
-  }
-
-  const ownerByMesoId = new Map<MesoRegionId, NationId>();
-  for (const macro of world.macroRegions) {
-    for (const mesoId of macro.mesoRegionIds) {
-      ownerByMesoId.set(mesoId, macro.nationId);
-    }
-  }
+  const mesoById = getMesoById(world);
+  const neighborsById = getNeighborsById(world);
+  const ownerByMesoId = getOwnerByMesoId(world);
 
   const warAdjacency = buildWarAdjacency(world.wars);
   const occupationByMesoId = world.occupation.mesoById;
@@ -62,34 +55,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     occupationByMesoId,
     warAdjacency,
   );
-  const borderByNationId = new Map<NationId, MesoRegionId[]>();
-  for (const meso of world.mesoRegions) {
-    if (!isPassable(meso)) {
-      continue;
-    }
-    const owner = ownerByMesoId.get(meso.id);
-    if (!owner) {
-      continue;
-    }
-
-    let isBorder = false;
-    for (const neighbor of meso.neighbors) {
-      const neighborOwner = ownerByMesoId.get(neighbor.id);
-      if (!neighborOwner || neighborOwner === owner) {
-        continue;
-      }
-      isBorder = true;
-    }
-
-    if (isBorder) {
-      const list = borderByNationId.get(owner);
-      if (list) {
-        list.push(meso.id);
-      } else {
-        borderByNationId.set(owner, [meso.id]);
-      }
-    }
-  }
+  const borderByNationId = getBorderTargetsByNation(world);
 
   const nationById = new Map<NationId, WorldState["nations"][number]>();
   for (const nation of world.nations) {

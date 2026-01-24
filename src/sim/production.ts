@@ -1,10 +1,11 @@
 import { WORLD_BALANCE } from "../data/balance";
 import type { MacroRegion } from "../worldgen/macro-region";
-import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
+import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { createDefaultUnit } from "./create-units";
 import { createUnitId, type UnitState } from "./unit";
 import type { WorldState } from "./world-state";
+import { getCityTargetsByNation, getOwnerByMesoId } from "./world-cache";
 
 export function updateProduction(world: WorldState): void {
   const production = WORLD_BALANCE.production;
@@ -18,14 +19,10 @@ export function updateProduction(world: WorldState): void {
     return;
   }
 
-  const ownerByMesoId = buildOwnerByMesoId(world.macroRegions);
+  const ownerByMesoId = getOwnerByMesoId(world);
   const occupationByMesoId = world.occupation.mesoById;
   const occupiedMacroById = world.occupation.macroById;
-  const cityTargetsByNation = collectCityTargetsByNation(
-    world.mesoRegions,
-    ownerByMesoId,
-    occupationByMesoId,
-  );
+  const cityTargetsByNation = getCityTargetsByNation(world);
   const unitCountsByNation = collectUnitCountsByNation(world.units);
 
   const newUnits: UnitState[] = [];
@@ -99,49 +96,6 @@ function createUnitForWorld(
   const unitId = createUnitId(world.unitIdCounter);
   world.unitIdCounter += 1;
   return createDefaultUnit(unitId, nationId, regionId);
-}
-
-function buildOwnerByMesoId(
-  macroRegions: MacroRegion[],
-): Map<MesoRegionId, NationId> {
-  const ownerByMesoId = new Map<MesoRegionId, NationId>();
-  for (const macro of macroRegions) {
-    for (const mesoId of macro.mesoRegionIds) {
-      ownerByMesoId.set(mesoId, macro.nationId);
-    }
-  }
-  return ownerByMesoId;
-}
-
-function collectCityTargetsByNation(
-  mesoRegions: MesoRegion[],
-  ownerByMesoId: Map<MesoRegionId, NationId>,
-  occupationByMesoId: Map<MesoRegionId, NationId>,
-): Map<NationId, MesoRegionId[]> {
-  const result = new Map<NationId, MesoRegionId[]>();
-  for (const meso of mesoRegions) {
-    if (meso.type === "sea") {
-      continue;
-    }
-    if (meso.building !== "city") {
-      continue;
-    }
-    const owner = ownerByMesoId.get(meso.id);
-    if (!owner) {
-      continue;
-    }
-    const occupier = occupationByMesoId.get(meso.id);
-    if (occupier && occupier !== owner) {
-      continue;
-    }
-    const list = result.get(owner);
-    if (list) {
-      list.push(meso.id);
-    } else {
-      result.set(owner, [meso.id]);
-    }
-  }
-  return result;
 }
 
 function countOwnedMacroRegions(

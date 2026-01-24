@@ -19,6 +19,7 @@ import { createSimTime } from "./time";
 import type { UnitState } from "./unit";
 import type { WarState } from "./war-state";
 import type { WorldState } from "./world-state";
+import { createWorldCache } from "./world-cache";
 
 export function createWorld(config: WorldConfig): WorldState {
   const rng = new SeededRng(config.seed);
@@ -59,6 +60,8 @@ export function createWorld(config: WorldConfig): WorldState {
   const battles: BattleState[] = [];
   const occupation = createOccupationState();
   const territoryVersion = 0;
+  const buildingVersion = 0;
+  const cache = createWorldCache();
 
   return {
     width: config.width,
@@ -72,9 +75,11 @@ export function createWorld(config: WorldConfig): WorldState {
     battles,
     occupation,
     territoryVersion,
+    buildingVersion,
     units,
     unitIdCounter,
     simRng,
+    cache,
     time,
   };
 }

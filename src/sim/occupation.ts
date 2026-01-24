@@ -4,6 +4,7 @@ import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { UnitState } from "./unit";
 import type { WorldState } from "./world-state";
+import { getOwnerByMesoId } from "./world-cache";
 import { buildWarAdjacency, isAtWar } from "./war-state";
 
 export interface OccupationState {
@@ -22,7 +23,7 @@ export function createOccupationState(): OccupationState {
 
 export function updateOccupation(world: WorldState): void {
   const warAdjacency = buildWarAdjacency(world.wars);
-  const ownerByMesoId = buildOwnerByMesoId(world.macroRegions);
+  const ownerByMesoId = getOwnerByMesoId(world);
   const unitsByMesoId = collectUnitsByMeso(world.units);
   const mesoOccupation = new Map<MesoRegionId, NationId>(world.occupation.mesoById);
   let mesoChanged = false;
@@ -74,16 +75,6 @@ export function updateOccupation(world: WorldState): void {
     world.occupation.macroById = macroOccupation;
     world.occupation.version += 1;
   }
-}
-
-function buildOwnerByMesoId(macroRegions: MacroRegion[]): Map<MesoRegionId, NationId> {
-  const ownerByMesoId = new Map<MesoRegionId, NationId>();
-  for (const macro of macroRegions) {
-    for (const mesoId of macro.mesoRegionIds) {
-      ownerByMesoId.set(mesoId, macro.nationId);
-    }
-  }
-  return ownerByMesoId;
 }
 
 function collectUnitsByMeso(units: UnitState[]): Map<MesoRegionId, UnitState[]> {

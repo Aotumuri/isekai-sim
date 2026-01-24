@@ -1,4 +1,5 @@
 import { Container, Graphics } from "pixi.js";
+import { clearLayer } from "../clear-layer";
 import type { OccupationState } from "../../sim/occupation";
 import type { MacroRegion } from "../../worldgen/macro-region";
 import type { MicroRegion } from "../../worldgen/micro-region";
@@ -17,7 +18,7 @@ export function drawTerritoryEffects(
   width: number,
   height: number,
 ): void {
-  layer.removeChildren();
+  clearLayer(layer);
 
   if (occupation.macroById.size === 0 && occupation.mesoById.size === 0) {
     return;

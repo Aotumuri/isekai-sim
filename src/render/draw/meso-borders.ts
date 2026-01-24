@@ -1,4 +1,6 @@
 import { Graphics, type Container } from "pixi.js";
+import { clearLayer } from "../clear-layer";
+import { getMicroRegionByIdMap } from "../region-index";
 import type { MicroRegion } from "../worldgen/micro-region";
 import { findSharedSegments } from "../meso-border-geometry";
 
@@ -6,7 +8,7 @@ const MESO_BORDER_COLOR = 0x000000;
 const MESO_BORDER_WIDTH = 1.5;
 
 export function drawMesoBorders(layer: Container, microRegions: MicroRegion[]): void {
-  layer.removeChildren();
+  clearLayer(layer);
 
   const graphics = new Graphics();
   graphics.lineStyle({
@@ -17,10 +19,7 @@ export function drawMesoBorders(layer: Container, microRegions: MicroRegion[]): 
     join: "round",
   });
 
-  const regionById = new Map<string, MicroRegion>();
-  for (const region of microRegions) {
-    regionById.set(region.id, region);
-  }
+  const regionById = getMicroRegionByIdMap(microRegions);
 
   const seenPairs = new Set<string>();
   for (const region of microRegions) {

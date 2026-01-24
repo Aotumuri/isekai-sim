@@ -3,6 +3,8 @@ import type { UnitState } from "../../sim/unit";
 import { MOVE_MS_PER_REGION } from "../../sim/movement";
 import type { MesoRegion } from "../../worldgen/meso-region";
 import { getNationColor } from "../nation-color";
+import { clearLayer } from "../clear-layer";
+import { getMesoRegionByIdMap } from "../region-index";
 
 const UNIT_RADIUS = 6;
 const UNIT_STROKE_WIDTH = 1.5;
@@ -21,10 +23,7 @@ export function drawUnits(
     return;
   }
 
-  const mesoById = new Map<MesoRegion["id"], MesoRegion>();
-  for (const region of mesoRegions) {
-    mesoById.set(region.id, region);
-  }
+  const mesoById = getMesoRegionByIdMap(mesoRegions);
 
   graphics.lineStyle(UNIT_STROKE_WIDTH, UNIT_STROKE_COLOR, 1);
 
@@ -81,7 +80,7 @@ function ensureGraphics(layer: Container): Graphics {
     return existing;
   }
 
-  layer.removeChildren();
+  clearLayer(layer);
   const graphics = new Graphics();
   graphics.name = "UnitGraphics";
   layer.addChild(graphics);

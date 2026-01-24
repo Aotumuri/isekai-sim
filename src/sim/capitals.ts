@@ -1,20 +1,17 @@
-import type { MacroRegion } from "../worldgen/macro-region";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { WorldState } from "./world-state";
+import { getMesoById, getOwnerByMesoId } from "./world-cache";
 
 export function updateCapitals(world: WorldState): void {
   if (world.nations.length === 0 || world.mesoRegions.length === 0) {
     return;
   }
 
-  const mesoById = new Map<MesoRegionId, MesoRegion>();
-  for (const meso of world.mesoRegions) {
-    mesoById.set(meso.id, meso);
-  }
-
-  const ownerByMesoId = buildOwnerByMesoId(world.macroRegions);
+  const mesoById = getMesoById(world);
+  const ownerByMesoId = getOwnerByMesoId(world);
   const occupationByMesoId = world.occupation.mesoById;
+  let buildingChanged = false;
 
   for (const nation of world.nations) {
     const capitalId = nation.capitalMesoId;
@@ -40,17 +37,25 @@ export function updateCapitals(world: WorldState): void {
     const didFall = capital.building === "capital";
     if (didFall) {
       capital.building = "city";
+      buildingChanged = true;
     }
     if (nextCapitalId) {
       const nextCapital = mesoById.get(nextCapitalId);
       if (nextCapital) {
-        nextCapital.building = "capital";
+        if (nextCapital.building !== "capital") {
+          nextCapital.building = "capital";
+          buildingChanged = true;
+        }
         nation.capitalMesoId = nextCapitalId;
       }
     }
     if (didFall) {
       nation.capitalFallCount += 1;
     }
+  }
+
+  if (buildingChanged) {
+    world.buildingVersion += 1;
   }
 }
 
@@ -83,16 +88,4 @@ function pickTemporaryCapital(
   }
 
   return candidate;
-}
-
-function buildOwnerByMesoId(
-  macroRegions: MacroRegion[],
-): Map<MesoRegionId, NationId> {
-  const ownerByMesoId = new Map<MesoRegionId, NationId>();
-  for (const macro of macroRegions) {
-    for (const mesoId of macro.mesoRegionIds) {
-      ownerByMesoId.set(mesoId, macro.nationId);
-    }
-  }
-  return ownerByMesoId;
 }

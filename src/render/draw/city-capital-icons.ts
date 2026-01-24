@@ -1,4 +1,5 @@
 import { Graphics, type Container } from "pixi.js";
+import { clearLayer } from "../clear-layer";
 import type { MesoRegion } from "../../worldgen/meso-region";
 
 const CAPITAL_STAR_POINTS = 5;
@@ -13,7 +14,7 @@ const CITY_MARKER_STROKE = 0x000000;
 const CITY_MARKER_STROKE_WIDTH = 1.5;
 
 export function drawCityCapitalIcons(layer: Container, mesoRegions: MesoRegion[]): void {
-  layer.removeChildren();
+  clearLayer(layer);
 
   if (mesoRegions.length === 0) {
     return;

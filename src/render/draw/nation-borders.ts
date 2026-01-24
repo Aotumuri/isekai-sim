@@ -1,4 +1,6 @@
 import { Graphics, type Container } from "pixi.js";
+import { clearLayer } from "../clear-layer";
+import { getMicroRegionByIdMap } from "../region-index";
 import type { MacroRegion } from "../../worldgen/macro-region";
 import type { MicroRegion } from "../../worldgen/micro-region";
 import type { Nation } from "../../worldgen/nation";
@@ -15,7 +17,7 @@ export function drawNationBorders(
   macroRegions: MacroRegion[],
   nations: Nation[],
 ): void {
-  layer.removeChildren();
+  clearLayer(layer);
 
   if (macroRegions.length === 0 || nations.length === 0) {
     return;
@@ -89,10 +91,7 @@ export function drawNationBorders(
     return graphics;
   };
 
-  const regionById = new Map<string, MicroRegion>();
-  for (const region of microRegions) {
-    regionById.set(region.id, region);
-  }
+  const regionById = getMicroRegionByIdMap(microRegions);
 
   for (const region of microRegions) {
     for (const neighborId of region.neighbors) {
