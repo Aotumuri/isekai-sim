@@ -22,6 +22,7 @@ import type { WorldState } from "./world-state";
 
 export function createWorld(config: WorldConfig): WorldState {
   const rng = new SeededRng(config.seed);
+  const simRng = new SeededRng(config.seed + 1);
   const microRegions = generateMicroRegions(config, rng);
   const microRegionEdges = createMicroRegionEdges(microRegions);
   applyElevation(microRegions, config, rng);
@@ -53,12 +54,8 @@ export function createWorld(config: WorldConfig): WorldState {
   }
   const time = createSimTime();
   const wars: WarState[] = [];
-  addTestWar(wars, mesoRegions, macroRegions, rng, time.fastTick);
-  addTestWar(wars, mesoRegions, macroRegions, rng, time.fastTick);
-  addTestWar(wars, mesoRegions, macroRegions, rng, time.fastTick);
-  addTestWar(wars, mesoRegions, macroRegions, rng, time.fastTick);
-  addTestWar(wars, mesoRegions, macroRegions, rng, time.fastTick);
-  addTestWar(wars, mesoRegions, macroRegions, rng, time.fastTick);
+  // TODO: remove test war
+  // addTestWar(wars, mesoRegions, macroRegions, rng, time.fastTick);
   const battles: BattleState[] = [];
   const occupation = createOccupationState();
   const territoryVersion = 0;
@@ -77,6 +74,7 @@ export function createWorld(config: WorldConfig): WorldState {
     territoryVersion,
     units,
     unitIdCounter,
+    simRng,
     time,
   };
 }

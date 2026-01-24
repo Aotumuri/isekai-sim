@@ -8,6 +8,7 @@ import type { OccupationState } from "./occupation";
 import type { SimTime } from "./time";
 import type { UnitState } from "./unit";
 import type { WarState } from "./war-state";
+import type { SeededRng } from "../utils/seeded-rng";
 
 export interface WorldState {
   width: number;
@@ -23,5 +24,6 @@ export interface WorldState {
   territoryVersion: number;
   units: UnitState[];
   unitIdCounter: number;
+  simRng: SeededRng;
   time: SimTime;
 }
