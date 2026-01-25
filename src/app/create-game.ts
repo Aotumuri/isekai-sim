@@ -52,6 +52,7 @@ export function createGame(root: HTMLElement): void {
   const timeHud = attachTimeHud(renderer);
   let lastOccupationVersion = world.occupation.version;
   let lastTerritoryVersion = world.territoryVersion;
+  let lastBuildingVersion = world.buildingVersion;
 
   renderer.app.ticker.add(() => {
     updateSimulation(world, clock, renderer.app.ticker.deltaMS);
@@ -76,6 +77,10 @@ export function createGame(root: HTMLElement): void {
         config.height,
       );
       lastOccupationVersion = world.occupation.version;
+      shouldRedrawIcons = true;
+    }
+    if (world.buildingVersion !== lastBuildingVersion) {
+      lastBuildingVersion = world.buildingVersion;
       shouldRedrawIcons = true;
     }
     if (shouldRedrawIcons) {

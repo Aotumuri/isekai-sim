@@ -1,10 +1,12 @@
 import type { WorldState } from "./world-state";
 import { updateBattles } from "./battles";
 import { updateCapitals } from "./capitals";
+import { updateCivilWar } from "./civil-war";
 import { repositionUnits } from "./nation/reposition-units";
 import { updateOccupation } from "./occupation";
 import { updateProduction } from "./production";
 import { updateSurrender } from "./surrender";
+import { updateWarCooperation } from "./war-cooperation";
 import { updateWarDeclarations } from "./war-declaration";
 import {
   FAST_TICK_MS,
@@ -43,6 +45,8 @@ function stepFastTick(world: WorldState, dtMs: number): void {
   updateBattles(world);
   updateOccupation(world);
   updateCapitals(world);
+  updateWarCooperation(world);
+  updateCivilWar(world);
   updateSurrender(world);
 }
 

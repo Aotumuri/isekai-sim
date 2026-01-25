@@ -60,7 +60,10 @@ export function updateWarDeclarations(world: WorldState): void {
 
     if (gap <= evenUnitGap && ratio <= evenUnitRatio) {
       if (world.simRng.nextFloat() < evenChance) {
-        candidates.push([nationA, nationB]);
+        const pickAggressorFirst = world.simRng.nextFloat() < 0.5;
+        candidates.push(
+          pickAggressorFirst ? [nationA, nationB] : [nationB, nationA],
+        );
       }
     }
   }
@@ -73,8 +76,8 @@ export function updateWarDeclarations(world: WorldState): void {
   const limit = Math.min(maxWars, candidates.length);
   for (let i = 0; i < limit; i += 1) {
     const pickIndex = world.simRng.nextInt(candidates.length);
-    const [nationA, nationB] = candidates.splice(pickIndex, 1)[0];
-    const war = declareWar(world.wars, nationA, nationB, world.time.fastTick);
+    const [aggressorId, defenderId] = candidates.splice(pickIndex, 1)[0];
+    const war = declareWar(world.wars, aggressorId, defenderId, world.time.fastTick);
     if (war) {
       console.info(
         `[War] ${war.nationAId} vs ${war.nationBId} start @${world.time.fastTick}`,

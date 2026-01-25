@@ -32,6 +32,7 @@ export function updateSurrender(world: WorldState): void {
     occupationByMesoId,
   );
   const surrenderBalance = WORLD_BALANCE.war.surrender;
+  const cooperationBalance = WORLD_BALANCE.war.cooperation;
 
   const surrendering: NationId[] = [];
   for (const nation of world.nations) {
@@ -61,11 +62,26 @@ export function updateSurrender(world: WorldState): void {
       0,
       1,
     );
-    const surrenderScore =
+    const baseSurrenderScore =
       occupationRatio * surrenderBalance.occupationWeight +
       capitalFallRatio * surrenderBalance.capitalFallWeight +
       cityLossRatio * surrenderBalance.cityLossWeight +
       unitLossRatio * surrenderBalance.unitLossWeight;
+    const cooperationRange = Math.max(
+      0.0001,
+      cooperationBalance.max - cooperationBalance.min,
+    );
+    const normalizedCooperation = clamp(
+      (nation.warCooperation - cooperationBalance.min) / cooperationRange,
+      0,
+      1,
+    );
+    const cooperationMultiplier =
+      cooperationBalance.surrenderMultiplierAtMin +
+      (cooperationBalance.surrenderMultiplierAtMax -
+        cooperationBalance.surrenderMultiplierAtMin) *
+        normalizedCooperation;
+    const surrenderScore = baseSurrenderScore * cooperationMultiplier;
     nation.surrenderScore = surrenderScore;
 
     if (unitCount <= 0) {

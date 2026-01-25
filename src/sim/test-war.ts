@@ -19,7 +19,10 @@ export function addTestWar(
   }
 
   const [nationAId, nationBId] = pairs[rng.nextInt(pairs.length)];
-  const war = declareWar(wars, nationAId, nationBId, startedAtFastTick, true);
+  const pickAggressorFirst = rng.nextFloat() < 0.5;
+  const aggressorId = pickAggressorFirst ? nationAId : nationBId;
+  const defenderId = pickAggressorFirst ? nationBId : nationAId;
+  const war = declareWar(wars, aggressorId, defenderId, startedAtFastTick, true);
   if (war) {
     console.info(
       `[War] ${war.nationAId} vs ${war.nationBId} start (test) @${startedAtFastTick}`,

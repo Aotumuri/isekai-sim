@@ -1,4 +1,5 @@
 import type { WorldConfig } from "../data/world-config";
+import { WORLD_BALANCE } from "../data/balance";
 import { SeededRng } from "../utils/seeded-rng";
 import { applyElevation } from "../worldgen/apply/elevation";
 import { applyRivers } from "../worldgen/apply/rivers";
@@ -41,6 +42,8 @@ export function createWorld(config: WorldConfig): WorldState {
     surrenderScore: 0,
     initialUnitCount: 0,
     initialCityCount: 0,
+    warCooperation: WORLD_BALANCE.war.cooperation.max,
+    warCooperationBoost: 0,
   }));
   const initialCityCounts = collectCityCountsByNation(mesoRegions, macroRegions);
   for (const nation of runtimeNations) {

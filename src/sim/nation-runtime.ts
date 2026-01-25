@@ -12,4 +12,6 @@ export type NationRuntime = Nation & {
   surrenderScore: number;
   initialUnitCount: number;
   initialCityCount: number;
+  warCooperation: number;
+  warCooperationBoost: number;
 };

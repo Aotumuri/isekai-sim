@@ -6,6 +6,8 @@ export interface WarState {
   id: WarId;
   nationAId: NationId;
   nationBId: NationId;
+  aggressorId: NationId;
+  defenderId: NationId;
   startedAtFastTick: number;
   isTest: boolean;
   contributionByNationId: Map<NationId, number>;
@@ -26,16 +28,16 @@ export function normalizeWarPair(
 
 export function declareWar(
   wars: WarState[],
-  nationAId: NationId,
-  nationBId: NationId,
+  aggressorId: NationId,
+  defenderId: NationId,
   startedAtFastTick: number,
   isTest = false,
 ): WarState | null {
-  if (nationAId === nationBId) {
+  if (aggressorId === defenderId) {
     return null;
   }
 
-  const [normalizedA, normalizedB] = normalizeWarPair(nationAId, nationBId);
+  const [normalizedA, normalizedB] = normalizeWarPair(aggressorId, defenderId);
   for (const war of wars) {
     if (war.nationAId === normalizedA && war.nationBId === normalizedB) {
       return null;
@@ -46,6 +48,8 @@ export function declareWar(
     id: createWarId(wars.length),
     nationAId: normalizedA,
     nationBId: normalizedB,
+    aggressorId,
+    defenderId,
     startedAtFastTick,
     isTest,
     contributionByNationId: new Map([
