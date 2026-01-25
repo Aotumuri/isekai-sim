@@ -6,7 +6,7 @@ import { getNationColor } from "../nation-color";
 import { clearLayer } from "../clear-layer";
 import { getMesoRegionByIdMap } from "../region-index";
 
-const UNIT_RADIUS = 6;
+const UNIT_RADIUS = 4.5;
 const UNIT_STROKE_WIDTH = 1.5;
 const UNIT_STROKE_COLOR = 0x000000;
 
