@@ -4,6 +4,7 @@ import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import { createNationId, type NationId } from "../worldgen/nation";
 import type { SeededRng } from "../utils/seeded-rng";
 import type { NationRuntime } from "./nation-runtime";
+import { nextScheduledTickRange } from "./schedule";
 import type { UnitState } from "./unit";
 import { declareWar } from "./war-state";
 import type { WorldState } from "./world-state";
@@ -98,6 +99,9 @@ export function updateCivilWar(world: WorldState): void {
       buildingChanged = true;
     }
 
+    const productionBalance = WORLD_BALANCE.production;
+    const unitRange = productionBalance.unitSlowTickRange;
+    const isUnitProductionEnabled = unitRange.min > 0 && unitRange.max > 0;
     const newNation: NationRuntime = {
       id: newNationId,
       capitalMesoId: cityMesoId,
@@ -112,6 +116,14 @@ export function updateCivilWar(world: WorldState): void {
       initialCityCount,
       warCooperation: cooperationBalance.max,
       warCooperationBoost: 0,
+      nextUnitProductionTick: isUnitProductionEnabled
+        ? nextScheduledTickRange(
+            world.time.slowTick,
+            unitRange.min,
+            unitRange.max,
+            world.simRng,
+          )
+        : Number.POSITIVE_INFINITY,
     };
     world.nations.push(newNation);
 

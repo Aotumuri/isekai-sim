@@ -29,4 +29,5 @@ export interface WorldState {
   simRng: SeededRng;
   cache: WorldCache;
   time: SimTime;
+  nextWarDeclarationTick: number;
 }

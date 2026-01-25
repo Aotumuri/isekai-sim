@@ -14,4 +14,5 @@ export type NationRuntime = Nation & {
   initialCityCount: number;
   warCooperation: number;
   warCooperationBoost: number;
+  nextUnitProductionTick: number;
 };

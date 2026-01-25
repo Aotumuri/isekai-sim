@@ -15,6 +15,7 @@ import type { BattleState } from "./battles";
 import { createInitialUnits } from "./create-units";
 import type { NationRuntime } from "./nation-runtime";
 import { createOccupationState } from "./occupation";
+import { nextScheduledTickRange } from "./schedule";
 import { addTestWar } from "./test-war";
 import { createSimTime } from "./time";
 import type { UnitState } from "./unit";
@@ -32,6 +33,9 @@ export function createWorld(config: WorldConfig): WorldState {
   applyRivers(microRegions, microRegionEdges, rng, config.riverSourceCount);
   const mesoRegions = generateMesoRegions(microRegions, config, rng);
   const { macroRegions, nations } = generateNations(mesoRegions, config, rng);
+  const productionBalance = WORLD_BALANCE.production;
+  const unitRange = productionBalance.unitSlowTickRange;
+  const isUnitProductionEnabled = unitRange.min > 0 && unitRange.max > 0;
   const runtimeNations: NationRuntime[] = nations.map((nation) => ({
     ...nation,
     unitRoles: {
@@ -44,6 +48,9 @@ export function createWorld(config: WorldConfig): WorldState {
     initialCityCount: 0,
     warCooperation: WORLD_BALANCE.war.cooperation.max,
     warCooperationBoost: 0,
+    nextUnitProductionTick: isUnitProductionEnabled
+      ? nextScheduledTickRange(0, unitRange.min, unitRange.max, simRng)
+      : Number.POSITIVE_INFINITY,
   }));
   const initialCityCounts = collectCityCountsByNation(mesoRegions, macroRegions);
   for (const nation of runtimeNations) {
@@ -58,6 +65,12 @@ export function createWorld(config: WorldConfig): WorldState {
   }
   const time = createSimTime();
   const wars: WarState[] = [];
+  const declareBalance = WORLD_BALANCE.war.declare;
+  const declareRange = declareBalance.slowTickRange;
+  const isWarDeclarationEnabled = declareRange.min > 0 && declareRange.max > 0;
+  const nextWarDeclarationTick = isWarDeclarationEnabled
+    ? nextScheduledTickRange(0, declareRange.min, declareRange.max, simRng)
+    : Number.POSITIVE_INFINITY;
   // TODO: remove test war
   // addTestWar(wars, mesoRegions, macroRegions, rng, time.fastTick);
   const battles: BattleState[] = [];
@@ -84,6 +97,7 @@ export function createWorld(config: WorldConfig): WorldState {
     simRng,
     cache,
     time,
+    nextWarDeclarationTick,
   };
 }
 

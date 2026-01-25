@@ -49,7 +49,10 @@ export const WORLD_BALANCE = {
     minCitiesPerNation: 1,
   },
   production: {
-    unitSlowTickInterval: 10,
+    unitSlowTickRange: {
+      min: 5,
+      max: 15,
+    },
     cityUnitsPerCycle: 1,
     capitalUnitsPerOwnedMacro: 0.1,
     maxUnitsPerNation: 100,
@@ -57,7 +60,10 @@ export const WORLD_BALANCE = {
   war: {
     macroOccupationRatio: 0.6,
     declare: {
-      slowTickInterval: 10,
+      slowTickRange: {
+        min: 5,
+        max: 15,
+      },
       minTotalUnits: 10,
       minUnitGap: 10,
       unitRatio: 1.4,

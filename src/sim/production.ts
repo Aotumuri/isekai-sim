@@ -3,21 +3,22 @@ import type { MacroRegion } from "../worldgen/macro-region";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { createDefaultUnit } from "./create-units";
+import { nextScheduledTickRange } from "./schedule";
 import { createUnitId, type UnitState } from "./unit";
 import type { WorldState } from "./world-state";
 import { getCityTargetsByNation, getOwnerByMesoId } from "./world-cache";
 
 export function updateProduction(world: WorldState): void {
   const production = WORLD_BALANCE.production;
-  if (production.unitSlowTickInterval <= 0) {
-    return;
-  }
-  if (world.time.slowTick % production.unitSlowTickInterval !== 0) {
+  const unitRange = production.unitSlowTickRange;
+  if (unitRange.min <= 0 || unitRange.max <= 0) {
     return;
   }
   if (world.nations.length === 0) {
     return;
   }
+  const minInterval = unitRange.min;
+  const maxInterval = unitRange.max;
 
   const ownerByMesoId = getOwnerByMesoId(world);
   const occupationByMesoId = world.occupation.mesoById;
@@ -31,9 +32,18 @@ export function updateProduction(world: WorldState): void {
   const hasCap = maxUnitsPerNation > 0;
 
   for (const nation of world.nations) {
+    if (world.time.slowTick < nation.nextUnitProductionTick) {
+      continue;
+    }
     let currentCount = unitCountsByNation.get(nation.id) ?? 0;
     const capacity = hasCap ? maxUnitsPerNation : Number.POSITIVE_INFINITY;
     if (currentCount >= capacity) {
+      nation.nextUnitProductionTick = nextScheduledTickRange(
+        world.time.slowTick,
+        minInterval,
+        maxInterval,
+        world.simRng,
+      );
       continue;
     }
 
@@ -81,6 +91,12 @@ export function updateProduction(world: WorldState): void {
     }
 
     unitCountsByNation.set(nation.id, currentCount);
+    nation.nextUnitProductionTick = nextScheduledTickRange(
+      world.time.slowTick,
+      minInterval,
+      maxInterval,
+      world.simRng,
+    );
   }
 
   if (newUnits.length > 0) {

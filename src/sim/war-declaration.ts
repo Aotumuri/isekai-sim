@@ -3,16 +3,24 @@ import type { NationId } from "../worldgen/nation";
 import type { UnitState } from "./unit";
 import type { WorldState } from "./world-state";
 import { getAdjacentNationPairs } from "./world-cache";
+import { nextScheduledTickRange } from "./schedule";
 import { buildWarAdjacency, declareWar, isAtWar } from "./war-state";
 
 export function updateWarDeclarations(world: WorldState): void {
   const declareBalance = WORLD_BALANCE.war.declare;
-  if (declareBalance.slowTickInterval <= 0) {
+  const declareRange = declareBalance.slowTickRange;
+  if (declareRange.min <= 0 || declareRange.max <= 0) {
     return;
   }
-  if (world.time.slowTick % declareBalance.slowTickInterval !== 0) {
+  if (world.time.slowTick < world.nextWarDeclarationTick) {
     return;
   }
+  world.nextWarDeclarationTick = nextScheduledTickRange(
+    world.time.slowTick,
+    declareRange.min,
+    declareRange.max,
+    world.simRng,
+  );
   if (world.nations.length < 2) {
     return;
   }
