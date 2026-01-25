@@ -102,6 +102,9 @@ export function updateCivilWar(world: WorldState): void {
     const productionBalance = WORLD_BALANCE.production;
     const unitRange = productionBalance.unitSlowTickRange;
     const isUnitProductionEnabled = unitRange.min > 0 && unitRange.max > 0;
+    const declareBalance = WORLD_BALANCE.war.declare;
+    const declareRange = declareBalance.slowTickRange;
+    const isWarDeclarationEnabled = declareRange.min > 0 && declareRange.max > 0;
     const newNation: NationRuntime = {
       id: newNationId,
       capitalMesoId: cityMesoId,
@@ -121,6 +124,14 @@ export function updateCivilWar(world: WorldState): void {
             world.time.slowTick,
             unitRange.min,
             unitRange.max,
+            world.simRng,
+          )
+        : Number.POSITIVE_INFINITY,
+      nextWarDeclarationTick: isWarDeclarationEnabled
+        ? nextScheduledTickRange(
+            world.time.slowTick,
+            declareRange.min,
+            declareRange.max,
             world.simRng,
           )
         : Number.POSITIVE_INFINITY,

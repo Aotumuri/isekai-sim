@@ -36,6 +36,9 @@ export function createWorld(config: WorldConfig): WorldState {
   const productionBalance = WORLD_BALANCE.production;
   const unitRange = productionBalance.unitSlowTickRange;
   const isUnitProductionEnabled = unitRange.min > 0 && unitRange.max > 0;
+  const declareBalance = WORLD_BALANCE.war.declare;
+  const declareRange = declareBalance.slowTickRange;
+  const isWarDeclarationEnabled = declareRange.min > 0 && declareRange.max > 0;
   const runtimeNations: NationRuntime[] = nations.map((nation) => ({
     ...nation,
     unitRoles: {
@@ -51,6 +54,9 @@ export function createWorld(config: WorldConfig): WorldState {
     nextUnitProductionTick: isUnitProductionEnabled
       ? nextScheduledTickRange(0, unitRange.min, unitRange.max, simRng)
       : Number.POSITIVE_INFINITY,
+    nextWarDeclarationTick: isWarDeclarationEnabled
+      ? nextScheduledTickRange(0, declareRange.min, declareRange.max, simRng)
+      : Number.POSITIVE_INFINITY,
   }));
   const initialCityCounts = collectCityCountsByNation(mesoRegions, macroRegions);
   for (const nation of runtimeNations) {
@@ -65,12 +71,6 @@ export function createWorld(config: WorldConfig): WorldState {
   }
   const time = createSimTime();
   const wars: WarState[] = [];
-  const declareBalance = WORLD_BALANCE.war.declare;
-  const declareRange = declareBalance.slowTickRange;
-  const isWarDeclarationEnabled = declareRange.min > 0 && declareRange.max > 0;
-  const nextWarDeclarationTick = isWarDeclarationEnabled
-    ? nextScheduledTickRange(0, declareRange.min, declareRange.max, simRng)
-    : Number.POSITIVE_INFINITY;
   // TODO: remove test war
   // addTestWar(wars, mesoRegions, macroRegions, rng, time.fastTick);
   const battles: BattleState[] = [];
@@ -97,7 +97,6 @@ export function createWorld(config: WorldConfig): WorldState {
     simRng,
     cache,
     time,
-    nextWarDeclarationTick,
   };
 }
 

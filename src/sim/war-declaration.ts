@@ -12,21 +12,22 @@ export function updateWarDeclarations(world: WorldState): void {
   if (declareRange.min <= 0 || declareRange.max <= 0) {
     return;
   }
-  if (world.time.slowTick < world.nextWarDeclarationTick) {
-    return;
-  }
-  world.nextWarDeclarationTick = nextScheduledTickRange(
-    world.time.slowTick,
-    declareRange.min,
-    declareRange.max,
-    world.simRng,
-  );
   if (world.nations.length < 2) {
     return;
   }
 
   const adjacentPairs = getAdjacentNationPairs(world);
+  const readyNationIds = new Set<NationId>();
+  for (const nation of world.nations) {
+    if (world.time.slowTick >= nation.nextWarDeclarationTick) {
+      readyNationIds.add(nation.id);
+    }
+  }
+  if (readyNationIds.size === 0) {
+    return;
+  }
   if (adjacentPairs.length === 0) {
+    scheduleNextWarDeclarations(world, readyNationIds, declareRange);
     return;
   }
 
@@ -43,6 +44,11 @@ export function updateWarDeclarations(world: WorldState): void {
 
   for (const [nationA, nationB] of adjacentPairs) {
     if (isAtWar(nationA, nationB, warAdjacency)) {
+      continue;
+    }
+    const isAReady = readyNationIds.has(nationA);
+    const isBReady = readyNationIds.has(nationB);
+    if (!isAReady && !isBReady) {
       continue;
     }
 
@@ -62,21 +68,36 @@ export function updateWarDeclarations(world: WorldState): void {
     const isDominant = gap >= minUnitGap || ratio >= unitRatio;
 
     if (isDominant) {
-      candidates.push([strongId, weakId]);
+      if ((strongId === nationA && isAReady) || (strongId === nationB && isBReady)) {
+        candidates.push([strongId, weakId]);
+      }
       continue;
     }
 
     if (gap <= evenUnitGap && ratio <= evenUnitRatio) {
       if (world.simRng.nextFloat() < evenChance) {
-        const pickAggressorFirst = world.simRng.nextFloat() < 0.5;
-        candidates.push(
-          pickAggressorFirst ? [nationA, nationB] : [nationB, nationA],
-        );
+        const readyOptions: NationId[] = [];
+        if (isAReady) {
+          readyOptions.push(nationA);
+        }
+        if (isBReady) {
+          readyOptions.push(nationB);
+        }
+        if (readyOptions.length === 0) {
+          continue;
+        }
+        const aggressorId =
+          readyOptions.length === 1
+            ? readyOptions[0]
+            : readyOptions[world.simRng.nextInt(readyOptions.length)];
+        const defenderId = aggressorId === nationA ? nationB : nationA;
+        candidates.push([aggressorId, defenderId]);
       }
     }
   }
 
   const maxWars = Math.max(0, Math.round(declareBalance.maxWarsPerTick));
+  scheduleNextWarDeclarations(world, readyNationIds, declareRange);
   if (candidates.length === 0 || maxWars <= 0) {
     return;
   }
@@ -104,4 +125,22 @@ function collectUnitCountsByNation(units: UnitState[]): Map<NationId, number> {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function scheduleNextWarDeclarations(
+  world: WorldState,
+  readyNationIds: Set<NationId>,
+  declareRange: { min: number; max: number },
+): void {
+  for (const nation of world.nations) {
+    if (!readyNationIds.has(nation.id)) {
+      continue;
+    }
+    nation.nextWarDeclarationTick = nextScheduledTickRange(
+      world.time.slowTick,
+      declareRange.min,
+      declareRange.max,
+      world.simRng,
+    );
+  }
 }
