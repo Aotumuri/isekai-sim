@@ -81,7 +81,7 @@ export const WORLD_BALANCE = {
       threshold: 1,
     },
     civilWar: {
-      enabled: true,
+      enabled: false,
     },
     cooperation: {
       min: 0,
