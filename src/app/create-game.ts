@@ -9,6 +9,7 @@ import { attachRegionHoverUI } from "../render/region/hover-ui";
 import { createRenderer } from "../render/renderer";
 import { attachTimeHud } from "../render/time-hud";
 import { attachViewControls } from "../render/view/controls";
+import { attachNationInfoBar } from "../render/nation-info-bar";
 import { createWorld } from "../sim/create-world";
 import { createSimClock } from "../sim/time";
 import { updateSimulation } from "../sim/update";
@@ -47,6 +48,7 @@ export function createGame(root: HTMLElement): void {
   );
   attachViewControls(renderer);
   attachRegionHoverUI(renderer, world);
+  const nationInfoBar = attachNationInfoBar(renderer, world);
   const clock = createSimClock();
   attachTimeControls(clock);
   const timeHud = attachTimeHud(renderer);
@@ -90,6 +92,7 @@ export function createGame(root: HTMLElement): void {
       );
     }
     timeHud.update(world.time, clock);
+    nationInfoBar.update();
     drawUnits(
       renderer.worldLayers.layers.Unit,
       world.units,

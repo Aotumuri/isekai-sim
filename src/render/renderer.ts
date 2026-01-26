@@ -7,6 +7,7 @@ export interface Renderer {
   worldContainer: Container;
   uiContainer: Container;
   worldLayers: ReturnType<typeof createWorldLayers>;
+  uiRightWidth: number;
 }
 
 export function createRenderer(root: HTMLElement, config: WorldConfig): Renderer {
@@ -33,5 +34,5 @@ export function createRenderer(root: HTMLElement, config: WorldConfig): Renderer
   uiContainer.position.set(0, 0);
   app.renderer.resize(config.width, config.height);
 
-  return { app, worldContainer, uiContainer, worldLayers };
+  return { app, worldContainer, uiContainer, worldLayers, uiRightWidth: 0 };
 }

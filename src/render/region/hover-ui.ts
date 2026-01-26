@@ -41,6 +41,14 @@ export function attachRegionHoverUI(renderer: Renderer, world: WorldState): void
   let lastPointerGlobal: Vec2 | null = null;
   let lastInfoTick = -1;
 
+  const isWorldPointer = (screenPos: Vec2 | null): boolean => {
+    if (!screenPos) {
+      return false;
+    }
+    const worldWidth = renderer.app.screen.width - renderer.uiRightWidth;
+    return screenPos.x <= worldWidth;
+  };
+
   const getUnitsForMeso = (mesoId: string | null): UnitState[] => {
     if (!mesoId) {
       return [];
@@ -61,7 +69,7 @@ export function attachRegionHoverUI(renderer: Renderer, world: WorldState): void
   };
 
   const updatePanel = (screenPos: Vec2 | null): void => {
-    if (!screenPos || !isSpacePressed) {
+    if (!screenPos || !isSpacePressed || !isWorldPointer(screenPos)) {
       panel.hide();
       return;
     }

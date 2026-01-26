@@ -12,6 +12,11 @@ export function attachViewControls(renderer: Renderer): void {
   let isDragging = false;
   let lastPointer: Vec2 | null = null;
 
+  const isWorldPointer = (screenX: number): boolean => {
+    const worldWidth = renderer.app.screen.width - renderer.uiRightWidth;
+    return screenX <= worldWidth;
+  };
+
   const stopDrag = (): void => {
     isDragging = false;
     lastPointer = null;
@@ -22,6 +27,9 @@ export function attachViewControls(renderer: Renderer): void {
 
   renderer.app.stage.on("pointerdown", (event) => {
     if (event.button !== 0) {
+      return;
+    }
+    if (!isWorldPointer(event.global.x)) {
       return;
     }
 
@@ -51,6 +59,9 @@ export function attachViewControls(renderer: Renderer): void {
 
       const rect = view.getBoundingClientRect();
       const screenPos = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      if (!isWorldPointer(screenPos.x)) {
+        return;
+      }
       const currentScale = renderer.worldContainer.scale.x;
       const zoomFactor = Math.exp(-event.deltaY * ZOOM_INTENSITY);
       const nextScale = clamp(currentScale * zoomFactor, MIN_SCALE, MAX_SCALE);
