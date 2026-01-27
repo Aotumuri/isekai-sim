@@ -4,7 +4,7 @@ import type { NationId } from "../worldgen/nation";
 
 export type UnitId = string & { __brand: "UnitId" };
 
-export type UnitType = "Infantry";
+export type UnitType = "Infantry" | "Tank";
 
 export interface UnitEquipmentSlot {
   equipmentKey: EquipmentKey;
@@ -17,6 +17,8 @@ export interface UnitState {
   regionId: MesoRegionId;
   type: UnitType;
   equipment: UnitEquipmentSlot[];
+  moveTicksPerRegion: number;
+  combatPower: number;
   org: number;
   manpower: number;
   moveTargetId: MesoRegionId | null;

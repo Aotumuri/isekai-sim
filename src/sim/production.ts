@@ -2,7 +2,7 @@ import { WORLD_BALANCE } from "../data/balance";
 import type { MacroRegion } from "../worldgen/macro-region";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
-import { createDefaultUnit } from "./create-units";
+import { createUnitForType, pickUnitType } from "./create-units";
 import { nextScheduledTickRange } from "./schedule";
 import { createUnitId, type UnitState } from "./unit";
 import type { WorldState } from "./world-state";
@@ -111,7 +111,8 @@ function createUnitForWorld(
 ): UnitState {
   const unitId = createUnitId(world.unitIdCounter);
   world.unitIdCounter += 1;
-  return createDefaultUnit(unitId, nationId, regionId);
+  const unitType = pickUnitType(world.simRng);
+  return createUnitForType(unitId, nationId, regionId, unitType);
 }
 
 function countOwnedMacroRegions(

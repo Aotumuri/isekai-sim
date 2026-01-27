@@ -257,7 +257,9 @@ function getUnitStrength(unit: UnitState): number {
   const avgFill = getAverageEquipmentFill(unit);
   const orgFactor = 0.5 + unit.org * 0.5;
   const equipmentFactor = 0.5 + avgFill * 0.5;
-  return Math.max(0, unit.manpower) * orgFactor * equipmentFactor;
+  return (
+    Math.max(0, unit.manpower) * orgFactor * equipmentFactor * Math.max(0, unit.combatPower)
+  );
 }
 
 function getAverageEquipmentFill(unit: UnitState): number {

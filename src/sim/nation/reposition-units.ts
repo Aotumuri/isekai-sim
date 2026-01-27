@@ -1,6 +1,6 @@
 import type { WorldState } from "../world-state";
 import type { UnitState } from "../unit";
-import { MOVE_MS_PER_REGION } from "../movement";
+import { getMoveMsPerRegion } from "../movement";
 import type {
   MesoRegion,
   MesoRegionBuilding,
@@ -209,9 +209,10 @@ function moveUnitTowardTarget(
     return;
   }
 
-  while (unit.moveProgressMs >= MOVE_MS_PER_REGION) {
+  const moveMsPerRegion = getMoveMsPerRegion(unit);
+  while (unit.moveProgressMs >= moveMsPerRegion) {
     const nextId = unit.moveToId ?? unit.regionId;
-    unit.moveProgressMs -= MOVE_MS_PER_REGION;
+    unit.moveProgressMs -= moveMsPerRegion;
     const previousId = unit.regionId;
     unit.regionId = nextId;
 

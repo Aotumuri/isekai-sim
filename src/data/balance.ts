@@ -48,6 +48,23 @@ export const WORLD_BALANCE = {
     cityPerMacroRegion: 0.3,
     minCitiesPerNation: 1,
   },
+  unit: {
+    tankShare: 0.2,
+    types: {
+      Infantry: {
+        moveTicksPerRegion: 16,
+        manpower: 1200,
+        org: 0.75,
+        combatPower: 1,
+      },
+      Tank: {
+        moveTicksPerRegion: 4,
+        manpower: 1200,
+        org: 0.85,
+        combatPower: 1.6,
+      },
+    },
+  },
   production: {
     unitSlowTickRange: {
       min: 5,

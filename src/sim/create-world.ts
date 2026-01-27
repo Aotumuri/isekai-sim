@@ -63,7 +63,7 @@ export function createWorld(config: WorldConfig): WorldState {
     nation.initialCityCount = initialCityCounts.get(nation.id) ?? 0;
   }
 
-  const units = createInitialUnits(runtimeNations);
+  const units = createInitialUnits(runtimeNations, simRng);
   const unitIdCounter = units.length;
   const initialUnitCounts = collectUnitCountsByNation(units);
   for (const nation of runtimeNations) {
