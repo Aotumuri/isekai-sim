@@ -40,7 +40,7 @@ export function attachTimeHud(renderer: Renderer): TimeHud {
     const nextText = [
       `Time ${formatClock(time.elapsedMs)}`,
       `Speed x${formatSpeed(getSpeedMultiplier(clock))}`,
-      "Keys [ ] or 1-4",
+      "Keys [ ] or 1-8",
     ].join("\n");
     if (nextText === lastText) {
       return;

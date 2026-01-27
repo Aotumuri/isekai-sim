@@ -1,6 +1,6 @@
 export const FAST_TICK_MS = 100;
 export const SLOW_TICK_MS = 1000;
-export const SPEED_MULTIPLIERS = [0.5, 1, 2, 4] as const;
+export const SPEED_MULTIPLIERS = [0.1, 0.5, 1, 2, 4, 8, 16, 32] as const;
 export const DEFAULT_SPEED_INDEX = 1;
 
 export interface SimTime {
