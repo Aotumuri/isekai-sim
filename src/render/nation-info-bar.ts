@@ -102,11 +102,13 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
   const titleText = new Text("Nation", titleStyle);
   const nameText = new Text("Select a nation", nameStyle);
   const overviewLabel = new Text("OVERVIEW", sectionStyle);
+  const resourcesLabel = new Text("RESOURCES", sectionStyle);
   const supportLabel = new Text("WAR SUPPORT", sectionStyle);
   const surrenderLabel = new Text("SURRENDER", sectionStyle);
   titleText.resolution = renderer.app.renderer.resolution;
   nameText.resolution = renderer.app.renderer.resolution;
   overviewLabel.resolution = renderer.app.renderer.resolution;
+  resourcesLabel.resolution = renderer.app.renderer.resolution;
   supportLabel.resolution = renderer.app.renderer.resolution;
   surrenderLabel.resolution = renderer.app.renderer.resolution;
 
@@ -115,6 +117,12 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
     meso: createRow("Regions", "-", labelStyle, valueStyle, renderer),
     cities: createRow("Cities", "-", labelStyle, valueStyle, renderer),
     wars: createRow("Wars", "-", labelStyle, valueStyle, renderer),
+  };
+  const resourcesRows = {
+    steel: createRow("Steel", "-", labelStyle, valueStyle, renderer),
+    fuel: createRow("Fuel", "-", labelStyle, valueStyle, renderer),
+    manpower: createRow("Manpower", "-", labelStyle, valueStyle, renderer),
+    weapons: createRow("Weapons", "-", labelStyle, valueStyle, renderer),
   };
   const supportRows = {
     support: createRow("Support", "-", labelStyle, valueStyle, renderer),
@@ -143,6 +151,7 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
     titleText,
     nameText,
     overviewLabel,
+    resourcesLabel,
     supportLabel,
     surrenderLabel,
     supportBarBg,
@@ -152,6 +161,9 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
   );
 
   for (const row of Object.values(overviewRows)) {
+    panelContent.addChild(row.label, row.value);
+  }
+  for (const row of Object.values(resourcesRows)) {
     panelContent.addChild(row.label, row.value);
   }
   for (const row of Object.values(supportRows)) {
@@ -318,6 +330,11 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
           setRowValue(overviewRows.cities, `${stats.cityCount}`);
           setRowValue(overviewRows.wars, `${stats.warCount}`);
 
+          setRowValue(resourcesRows.steel, formatInteger(stats.resources.steel));
+          setRowValue(resourcesRows.fuel, formatInteger(stats.resources.fuel));
+          setRowValue(resourcesRows.manpower, formatInteger(stats.resources.manpower));
+          setRowValue(resourcesRows.weapons, formatInteger(stats.resources.weapons));
+
           setRowValue(supportRows.support, formatPercent(stats.warSupport));
           setRowValue(supportRows.duration, formatNumber(stats.supportDuration));
           setRowValue(supportRows.capital, formatNumber(stats.supportCapital));
@@ -344,9 +361,11 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
             titleText,
             nameText,
             overviewLabel,
+            resourcesLabel,
             supportLabel,
             surrenderLabel,
             overviewRows,
+            resourcesRows,
             supportRows,
             surrenderRows,
             supportBarBg,
@@ -364,9 +383,11 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
             titleText,
             nameText,
             overviewLabel,
+            resourcesLabel,
             supportLabel,
             surrenderLabel,
             overviewRows,
+            resourcesRows,
             supportRows,
             surrenderRows,
             supportBarBg,
@@ -382,9 +403,11 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
           titleText,
           nameText,
           overviewLabel,
+          resourcesLabel,
           supportLabel,
           surrenderLabel,
           overviewRows,
+          resourcesRows,
           supportRows,
           surrenderRows,
           supportBarBg,
@@ -436,9 +459,11 @@ function layoutEmptyPanel(
   titleText: Text,
   nameText: Text,
   overviewLabel: Text,
+  resourcesLabel: Text,
   supportLabel: Text,
   surrenderLabel: Text,
   overviewRows: Record<string, StatRow>,
+  resourcesRows: Record<string, StatRow>,
   supportRows: Record<string, StatRow>,
   surrenderRows: Record<string, StatRow>,
   supportBarBg: Graphics,
@@ -448,6 +473,9 @@ function layoutEmptyPanel(
 ): number {
   nameText.text = "Select a nation";
   for (const row of Object.values(overviewRows)) {
+    setRowValue(row, "-");
+  }
+  for (const row of Object.values(resourcesRows)) {
     setRowValue(row, "-");
   }
   for (const row of Object.values(supportRows)) {
@@ -462,9 +490,11 @@ function layoutEmptyPanel(
     titleText,
     nameText,
     overviewLabel,
+    resourcesLabel,
     supportLabel,
     surrenderLabel,
     overviewRows,
+    resourcesRows,
     supportRows,
     surrenderRows,
     supportBarBg,
@@ -482,9 +512,11 @@ function layoutPanel(
   titleText: Text,
   nameText: Text,
   overviewLabel: Text,
+  resourcesLabel: Text,
   supportLabel: Text,
   surrenderLabel: Text,
   overviewRows: Record<string, StatRow>,
+  resourcesRows: Record<string, StatRow>,
   supportRows: Record<string, StatRow>,
   surrenderRows: Record<string, StatRow>,
   supportBarBg: Graphics,
@@ -504,6 +536,10 @@ function layoutPanel(
   overviewLabel.position.set(PANEL_PADDING, y);
   y += overviewLabel.height + ROW_GAP;
   y = layoutRows(overviewRows, y);
+
+  resourcesLabel.position.set(PANEL_PADDING, y);
+  y += resourcesLabel.height + ROW_GAP;
+  y = layoutRows(resourcesRows, y);
 
   supportLabel.position.set(PANEL_PADDING, y + SECTION_GAP);
   y += supportLabel.height + SECTION_GAP + ROW_GAP;
@@ -653,6 +689,12 @@ function buildNationStats(
   surrenderUnitLoss: number;
   surrenderMultiplier: number;
   surrenderRatio: number;
+  resources: {
+    steel: number;
+    fuel: number;
+    manpower: number;
+    weapons: number;
+  };
 } {
   const unitCount = countUnitsByNation(world.units, nation.id);
   const territoryStats = collectTerritoryStats(
@@ -718,6 +760,12 @@ function buildNationStats(
     cityCount: territoryStats.cityCount,
     warCount: warStats.warCount,
     warSupport: nation.warCooperation,
+    resources: {
+      steel: Math.max(0, Math.floor(nation.resources.steel)),
+      fuel: Math.max(0, Math.floor(nation.resources.fuel)),
+      manpower: Math.max(0, Math.floor(nation.resources.manpower)),
+      weapons: Math.max(0, Math.floor(nation.resources.weapons)),
+    },
     supportDuration: durationRatio * cooperationBalance.durationWeight,
     supportCapital: capitalFallRatio * cooperationBalance.capitalFallWeight,
     supportCityLoss: cityLossRatio * cooperationBalance.cityLossWeight,
@@ -850,6 +898,13 @@ function formatNumber(value: number): string {
     return "0.00";
   }
   return value.toFixed(2);
+}
+
+function formatInteger(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "0";
+  }
+  return Math.max(0, Math.floor(value)).toString();
 }
 
 function formatPercent(value: number): string {

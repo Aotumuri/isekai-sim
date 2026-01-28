@@ -13,7 +13,7 @@ import type { MesoRegion } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { BattleState } from "./battles";
 import { createInitialUnits } from "./create-units";
-import type { NationRuntime } from "./nation-runtime";
+import { createNationResources, type NationRuntime } from "./nation-runtime";
 import { createOccupationState } from "./occupation";
 import { nextScheduledTickRange } from "./schedule";
 import { addTestWar } from "./test-war";
@@ -51,6 +51,7 @@ export function createWorld(config: WorldConfig): WorldState {
     initialCityCount: 0,
     warCooperation: WORLD_BALANCE.war.cooperation.max,
     warCooperationBoost: 0,
+    resources: createNationResources(),
     nextUnitProductionTick: isUnitProductionEnabled
       ? nextScheduledTickRange(0, unitRange.min, unitRange.max, simRng)
       : Number.POSITIVE_INFINITY,

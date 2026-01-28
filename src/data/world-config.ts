@@ -29,6 +29,10 @@ export interface WorldConfig {
   mesoSeaCenterRatio: number;
   mesoRiverCenterRatio: number;
   mesoMinCenterCount: number;
+  resourceSteelRatio: number;
+  resourceFuelRatio: number;
+  resourceMinSteelDeposits: number;
+  resourceMinFuelDeposits: number;
   nationEnabled: boolean;
   nationTargetMacroRegionsPerNation: number;
   nationMacroRegionSizeRange: Range;
@@ -45,13 +49,14 @@ const DEFAULT_SEED = Math.floor(Math.random() * 1_000_000_000_000);
 console.log("World generation seed:", DEFAULT_SEED);
 
 export function createWorldConfig(width: number, height: number): WorldConfig {
-  const { microRegion, elevation, river, mesoRegion, nation } = WORLD_BALANCE;
+  const { microRegion, elevation, river, mesoRegion, nation, resources } = WORLD_BALANCE;
   const area = Math.max(1, width * height);
   const microRegionCount = Math.max(microRegion.minCount, Math.floor(area * microRegion.density));
   const riverSourceCount = Math.max(
     river.minSourceCount,
     Math.floor(microRegionCount * river.sourceCountRatio),
   );
+  const resourceDeposits = resources.deposits;
 
   return {
     width,
@@ -77,6 +82,10 @@ export function createWorldConfig(width: number, height: number): WorldConfig {
     mesoSeaCenterRatio: mesoRegion.seaCenterRatio,
     mesoRiverCenterRatio: mesoRegion.riverCenterRatio,
     mesoMinCenterCount: mesoRegion.minCenterCount,
+    resourceSteelRatio: resourceDeposits.steelRatio,
+    resourceFuelRatio: resourceDeposits.fuelRatio,
+    resourceMinSteelDeposits: resourceDeposits.minSteel,
+    resourceMinFuelDeposits: resourceDeposits.minFuel,
     nationEnabled: nation.enabled,
     nationTargetMacroRegionsPerNation: nation.targetMacroRegionsPerNation,
     nationMacroRegionSizeRange: { ...nation.macroRegionSizeRange },

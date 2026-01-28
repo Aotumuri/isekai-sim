@@ -3,7 +3,7 @@ import type { MacroRegion, MacroRegionId } from "../worldgen/macro-region";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import { createNationId, type NationId } from "../worldgen/nation";
 import type { SeededRng } from "../utils/seeded-rng";
-import type { NationRuntime } from "./nation-runtime";
+import { createNationResources, type NationRuntime, type NationResources } from "./nation-runtime";
 import { nextScheduledTickRange } from "./schedule";
 import type { UnitState } from "./unit";
 import { declareWar } from "./war-state";
@@ -81,6 +81,9 @@ export function updateCivilWar(world: WorldState): void {
       rebelMacroIds,
       mesoById,
     );
+    const totalMacroCount = nation.macroRegionIds.length;
+    const rebelShare = totalMacroCount > 0 ? rebelMacroIds.size / totalMacroCount : 0;
+    const rebelResources = transferResources(nation.resources, rebelShare);
 
     for (const macro of world.macroRegions) {
       if (!rebelMacroIds.has(macro.id)) {
@@ -119,6 +122,7 @@ export function updateCivilWar(world: WorldState): void {
       initialCityCount,
       warCooperation: cooperationBalance.max,
       warCooperationBoost: 0,
+      resources: rebelResources,
       nextUnitProductionTick: isUnitProductionEnabled
         ? nextScheduledTickRange(
             world.time.slowTick,
@@ -150,7 +154,6 @@ export function updateCivilWar(world: WorldState): void {
       cooperationBalance.max,
     );
 
-    // TODO: Split manpower/resources between the old nation and the rebel nation.
     const war = declareWar(world.wars, newNationId, nation.id, world.time.fastTick);
     if (war) {
       console.info(
@@ -350,6 +353,27 @@ function buildMacroAdjacency(
     }
   }
   return adjacency;
+}
+
+function transferResources(
+  resources: NationResources,
+  share: number,
+): NationResources {
+  const ratio = clamp(share, 0, 1);
+  if (ratio <= 0) {
+    return createNationResources();
+  }
+  const taken: NationResources = {
+    steel: Math.floor(resources.steel * ratio),
+    fuel: Math.floor(resources.fuel * ratio),
+    manpower: Math.floor(resources.manpower * ratio),
+    weapons: Math.floor(resources.weapons * ratio),
+  };
+  resources.steel = Math.max(0, resources.steel - taken.steel);
+  resources.fuel = Math.max(0, resources.fuel - taken.fuel);
+  resources.manpower = Math.max(0, resources.manpower - taken.manpower);
+  resources.weapons = Math.max(0, resources.weapons - taken.weapons);
+  return taken;
 }
 
 function clamp(value: number, min: number, max: number): number {

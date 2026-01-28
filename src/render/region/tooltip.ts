@@ -32,11 +32,15 @@ export function formatRegionTooltip(
     lines.push(
       meso.building ? `Building: ${formatBuilding(meso.building)}` : "Building: -",
     );
+    lines.push(
+      meso.resource ? `Resource: ${formatResource(meso.resource)}` : "Resource: -",
+    );
   } else {
     lines.push("Meso: -");
     lines.push("Meso Center: -");
     lines.push("Meso Neighbors: -");
     lines.push("Building: -");
+    lines.push("Resource: -");
   }
 
   lines.push(macro ? `Macro: ${macro.id} (${macro.isCore ? "Core" : "Remote"})` : "Macro: -");
@@ -54,6 +58,17 @@ function formatBuilding(building: MesoRegion["building"]): string {
       return "City";
     case "port":
       return "Port";
+    default:
+      return "-";
+  }
+}
+
+function formatResource(resource: MesoRegion["resource"]): string {
+  switch (resource) {
+    case "steel":
+      return "Steel";
+    case "fuel":
+      return "Fuel";
     default:
       return "-";
   }

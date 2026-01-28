@@ -6,6 +6,7 @@ import type { MicroRegion, MicroRegionId } from "../micro-region";
 import {
   createMesoRegionId,
   type MesoRegion,
+  type MesoRegionResource,
   type MesoRegionType,
 } from "../meso-region";
 
@@ -151,6 +152,8 @@ export function generateMesoRegions(
     region.neighbors = neighborsById.get(region.id) ?? [];
   }
 
+  assignResources(mergedMesoRegions, config, rng);
+
   return mergedMesoRegions;
 }
 
@@ -179,6 +182,7 @@ function createRegion(
     microRegionIds: [centerRegion.id],
     neighbors: [],
     building: null,
+    resource: null,
   };
   mesoRegions.push(region);
   centerRegion.mesoRegionId = region.id;
@@ -203,5 +207,66 @@ function shuffleInPlace(values: number[], rng: SeededRng): void {
   for (let i = values.length - 1; i > 0; i -= 1) {
     const j = rng.nextInt(i + 1);
     [values[i], values[j]] = [values[j], values[i]];
+  }
+}
+
+function assignResources(
+  mesoRegions: MesoRegion[],
+  config: WorldConfig,
+  rng: SeededRng,
+): void {
+  const candidates: number[] = [];
+  for (let i = 0; i < mesoRegions.length; i += 1) {
+    if (mesoRegions[i].type === "land") {
+      candidates.push(i);
+    }
+  }
+  if (candidates.length === 0) {
+    return;
+  }
+
+  const steelTarget = computeResourceCount(
+    candidates.length,
+    config.resourceSteelRatio,
+    config.resourceMinSteelDeposits,
+  );
+  const fuelTarget = computeResourceCount(
+    candidates.length,
+    config.resourceFuelRatio,
+    config.resourceMinFuelDeposits,
+  );
+
+  const shuffled = [...candidates];
+  shuffleInPlace(shuffled, rng);
+
+  const steelCount = Math.min(steelTarget, shuffled.length);
+  const fuelCount = Math.min(fuelTarget, Math.max(0, shuffled.length - steelCount));
+
+  const steelIndices = shuffled.slice(0, steelCount);
+  const fuelIndices = shuffled.slice(steelCount, steelCount + fuelCount);
+
+  setResources(mesoRegions, steelIndices, "steel");
+  setResources(mesoRegions, fuelIndices, "fuel");
+}
+
+function computeResourceCount(count: number, ratio: number, minCount: number): number {
+  if (count <= 0) {
+    return 0;
+  }
+  const target = Math.floor(count * Math.max(0, ratio));
+  return Math.min(count, Math.max(minCount, target));
+}
+
+function setResources(
+  mesoRegions: MesoRegion[],
+  indices: number[],
+  resource: MesoRegionResource,
+): void {
+  for (const index of indices) {
+    const meso = mesoRegions[index];
+    if (!meso) {
+      continue;
+    }
+    meso.resource = resource;
   }
 }
