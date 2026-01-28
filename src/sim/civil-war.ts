@@ -3,7 +3,12 @@ import type { MacroRegion, MacroRegionId } from "../worldgen/macro-region";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import { createNationId, type NationId } from "../worldgen/nation";
 import type { SeededRng } from "../utils/seeded-rng";
-import { createNationResources, type NationRuntime, type NationResources } from "./nation-runtime";
+import {
+  createNationResourceFlow,
+  createNationResources,
+  type NationRuntime,
+  type NationResources,
+} from "./nation-runtime";
 import { nextScheduledTickRange } from "./schedule";
 import type { UnitState } from "./unit";
 import { declareWar } from "./war-state";
@@ -123,6 +128,7 @@ export function updateCivilWar(world: WorldState): void {
       warCooperation: cooperationBalance.max,
       warCooperationBoost: 0,
       resources: rebelResources,
+      resourceFlow: createNationResourceFlow(),
       nextUnitProductionTick: isUnitProductionEnabled
         ? nextScheduledTickRange(
             world.time.slowTick,

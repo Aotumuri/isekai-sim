@@ -330,10 +330,38 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
           setRowValue(overviewRows.cities, `${stats.cityCount}`);
           setRowValue(overviewRows.wars, `${stats.warCount}`);
 
-          setRowValue(resourcesRows.steel, formatInteger(stats.resources.steel));
-          setRowValue(resourcesRows.fuel, formatInteger(stats.resources.fuel));
-          setRowValue(resourcesRows.manpower, formatInteger(stats.resources.manpower));
-          setRowValue(resourcesRows.weapons, formatInteger(stats.resources.weapons));
+          setRowValue(
+            resourcesRows.steel,
+            formatResourceValue(
+              stats.resources.steel,
+              stats.resourceFlow.delta.steel,
+              stats.resourceFlow.usage.steel,
+            ),
+          );
+          setRowValue(
+            resourcesRows.fuel,
+            formatResourceValue(
+              stats.resources.fuel,
+              stats.resourceFlow.delta.fuel,
+              stats.resourceFlow.usage.fuel,
+            ),
+          );
+          setRowValue(
+            resourcesRows.manpower,
+            formatResourceValue(
+              stats.resources.manpower,
+              stats.resourceFlow.delta.manpower,
+              stats.resourceFlow.usage.manpower,
+            ),
+          );
+          setRowValue(
+            resourcesRows.weapons,
+            formatResourceValue(
+              stats.resources.weapons,
+              stats.resourceFlow.delta.weapons,
+              stats.resourceFlow.usage.weapons,
+            ),
+          );
 
           setRowValue(supportRows.support, formatPercent(stats.warSupport));
           setRowValue(supportRows.duration, formatNumber(stats.supportDuration));
@@ -695,6 +723,20 @@ function buildNationStats(
     manpower: number;
     weapons: number;
   };
+  resourceFlow: {
+    usage: {
+      steel: number;
+      fuel: number;
+      manpower: number;
+      weapons: number;
+    };
+    delta: {
+      steel: number;
+      fuel: number;
+      manpower: number;
+      weapons: number;
+    };
+  };
 } {
   const unitCount = countUnitsByNation(world.units, nation.id);
   const territoryStats = collectTerritoryStats(
@@ -765,6 +807,20 @@ function buildNationStats(
       fuel: Math.max(0, Math.floor(nation.resources.fuel)),
       manpower: Math.max(0, Math.floor(nation.resources.manpower)),
       weapons: Math.max(0, Math.floor(nation.resources.weapons)),
+    },
+    resourceFlow: {
+      usage: {
+        steel: Math.max(0, Math.floor(nation.resourceFlow.usage.steel)),
+        fuel: Math.max(0, Math.floor(nation.resourceFlow.usage.fuel)),
+        manpower: Math.max(0, Math.floor(nation.resourceFlow.usage.manpower)),
+        weapons: Math.max(0, Math.floor(nation.resourceFlow.usage.weapons)),
+      },
+      delta: {
+        steel: Math.floor(nation.resourceFlow.delta.steel),
+        fuel: Math.floor(nation.resourceFlow.delta.fuel),
+        manpower: Math.floor(nation.resourceFlow.delta.manpower),
+        weapons: Math.floor(nation.resourceFlow.delta.weapons),
+      },
     },
     supportDuration: durationRatio * cooperationBalance.durationWeight,
     supportCapital: capitalFallRatio * cooperationBalance.capitalFallWeight,
@@ -905,6 +961,19 @@ function formatInteger(value: number): string {
     return "0";
   }
   return Math.max(0, Math.floor(value)).toString();
+}
+
+function formatSignedInteger(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "+0";
+  }
+  const rounded = Math.floor(value);
+  const abs = Math.abs(rounded);
+  return rounded >= 0 ? `+${abs}` : `-${abs}`;
+}
+
+function formatResourceValue(amount: number, delta: number, usage: number): string {
+  return `${formatInteger(amount)} (Net ${formatSignedInteger(delta)} / Use ${formatInteger(usage)})`;
 }
 
 function formatPercent(value: number): string {
