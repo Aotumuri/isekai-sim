@@ -25,13 +25,14 @@ export function createBattleId(index: number): BattleId {
 }
 
 export function updateBattles(world: WorldState): void {
-  if (world.wars.length === 0 || world.units.length < 2) {
+  const landUnits = world.units.filter((unit) => unit.domain === "land");
+  if (world.wars.length === 0 || landUnits.length < 2) {
     return;
   }
 
   const warAdjacency = buildWarAdjacency(world.wars);
-  const unitsByMesoId = collectUnitsByMesoAndNation(world.units);
-  const attackersByTarget = collectAttackersByTarget(world.units, unitsByMesoId, warAdjacency);
+  const unitsByMesoId = collectUnitsByMesoAndNation(landUnits);
+  const attackersByTarget = collectAttackersByTarget(landUnits, unitsByMesoId, warAdjacency);
   const existingByKey = indexExistingBattles(world.battles);
   const now = world.time.fastTick;
   const removedUnitIds = new Set<UnitId>();

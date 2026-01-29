@@ -7,6 +7,7 @@ import type {
   MesoRegionId,
 } from "../../worldgen/meso-region";
 import type { NationId } from "../../worldgen/nation";
+import type { SeededRng } from "../../utils/seeded-rng";
 import { buildWarAdjacency, isAtWar, type WarAdjacency } from "../war-state";
 import {
   getBorderTargetsByNation,
@@ -19,6 +20,10 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
   if (world.units.length === 0 || world.mesoRegions.length === 0) {
     return;
   }
+  const landUnits = world.units.filter((unit) => unit.domain === "land");
+  if (landUnits.length === 0) {
+    return;
+  }
 
   const mesoById = getMesoById(world);
   const neighborsById = getNeighborsById(world);
@@ -27,7 +32,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
   const warAdjacency = buildWarAdjacency(world.wars);
   const occupationByMesoId = world.occupation.mesoById;
   const hasEnemyUnits = (targetId: MesoRegionId, nationId: NationId): boolean => {
-    for (const unit of world.units) {
+    for (const unit of landUnits) {
       if (
         unit.regionId === targetId &&
         unit.nationId !== nationId &&
@@ -44,7 +49,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     mesoById,
   );
   const intrusionTargetsByNationId = collectIntrusionTargetsByNation(
-    world.units,
+    landUnits,
     ownerByMesoId,
     mesoById,
     warAdjacency,
@@ -65,7 +70,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
   }
 
   const unitsByNation = new Map<NationId, UnitState[]>();
-  for (const unit of world.units) {
+  for (const unit of landUnits) {
     const list = unitsByNation.get(unit.nationId);
     if (list) {
       list.push(unit);
@@ -110,6 +115,56 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
       occupationByMesoId,
       warAdjacency,
       isBlockedByEnemy,
+    );
+  }
+}
+
+export function repositionNavalUnits(world: WorldState, dtMs: number): void {
+  if (world.units.length === 0 || world.mesoRegions.length === 0) {
+    return;
+  }
+  const navalUnits = world.units.filter((unit) => unit.domain === "naval");
+  if (navalUnits.length === 0) {
+    return;
+  }
+
+  const mesoById = getMesoById(world);
+  const neighborsById = getNeighborsById(world);
+  const ownerByMesoId = getOwnerByMesoId(world);
+
+  for (const unit of navalUnits) {
+    const current = mesoById.get(unit.regionId);
+    if (!current || !isNavalNode(current, unit.nationId, ownerByMesoId)) {
+      resetMovement(unit);
+      continue;
+    }
+
+    if (!unit.moveTargetId || unit.regionId === unit.moveTargetId) {
+      const target = pickNavalTarget(
+        unit.regionId,
+        unit.nationId,
+        neighborsById,
+        mesoById,
+        ownerByMesoId,
+        world.simRng,
+      );
+      unit.moveTargetId = target;
+    }
+
+    if (!unit.moveTargetId) {
+      resetMovement(unit);
+      continue;
+    }
+
+    moveUnitTowardTarget(
+      unit,
+      dtMs,
+      neighborsById,
+      (id) => {
+        const meso = mesoById.get(id);
+        return !!meso && isNavalNode(meso, unit.nationId, ownerByMesoId);
+      },
+      () => false,
     );
   }
 }
@@ -349,6 +404,53 @@ function resolveFirstStep(
     prev = previous.get(current) ?? null;
   }
   return prev === startId ? current : null;
+}
+
+function isNavalNode(
+  meso: MesoRegion,
+  nationId: NationId,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+): boolean {
+  if (meso.type === "sea") {
+    return true;
+  }
+  if (meso.building === "port") {
+    return ownerByMesoId.get(meso.id) === nationId;
+  }
+  return false;
+}
+
+function pickNavalTarget(
+  startId: MesoRegionId,
+  nationId: NationId,
+  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+  rng: SeededRng,
+): MesoRegionId | null {
+  const neighbors = neighborsById.get(startId) ?? [];
+  const candidates: MesoRegionId[] = [];
+  for (const neighborId of neighbors) {
+    const neighbor = mesoById.get(neighborId);
+    if (!neighbor) {
+      continue;
+    }
+    if (!isNavalNode(neighbor, nationId, ownerByMesoId)) {
+      continue;
+    }
+    candidates.push(neighborId);
+  }
+  if (candidates.length === 0) {
+    return null;
+  }
+  return candidates.length === 1 ? candidates[0] : candidates[rng.nextInt(candidates.length)];
+}
+
+function resetMovement(unit: UnitState): void {
+  unit.moveTargetId = null;
+  unit.moveFromId = null;
+  unit.moveToId = null;
+  unit.moveProgressMs = 0;
 }
 
 function isPassable(meso: MesoRegion): boolean {

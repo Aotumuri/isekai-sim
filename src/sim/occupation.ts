@@ -80,6 +80,9 @@ export function updateOccupation(world: WorldState): void {
 function collectUnitsByMeso(units: UnitState[]): Map<MesoRegionId, UnitState[]> {
   const unitsByMesoId = new Map<MesoRegionId, UnitState[]>();
   for (const unit of units) {
+    if (unit.domain !== "land") {
+      continue;
+    }
     const list = unitsByMesoId.get(unit.regionId);
     if (list) {
       list.push(unit);
