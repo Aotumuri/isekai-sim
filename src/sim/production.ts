@@ -5,9 +5,9 @@ import type { NationId } from "../worldgen/nation";
 import { createUnitForType } from "./create-units";
 import type { NationResourceFlow, NationResources } from "./nation-runtime";
 import { nextScheduledTickRange } from "./schedule";
-import { createUnitId, type UnitState, type UnitType } from "./unit";
+import { createUnitId, type NavalUnitType, type UnitState, type UnitType } from "./unit";
 import type { WorldState } from "./world-state";
-import { getCityTargetsByNation, getOwnerByMesoId } from "./world-cache";
+import { getCityTargetsByNation, getOwnerByMesoId, getPortTargetsByNation } from "./world-cache";
 
 export function updateProduction(world: WorldState): void {
   if (world.nations.length === 0) {
@@ -47,10 +47,15 @@ export function updateProduction(world: WorldState): void {
   const maxInterval = unitRange.max;
   const occupiedMacroById = world.occupation.macroById;
   const cityTargetsByNation = getCityTargetsByNation(world);
+  const portTargetsByNation = getPortTargetsByNation(world);
   const unitCountsByNation = collectUnitCountsByNation(world.units);
 
   const newUnits: UnitState[] = [];
   const cityUnitsPerCycle = Math.max(0, Math.round(production.cityUnitsPerCycle));
+  const portNavalUnitsPerCycle = Math.max(
+    0,
+    Math.round(production.portNavalUnitsPerCycle ?? 0),
+  );
   const maxUnitsPerNation = Math.max(0, Math.round(production.maxUnitsPerNation));
   const hasCap = maxUnitsPerNation > 0;
 
@@ -75,6 +80,23 @@ export function updateProduction(world: WorldState): void {
         return false;
       }
       const unitType = pickAffordableUnitType(nation.resources, world.simRng);
+      if (!unitType) {
+        return false;
+      }
+      const flow = flowByNation.get(nation.id);
+      if (!consumeResourcesForUnit(nation.resources, unitType, flow?.usage)) {
+        return false;
+      }
+      newUnits.push(createUnitForWorld(world, nation.id, regionId, unitType));
+      currentCount += 1;
+      return true;
+    };
+
+    const addNavalUnit = (regionId: MesoRegionId): boolean => {
+      if (currentCount >= capacity) {
+        return false;
+      }
+      const unitType = pickNavalUnitType(nation.resources, world.simRng);
       if (!unitType) {
         return false;
       }
@@ -112,6 +134,20 @@ export function updateProduction(world: WorldState): void {
       for (const cityId of cityTargets) {
         for (let i = 0; i < cityUnitsPerCycle; i += 1) {
           if (!addUnit(cityId)) {
+            break;
+          }
+        }
+        if (currentCount >= capacity) {
+          break;
+        }
+      }
+    }
+
+    const portTargets = portTargetsByNation.get(nation.id) ?? [];
+    if (portNavalUnitsPerCycle > 0 && portTargets.length > 0) {
+      for (const portId of portTargets) {
+        for (let i = 0; i < portNavalUnitsPerCycle; i += 1) {
+          if (!addNavalUnit(portId)) {
             break;
           }
         }
@@ -379,6 +415,25 @@ function pickAffordableUnitType(
   }
   if (canInfantry) {
     return "Infantry";
+  }
+  return null;
+}
+
+function pickNavalUnitType(
+  resources: NationResources,
+  rng: WorldState["simRng"],
+): NavalUnitType | null {
+  const canTransport = canAffordUnit(resources, "TransportShip");
+  const canCombat = canAffordUnit(resources, "CombatShip");
+  if (canTransport && canCombat) {
+    const transportShare = clamp(WORLD_BALANCE.unit.navalTransportShare ?? 0.5, 0, 1);
+    return rng.nextFloat() < transportShare ? "TransportShip" : "CombatShip";
+  }
+  if (canCombat) {
+    return "CombatShip";
+  }
+  if (canTransport) {
+    return "TransportShip";
   }
   return null;
 }

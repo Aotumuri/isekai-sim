@@ -14,6 +14,8 @@ export interface WorldCache {
   adjacentNationPairsVersion: number;
   cityTargetsByNation: Map<NationId, MesoRegionId[]>;
   cityTargetsKey: string;
+  portTargetsByNation: Map<NationId, MesoRegionId[]>;
+  portTargetsKey: string;
 }
 
 export function createWorldCache(): WorldCache {
@@ -28,6 +30,8 @@ export function createWorldCache(): WorldCache {
     adjacentNationPairsVersion: -1,
     cityTargetsByNation: new Map(),
     cityTargetsKey: "",
+    portTargetsByNation: new Map(),
+    portTargetsKey: "",
   };
 }
 
@@ -142,6 +146,26 @@ export function getCityTargetsByNation(
   return targets;
 }
 
+export function getPortTargetsByNation(
+  world: WorldState,
+): Map<NationId, MesoRegionId[]> {
+  const cache = world.cache;
+  const key = `${world.territoryVersion}:${world.occupation.version}:${world.buildingVersion}`;
+  if (cache.portTargetsKey === key) {
+    return cache.portTargetsByNation;
+  }
+
+  const ownerByMesoId = getOwnerByMesoId(world);
+  const targets = collectPortTargetsByNation(
+    world.mesoRegions,
+    ownerByMesoId,
+    world.occupation.mesoById,
+  );
+  cache.portTargetsByNation = targets;
+  cache.portTargetsKey = key;
+  return targets;
+}
+
 function buildOwnerByMesoId(
   macroRegions: MacroRegion[],
 ): Map<MesoRegionId, NationId> {
@@ -225,6 +249,37 @@ function collectCityTargetsByNation(
       continue;
     }
     if (meso.building !== "city") {
+      continue;
+    }
+    const owner = ownerByMesoId.get(meso.id);
+    if (!owner) {
+      continue;
+    }
+    const occupier = occupationByMesoId.get(meso.id);
+    if (occupier && occupier !== owner) {
+      continue;
+    }
+    const list = result.get(owner);
+    if (list) {
+      list.push(meso.id);
+    } else {
+      result.set(owner, [meso.id]);
+    }
+  }
+  return result;
+}
+
+function collectPortTargetsByNation(
+  mesoRegions: MesoRegion[],
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+  occupationByMesoId: Map<MesoRegionId, NationId>,
+): Map<NationId, MesoRegionId[]> {
+  const result = new Map<NationId, MesoRegionId[]>();
+  for (const meso of mesoRegions) {
+    if (meso.type === "sea") {
+      continue;
+    }
+    if (meso.building !== "port") {
       continue;
     }
     const owner = ownerByMesoId.get(meso.id);

@@ -52,6 +52,7 @@ export const WORLD_BALANCE = {
   },
   unit: {
     tankShare: 0.2,
+    navalTransportShare: 0.4,
     types: {
       Infantry: {
         domain: "land",
@@ -116,6 +117,7 @@ export const WORLD_BALANCE = {
       max: 15,
     },
     cityUnitsPerCycle: 1,
+    portNavalUnitsPerCycle: 1,
     capitalUnitsPerOwnedMacro: 0.1,
     maxUnitsPerNation: 100,
   },
