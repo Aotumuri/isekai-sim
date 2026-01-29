@@ -12,6 +12,10 @@ const CITY_MARKER_SIZE = 12;
 const CITY_MARKER_FILL = 0xffffff;
 const CITY_MARKER_STROKE = 0x000000;
 const CITY_MARKER_STROKE_WIDTH = 1.5;
+const PORT_MARKER_SIZE = 12;
+const PORT_MARKER_FILL = 0x3aa7ff;
+const PORT_MARKER_STROKE = 0x0b2233;
+const PORT_MARKER_STROKE_WIDTH = 1.5;
 const RESOURCE_ICON_SIZE = 8;
 const RESOURCE_STROKE = 0x000000;
 const RESOURCE_STROKE_WIDTH = 1.2;
@@ -39,6 +43,16 @@ export function drawCityCapitalIcons(layer: Container, mesoRegions: MesoRegion[]
   }
 
   for (const meso of mesoRegions) {
+    if (meso.building !== "port") {
+      continue;
+    }
+    graphics.lineStyle(PORT_MARKER_STROKE_WIDTH, PORT_MARKER_STROKE, 1);
+    graphics.beginFill(PORT_MARKER_FILL, 1);
+    drawTriangle(graphics, meso.center, PORT_MARKER_SIZE);
+    graphics.endFill();
+  }
+
+  for (const meso of mesoRegions) {
     if (meso.building !== "capital") {
       continue;
     }
@@ -58,7 +72,8 @@ export function drawCityCapitalIcons(layer: Container, mesoRegions: MesoRegion[]
     if (!meso.resource) {
       continue;
     }
-    const hasBuilding = meso.building === "city" || meso.building === "capital";
+    const hasBuilding =
+      meso.building === "city" || meso.building === "capital" || meso.building === "port";
     const center = hasBuilding
       ? { x: meso.center.x + RESOURCE_OFFSET.x, y: meso.center.y + RESOURCE_OFFSET.y }
       : meso.center;
@@ -111,6 +126,18 @@ function drawSquare(
 ): void {
   const half = size / 2;
   graphics.drawRect(center.x - half, center.y - half, size, size);
+}
+
+function drawTriangle(
+  graphics: Graphics,
+  center: { x: number; y: number },
+  size: number,
+): void {
+  const half = size / 2;
+  graphics.moveTo(center.x, center.y - half);
+  graphics.lineTo(center.x + half, center.y + half);
+  graphics.lineTo(center.x - half, center.y + half);
+  graphics.closePath();
 }
 
 function drawDiamond(

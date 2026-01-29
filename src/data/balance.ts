@@ -47,6 +47,8 @@ export const WORLD_BALANCE = {
     },
     cityPerMacroRegion: 0.3,
     minCitiesPerNation: 1,
+    portPerMacroRegion: 0.15,
+    minPortsPerNation: 1,
   },
   unit: {
     tankShare: 0.2,

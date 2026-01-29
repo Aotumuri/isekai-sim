@@ -142,6 +142,7 @@ export function generateNations(
   }
 
   assignCities(mesoRegions, macroRegions, nations, idToIndex, config, rng);
+  assignPorts(mesoRegions, macroRegions, nations, idToIndex, config, rng);
 
   return { nations, macroRegions };
 }
@@ -163,7 +164,7 @@ function assignCities(
         continue;
       }
       const meso = mesoRegions[index];
-      if (meso.type === "sea") {
+      if (meso.type !== "land") {
         continue;
       }
       if (meso.building === "capital") {
@@ -201,6 +202,91 @@ function assignCities(
       }
     }
   }
+}
+
+function assignPorts(
+  mesoRegions: MesoRegion[],
+  macroRegions: MacroRegion[],
+  nations: Nation[],
+  idToIndex: Map<MesoRegionId, number>,
+  config: WorldConfig,
+  rng: SeededRng,
+): void {
+  const candidatesByNation = new Map<Nation["id"], number[]>();
+  const isCoastal = buildCoastalIndex(mesoRegions, idToIndex);
+
+  for (const macro of macroRegions) {
+    for (const mesoId of macro.mesoRegionIds) {
+      const index = idToIndex.get(mesoId);
+      if (index === undefined) {
+        continue;
+      }
+      const meso = mesoRegions[index];
+      if (meso.type === "sea") {
+        continue;
+      }
+      if (!isCoastal[index]) {
+        continue;
+      }
+      if (meso.building !== null) {
+        continue;
+      }
+      let list = candidatesByNation.get(macro.nationId);
+      if (!list) {
+        list = [];
+        candidatesByNation.set(macro.nationId, list);
+      }
+      list.push(index);
+    }
+  }
+
+  for (const nation of nations) {
+    const candidates = candidatesByNation.get(nation.id) ?? [];
+    if (candidates.length === 0) {
+      continue;
+    }
+    const baseCount = Math.round(
+      nation.macroRegionIds.length * config.nationPortPerMacroRegion,
+    );
+    const minCount = Math.max(0, Math.round(config.nationMinPortsPerNation));
+    const targetCount = Math.min(
+      candidates.length,
+      Math.max(minCount, baseCount),
+    );
+    if (targetCount <= 0) {
+      continue;
+    }
+    const selected = pickRandomIndices(candidates, targetCount, rng);
+    for (const index of selected) {
+      if (mesoRegions[index].building === null) {
+        mesoRegions[index].building = "port";
+      }
+    }
+  }
+}
+
+function buildCoastalIndex(
+  mesoRegions: MesoRegion[],
+  idToIndex: Map<MesoRegionId, number>,
+): boolean[] {
+  const coastal = new Array<boolean>(mesoRegions.length).fill(false);
+  for (let i = 0; i < mesoRegions.length; i += 1) {
+    const meso = mesoRegions[i];
+    if (meso.type === "sea") {
+      continue;
+    }
+    for (const neighbor of meso.neighbors) {
+      const neighborIndex = idToIndex.get(neighbor.id);
+      if (neighborIndex === undefined) {
+        continue;
+      }
+      if (mesoRegions[neighborIndex].type === "sea") {
+        coastal[i] = true;
+        break;
+      }
+    }
+  }
+  return coastal;
 }
 
 function assignToCapitals(
