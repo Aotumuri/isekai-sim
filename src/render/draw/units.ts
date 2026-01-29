@@ -12,6 +12,10 @@ const UNIT_STROKE_COLOR = 0x000000;
 const TANK_MARK_WIDTH = 2;
 const TANK_MARK_COLOR = 0x000000;
 const TANK_MARK_RATIO = 0.7;
+const NAVAL_MARK_WIDTH = 1.5;
+const NAVAL_MARK_COLOR = 0x000000;
+const NAVAL_MARK_RATIO = 0.6;
+const TRANSPORT_MARK_INNER_RATIO = 0.32;
 
 export function drawUnits(
   layer: Container,
@@ -45,6 +49,22 @@ export function drawUnits(
       graphics.lineStyle(TANK_MARK_WIDTH, TANK_MARK_COLOR, 1);
       graphics.moveTo(pos.x - half, pos.y);
       graphics.lineTo(pos.x + half, pos.y);
+    } else if (unit.type === "CombatShip") {
+      const half = UNIT_RADIUS * NAVAL_MARK_RATIO;
+      graphics.lineStyle(NAVAL_MARK_WIDTH, NAVAL_MARK_COLOR, 1);
+      graphics.moveTo(pos.x - half, pos.y + half);
+      graphics.lineTo(pos.x, pos.y - half);
+      graphics.lineTo(pos.x + half, pos.y + half);
+      graphics.closePath();
+    } else if (unit.type === "TransportShip") {
+      const half = UNIT_RADIUS * NAVAL_MARK_RATIO;
+      const inner = UNIT_RADIUS * TRANSPORT_MARK_INNER_RATIO;
+      graphics.lineStyle(NAVAL_MARK_WIDTH, NAVAL_MARK_COLOR, 1);
+      graphics.drawRect(pos.x - half, pos.y - half, half * 2, half * 2);
+      graphics.moveTo(pos.x - inner, pos.y);
+      graphics.lineTo(pos.x + inner, pos.y);
+      graphics.moveTo(pos.x, pos.y - inner);
+      graphics.lineTo(pos.x, pos.y + inner);
     }
   }
 
