@@ -73,7 +73,7 @@ export const WORLD_BALANCE = {
       },
       TransportShip: {
         domain: "naval",
-        moveTicksPerRegion: 6,
+        moveTicksPerRegion: 20,
         manpower: 300,
         org: 0.6,
         combatPower: 0,
@@ -82,7 +82,7 @@ export const WORLD_BALANCE = {
       },
       CombatShip: {
         domain: "naval",
-        moveTicksPerRegion: 5,
+        moveTicksPerRegion: 20,
         manpower: 500,
         org: 0.85,
         combatPower: 2.0,
