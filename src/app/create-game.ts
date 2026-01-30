@@ -35,6 +35,7 @@ export function createGame(root: HTMLElement): void {
     world.occupation,
     config.width,
     config.height,
+    renderer.app.renderer,
   );
   drawCityCapitalIcons(
     renderer.worldLayers.layers.CityCapitalResourceIcons,
@@ -77,6 +78,7 @@ export function createGame(root: HTMLElement): void {
         world.occupation,
         config.width,
         config.height,
+        renderer.app.renderer,
       );
       lastOccupationVersion = world.occupation.version;
       shouldRedrawIcons = true;

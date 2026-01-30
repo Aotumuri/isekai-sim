@@ -4,7 +4,13 @@ import type { MesoRegion, MesoRegionId } from "../../worldgen/meso-region";
 import type { NationId } from "../../worldgen/nation";
 import { buildWarAdjacency, type WarAdjacency } from "../war-state";
 import { getMesoById, getNeighborsById, getOwnerByMesoId } from "../world-cache";
-import { findNearestTarget, moveUnitTowardTarget, resetMovement } from "./movement-utils";
+import { getCachedAllowedSet, getCachedDistanceField } from "../pathfinding-cache";
+import {
+  buildDistanceField,
+  findNearestTarget,
+  moveUnitTowardTarget,
+  resetMovement,
+} from "./movement-utils";
 
 export function repositionNavalUnits(world: WorldState, dtMs: number): void {
   if (world.units.length === 0 || world.mesoRegions.length === 0) {
@@ -45,6 +51,19 @@ export function repositionNavalUnits(world: WorldState, dtMs: number): void {
     mesoById,
     warAdjacency,
   );
+  const navalAllowedByNation = new Map<NationId, Set<MesoRegionId>>();
+  for (const nationId of unitsByNation.keys()) {
+    const allowed = getCachedAllowedSet(
+      world.cache,
+      buildNavalAllowedKey(
+        nationId,
+        world.territoryVersion,
+        world.buildingVersion,
+      ),
+      () => buildNavalAllowedSet(nationId, world.mesoRegions, ownerByMesoId),
+    );
+    navalAllowedByNation.set(nationId, allowed);
+  }
 
   for (const [nationId, units] of unitsByNation.entries()) {
     const combatShips = units.filter((unit) => unit.type === "CombatShip");
@@ -59,6 +78,7 @@ export function repositionNavalUnits(world: WorldState, dtMs: number): void {
       neighborsById,
       mesoById,
     );
+    const allowedSet = navalAllowedByNation.get(nationId);
     const landingPlans = transports.length > 0
       ? planLandingsForNation(
           nationId,
@@ -77,8 +97,7 @@ export function repositionNavalUnits(world: WorldState, dtMs: number): void {
       landingPlans,
       portTargets,
       neighborsById,
-      mesoById,
-      ownerByMesoId,
+      allowedSet ? (id) => allowedSet.has(id) : (id) => false,
     );
     assignCombatShipTargets(
       combatShips,
@@ -91,8 +110,9 @@ export function repositionNavalUnits(world: WorldState, dtMs: number): void {
   }
 
   for (const unit of navalUnits) {
+    const allowedSet = navalAllowedByNation.get(unit.nationId);
     const current = mesoById.get(unit.regionId);
-    if (!current || !isNavalNode(current, unit.nationId, ownerByMesoId)) {
+    if (!current || !allowedSet || !allowedSet.has(current.id)) {
       resetMovement(unit);
       continue;
     }
@@ -102,15 +122,26 @@ export function repositionNavalUnits(world: WorldState, dtMs: number): void {
       continue;
     }
 
+    const isAllowed = (id: MesoRegionId): boolean =>
+      !!allowedSet && allowedSet.has(id);
+    const targetId = unit.moveTargetId;
+    const distanceById = getCachedDistanceField(
+      world.cache,
+      buildNavalDistanceFieldKey(
+        unit.nationId,
+        targetId,
+        world.territoryVersion,
+        world.buildingVersion,
+      ),
+      () => buildDistanceField(targetId, neighborsById, isAllowed),
+    );
     moveUnitTowardTarget(
       unit,
       dtMs,
       neighborsById,
-      (id) => {
-        const meso = mesoById.get(id);
-        return !!meso && isNavalNode(meso, unit.nationId, ownerByMesoId);
-      },
+      isAllowed,
       () => false,
+      distanceById,
     );
   }
 }
@@ -461,21 +492,12 @@ function assignTransportTargets(
   landingPlans: LandingPlan[],
   portTargets: MesoRegionId[],
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
-  mesoById: Map<MesoRegionId, MesoRegion>,
-  ownerByMesoId: Map<MesoRegionId, NationId>,
+  isAllowed: (id: MesoRegionId) => boolean,
 ): void {
   if (transports.length === 0) {
     return;
   }
-  const nationId = transports[0]?.nationId;
-  if (!nationId) {
-    return;
-  }
   const portSet = new Set(portTargets);
-  const isAllowed = (id: MesoRegionId): boolean => {
-    const meso = mesoById.get(id);
-    return !!meso && isNavalNode(meso, nationId, ownerByMesoId);
-  };
   const ordered = [...transports].sort((a, b) => a.id.localeCompare(b.id));
   let planIndex = 0;
   for (const unit of ordered) {
@@ -594,4 +616,42 @@ function collectAdjacentSeaIds(
 
 function uniqueIds(ids: MesoRegionId[]): MesoRegionId[] {
   return [...new Set(ids)];
+}
+
+function buildNavalAllowedKey(
+  nationId: NationId,
+  territoryVersion: number,
+  buildingVersion: number,
+): string {
+  return `naval-allowed:${nationId}:${territoryVersion}:${buildingVersion}`;
+}
+
+function buildNavalAllowedSet(
+  nationId: NationId,
+  mesoRegions: MesoRegion[],
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+): Set<MesoRegionId> {
+  const allowed = new Set<MesoRegionId>();
+  for (const meso of mesoRegions) {
+    if (meso.type === "sea") {
+      allowed.add(meso.id);
+      continue;
+    }
+    if (meso.building !== "port") {
+      continue;
+    }
+    if (ownerByMesoId.get(meso.id) === nationId) {
+      allowed.add(meso.id);
+    }
+  }
+  return allowed;
+}
+
+function buildNavalDistanceFieldKey(
+  nationId: NationId,
+  targetId: MesoRegionId,
+  territoryVersion: number,
+  buildingVersion: number,
+): string {
+  return `naval:${nationId}:${targetId}:${territoryVersion}:${buildingVersion}`;
 }

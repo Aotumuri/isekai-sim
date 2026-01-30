@@ -16,6 +16,18 @@ export interface WorldCache {
   cityTargetsKey: string;
   portTargetsByNation: Map<NationId, MesoRegionId[]>;
   portTargetsKey: string;
+  distanceFieldByKey: Map<string, { distanceById: Map<MesoRegionId, number> }>;
+  distanceFieldMaxEntries: number;
+  allowedSetByKey: Map<string, Set<MesoRegionId>>;
+  allowedSetMaxEntries: number;
+  targetFieldByKey: Map<
+    string,
+    {
+      distanceById: Map<MesoRegionId, number>;
+      nearestTargetById: Map<MesoRegionId, MesoRegionId>;
+    }
+  >;
+  targetFieldMaxEntries: number;
 }
 
 export function createWorldCache(): WorldCache {
@@ -32,6 +44,12 @@ export function createWorldCache(): WorldCache {
     cityTargetsKey: "",
     portTargetsByNation: new Map(),
     portTargetsKey: "",
+    distanceFieldByKey: new Map(),
+    distanceFieldMaxEntries: 256,
+    allowedSetByKey: new Map(),
+    allowedSetMaxEntries: 128,
+    targetFieldByKey: new Map(),
+    targetFieldMaxEntries: 128,
   };
 }
 

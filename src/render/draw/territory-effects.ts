@@ -1,5 +1,4 @@
-import { Container, Graphics } from "pixi.js";
-import { clearLayer } from "../clear-layer";
+import { Container, Graphics, Rectangle, Renderer, Sprite } from "pixi.js";
 import type { OccupationState } from "../../sim/occupation";
 import type { MacroRegion } from "../../worldgen/macro-region";
 import type { MicroRegion } from "../../worldgen/micro-region";
@@ -9,6 +8,7 @@ import { getNationColor } from "../nation-color";
 const HATCH_SPACING = 12;
 const HATCH_WIDTH = 2;
 const HATCH_ALPHA = 0.5;
+const TERRITORY_SPRITE_NAME = "TerritoryEffectsSprite";
 
 export function drawTerritoryEffects(
   layer: Container,
@@ -17,8 +17,9 @@ export function drawTerritoryEffects(
   occupation: OccupationState,
   width: number,
   height: number,
+  renderer: Renderer,
 ): void {
-  clearLayer(layer);
+  clearTerritoryLayer(layer);
 
   if (occupation.macroById.size === 0 && occupation.mesoById.size === 0) {
     return;
@@ -75,13 +76,14 @@ export function drawTerritoryEffects(
   }
 
   const bounds = { minX: 0, minY: 0, maxX: width, maxY: height };
+  const source = new Container();
 
   for (const [nationId, regions] of macroRegionsByNationId.entries()) {
     if (regions.length === 0) {
       continue;
     }
 
-    drawHatchedRegions(layer, nationId, regions, bounds, true);
+    drawHatchedRegions(source, nationId, regions, bounds, true);
   }
 
   for (const [nationId, regions] of mesoRegionsByNationId.entries()) {
@@ -89,7 +91,27 @@ export function drawTerritoryEffects(
       continue;
     }
 
-    drawHatchedRegions(layer, nationId, regions, bounds, false);
+    drawHatchedRegions(source, nationId, regions, bounds, false);
+  }
+
+  const texture = renderer.generateTexture(source, {
+    region: new Rectangle(0, 0, width, height),
+    resolution: renderer.resolution,
+  });
+  source.destroy({ children: true });
+  const sprite = new Sprite(texture);
+  sprite.name = TERRITORY_SPRITE_NAME;
+  sprite.position.set(0, 0);
+  layer.addChild(sprite);
+}
+
+function clearTerritoryLayer(layer: Container): void {
+  const children = layer.removeChildren();
+  for (const child of children) {
+    if (child instanceof Sprite) {
+      child.texture.destroy(true);
+    }
+    child.destroy({ children: true });
   }
 }
 

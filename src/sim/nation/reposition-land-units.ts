@@ -8,6 +8,7 @@ import type {
 } from "../../worldgen/meso-region";
 import type { NationId } from "../../worldgen/nation";
 import { buildWarAdjacency, isAtWar, type WarAdjacency } from "../war-state";
+import { buildDistanceField, buildTargetField } from "./movement-utils";
 import {
   getBorderTargetsByNation,
   getMesoById,
@@ -15,6 +16,11 @@ import {
   getOwnerByMesoId,
   getPortTargetsByNation,
 } from "../world-cache";
+import {
+  getCachedAllowedSet,
+  getCachedDistanceField,
+  getCachedTargetField,
+} from "../pathfinding-cache";
 
 export function repositionUnits(world: WorldState, dtMs: number): void {
   if (world.units.length === 0 || world.mesoRegions.length === 0) {
@@ -30,6 +36,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
   const ownerByMesoId = getOwnerByMesoId(world);
 
   const warAdjacency = buildWarAdjacency(world.wars);
+  const warCacheKey = buildWarCacheKey(world.wars);
   const occupationByMesoId = world.occupation.mesoById;
   const hasEnemyUnits = (targetId: MesoRegionId, nationId: NationId): boolean => {
     for (const unit of landUnits) {
@@ -130,6 +137,8 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
       occupationByMesoId,
       warAdjacency,
       isBlockedByEnemy,
+      world,
+      warCacheKey,
     );
   }
 }
@@ -202,7 +211,51 @@ function repositionNationUnits(
   occupationByMesoId: Map<MesoRegionId, NationId>,
   warAdjacency: WarAdjacency,
   isBlockedByEnemy: (toId: MesoRegionId) => boolean,
+  world: WorldState,
+  warCacheKey: string,
 ): void {
+  const ownedAllowedKey = buildLandAllowedKey(
+    nationId,
+    "owned",
+    world.territoryVersion,
+    warCacheKey,
+  );
+  const warAllowedKey = buildLandAllowedKey(
+    nationId,
+    "war",
+    world.territoryVersion,
+    warCacheKey,
+  );
+  const ownedAllowedSet = getCachedAllowedSet(
+    world.cache,
+    ownedAllowedKey,
+    () =>
+      buildLandAllowedSet(
+        nationId,
+        world.mesoRegions,
+        ownerByMesoId,
+        warAdjacency,
+        "owned",
+      ),
+  );
+  const needsWarAllowed = (warAdjacency.get(nationId)?.size ?? 0) > 0;
+  const warAllowedSet = needsWarAllowed
+    ? getCachedAllowedSet(
+        world.cache,
+        warAllowedKey,
+        () =>
+          buildLandAllowedSet(
+            nationId,
+            world.mesoRegions,
+            ownerByMesoId,
+            warAdjacency,
+            "war",
+          ),
+      )
+    : ownedAllowedSet;
+  const isOwnedAllowed = (id: MesoRegionId): boolean => ownedAllowedSet.has(id);
+  const isWarAllowed = (id: MesoRegionId): boolean => warAllowedSet.has(id);
+
   assignDefenseTargets(
     defenseUnits,
     nationId,
@@ -213,8 +266,12 @@ function repositionNationUnits(
     neighborsById,
     ownerByMesoId,
     occupationByMesoId,
-    warAdjacency,
-  );
+      isOwnedAllowed,
+      isWarAllowed,
+      world.cache,
+      ownedAllowedKey,
+      warAllowedKey,
+    );
   assignOccupationTargets(
     occupationUnits,
     nationId,
@@ -223,6 +280,9 @@ function repositionNationUnits(
     neighborsById,
     ownerByMesoId,
     warAdjacency,
+    isWarAllowed,
+    world.cache,
+    warAllowedKey,
   );
 
   const orderedUnits = [...defenseUnits, ...occupationUnits].sort((a, b) =>
@@ -238,15 +298,28 @@ function repositionNationUnits(
       mesoById,
       warAdjacency,
     );
+    const isAllowed = useWarPath ? isWarAllowed : isOwnedAllowed;
+    const targetId = unit.moveTargetId;
+    const distanceById = targetId
+      ? getCachedDistanceField(
+          world.cache,
+          buildLandDistanceFieldKey(
+            nationId,
+            targetId,
+            useWarPath,
+            world.territoryVersion,
+            warCacheKey,
+          ),
+          () => buildDistanceField(targetId, neighborsById, isAllowed),
+        )
+      : undefined;
     moveUnitTowardTarget(
       unit,
       dtMs,
       neighborsById,
-      (id) =>
-        useWarPath
-          ? isPassableForNation(id, nationId, mesoById, ownerByMesoId, warAdjacency)
-          : isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      isAllowed,
       isBlockedByEnemy,
+      distanceById,
     );
   }
 }
@@ -257,6 +330,7 @@ function moveUnitTowardTarget(
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
   isAllowed: (id: MesoRegionId) => boolean,
   isBlockedByEnemy: (toId: MesoRegionId) => boolean,
+  distanceById?: Map<MesoRegionId, number>,
 ): void {
   if (!unit.moveTargetId || unit.regionId === unit.moveTargetId) {
     unit.moveFromId = null;
@@ -274,7 +348,7 @@ function moveUnitTowardTarget(
   }
 
   unit.moveProgressMs += dtMs;
-  if (!ensureMoveLeg(unit, neighborsById, isAllowed)) {
+  if (!ensureMoveLeg(unit, neighborsById, isAllowed, distanceById)) {
     unit.moveTargetId = null;
     unit.moveFromId = null;
     unit.moveToId = null;
@@ -304,7 +378,7 @@ function moveUnitTowardTarget(
 
     unit.moveFromId = null;
     unit.moveToId = null;
-    if (!ensureMoveLeg(unit, neighborsById, isAllowed)) {
+    if (!ensureMoveLeg(unit, neighborsById, isAllowed, distanceById)) {
       unit.moveTargetId = null;
       unit.moveFromId = null;
       unit.moveToId = null;
@@ -312,46 +386,6 @@ function moveUnitTowardTarget(
       return;
     }
   }
-}
-
-function findNearestTarget(
-  startId: MesoRegionId,
-  targetSet: Set<MesoRegionId>,
-  assignedTargets: Set<MesoRegionId>,
-  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
-  isAllowed: (id: MesoRegionId) => boolean,
-): MesoRegionId | null {
-  if (!isAllowed(startId)) {
-    return null;
-  }
-  if (targetSet.has(startId) && !assignedTargets.has(startId)) {
-    return startId;
-  }
-
-  const queue: MesoRegionId[] = [startId];
-  const visited = new Set<MesoRegionId>([startId]);
-  let head = 0;
-
-  while (head < queue.length) {
-    const current = queue[head];
-    head += 1;
-    const neighbors = neighborsById.get(current) ?? [];
-    for (const neighbor of neighbors) {
-      if (visited.has(neighbor)) {
-        continue;
-      }
-      if (!isAllowed(neighbor)) {
-        continue;
-      }
-      if (targetSet.has(neighbor) && !assignedTargets.has(neighbor)) {
-        return neighbor;
-      }
-      visited.add(neighbor);
-      queue.push(neighbor);
-    }
-  }
-
-  return null;
 }
 
 function findNextStep(
@@ -387,10 +421,46 @@ function findNextStep(
   return null;
 }
 
+function findNextStepFromDistanceField(
+  startId: MesoRegionId,
+  targetId: MesoRegionId,
+  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
+  isAllowed: (id: MesoRegionId) => boolean,
+  distanceById: Map<MesoRegionId, number>,
+): MesoRegionId | null {
+  if (startId === targetId) {
+    return null;
+  }
+  const currentDistance = distanceById.get(startId);
+  if (currentDistance === undefined) {
+    return null;
+  }
+
+  const neighbors = neighborsById.get(startId) ?? [];
+  let best: MesoRegionId | null = null;
+  let bestDistance = currentDistance;
+  for (const neighbor of neighbors) {
+    if (!isAllowed(neighbor)) {
+      continue;
+    }
+    const dist = distanceById.get(neighbor);
+    if (dist === undefined || dist >= currentDistance) {
+      continue;
+    }
+    if (dist < bestDistance || (dist === bestDistance && (!best || neighbor < best))) {
+      bestDistance = dist;
+      best = neighbor;
+    }
+  }
+
+  return best;
+}
+
 function ensureMoveLeg(
   unit: UnitState,
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
   isAllowed: (id: MesoRegionId) => boolean,
+  distanceById?: Map<MesoRegionId, number>,
 ): MesoRegionId | null {
   if (unit.moveFromId === unit.regionId && unit.moveToId) {
     if (isAllowed(unit.moveToId)) {
@@ -400,7 +470,15 @@ function ensureMoveLeg(
     unit.moveToId = null;
   }
 
-  const nextStep = findNextStep(unit.regionId, unit.moveTargetId, neighborsById, isAllowed);
+  const nextStep = distanceById
+    ? findNextStepFromDistanceField(
+        unit.regionId,
+        unit.moveTargetId,
+        neighborsById,
+        isAllowed,
+        distanceById,
+      )
+    : findNextStep(unit.regionId, unit.moveTargetId, neighborsById, isAllowed);
   if (!nextStep) {
     return null;
   }
@@ -550,7 +628,11 @@ function assignDefenseTargets(
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
   ownerByMesoId: Map<MesoRegionId, NationId>,
   occupationByMesoId: Map<MesoRegionId, NationId>,
-  warAdjacency: WarAdjacency,
+  isOwnedAllowed: (id: MesoRegionId) => boolean,
+  isWarAllowed: (id: MesoRegionId) => boolean,
+  cache: WorldState["cache"],
+  ownedAllowedKey: string,
+  warAllowedKey: string,
 ): void {
   if (units.length === 0) {
     return;
@@ -606,7 +688,7 @@ function assignDefenseTargets(
       remainingUnits,
       capitalSet,
       assignedTargets,
-      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      isOwnedAllowed,
     );
     remainingUnits = assignUnitsOnTarget(remainingUnits, capitalSet, assignedTargets);
     remainingUnits = assignNearestTargets(
@@ -614,7 +696,10 @@ function assignDefenseTargets(
       capitalSet,
       assignedTargets,
       neighborsById,
-      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      isOwnedAllowed,
+      mesoById,
+      cache,
+      ownedAllowedKey,
     );
   }
 
@@ -630,7 +715,7 @@ function assignDefenseTargets(
       remainingUnits,
       citySet,
       assignedTargets,
-      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      isOwnedAllowed,
     );
     remainingUnits = assignUnitsOnTarget(remainingUnits, citySet, assignedTargets);
     remainingUnits = assignNearestTargets(
@@ -638,7 +723,10 @@ function assignDefenseTargets(
       citySet,
       assignedTargets,
       neighborsById,
-      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      isOwnedAllowed,
+      mesoById,
+      cache,
+      ownedAllowedKey,
     );
   }
 
@@ -647,7 +735,7 @@ function assignDefenseTargets(
       remainingUnits,
       intrusionSet,
       assignedTargets,
-      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      isOwnedAllowed,
     );
     remainingUnits = assignUnitsOnTarget(remainingUnits, intrusionSet, assignedTargets);
     remainingUnits = assignNearestTargets(
@@ -655,7 +743,10 @@ function assignDefenseTargets(
       intrusionSet,
       assignedTargets,
       neighborsById,
-      (id) => isPassableForNation(id, nationId, mesoById, ownerByMesoId, warAdjacency),
+      isWarAllowed,
+      mesoById,
+      cache,
+      warAllowedKey,
     );
   }
 
@@ -672,7 +763,10 @@ function assignDefenseTargets(
       liberationSet,
       assignedTargets,
       neighborsById,
-      (id) => isPassableForNation(id, nationId, mesoById, ownerByMesoId, warAdjacency),
+      isWarAllowed,
+      mesoById,
+      cache,
+      warAllowedKey,
     );
   }
 
@@ -681,7 +775,7 @@ function assignDefenseTargets(
       remainingUnits,
       borderSet,
       assignedTargets,
-      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      isOwnedAllowed,
     );
     remainingUnits = assignUnitsOnTarget(remainingUnits, borderSet, assignedTargets);
     remainingUnits = assignNearestTargets(
@@ -689,7 +783,10 @@ function assignDefenseTargets(
       borderSet,
       assignedTargets,
       neighborsById,
-      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      isOwnedAllowed,
+      mesoById,
+      cache,
+      ownedAllowedKey,
     );
   }
 
@@ -705,7 +802,7 @@ function assignDefenseTargets(
       remainingUnits,
       interiorSet,
       assignedTargets,
-      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      isOwnedAllowed,
     );
     remainingUnits = assignUnitsOnTarget(remainingUnits, interiorSet, assignedTargets);
     remainingUnits = assignNearestTargets(
@@ -713,7 +810,10 @@ function assignDefenseTargets(
       interiorSet,
       assignedTargets,
       neighborsById,
-      (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      isOwnedAllowed,
+      mesoById,
+      cache,
+      ownedAllowedKey,
     );
   }
 
@@ -741,6 +841,9 @@ function assignOccupationTargets(
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
   ownerByMesoId: Map<MesoRegionId, NationId>,
   warAdjacency: WarAdjacency,
+  isWarAllowed: (id: MesoRegionId) => boolean,
+  cache: WorldState["cache"],
+  warAllowedKey: string,
 ): void {
   if (units.length === 0) {
     return;
@@ -773,7 +876,10 @@ function assignOccupationTargets(
     targetSet,
     assignedTargets,
     neighborsById,
-    (id) => isPassableForNation(id, nationId, mesoById, ownerByMesoId, warAdjacency),
+    isWarAllowed,
+    mesoById,
+    cache,
+    warAllowedKey,
   );
 
   if (remainingUnits.length > 0) {
@@ -914,32 +1020,218 @@ function assignNearestTargets(
   assignedTargets: Set<MesoRegionId>,
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
   isAllowed: (id: MesoRegionId) => boolean,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+  cache: WorldState["cache"],
+  allowedKey: string,
 ): UnitState[] {
   if (targetSet.size === 0 || assignedTargets.size >= targetSet.size) {
     return units;
   }
 
-  const remaining: UnitState[] = [];
+  const availableTargets: MesoRegionId[] = [];
+  for (const target of targetSet) {
+    if (!assignedTargets.has(target)) {
+      availableTargets.push(target);
+    }
+  }
+  if (availableTargets.length === 0) {
+    return units;
+  }
+
+  const targetKey = buildTargetSetKey(availableTargets);
+  const fieldKey = buildTargetFieldKey(allowedKey, targetKey);
+  const targetField = getCachedTargetField(cache, fieldKey, () =>
+    buildTargetField(availableTargets, neighborsById, isAllowed),
+  );
+
+  const bestByTarget = new Map<
+    MesoRegionId,
+    { unit: UnitState; distance: number }
+  >();
   for (const unit of units) {
-    if (assignedTargets.size >= targetSet.size) {
-      remaining.push(unit);
+    if (!isAllowed(unit.regionId)) {
       continue;
     }
-    const target = findNearestTarget(
-      unit.regionId,
-      targetSet,
-      assignedTargets,
-      neighborsById,
-      isAllowed,
-    );
-    if (target) {
+    const target = targetField.nearestTargetById.get(unit.regionId);
+    if (!target || assignedTargets.has(target)) {
+      continue;
+    }
+    const distance = targetField.distanceById.get(unit.regionId) ?? Number.POSITIVE_INFINITY;
+    const existing = bestByTarget.get(target);
+    if (
+      !existing ||
+      distance < existing.distance ||
+      (distance === existing.distance && unit.id < existing.unit.id)
+    ) {
+      bestByTarget.set(target, { unit, distance });
+    }
+  }
+
+  const remaining: UnitState[] = [];
+  for (const unit of units) {
+    const target = targetField.nearestTargetById.get(unit.regionId);
+    const best = target ? bestByTarget.get(target) : null;
+    if (best && best.unit === unit) {
       unit.moveTargetId = target;
       assignedTargets.add(target);
     } else {
       remaining.push(unit);
     }
   }
+
+  if (remaining.length === 0 || assignedTargets.size >= targetSet.size) {
+    return remaining;
+  }
+
+  const stillAvailable: MesoRegionId[] = [];
+  for (const target of availableTargets) {
+    if (!assignedTargets.has(target)) {
+      stillAvailable.push(target);
+    }
+  }
+  if (stillAvailable.length === 0) {
+    return remaining;
+  }
+
+  return assignNearestTargetsByGrid(
+    remaining,
+    stillAvailable,
+    assignedTargets,
+    mesoById,
+    isAllowed,
+  );
+}
+
+const TARGET_GRID_CELL_SIZE = 160;
+const TARGET_GRID_MAX_RADIUS = 8;
+
+function assignNearestTargetsByGrid(
+  units: UnitState[],
+  targets: MesoRegionId[],
+  assignedTargets: Set<MesoRegionId>,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+  isAllowed: (id: MesoRegionId) => boolean,
+): UnitState[] {
+  if (units.length === 0 || targets.length === 0) {
+    return units;
+  }
+
+  const unassignedTargets = new Set(targets);
+  const grid = buildTargetGrid(targets, mesoById);
+  const remaining: UnitState[] = [];
+
+  for (const unit of units) {
+    if (unassignedTargets.size === 0) {
+      remaining.push(unit);
+      continue;
+    }
+    if (!isAllowed(unit.regionId)) {
+      remaining.push(unit);
+      continue;
+    }
+    const meso = mesoById.get(unit.regionId);
+    if (!meso) {
+      remaining.push(unit);
+      continue;
+    }
+    const target = findNearestTargetInGrid(
+      meso.center,
+      grid,
+      unassignedTargets,
+      mesoById,
+    );
+    if (!target) {
+      remaining.push(unit);
+      continue;
+    }
+    unit.moveTargetId = target;
+    assignedTargets.add(target);
+    unassignedTargets.delete(target);
+  }
+
   return remaining;
+}
+
+function buildTargetGrid(
+  targets: MesoRegionId[],
+  mesoById: Map<MesoRegionId, MesoRegion>,
+): Map<string, MesoRegionId[]> {
+  const grid = new Map<string, MesoRegionId[]>();
+  for (const target of targets) {
+    const meso = mesoById.get(target);
+    if (!meso) {
+      continue;
+    }
+    const key = gridKey(meso.center.x, meso.center.y);
+    const list = grid.get(key);
+    if (list) {
+      list.push(target);
+    } else {
+      grid.set(key, [target]);
+    }
+  }
+  return grid;
+}
+
+function findNearestTargetInGrid(
+  center: { x: number; y: number },
+  grid: Map<string, MesoRegionId[]>,
+  unassignedTargets: Set<MesoRegionId>,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+): MesoRegionId | null {
+  const cellX = Math.floor(center.x / TARGET_GRID_CELL_SIZE);
+  const cellY = Math.floor(center.y / TARGET_GRID_CELL_SIZE);
+
+  let bestTarget: MesoRegionId | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (let radius = 0; radius <= TARGET_GRID_MAX_RADIUS; radius += 1) {
+    let found = false;
+    for (let dx = -radius; dx <= radius; dx += 1) {
+      for (let dy = -radius; dy <= radius; dy += 1) {
+        if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) {
+          continue;
+        }
+        const key = `${cellX + dx},${cellY + dy}`;
+        const list = grid.get(key);
+        if (!list) {
+          continue;
+        }
+        for (const target of list) {
+          if (!unassignedTargets.has(target)) {
+            continue;
+          }
+          const targetMeso = mesoById.get(target);
+          if (!targetMeso) {
+            continue;
+          }
+          found = true;
+          const offsetX = targetMeso.center.x - center.x;
+          const offsetY = targetMeso.center.y - center.y;
+          const dist = offsetX * offsetX + offsetY * offsetY;
+          if (
+            dist < bestDistance ||
+            (dist === bestDistance && target < (bestTarget ?? target))
+          ) {
+            bestDistance = dist;
+            bestTarget = target;
+          }
+        }
+      }
+    }
+    if (found && bestTarget) {
+      return bestTarget;
+    }
+  }
+
+  const fallback = unassignedTargets.values().next().value as MesoRegionId | undefined;
+  return fallback ?? null;
+}
+
+function gridKey(x: number, y: number): string {
+  const gx = Math.floor(x / TARGET_GRID_CELL_SIZE);
+  const gy = Math.floor(y / TARGET_GRID_CELL_SIZE);
+  return `${gx},${gy}`;
 }
 
 function assignStackedTargets(units: UnitState[], targets: MesoRegionId[]): void {
@@ -1155,40 +1447,6 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function isOwnedPassable(
-  id: MesoRegionId,
-  nationId: NationId,
-  mesoById: Map<MesoRegionId, MesoRegion>,
-  ownerByMesoId: Map<MesoRegionId, NationId>,
-): boolean {
-  if (ownerByMesoId.get(id) !== nationId) {
-    return false;
-  }
-  const meso = mesoById.get(id);
-  return !!meso && isPassable(meso);
-}
-
-function isPassableForNation(
-  id: MesoRegionId,
-  nationId: NationId,
-  mesoById: Map<MesoRegionId, MesoRegion>,
-  ownerByMesoId: Map<MesoRegionId, NationId>,
-  warAdjacency: WarAdjacency,
-): boolean {
-  const owner = ownerByMesoId.get(id);
-  if (!owner) {
-    return false;
-  }
-  const meso = mesoById.get(id);
-  if (!meso || !isPassable(meso)) {
-    return false;
-  }
-  if (owner === nationId) {
-    return true;
-  }
-  return isAtWar(nationId, owner, warAdjacency);
-}
-
 function isEnemyTarget(
   id: MesoRegionId,
   nationId: NationId,
@@ -1257,4 +1515,83 @@ function shouldUseWarPath(
   }
 
   return false;
+}
+
+function buildLandDistanceFieldKey(
+  nationId: NationId,
+  targetId: MesoRegionId,
+  useWarPath: boolean,
+  territoryVersion: number,
+  warCacheKey: string,
+): string {
+  if (useWarPath) {
+    return `land-war:${nationId}:${targetId}:${territoryVersion}:${warCacheKey}`;
+  }
+  return `land-owned:${nationId}:${targetId}:${territoryVersion}`;
+}
+
+function buildTargetSetKey(targets: MesoRegionId[]): string {
+  return [...new Set(targets)]
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+    .join("|");
+}
+
+function buildTargetFieldKey(allowedKey: string, targetKey: string): string {
+  return `target-field:${allowedKey}:${targetKey}`;
+}
+
+function buildLandAllowedKey(
+  nationId: NationId,
+  mode: "owned" | "war",
+  territoryVersion: number,
+  warCacheKey: string,
+): string {
+  if (mode === "war") {
+    return `land-allowed-war:${nationId}:${territoryVersion}:${warCacheKey}`;
+  }
+  return `land-allowed-owned:${nationId}:${territoryVersion}`;
+}
+
+function buildWarCacheKey(wars: WorldState["wars"]): string {
+  if (wars.length === 0) {
+    return "none";
+  }
+  const pairs = wars
+    .map((war) => {
+      const a = war.nationAId;
+      const b = war.nationBId;
+      return a < b ? `${a}:${b}` : `${b}:${a}`;
+    })
+    .sort();
+  return pairs.join("|");
+}
+
+function buildLandAllowedSet(
+  nationId: NationId,
+  mesoRegions: MesoRegion[],
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+  warAdjacency: WarAdjacency,
+  mode: "owned" | "war",
+): Set<MesoRegionId> {
+  const allowed = new Set<MesoRegionId>();
+  const enemies = warAdjacency.get(nationId);
+
+  for (const meso of mesoRegions) {
+    if (!isPassable(meso)) {
+      continue;
+    }
+    const owner = ownerByMesoId.get(meso.id);
+    if (!owner) {
+      continue;
+    }
+    if (owner === nationId) {
+      allowed.add(meso.id);
+      continue;
+    }
+    if (mode === "war" && enemies?.has(owner)) {
+      allowed.add(meso.id);
+    }
+  }
+
+  return allowed;
 }
