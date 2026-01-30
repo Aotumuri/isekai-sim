@@ -406,12 +406,14 @@ function assignNearestTargets(
   return remaining;
 }
 
-function buildTargetSetKey(targetSet: Set<MesoRegionId>): string {
-  if (targetSet.size === 0) {
-    return "";
+function buildTargetSetKey(targetSet: Set<MesoRegionId>): number {
+  let h = 2166136261 >>> 0;
+  const ordered = [...targetSet].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  for (const t of ordered) {
+    h ^= (t as unknown as number) >>> 0;
+    h = Math.imul(h, 16777619) >>> 0;
   }
-  const orderedTargets = [...targetSet].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-  return orderedTargets.join(",");
+  return h >>> 0;
 }
 
 function getNearestTargetMap(
