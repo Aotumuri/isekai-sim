@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "perf": "npx tsx scripts/bench-sim.ts --seed 6281964219024 --minutes 3 --speed 32 --width 2750 --height 1860 --fps 60"
   },
   "dependencies": {
     "d3-delaunay": "^6.0.4",
