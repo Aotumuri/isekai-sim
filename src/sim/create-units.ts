@@ -59,6 +59,7 @@ export function createUnitForType(
   const domain = settings.domain ?? "land";
   const equipment =
     domain === "naval" ? [] : DEFAULT_EQUIPMENT.map((slot) => ({ ...slot }));
+  const transportCapacity = Math.max(0, Math.round(settings.transportCapacity ?? 0));
   return {
     id,
     nationId,
@@ -70,6 +71,11 @@ export function createUnitForType(
     combatPower: Math.max(0, settings.combatPower),
     org: clamp(settings.org, 0, 1),
     manpower: Math.max(0, settings.manpower),
+    landingDebuffTicks: 0,
+    landingDebuffMultiplier: 1,
+    transportCapacity,
+    cargoUnitIds: [],
+    cargoOriginId: null,
     moveTargetId: null,
     moveFromId: null,
     moveToId: null,

@@ -258,8 +258,10 @@ function getUnitStrength(unit: UnitState): number {
   const avgFill = getAverageEquipmentFill(unit);
   const orgFactor = 0.5 + unit.org * 0.5;
   const equipmentFactor = 0.5 + avgFill * 0.5;
+  const landingFactor = getLandingDebuffMultiplier(unit);
   return (
     Math.max(0, unit.manpower) * orgFactor * equipmentFactor * Math.max(0, unit.combatPower)
+    * landingFactor
   );
 }
 
@@ -309,4 +311,19 @@ function applyDamage(
   }
 
   return { manpowerLoss, orgLoss };
+}
+
+function getLandingDebuffMultiplier(unit: UnitState): number {
+  if (unit.domain !== "land") {
+    return 1;
+  }
+  if (unit.landingDebuffTicks <= 0) {
+    return 1;
+  }
+  const value = unit.landingDebuffMultiplier;
+  return clamp(value, 0, 1);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }

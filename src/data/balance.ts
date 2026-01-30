@@ -80,6 +80,7 @@ export const WORLD_BALANCE = {
         combatPower: 0,
         weaponCost: 8,
         fuelUse: 2,
+        transportCapacity: 5,
       },
       CombatShip: {
         domain: "naval",

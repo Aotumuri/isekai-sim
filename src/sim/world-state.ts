@@ -25,6 +25,7 @@ export interface WorldState {
   territoryVersion: number;
   buildingVersion: number;
   units: UnitState[];
+  embarkedUnits: Map<UnitState["id"], UnitState>;
   unitIdCounter: number;
   simRng: SeededRng;
   cache: WorldCache;

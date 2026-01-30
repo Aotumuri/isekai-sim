@@ -71,6 +71,7 @@ export function createWorld(config: WorldConfig): WorldState {
 
   const units = createInitialUnits(runtimeNations, mesoRegions, macroRegions, simRng);
   const unitIdCounter = units.length;
+  const embarkedUnits = new Map<UnitState["id"], UnitState>();
   const initialUnitCounts = collectUnitCountsByNation(units);
   for (const nation of runtimeNations) {
     nation.initialUnitCount = initialUnitCounts.get(nation.id) ?? 0;
@@ -99,6 +100,7 @@ export function createWorld(config: WorldConfig): WorldState {
     territoryVersion,
     buildingVersion,
     units,
+    embarkedUnits,
     unitIdCounter,
     simRng,
     cache,

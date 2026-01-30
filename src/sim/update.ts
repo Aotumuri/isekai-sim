@@ -5,6 +5,8 @@ import { updateCivilWar } from "./civil-war";
 import { repositionNavalUnits, repositionUnits } from "./nation/reposition-units";
 import { updateOccupation } from "./occupation";
 import { updateProduction } from "./production";
+import { updateNavalBattles } from "./naval-battles";
+import { updateTransports } from "./transport";
 import { updateSurrender } from "./surrender";
 import { updateWarCooperation } from "./war-cooperation";
 import { updateWarDeclarations } from "./war-declaration";
@@ -43,6 +45,8 @@ function stepFastTick(world: WorldState, dtMs: number): void {
   world.time.elapsedMs += dtMs;
   repositionUnits(world, dtMs);
   repositionNavalUnits(world, dtMs);
+  updateTransports(world);
+  updateNavalBattles(world);
   updateBattles(world);
   updateOccupation(world);
   updateCapitals(world);

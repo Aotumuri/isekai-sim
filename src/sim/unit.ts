@@ -25,6 +25,11 @@ export interface UnitState {
   combatPower: number;
   org: number;
   manpower: number;
+  landingDebuffTicks: number;
+  landingDebuffMultiplier: number;
+  transportCapacity: number;
+  cargoUnitIds: UnitId[];
+  cargoOriginId: MesoRegionId | null;
   moveTargetId: MesoRegionId | null;
   moveFromId: MesoRegionId | null;
   moveToId: MesoRegionId | null;
