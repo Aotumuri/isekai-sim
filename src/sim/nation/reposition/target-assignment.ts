@@ -2,7 +2,7 @@ import type { UnitState } from "../../unit";
 import type { MesoRegion, MesoRegionId } from "../../../worldgen/meso-region";
 import type { NationId } from "../../../worldgen/nation";
 import type { WarAdjacency } from "../../war-state";
-import { findNearestTarget } from "./movement-engine";
+import { buildNearestTargetMap, findNearestTarget } from "./movement-engine";
 import { collectBuildingTargets, collectOwnedTargets } from "./target-collectors";
 import { selectTargetsForUnits } from "./target-selection";
 import {
@@ -11,6 +11,8 @@ import {
   isOwnedPassable,
   isPassableForNation,
 } from "./passability";
+
+type NearestCache = Map<string, Map<MesoRegionId, MesoRegionId>>;
 
 export function assignDefenseTargets(
   units: UnitState[],
@@ -68,8 +70,10 @@ export function assignDefenseTargets(
     return;
   }
 
-  const orderedUnits = [...units].sort((a, b) => a.id.localeCompare(b.id));
+  // Units are already sorted by id in repositionUnits.
+  const orderedUnits = units;
   const assignedTargets = new Set<MesoRegionId>();
+  const nearestCache: NearestCache = new Map();
   let remainingUnits = orderedUnits;
 
   if (capitalTargets.length > 0 && remainingUnits.length > 0) {
@@ -87,6 +91,8 @@ export function assignDefenseTargets(
       assignedTargets,
       neighborsById,
       (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      nearestCache,
+      "owned",
     );
   }
 
@@ -111,6 +117,8 @@ export function assignDefenseTargets(
       assignedTargets,
       neighborsById,
       (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      nearestCache,
+      "owned",
     );
   }
 
@@ -128,6 +136,8 @@ export function assignDefenseTargets(
       assignedTargets,
       neighborsById,
       (id) => isPassableForNation(id, nationId, mesoById, ownerByMesoId, warAdjacency),
+      nearestCache,
+      "warpassable",
     );
   }
 
@@ -145,6 +155,8 @@ export function assignDefenseTargets(
       assignedTargets,
       neighborsById,
       (id) => isPassableForNation(id, nationId, mesoById, ownerByMesoId, warAdjacency),
+      nearestCache,
+      "warpassable",
     );
   }
 
@@ -162,6 +174,8 @@ export function assignDefenseTargets(
       assignedTargets,
       neighborsById,
       (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      nearestCache,
+      "owned",
     );
   }
 
@@ -186,6 +200,8 @@ export function assignDefenseTargets(
       assignedTargets,
       neighborsById,
       (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      nearestCache,
+      "owned",
     );
   }
 
@@ -223,14 +239,16 @@ export function assignOccupationTargets(
   }
 
   const targetSet = new Set(occupationTargets);
-  const targetList = [...targetSet];
   if (targetSet.size === 0) {
     clearUnitMovement(units);
     return;
   }
+  const targetList = [...targetSet];
 
-  const orderedUnits = [...units].sort((a, b) => a.id.localeCompare(b.id));
+  // Units are already sorted by id in repositionUnits.
+  const orderedUnits = units;
   const assignedTargets = new Set<MesoRegionId>();
+  const nearestCache: NearestCache = new Map();
   let remainingUnits = orderedUnits;
 
   remainingUnits = keepExistingTargets(
@@ -246,6 +264,8 @@ export function assignOccupationTargets(
     assignedTargets,
     neighborsById,
     (id) => isPassableForNation(id, nationId, mesoById, ownerByMesoId, warAdjacency),
+    nearestCache,
+    "warpassable",
   );
 
   if (remainingUnits.length > 0) {
@@ -338,10 +358,22 @@ function assignNearestTargets(
   assignedTargets: Set<MesoRegionId>,
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
   isAllowed: (id: MesoRegionId) => boolean,
+  nearestCache: NearestCache,
+  allowedModeKey: string,
 ): UnitState[] {
   if (targetSet.size === 0 || assignedTargets.size >= targetSet.size) {
     return units;
   }
+
+  const targetSetKey = buildTargetSetKey(targetSet);
+  const cacheKey = `${targetSetKey}|${allowedModeKey}`;
+  const nearestTargetByRegion = getNearestTargetMap(
+    nearestCache,
+    cacheKey,
+    targetSet,
+    neighborsById,
+    isAllowed,
+  );
 
   const remaining: UnitState[] = [];
   for (const unit of units) {
@@ -349,21 +381,52 @@ function assignNearestTargets(
       remaining.push(unit);
       continue;
     }
-    const target = findNearestTarget(
-      unit.regionId,
-      targetSet,
-      assignedTargets,
-      neighborsById,
-      isAllowed,
-    );
-    if (target) {
-      unit.moveTargetId = target;
-      assignedTargets.add(target);
-    } else {
-      remaining.push(unit);
+    const candidate = nearestTargetByRegion.get(unit.regionId);
+    if (candidate && !assignedTargets.has(candidate)) {
+      unit.moveTargetId = candidate;
+      assignedTargets.add(candidate);
+      continue;
     }
+    if (candidate) {
+      const target = findNearestTarget(
+        unit.regionId,
+        targetSet,
+        assignedTargets,
+        neighborsById,
+        isAllowed,
+      );
+      if (target) {
+        unit.moveTargetId = target;
+        assignedTargets.add(target);
+        continue;
+      }
+    }
+    remaining.push(unit);
   }
   return remaining;
+}
+
+function buildTargetSetKey(targetSet: Set<MesoRegionId>): string {
+  if (targetSet.size === 0) {
+    return "";
+  }
+  const orderedTargets = [...targetSet].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  return orderedTargets.join(",");
+}
+
+function getNearestTargetMap(
+  cache: NearestCache,
+  cacheKey: string,
+  targetSet: Set<MesoRegionId>,
+  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
+  isAllowed: (id: MesoRegionId) => boolean,
+): Map<MesoRegionId, MesoRegionId> {
+  let cached = cache.get(cacheKey);
+  if (!cached) {
+    cached = buildNearestTargetMap(targetSet, neighborsById, isAllowed);
+    cache.set(cacheKey, cached);
+  }
+  return cached;
 }
 
 function assignStackedTargets(units: UnitState[], targets: MesoRegionId[]): void {

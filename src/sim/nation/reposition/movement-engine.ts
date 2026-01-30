@@ -2,6 +2,50 @@ import type { UnitState } from "../../unit";
 import type { MesoRegionId } from "../../../worldgen/meso-region";
 import { getMoveMsPerRegion } from "../../movement";
 
+export function buildNearestTargetMap(
+  targetSet: Set<MesoRegionId>,
+  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
+  isAllowed: (id: MesoRegionId) => boolean,
+): Map<MesoRegionId, MesoRegionId> {
+  const nearestTargetByRegion = new Map<MesoRegionId, MesoRegionId>();
+  if (targetSet.size === 0) {
+    return nearestTargetByRegion;
+  }
+
+  const orderedTargets = [...targetSet].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const queue: MesoRegionId[] = [];
+  for (const target of orderedTargets) {
+    if (!isAllowed(target)) {
+      continue;
+    }
+    nearestTargetByRegion.set(target, target);
+    queue.push(target);
+  }
+
+  let head = 0;
+  while (head < queue.length) {
+    const current = queue[head];
+    head += 1;
+    const sourceTarget = nearestTargetByRegion.get(current);
+    if (!sourceTarget) {
+      continue;
+    }
+    const neighbors = neighborsById.get(current) ?? [];
+    for (const neighbor of neighbors) {
+      if (nearestTargetByRegion.has(neighbor)) {
+        continue;
+      }
+      if (!isAllowed(neighbor)) {
+        continue;
+      }
+      nearestTargetByRegion.set(neighbor, sourceTarget);
+      queue.push(neighbor);
+    }
+  }
+
+  return nearestTargetByRegion;
+}
+
 export function moveUnitTowardTarget(
   unit: UnitState,
   dtMs: number,

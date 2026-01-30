@@ -160,9 +160,8 @@ function repositionNationUnits(
     warAdjacency,
   );
 
-  const orderedUnits = [...defenseUnits, ...occupationUnits].sort((a, b) =>
-    a.id.localeCompare(b.id),
-  );
+  // defenseUnits and occupationUnits are slices of a pre-sorted list.
+  const orderedUnits = [...defenseUnits, ...occupationUnits];
 
   for (const unit of orderedUnits) {
     const useWarPath = shouldUseWarPath(
