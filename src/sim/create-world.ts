@@ -26,6 +26,7 @@ import type { UnitState } from "./unit";
 import type { WarState } from "./war-state";
 import type { WorldState } from "./world-state";
 import { createWorldCache } from "./world-cache";
+import { WAR_DECLARE_POLICY } from "./nation/war-declare-policy";
 
 export function createWorld(config: WorldConfig): WorldState {
   const rng = new SeededRng(config.seed);
@@ -40,8 +41,7 @@ export function createWorld(config: WorldConfig): WorldState {
   const productionBalance = WORLD_BALANCE.production;
   const unitRange = productionBalance.unitSlowTickRange;
   const isUnitProductionEnabled = unitRange.min > 0 && unitRange.max > 0;
-  const declareBalance = WORLD_BALANCE.war.declare;
-  const declareRange = declareBalance.slowTickRange;
+  const declareRange = WAR_DECLARE_POLICY.slowTickRange;
   const isWarDeclarationEnabled = declareRange.min > 0 && declareRange.max > 0;
   const runtimeNations: NationRuntime[] = nations.map((nation) => ({
     ...nation,

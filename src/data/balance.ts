@@ -124,19 +124,6 @@ export const WORLD_BALANCE = {
   },
   war: {
     macroOccupationRatio: 0.6,
-    declare: {
-      slowTickRange: {
-        min: 5,
-        max: 15,
-      },
-      minTotalUnits: 10,
-      minUnitGap: 10,
-      unitRatio: 1.4,
-      evenUnitGap: 2,
-      evenUnitRatio: 1.1,
-      evenChance: 0.02,
-      maxWarsPerTick: 5,
-    },
     surrender: {
       occupationWeight: 0.5,
       capitalFallWeight: 1,

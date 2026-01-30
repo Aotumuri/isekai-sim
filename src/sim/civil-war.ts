@@ -9,6 +9,7 @@ import {
   type NationRuntime,
   type NationResources,
 } from "./nation-runtime";
+import { WAR_DECLARE_POLICY } from "./nation/war-declare-policy";
 import { nextScheduledTickRange } from "./schedule";
 import type { UnitState } from "./unit";
 import { declareWar } from "./war-state";
@@ -110,8 +111,7 @@ export function updateCivilWar(world: WorldState): void {
     const productionBalance = WORLD_BALANCE.production;
     const unitRange = productionBalance.unitSlowTickRange;
     const isUnitProductionEnabled = unitRange.min > 0 && unitRange.max > 0;
-    const declareBalance = WORLD_BALANCE.war.declare;
-    const declareRange = declareBalance.slowTickRange;
+    const declareRange = WAR_DECLARE_POLICY.slowTickRange;
     const isWarDeclarationEnabled = declareRange.min > 0 && declareRange.max > 0;
     const newNation: NationRuntime = {
       id: newNationId,
