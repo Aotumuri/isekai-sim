@@ -1,6 +1,6 @@
 import type { SeededRng } from "../utils/seeded-rng";
 import type { MacroRegion } from "../worldgen/macro-region";
-import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
+import type { MesoRegion } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { WarState } from "./war-state";
 import { declareWar } from "./war-state";
@@ -12,76 +12,37 @@ export function addTestWar(
   rng: SeededRng,
   startedAtFastTick: number,
 ): void {
-  const pairs = collectAdjacentNationPairs(mesoRegions, macroRegions);
-  if (pairs.length === 0) {
-    console.info("[War] No adjacent nation pairs found for test war.");
+  void mesoRegions;
+  void rng;
+
+  const nationIds = collectNationIds(macroRegions);
+  if (nationIds.length < 2) {
+    console.info("[War] Not enough nations found for test war.");
     return;
   }
 
-  const [nationAId, nationBId] = pairs[rng.nextInt(pairs.length)];
-  const pickAggressorFirst = rng.nextFloat() < 0.5;
-  const aggressorId = pickAggressorFirst ? nationAId : nationBId;
-  const defenderId = pickAggressorFirst ? nationBId : nationAId;
-  const war = declareWar(wars, aggressorId, defenderId, startedAtFastTick, true);
-  if (war) {
-    console.info(
-      `[War] ${war.nationAId} vs ${war.nationBId} start (test) @${startedAtFastTick}`,
-    );
+  let warCount = 0;
+  for (let i = 0; i < nationIds.length; i += 1) {
+    for (let j = i + 1; j < nationIds.length; j += 1) {
+      const war = declareWar(
+        wars,
+        nationIds[i],
+        nationIds[j],
+        startedAtFastTick,
+        true,
+      );
+      if (war) {
+        warCount += 1;
+      }
+    }
   }
+  console.info(`[War] Test: declared ${warCount} wars @${startedAtFastTick}`);
 }
 
-function collectAdjacentNationPairs(
-  mesoRegions: MesoRegion[],
-  macroRegions: MacroRegion[],
-): Array<[NationId, NationId]> {
-  const mesoById = new Map<MesoRegionId, MesoRegion>();
-  for (const meso of mesoRegions) {
-    mesoById.set(meso.id, meso);
-  }
-
-  const ownerByMesoId = new Map<MesoRegionId, NationId>();
+function collectNationIds(macroRegions: MacroRegion[]): NationId[] {
+  const ids = new Set<NationId>();
   for (const macro of macroRegions) {
-    for (const mesoId of macro.mesoRegionIds) {
-      ownerByMesoId.set(mesoId, macro.nationId);
-    }
+    ids.add(macro.nationId);
   }
-
-  const pairs: Array<[NationId, NationId]> = [];
-  const seen = new Set<string>();
-
-  for (const meso of mesoRegions) {
-    if (!isPassable(meso)) {
-      continue;
-    }
-    const owner = ownerByMesoId.get(meso.id);
-    if (!owner) {
-      continue;
-    }
-
-    for (const neighbor of meso.neighbors) {
-      const neighborMeso = mesoById.get(neighbor.id);
-      if (!neighborMeso || !isPassable(neighborMeso)) {
-        continue;
-      }
-      const neighborOwner = ownerByMesoId.get(neighbor.id);
-      if (!neighborOwner || neighborOwner === owner) {
-        continue;
-      }
-
-      const [nationA, nationB] =
-        owner < neighborOwner ? [owner, neighborOwner] : [neighborOwner, owner];
-      const key = `${nationA}::${nationB}`;
-      if (seen.has(key)) {
-        continue;
-      }
-      seen.add(key);
-      pairs.push([nationA, nationB]);
-    }
-  }
-
-  return pairs;
-}
-
-function isPassable(meso: MesoRegion): boolean {
-  return meso.type !== "sea";
+  return [...ids];
 }

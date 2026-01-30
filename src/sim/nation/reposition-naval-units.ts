@@ -59,13 +59,6 @@ export function repositionNavalUnits(world: WorldState, dtMs: number): void {
       neighborsById,
       mesoById,
     );
-    const canLandAttack = hasLandAttackTargets(
-      nationId,
-      mesoById,
-      ownerByMesoId,
-      occupationByMesoId,
-      warAdjacency,
-    );
     const landingPlans = transports.length > 0
       ? planLandingsForNation(
           nationId,
@@ -75,7 +68,7 @@ export function repositionNavalUnits(world: WorldState, dtMs: number): void {
           neighborsById,
           mesoById,
           ownerByMesoId,
-          !canLandAttack ? transports.length : 1,
+          1,
         )
       : [];
 
@@ -137,47 +130,6 @@ function isNavalNode(
   }
   if (meso.building === "port") {
     return ownerByMesoId.get(meso.id) === nationId;
-  }
-  return false;
-}
-
-function hasLandAttackTargets(
-  nationId: NationId,
-  mesoById: Map<MesoRegionId, MesoRegion>,
-  ownerByMesoId: Map<MesoRegionId, NationId>,
-  occupationByMesoId: Map<MesoRegionId, NationId>,
-  warAdjacency: WarAdjacency,
-): boolean {
-  for (const [mesoId, meso] of mesoById.entries()) {
-    if (meso.type === "sea") {
-      continue;
-    }
-    const owner = ownerByMesoId.get(mesoId);
-    if (owner !== nationId) {
-      continue;
-    }
-    const occupier = occupationByMesoId.get(mesoId);
-    if (occupier && occupier !== nationId) {
-      continue;
-    }
-    for (const neighbor of meso.neighbors) {
-      const neighborMeso = mesoById.get(neighbor.id);
-      if (!neighborMeso || neighborMeso.type === "sea") {
-        continue;
-      }
-      const neighborOwner = ownerByMesoId.get(neighbor.id);
-      if (!neighborOwner || neighborOwner === nationId) {
-        continue;
-      }
-      const neighborOccupier = occupationByMesoId.get(neighbor.id);
-      const controller =
-        neighborOccupier && neighborOccupier !== neighborOwner
-          ? neighborOccupier
-          : neighborOwner;
-      if (controller !== nationId && warAdjacency.get(nationId)?.has(controller)) {
-        return true;
-      }
-    }
   }
   return false;
 }
@@ -588,13 +540,15 @@ function assignCombatShipTargets(
   }
 
   const offenseTargets =
-    enemyNear.length > 0
-      ? enemyNear
-      : enemyInHome.length > 0
-        ? enemyInHome
-        : homeSeas.length > 0
-          ? homeSeas
-          : portTargets;
+    landingPlans.length > 0
+      ? [landingPlans[0].targetSeaId]
+      : enemyNear.length > 0
+        ? enemyNear
+        : enemyInHome.length > 0
+          ? enemyInHome
+          : homeSeas.length > 0
+            ? homeSeas
+            : portTargets;
   assignTargetsRoundRobin(remainingOffense, offenseTargets);
 }
 

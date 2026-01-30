@@ -120,7 +120,7 @@ export const WORLD_BALANCE = {
     cityUnitsPerCycle: 1,
     portNavalUnitsPerCycle: 1,
     capitalUnitsPerOwnedMacro: 0.1,
-    maxUnitsPerNation: 100,
+    maxUnitsPerNation: 1000,
   },
   war: {
     macroOccupationRatio: 0.6,
