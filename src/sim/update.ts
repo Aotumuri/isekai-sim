@@ -2,7 +2,7 @@ import type { WorldState } from "./world-state";
 import { updateBattles } from "./battles";
 import { updateCapitals } from "./capitals";
 import { updateCivilWar } from "./civil-war";
-import { repositionNavalUnits, repositionUnits } from "./nation/reposition-units";
+import { repositionNavalUnits, repositionUnits } from "./nation/reposition";
 import { updateOccupation } from "./occupation";
 import { updateProduction } from "./production";
 import { updateSurrender } from "./surrender";
