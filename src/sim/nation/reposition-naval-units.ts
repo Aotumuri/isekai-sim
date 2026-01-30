@@ -59,8 +59,15 @@ export function repositionNavalUnits(world: WorldState, dtMs: number): void {
       neighborsById,
       mesoById,
     );
-    const landingPlan = transports.length > 0
-      ? planLandingForNation(
+    const canLandAttack = hasLandAttackTargets(
+      nationId,
+      mesoById,
+      ownerByMesoId,
+      occupationByMesoId,
+      warAdjacency,
+    );
+    const landingPlans = transports.length > 0
+      ? planLandingsForNation(
           nationId,
           homeSeas,
           portTargets,
@@ -68,12 +75,13 @@ export function repositionNavalUnits(world: WorldState, dtMs: number): void {
           neighborsById,
           mesoById,
           ownerByMesoId,
+          !canLandAttack ? transports.length : 1,
         )
-      : null;
+      : [];
 
     assignTransportTargets(
       transports,
-      landingPlan,
+      landingPlans,
       portTargets,
       neighborsById,
       mesoById,
@@ -85,7 +93,7 @@ export function repositionNavalUnits(world: WorldState, dtMs: number): void {
       portTargets,
       enemyInHome,
       enemyNear,
-      landingPlan,
+      landingPlans,
     );
   }
 
@@ -129,6 +137,47 @@ function isNavalNode(
   }
   if (meso.building === "port") {
     return ownerByMesoId.get(meso.id) === nationId;
+  }
+  return false;
+}
+
+function hasLandAttackTargets(
+  nationId: NationId,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+  occupationByMesoId: Map<MesoRegionId, NationId>,
+  warAdjacency: WarAdjacency,
+): boolean {
+  for (const [mesoId, meso] of mesoById.entries()) {
+    if (meso.type === "sea") {
+      continue;
+    }
+    const owner = ownerByMesoId.get(mesoId);
+    if (owner !== nationId) {
+      continue;
+    }
+    const occupier = occupationByMesoId.get(mesoId);
+    if (occupier && occupier !== nationId) {
+      continue;
+    }
+    for (const neighbor of meso.neighbors) {
+      const neighborMeso = mesoById.get(neighbor.id);
+      if (!neighborMeso || neighborMeso.type === "sea") {
+        continue;
+      }
+      const neighborOwner = ownerByMesoId.get(neighbor.id);
+      if (!neighborOwner || neighborOwner === nationId) {
+        continue;
+      }
+      const neighborOccupier = occupationByMesoId.get(neighbor.id);
+      const controller =
+        neighborOccupier && neighborOccupier !== neighborOwner
+          ? neighborOccupier
+          : neighborOwner;
+      if (controller !== nationId && warAdjacency.get(nationId)?.has(controller)) {
+        return true;
+      }
+    }
   }
   return false;
 }
@@ -331,7 +380,7 @@ function collectEnemySeasNearHome(
   return [...result];
 }
 
-function planLandingForNation(
+function planLandingsForNation(
   nationId: NationId,
   homeSeas: MesoRegionId[],
   ports: MesoRegionId[],
@@ -339,13 +388,14 @@ function planLandingForNation(
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
   mesoById: Map<MesoRegionId, MesoRegion>,
   ownerByMesoId: Map<MesoRegionId, NationId>,
-): LandingPlan | null {
+  maxPlans: number,
+): LandingPlan[] {
   if (enemyCoastalTargets.length === 0) {
-    return null;
+    return [];
   }
   const sources = uniqueIds([...homeSeas, ...ports]);
   if (sources.length === 0) {
-    return null;
+    return [];
   }
   const search = buildNavalSearch(
     sources,
@@ -355,8 +405,7 @@ function planLandingForNation(
     nationId,
   );
 
-  let bestSea: MesoRegionId | null = null;
-  let bestDistance = Number.POSITIVE_INFINITY;
+  const candidateDistances = new Map<MesoRegionId, number>();
   for (const landId of enemyCoastalTargets) {
     const seas = collectAdjacentSeaIds(landId, mesoById);
     for (const seaId of seas) {
@@ -364,26 +413,35 @@ function planLandingForNation(
       if (dist === undefined) {
         continue;
       }
-      if (dist < bestDistance) {
-        bestDistance = dist;
-        bestSea = seaId;
+      const existing = candidateDistances.get(seaId);
+      if (existing === undefined || dist < existing) {
+        candidateDistances.set(seaId, dist);
       }
     }
   }
 
-  if (!bestSea) {
-    return null;
+  if (candidateDistances.size === 0) {
+    return [];
   }
 
-  const path = buildPath(bestSea, search.previous);
-  const escortTargets = path
-    .filter((id) => mesoById.get(id)?.type === "sea")
-    .reverse();
-  if (escortTargets.length === 0) {
-    escortTargets.push(bestSea);
+  const sortedSeas = [...candidateDistances.entries()]
+    .sort((a, b) => a[1] - b[1])
+    .map(([seaId]) => seaId);
+  const limitedSeas = sortedSeas.slice(0, Math.max(1, Math.min(maxPlans, sortedSeas.length)));
+  const plans: LandingPlan[] = [];
+
+  for (const seaId of limitedSeas) {
+    const path = buildPath(seaId, search.previous);
+    const escortTargets = path
+      .filter((id) => mesoById.get(id)?.type === "sea")
+      .reverse();
+    if (escortTargets.length === 0) {
+      escortTargets.push(seaId);
+    }
+    plans.push({ targetSeaId: seaId, escortTargets });
   }
 
-  return { targetSeaId: bestSea, escortTargets };
+  return plans;
 }
 
 function buildNavalSearch(
@@ -448,7 +506,7 @@ function buildPath(
 
 function assignTransportTargets(
   transports: UnitState[],
-  landingPlan: LandingPlan | null,
+  landingPlans: LandingPlan[],
   portTargets: MesoRegionId[],
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
   mesoById: Map<MesoRegionId, MesoRegion>,
@@ -467,9 +525,12 @@ function assignTransportTargets(
     return !!meso && isNavalNode(meso, nationId, ownerByMesoId);
   };
   const ordered = [...transports].sort((a, b) => a.id.localeCompare(b.id));
+  let planIndex = 0;
   for (const unit of ordered) {
-    if (landingPlan && unit.cargoUnitIds.length > 0) {
-      unit.moveTargetId = landingPlan.targetSeaId;
+    if (landingPlans.length > 0 && unit.cargoUnitIds.length > 0) {
+      const plan = landingPlans[planIndex % landingPlans.length];
+      planIndex += 1;
+      unit.moveTargetId = plan.targetSeaId;
       continue;
     }
     if (portSet.size === 0) {
@@ -493,7 +554,7 @@ function assignCombatShipTargets(
   portTargets: MesoRegionId[],
   enemyInHome: MesoRegionId[],
   enemyNear: MesoRegionId[],
-  landingPlan: LandingPlan | null,
+  landingPlans: LandingPlan[],
 ): void {
   if (combatShips.length === 0) {
     return;
@@ -512,10 +573,18 @@ function assignCombatShipTargets(
   assignTargetsRoundRobin(defenders, defenseTargets);
 
   let remainingOffense = offense;
-  if (landingPlan && landingPlan.escortTargets.length > 0) {
-    const escortShips = remainingOffense.slice(0, landingPlan.escortTargets.length);
-    assignTargetsSequential(escortShips, landingPlan.escortTargets);
-    remainingOffense = remainingOffense.slice(escortShips.length);
+  if (landingPlans.length > 0) {
+    for (const plan of landingPlans) {
+      if (remainingOffense.length === 0) {
+        break;
+      }
+      if (plan.escortTargets.length === 0) {
+        continue;
+      }
+      const escortShips = remainingOffense.slice(0, plan.escortTargets.length);
+      assignTargetsSequential(escortShips, plan.escortTargets);
+      remainingOffense = remainingOffense.slice(escortShips.length);
+    }
   }
 
   const offenseTargets =

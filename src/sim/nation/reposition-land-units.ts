@@ -13,6 +13,7 @@ import {
   getMesoById,
   getNeighborsById,
   getOwnerByMesoId,
+  getPortTargetsByNation,
 } from "../world-cache";
 
 export function repositionUnits(world: WorldState, dtMs: number): void {
@@ -60,6 +61,8 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     warAdjacency,
   );
   const borderByNationId = getBorderTargetsByNation(world);
+  const portTargetsByNationId = getPortTargetsByNation(world);
+  const transportCountsByNation = collectTransportCountsByNation(world.units);
 
   const nationById = new Map<NationId, WorldState["nations"][number]>();
   for (const nation of world.nations) {
@@ -83,12 +86,25 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     const intrusionTargets = intrusionTargetsByNationId.get(nationId) ?? [];
     const liberationTargets = liberationTargetsByNationId.get(nationId) ?? [];
     const occupationTargets = occupationTargetsByNationId.get(nationId) ?? [];
+    const portTargets = portTargetsByNationId.get(nationId) ?? [];
+    const hasFrontline = hasLandAttackTargets(
+      nationId,
+      mesoById,
+      ownerByMesoId,
+      occupationByMesoId,
+      warAdjacency,
+    );
+    const noLandAttack =
+      intrusionTargets.length === 0 && liberationTargets.length === 0 && !hasFrontline;
+    const hasTransports = (transportCountsByNation.get(nationId) ?? 0) > 0;
+    const stagingTargets =
+      noLandAttack && hasTransports && portTargets.length > 0 ? portTargets : occupationTargets;
     const orderedUnits = [...units].sort((a, b) => a.id.localeCompare(b.id));
     const defenseCount = determineDefenseUnitCount(
       orderedUnits.length,
       intrusionTargets.length,
       liberationTargets.length,
-      occupationTargets.length,
+      stagingTargets.length,
     );
     const defenseUnits = orderedUnits.slice(0, defenseCount);
     const occupationUnits = orderedUnits.slice(defenseCount);
@@ -106,7 +122,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
       intrusionTargets,
       liberationTargets,
       borderTargets,
-      occupationTargets,
+      stagingTargets,
       dtMs,
       mesoById,
       neighborsById,
@@ -116,6 +132,58 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
       isBlockedByEnemy,
     );
   }
+}
+
+function collectTransportCountsByNation(units: UnitState[]): Map<NationId, number> {
+  const counts = new Map<NationId, number>();
+  for (const unit of units) {
+    if (unit.type !== "TransportShip") {
+      continue;
+    }
+    counts.set(unit.nationId, (counts.get(unit.nationId) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function hasLandAttackTargets(
+  nationId: NationId,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+  occupationByMesoId: Map<MesoRegionId, NationId>,
+  warAdjacency: WarAdjacency,
+): boolean {
+  for (const [mesoId, meso] of mesoById.entries()) {
+    if (meso.type === "sea") {
+      continue;
+    }
+    const owner = ownerByMesoId.get(mesoId);
+    if (owner !== nationId) {
+      continue;
+    }
+    const occupier = occupationByMesoId.get(mesoId);
+    if (occupier && occupier !== nationId) {
+      continue;
+    }
+    for (const neighbor of meso.neighbors) {
+      const neighborMeso = mesoById.get(neighbor.id);
+      if (!neighborMeso || neighborMeso.type === "sea") {
+        continue;
+      }
+      const neighborOwner = ownerByMesoId.get(neighbor.id);
+      if (!neighborOwner || neighborOwner === nationId) {
+        continue;
+      }
+      const neighborOccupier = occupationByMesoId.get(neighbor.id);
+      const controller =
+        neighborOccupier && neighborOccupier !== neighborOwner
+          ? neighborOccupier
+          : neighborOwner;
+      if (warAdjacency.get(nationId)?.has(controller)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 
