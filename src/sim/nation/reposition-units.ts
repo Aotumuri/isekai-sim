@@ -432,6 +432,32 @@ function isNavalNode(
   return false;
 }
 
+function collectCoastalSeaTiles(
+  nationId: NationId,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+): MesoRegionId[] {
+  const result = new Set<MesoRegionId>();
+
+  for (const [mesoId, owner] of ownerByMesoId.entries()) {
+    if (owner !== nationId) continue;
+
+    const meso = mesoById.get(mesoId);
+    if (!meso || meso.type === "sea") continue;
+
+    const neighbors = neighborsById.get(mesoId) ?? [];
+    for (const nId of neighbors) {
+      const neighbor = mesoById.get(nId);
+      if (neighbor?.type === "sea") {
+        result.add(nId);
+      }
+    }
+  }
+
+  return [...result];
+}
+
 function pickNavalTarget(
   startId: MesoRegionId,
   nationId: NationId,
@@ -440,22 +466,37 @@ function pickNavalTarget(
   ownerByMesoId: Map<MesoRegionId, NationId>,
   rng: SeededRng,
 ): MesoRegionId | null {
+  // 1) Prefer seas adjacent to own land (coastal guard)
+  const coastalSeaTiles = collectCoastalSeaTiles(
+    nationId,
+    mesoById,
+    neighborsById,
+    ownerByMesoId,
+  );
+
+  if (coastalSeaTiles.length > 0) {
+    return coastalSeaTiles.length === 1
+      ? coastalSeaTiles[0]
+      : coastalSeaTiles[rng.nextInt(coastalSeaTiles.length)];
+  }
+
+  // 2) Fallback: previous local naval movement (adjacent navigable seas)
   const neighbors = neighborsById.get(startId) ?? [];
   const candidates: MesoRegionId[] = [];
   for (const neighborId of neighbors) {
     const neighbor = mesoById.get(neighborId);
-    if (!neighbor) {
-      continue;
-    }
-    if (!isNavalNode(neighbor, nationId, ownerByMesoId)) {
-      continue;
-    }
+    if (!neighbor) continue;
+    if (!isNavalNode(neighbor, nationId, ownerByMesoId)) continue;
     candidates.push(neighborId);
   }
+
   if (candidates.length === 0) {
     return null;
   }
-  return candidates.length === 1 ? candidates[0] : candidates[rng.nextInt(candidates.length)];
+
+  return candidates.length === 1
+    ? candidates[0]
+    : candidates[rng.nextInt(candidates.length)];
 }
 
 function resetMovement(unit: UnitState): void {
