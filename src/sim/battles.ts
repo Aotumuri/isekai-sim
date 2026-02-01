@@ -2,10 +2,12 @@ import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { UnitId, UnitState } from "./unit";
 import type { WorldState } from "./world-state";
+import { getMesoById } from "./world-cache";
 import {
   addWarContribution,
   buildWarAdjacency,
   isAtWar,
+  normalizeWarPair,
   type WarAdjacency,
 } from "./war-state";
 
@@ -25,17 +27,58 @@ export function createBattleId(index: number): BattleId {
 }
 
 export function updateBattles(world: WorldState): void {
-  const landUnits = world.units.filter((unit) => unit.domain === "land");
-  if (world.wars.length === 0 || landUnits.length < 2) {
+  if (world.wars.length === 0 || world.units.length < 2) {
     return;
   }
 
   const warAdjacency = buildWarAdjacency(world.wars);
-  const unitsByMesoId = collectUnitsByMesoAndNation(landUnits);
-  const attackersByTarget = collectAttackersByTarget(landUnits, unitsByMesoId, warAdjacency);
   const existingByKey = indexExistingBattles(world.battles);
   const now = world.time.fastTick;
   const removedUnitIds = new Set<UnitId>();
+
+  const landUnits = world.units.filter((unit) => unit.domain === "land");
+  if (landUnits.length >= 2) {
+    updateLandBattles(
+      world,
+      landUnits,
+      warAdjacency,
+      existingByKey,
+      removedUnitIds,
+      now,
+    );
+  }
+
+  const navalUnits = world.units.filter((unit) => unit.domain === "naval");
+  if (navalUnits.length >= 2) {
+    updateNavalBattles(
+      world,
+      navalUnits,
+      warAdjacency,
+      existingByKey,
+      removedUnitIds,
+      now,
+    );
+  }
+
+  if (removedUnitIds.size > 0) {
+    world.units = world.units.filter((unit) => !removedUnitIds.has(unit.id));
+  }
+
+  if (world.battles.length > 0) {
+    world.battles = world.battles.filter((battle) => battle.lastActiveFastTick === now);
+  }
+}
+
+function updateLandBattles(
+  world: WorldState,
+  landUnits: UnitState[],
+  warAdjacency: WarAdjacency,
+  existingByKey: Map<string, BattleState>,
+  removedUnitIds: Set<UnitId>,
+  now: number,
+): void {
+  const unitsByMesoId = collectUnitsByMesoAndNation(landUnits);
+  const attackersByTarget = collectAttackersByTarget(landUnits, unitsByMesoId, warAdjacency);
 
   for (const [mesoId, attackersByNation] of attackersByTarget.entries()) {
     const defendersByNation = unitsByMesoId.get(mesoId);
@@ -85,14 +128,169 @@ export function updateBattles(world: WorldState): void {
       }
     }
   }
+}
 
-  if (removedUnitIds.size > 0) {
-    world.units = world.units.filter((unit) => !removedUnitIds.has(unit.id));
+function updateNavalBattles(
+  world: WorldState,
+  navalUnits: UnitState[],
+  warAdjacency: WarAdjacency,
+  existingByKey: Map<string, BattleState>,
+  removedUnitIds: Set<UnitId>,
+  now: number,
+): void {
+  const mesoById = getMesoById(world);
+  const seaUnits = navalUnits.filter(
+    (unit) => mesoById.get(unit.regionId)?.type === "sea",
+  );
+  if (seaUnits.length < 2) {
+    return;
   }
 
-  if (world.battles.length > 0) {
-    world.battles = world.battles.filter((battle) => battle.lastActiveFastTick === now);
+  const unitsByMesoId = collectUnitsByMesoAndNation(seaUnits);
+  for (const [mesoId, unitsByNation] of unitsByMesoId.entries()) {
+    if (unitsByNation.size < 2) {
+      continue;
+    }
+    const nations = [...unitsByNation.keys()];
+    for (let i = 0; i < nations.length; i += 1) {
+      for (let j = i + 1; j < nations.length; j += 1) {
+        const nationA = nations[i];
+        const nationB = nations[j];
+        if (!isAtWar(nationA, nationB, warAdjacency)) {
+          continue;
+        }
+        const [attackerNationId, defenderNationId] = normalizeWarPair(nationA, nationB);
+        const attackers = unitsByNation.get(attackerNationId);
+        const defenders = unitsByNation.get(defenderNationId);
+        if (!attackers || !defenders) {
+          continue;
+        }
+
+        const key = battleKey(mesoId, attackerNationId, defenderNationId);
+        let battle = existingByKey.get(key);
+        if (!battle) {
+          battle = {
+            id: createBattleId(world.battles.length),
+            mesoId,
+            attackerNationId,
+            defenderNationId,
+            startedAtFastTick: now,
+            lastActiveFastTick: now,
+          };
+          world.battles.push(battle);
+          existingByKey.set(key, battle);
+          console.info(
+            `[Battle] ${battle.mesoId} ${battle.attackerNationId} -> ${battle.defenderNationId} start @${now}`,
+          );
+        } else {
+          battle.lastActiveFastTick = now;
+        }
+
+        const outcome = resolveNavalBattle(
+          battle,
+          attackers,
+          defenders,
+          removedUnitIds,
+          now,
+        );
+        if (outcome) {
+          addWarContribution(
+            world.wars,
+            battle.attackerNationId,
+            battle.defenderNationId,
+            outcome.defenderManpowerLoss,
+          );
+          addWarContribution(
+            world.wars,
+            battle.defenderNationId,
+            battle.attackerNationId,
+            outcome.attackerManpowerLoss,
+          );
+        }
+      }
+    }
   }
+}
+
+function resolveNavalBattle(
+  battle: BattleState,
+  attackers: UnitState[],
+  defenders: UnitState[],
+  removedUnitIds: Set<UnitId>,
+  now: number,
+): { attackerManpowerLoss: number; defenderManpowerLoss: number } | null {
+  const combatAttackers = attackers.filter(isCombatShip);
+  const combatDefenders = defenders.filter(isCombatShip);
+  const transportAttackers = attackers.filter(isTransportShip);
+  const transportDefenders = defenders.filter(isTransportShip);
+
+  let attackerManpowerLoss = 0;
+  let defenderManpowerLoss = 0;
+
+  if (combatAttackers.length > 0 && combatDefenders.length > 0) {
+    const outcome = resolveBattle(
+      battle,
+      combatAttackers,
+      combatDefenders,
+      removedUnitIds,
+      now,
+    );
+    if (outcome) {
+      attackerManpowerLoss += outcome.attackerManpowerLoss;
+      defenderManpowerLoss += outcome.defenderManpowerLoss;
+    }
+  }
+
+  const remainingCombatAttackers = collectAliveUnits(combatAttackers, removedUnitIds);
+  const remainingCombatDefenders = collectAliveUnits(combatDefenders, removedUnitIds);
+
+  if (remainingCombatAttackers.length > 0 && remainingCombatDefenders.length > 0) {
+    return attackerManpowerLoss > 0 || defenderManpowerLoss > 0
+      ? { attackerManpowerLoss, defenderManpowerLoss }
+      : null;
+  }
+
+  if (remainingCombatAttackers.length > 0 && transportDefenders.length > 0) {
+    const outcome = resolveBattle(
+      battle,
+      remainingCombatAttackers,
+      transportDefenders,
+      removedUnitIds,
+      now,
+    );
+    if (outcome) {
+      attackerManpowerLoss += outcome.attackerManpowerLoss;
+      defenderManpowerLoss += outcome.defenderManpowerLoss;
+    }
+  }
+
+  if (remainingCombatDefenders.length > 0 && transportAttackers.length > 0) {
+    const outcome = resolveBattle(
+      battle,
+      transportAttackers,
+      remainingCombatDefenders,
+      removedUnitIds,
+      now,
+    );
+    if (outcome) {
+      attackerManpowerLoss += outcome.attackerManpowerLoss;
+      defenderManpowerLoss += outcome.defenderManpowerLoss;
+    }
+  }
+
+  if (attackerManpowerLoss <= 0 && defenderManpowerLoss <= 0) {
+    return null;
+  }
+
+  return { attackerManpowerLoss, defenderManpowerLoss };
+}
+
+function isCombatShip(unit: UnitState): boolean {
+  return unit.domain === "naval" && unit.type === "CombatShip";
+}
+
+function isTransportShip(unit: UnitState): boolean {
+  return unit.domain === "naval" && unit.type === "TransportShip";
 }
 
 function collectUnitsByMesoAndNation(
