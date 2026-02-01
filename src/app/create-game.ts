@@ -15,7 +15,7 @@ import { createSimClock, getSpeedMultiplier } from "../sim/time";
 import { updateSimulation } from "../sim/update";
 import { attachTimeControls } from "./time-controls";
 
-const DISABLE_UNIT_ANIMATION_SPEED = 8;
+const DISABLE_UNIT_ANIMATION_SPEED = 4;
 
 export function createGame(root: HTMLElement): void {
   const config = createWorldConfig(window.innerWidth, window.innerHeight);
