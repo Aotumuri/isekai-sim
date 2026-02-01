@@ -76,7 +76,7 @@ export const WORLD_BALANCE = {
       },
       TransportShip: {
         domain: "naval",
-        moveTicksPerRegion: 20,
+        moveTicksPerRegion: 75,
         manpower: 300,
         org: 0.6,
         combatPower: 0,
@@ -85,7 +85,7 @@ export const WORLD_BALANCE = {
       },
       CombatShip: {
         domain: "naval",
-        moveTicksPerRegion: 20,
+        moveTicksPerRegion: 75,
         manpower: 500,
         org: 0.85,
         combatPower: 2.0,
@@ -115,8 +115,8 @@ export const WORLD_BALANCE = {
   },
   production: {
     unitSlowTickRange: {
-      min: 5,
-      max: 15,
+      min: 10,
+      max: 50,
     },
     cityUnitsPerCycle: 1,
     portNavalUnitsPerCycle: 1,
@@ -152,15 +152,15 @@ export const WORLD_BALANCE = {
     cooperation: {
       min: 0,
       max: 1,
-      durationTicksForMaxPenalty: 10000,
+      durationTicksForMaxPenalty: 5000,
       durationWeight: 1,
       capitalFallMax: 3,
       capitalFallWeight: 0.5,
       cityLossWeight: 0.3,
       surrenderMultiplierAtMin: 1.5,
       surrenderMultiplierAtMax: 0.7,
-      civilWarBoost: 0.5,
-      civilWarBoostDecay: 0.0001,
+      civilWarBoost: 0.25,
+      civilWarBoostDecay: 0.001,
       peaceRecoveryPerTick: 0.0002,
       aggressorPenaltyMultiplier: 2,
       defenderPenaltyMultiplier: 1,
