@@ -13,7 +13,7 @@ import { nextScheduledTickRange } from "./schedule";
 import type { UnitState } from "./unit";
 import { declareWar } from "./war-state";
 import type { WorldState } from "./world-state";
-import { getMesoById } from "./world-cache";
+import { getMacroAdjacency, getMesoById } from "./world-cache";
 
 export function updateCivilWar(world: WorldState): void {
   if (world.nations.length === 0) {
@@ -27,7 +27,7 @@ export function updateCivilWar(world: WorldState): void {
   }
   const mesoById = getMesoById(world);
   const mesoToMacro = buildMesoToMacroMap(world.macroRegions);
-  const macroAdjacency = buildMacroAdjacency(world.mesoRegions, mesoToMacro);
+  const macroAdjacency = getMacroAdjacency(world);
 
   const nationsSnapshot = [...world.nations];
   let territoryChanged = false;
@@ -333,32 +333,6 @@ function buildMesoToMacroMap(
     }
   }
   return map;
-}
-
-function buildMacroAdjacency(
-  mesoRegions: MesoRegion[],
-  mesoToMacro: Map<MesoRegionId, MacroRegionId>,
-): Map<MacroRegionId, Set<MacroRegionId>> {
-  const adjacency = new Map<MacroRegionId, Set<MacroRegionId>>();
-  for (const meso of mesoRegions) {
-    const macroId = mesoToMacro.get(meso.id);
-    if (!macroId) {
-      continue;
-    }
-    for (const neighbor of meso.neighbors) {
-      const neighborMacro = mesoToMacro.get(neighbor.id);
-      if (!neighborMacro || neighborMacro === macroId) {
-        continue;
-      }
-      let list = adjacency.get(macroId);
-      if (!list) {
-        list = new Set();
-        adjacency.set(macroId, list);
-      }
-      list.add(neighborMacro);
-    }
-  }
-  return adjacency;
 }
 
 function transferResources(

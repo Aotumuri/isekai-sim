@@ -22,6 +22,7 @@ export interface WorldState {
   wars: WarState[];
   battles: BattleState[];
   occupation: OccupationState;
+  mapVersion: number;
   territoryVersion: number;
   buildingVersion: number;
   units: UnitState[];

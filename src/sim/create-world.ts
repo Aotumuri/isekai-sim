@@ -81,6 +81,7 @@ export function createWorld(config: WorldConfig): WorldState {
   // addTestWar(wars, mesoRegions, macroRegions, rng, time.fastTick);
   const battles: BattleState[] = [];
   const occupation = createOccupationState();
+  const mapVersion = 0;
   const territoryVersion = 0;
   const buildingVersion = 0;
   const cache = createWorldCache();
@@ -96,6 +97,7 @@ export function createWorld(config: WorldConfig): WorldState {
     wars,
     battles,
     occupation,
+    mapVersion,
     territoryVersion,
     buildingVersion,
     units,

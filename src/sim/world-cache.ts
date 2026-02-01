@@ -1,4 +1,4 @@
-import type { MacroRegion } from "../worldgen/macro-region";
+import type { MacroRegion, MacroRegionId } from "../worldgen/macro-region";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { WorldState } from "./world-state";
@@ -12,6 +12,8 @@ export interface WorldCache {
   borderByNationVersion: number;
   adjacentNationPairs: Array<[NationId, NationId]>;
   adjacentNationPairsVersion: number;
+  macroAdjacency: Map<MacroRegionId, Set<MacroRegionId>>;
+  macroAdjacencyVersion: number;
   cityTargetsByNation: Map<NationId, MesoRegionId[]>;
   cityTargetsKey: string;
   portTargetsByNation: Map<NationId, MesoRegionId[]>;
@@ -28,6 +30,8 @@ export function createWorldCache(): WorldCache {
     borderByNationVersion: -1,
     adjacentNationPairs: [],
     adjacentNationPairsVersion: -1,
+    macroAdjacency: new Map(),
+    macroAdjacencyVersion: -1,
     cityTargetsByNation: new Map(),
     cityTargetsKey: "",
     portTargetsByNation: new Map(),
@@ -126,6 +130,21 @@ export function getAdjacentNationPairs(
   return pairs;
 }
 
+export function getMacroAdjacency(
+  world: WorldState,
+): Map<MacroRegionId, Set<MacroRegionId>> {
+  const cache = world.cache;
+  if (cache.macroAdjacencyVersion === world.mapVersion) {
+    return cache.macroAdjacency;
+  }
+
+  const mesoToMacro = buildMesoToMacroMap(world.macroRegions);
+  const adjacency = buildMacroAdjacency(world.mesoRegions, mesoToMacro);
+  cache.macroAdjacency = adjacency;
+  cache.macroAdjacencyVersion = world.mapVersion;
+  return adjacency;
+}
+
 export function getCityTargetsByNation(
   world: WorldState,
 ): Map<NationId, MesoRegionId[]> {
@@ -195,6 +214,44 @@ function ensureStaticMesoCache(world: WorldState): void {
   }
   cache.mesoById = mesoById;
   cache.neighborsById = neighborsById;
+}
+
+function buildMesoToMacroMap(
+  macroRegions: MacroRegion[],
+): Map<MesoRegionId, MacroRegionId> {
+  const map = new Map<MesoRegionId, MacroRegionId>();
+  for (const macro of macroRegions) {
+    for (const mesoId of macro.mesoRegionIds) {
+      map.set(mesoId, macro.id);
+    }
+  }
+  return map;
+}
+
+function buildMacroAdjacency(
+  mesoRegions: MesoRegion[],
+  mesoToMacro: Map<MesoRegionId, MacroRegionId>,
+): Map<MacroRegionId, Set<MacroRegionId>> {
+  const adjacency = new Map<MacroRegionId, Set<MacroRegionId>>();
+  for (const meso of mesoRegions) {
+    const macroId = mesoToMacro.get(meso.id);
+    if (!macroId) {
+      continue;
+    }
+    for (const neighbor of meso.neighbors) {
+      const neighborMacro = mesoToMacro.get(neighbor.id);
+      if (!neighborMacro || neighborMacro === macroId) {
+        continue;
+      }
+      let list = adjacency.get(macroId);
+      if (!list) {
+        list = new Set();
+        adjacency.set(macroId, list);
+      }
+      list.add(neighborMacro);
+    }
+  }
+  return adjacency;
 }
 
 function collectAdjacentNationPairs(
