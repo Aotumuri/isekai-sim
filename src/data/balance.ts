@@ -52,7 +52,7 @@ export const WORLD_BALANCE = {
   },
   unit: {
     naval: {
-      enabled: true,
+      enabled: false,
     },
     tankShare: 0.2,
     navalTransportShare: 0.4,
