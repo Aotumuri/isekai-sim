@@ -20,6 +20,9 @@ export interface UnitState {
   regionId: MesoRegionId;
   type: UnitType;
   domain: UnitDomain;
+  cargoUnits: UnitState[];
+  amphibiousEmbarkRequested: boolean;
+  amphibiousLandRequested: boolean;
   equipment: UnitEquipmentSlot[];
   moveTicksPerRegion: number;
   combatPower: number;

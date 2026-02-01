@@ -53,6 +53,8 @@ export const WORLD_BALANCE = {
   unit: {
     tankShare: 0.2,
     navalTransportShare: 0.4,
+    navalTransportCapacity: 10,
+    amphibiousInvasionLossRatio: 0.6,
     types: {
       Infantry: {
         domain: "land",
