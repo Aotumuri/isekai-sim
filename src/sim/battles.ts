@@ -200,17 +200,19 @@ function resolveBattle(
 
   const strengthA = sumStrength(aliveA);
   const strengthB = sumStrength(aliveB);
-  if (strengthA <= 0 || strengthB <= 0) {
+  if (strengthA <= 0 && strengthB <= 0) {
     return null;
   }
 
-  const damageToA = DAMAGE_PER_TICK * (strengthB / DAMAGE_SCALE);
-  const damageToB = DAMAGE_PER_TICK * (strengthA / DAMAGE_SCALE);
-  const orgDamageToA = ORG_DAMAGE_PER_TICK * (strengthB / ORG_DAMAGE_SCALE);
-  const orgDamageToB = ORG_DAMAGE_PER_TICK * (strengthA / ORG_DAMAGE_SCALE);
+  const damageToA = strengthB > 0 ? DAMAGE_PER_TICK * (strengthB / DAMAGE_SCALE) : 0;
+  const damageToB = strengthA > 0 ? DAMAGE_PER_TICK * (strengthA / DAMAGE_SCALE) : 0;
+  const orgDamageToA = strengthB > 0 ? ORG_DAMAGE_PER_TICK * (strengthB / ORG_DAMAGE_SCALE) : 0;
+  const orgDamageToB = strengthA > 0 ? ORG_DAMAGE_PER_TICK * (strengthA / ORG_DAMAGE_SCALE) : 0;
 
-  const lossA = applyDamage(aliveA, strengthA, damageToA, orgDamageToA, removedUnitIds);
-  const lossB = applyDamage(aliveB, strengthB, damageToB, orgDamageToB, removedUnitIds);
+  const damageWeightA = sumDamageWeight(aliveA);
+  const damageWeightB = sumDamageWeight(aliveB);
+  const lossA = applyDamage(aliveA, damageWeightA, damageToA, orgDamageToA, removedUnitIds);
+  const lossB = applyDamage(aliveB, damageWeightB, damageToB, orgDamageToB, removedUnitIds);
 
   const remainingA = aliveA.some((unit) => isUnitAlive(unit, removedUnitIds));
   const remainingB = aliveB.some((unit) => isUnitAlive(unit, removedUnitIds));
@@ -254,13 +256,23 @@ function sumStrength(units: UnitState[]): number {
   return total;
 }
 
+function sumDamageWeight(units: UnitState[]): number {
+  let total = 0;
+  for (const unit of units) {
+    total += getUnitDamageWeight(unit);
+  }
+  return total;
+}
+
 function getUnitStrength(unit: UnitState): number {
+  return getUnitDamageWeight(unit) * Math.max(0, unit.combatPower);
+}
+
+function getUnitDamageWeight(unit: UnitState): number {
   const avgFill = getAverageEquipmentFill(unit);
   const orgFactor = 0.5 + unit.org * 0.5;
   const equipmentFactor = 0.5 + avgFill * 0.5;
-  return (
-    Math.max(0, unit.manpower) * orgFactor * equipmentFactor * Math.max(0, unit.combatPower)
-  );
+  return Math.max(0, unit.manpower) * orgFactor * equipmentFactor;
 }
 
 function getAverageEquipmentFill(unit: UnitState): number {
@@ -276,23 +288,24 @@ function getAverageEquipmentFill(unit: UnitState): number {
 
 function applyDamage(
   units: UnitState[],
-  totalStrength: number,
+  totalWeight: number,
   manpowerDamage: number,
   orgDamage: number,
   removedUnitIds: Set<UnitId>,
 ): { manpowerLoss: number; orgLoss: number } {
-  if (totalStrength <= 0 || (manpowerDamage <= 0 && orgDamage <= 0)) {
+  if (units.length === 0 || (manpowerDamage <= 0 && orgDamage <= 0)) {
     return { manpowerLoss: 0, orgLoss: 0 };
   }
 
   let manpowerLoss = 0;
   let orgLoss = 0;
+  const useFallback = totalWeight <= 0;
+  const fallbackWeight = useFallback ? 1 / units.length : 0;
   for (const unit of units) {
-    const strength = getUnitStrength(unit);
-    if (strength <= 0) {
+    const weight = useFallback ? fallbackWeight : getUnitDamageWeight(unit) / totalWeight;
+    if (!useFallback && weight <= 0) {
       continue;
     }
-    const weight = strength / totalStrength;
     const prevManpower = unit.manpower;
     const prevOrg = unit.org;
     if (manpowerDamage > 0) {
