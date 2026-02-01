@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, Texture, Renderer } from "pixi.js";
+import { Container, Graphics, Sprite, Texture, Renderer, Rectangle } from "pixi.js";
 import { clearLayer } from "../clear-layer";
 import type { OccupationState } from "../../sim/occupation";
 import type { MacroRegion } from "../../worldgen/macro-region";
@@ -33,18 +33,27 @@ function getHatchTexture(bounds: Bounds, reverse: boolean): Texture {
     return cached;
   }
 
+  const w = Math.max(0, bounds.maxX - bounds.minX);
+  const h = Math.max(0, bounds.maxY - bounds.minY);
+
   const g = new Graphics();
   g.lineStyle({ width: HATCH_WIDTH, color: 0xffffff, alpha: 1 });
+
+  // Draw in local coords (0..w/h) so the texture isn't shifted/cropped by negative start positions.
+  const localBounds: Bounds = { minX: 0, minY: 0, maxX: w, maxY: h };
   if (reverse) {
-    drawHatchLinesReverse(g, bounds, HATCH_SPACING);
+    drawHatchLinesReverse(g, localBounds, HATCH_SPACING);
   } else {
-    drawHatchLines(g, bounds, HATCH_SPACING);
+    drawHatchLines(g, localBounds, HATCH_SPACING);
   }
 
   if (!sharedRenderer) {
     throw new Error("TerritoryEffects renderer not set. Call setTerritoryEffectsRenderer(renderer) once at init.");
   }
-  const tex: Texture = sharedRenderer.generateTexture(g);
+  const tex: Texture = sharedRenderer.generateTexture(g, {
+    region: new Rectangle(0, 0, w, h),
+    resolution: 1,
+  });
   g.destroy(true);
 
   hatchTextureCache.set(key, tex);
@@ -182,7 +191,7 @@ function drawHatchedRegions(
 
   const hatchTex = getHatchTexture(bounds, false);
   const hatch = new Sprite(hatchTex);
-  hatch.position.set(bounds.minX, bounds.minY);
+  hatch.position.set(0, 0);
   hatch.tint = color;
   hatch.alpha = HATCH_ALPHA;
   hatch.mask = mask;
@@ -191,7 +200,7 @@ function drawHatchedRegions(
   if (crossHatch) {
     const hatchTexRev = getHatchTexture(bounds, true);
     const hatchRev = new Sprite(hatchTexRev);
-    hatchRev.position.set(bounds.minX, bounds.minY);
+    hatchRev.position.set(0, 0);
     hatchRev.tint = color;
     hatchRev.alpha = HATCH_ALPHA;
     hatchRev.mask = mask;
