@@ -3,7 +3,7 @@ import { drawCityCapitalIcons } from "../render/draw/city-capital-icons";
 import { drawMesoBorders } from "../render/draw/meso-borders";
 import { drawMicroRegions } from "../render/draw/micro-regions";
 import { drawNationBorders } from "../render/draw/nation-borders";
-import { drawTerritoryEffects } from "../render/draw/territory-effects";
+import { drawTerritoryEffects, setTerritoryEffectsRenderer } from "../render/draw/territory-effects";
 import { drawUnits } from "../render/draw/units";
 import { attachRegionHoverUI } from "../render/region/hover-ui";
 import { createRenderer } from "../render/renderer";
@@ -20,6 +20,7 @@ const DISABLE_UNIT_ANIMATION_SPEED = 8;
 export function createGame(root: HTMLElement): void {
   const config = createWorldConfig(window.innerWidth, window.innerHeight);
   const renderer = createRenderer(root, config);
+  setTerritoryEffectsRenderer(renderer.app.renderer);
   const world = createWorld(config);
 
   drawMicroRegions(renderer.worldLayers.layers.MicroTerrain, world.microRegions);

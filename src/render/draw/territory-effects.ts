@@ -1,4 +1,4 @@
-import { Container, Graphics } from "pixi.js";
+import { Container, Graphics, Sprite, Texture, Renderer } from "pixi.js";
 import { clearLayer } from "../clear-layer";
 import type { OccupationState } from "../../sim/occupation";
 import type { MacroRegion } from "../../worldgen/macro-region";
@@ -9,6 +9,47 @@ import { getNationColor } from "../nation-color";
 const HATCH_SPACING = 12;
 const HATCH_WIDTH = 2;
 const HATCH_ALPHA = 0.5;
+
+type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
+
+const hatchTextureCache = new Map<string, Texture>();
+
+let sharedRenderer: Renderer | null = null;
+
+export function setTerritoryEffectsRenderer(renderer: Renderer): void {
+  sharedRenderer = renderer;
+}
+
+function boundsKey(bounds: Bounds, reverse: boolean): string {
+  const w = Math.max(0, bounds.maxX - bounds.minX);
+  const h = Math.max(0, bounds.maxY - bounds.minY);
+  return `${w}x${h}:s${HATCH_SPACING}:w${HATCH_WIDTH}:r${reverse ? 1 : 0}`;
+}
+
+function getHatchTexture(bounds: Bounds, reverse: boolean): Texture {
+  const key = boundsKey(bounds, reverse);
+  const cached = hatchTextureCache.get(key);
+  if (cached) {
+    return cached;
+  }
+
+  const g = new Graphics();
+  g.lineStyle({ width: HATCH_WIDTH, color: 0xffffff, alpha: 1 });
+  if (reverse) {
+    drawHatchLinesReverse(g, bounds, HATCH_SPACING);
+  } else {
+    drawHatchLines(g, bounds, HATCH_SPACING);
+  }
+
+  if (!sharedRenderer) {
+    throw new Error("TerritoryEffects renderer not set. Call setTerritoryEffectsRenderer(renderer) once at init.");
+  }
+  const tex: Texture = sharedRenderer.generateTexture(g);
+  g.destroy(true);
+
+  hatchTextureCache.set(key, tex);
+  return tex;
+}
 
 export function drawTerritoryEffects(
   layer: Container,
@@ -74,7 +115,7 @@ export function drawTerritoryEffects(
     }
   }
 
-  const bounds = { minX: 0, minY: 0, maxX: width, maxY: height };
+  const bounds: Bounds = { minX: 0, minY: 0, maxX: width, maxY: height };
 
   for (const [nationId, regions] of macroRegionsByNationId.entries()) {
     if (regions.length === 0) {
@@ -125,7 +166,7 @@ function drawHatchedRegions(
   layer: Container,
   nationId: NationId,
   regions: MicroRegion[],
-  bounds: { minX: number; minY: number; maxX: number; maxY: number },
+  bounds: Bounds,
   crossHatch: boolean,
 ): void {
   const mask = new Graphics();
@@ -137,18 +178,25 @@ function drawHatchedRegions(
   mask.renderable = false;
   layer.addChild(mask);
 
-  const hatch = new Graphics();
-  hatch.lineStyle({
-    width: HATCH_WIDTH,
-    color: getNationColor(nationId),
-    alpha: HATCH_ALPHA,
-  });
-  drawHatchLines(hatch, bounds, HATCH_SPACING);
-  if (crossHatch) {
-    drawHatchLinesReverse(hatch, bounds, HATCH_SPACING);
-  }
+  const color = getNationColor(nationId);
+
+  const hatchTex = getHatchTexture(bounds, false);
+  const hatch = new Sprite(hatchTex);
+  hatch.position.set(bounds.minX, bounds.minY);
+  hatch.tint = color;
+  hatch.alpha = HATCH_ALPHA;
   hatch.mask = mask;
   layer.addChild(hatch);
+
+  if (crossHatch) {
+    const hatchTexRev = getHatchTexture(bounds, true);
+    const hatchRev = new Sprite(hatchTexRev);
+    hatchRev.position.set(bounds.minX, bounds.minY);
+    hatchRev.tint = color;
+    hatchRev.alpha = HATCH_ALPHA;
+    hatchRev.mask = mask;
+    layer.addChild(hatchRev);
+  }
 }
 
 function drawPolygon(graphics: Graphics, region: MicroRegion): void {
