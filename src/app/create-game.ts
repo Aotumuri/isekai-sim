@@ -44,6 +44,7 @@ export function createGame(root: HTMLElement): void {
   );
   drawUnits(
     renderer.worldLayers.layers.Unit,
+    renderer.app.renderer,
     world.units,
     world.mesoRegions,
     0,
@@ -97,6 +98,7 @@ export function createGame(root: HTMLElement): void {
     nationInfoBar.update();
     drawUnits(
       renderer.worldLayers.layers.Unit,
+      renderer.app.renderer,
       world.units,
       world.mesoRegions,
       clock.accumulatorMs,
