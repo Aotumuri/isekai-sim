@@ -11,9 +11,11 @@ import { attachTimeHud } from "../render/time-hud";
 import { attachViewControls } from "../render/view/controls";
 import { attachNationInfoBar } from "../render/nation-info-bar";
 import { createWorld } from "../sim/create-world";
-import { createSimClock } from "../sim/time";
+import { createSimClock, getSpeedMultiplier } from "../sim/time";
 import { updateSimulation } from "../sim/update";
 import { attachTimeControls } from "./time-controls";
+
+const DISABLE_UNIT_ANIMATION_SPEED = 8;
 
 export function createGame(root: HTMLElement): void {
   const config = createWorldConfig(window.innerWidth, window.innerHeight);
@@ -98,6 +100,7 @@ export function createGame(root: HTMLElement): void {
       world.units,
       world.mesoRegions,
       clock.accumulatorMs,
+      getSpeedMultiplier(clock) < DISABLE_UNIT_ANIMATION_SPEED,
     );
   });
 }

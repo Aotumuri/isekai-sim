@@ -22,6 +22,7 @@ export function drawUnits(
   units: UnitState[],
   mesoRegions: MesoRegion[],
   interpolationMs = 0,
+  animateMovement = true,
 ): void {
   const graphics = ensureGraphics(layer);
   graphics.clear();
@@ -33,7 +34,7 @@ export function drawUnits(
   const mesoById = getMesoRegionByIdMap(mesoRegions);
 
   for (const unit of units) {
-    const pos = resolveUnitPosition(unit, mesoById, interpolationMs);
+    const pos = resolveUnitPosition(unit, mesoById, interpolationMs, animateMovement);
     if (!pos) {
       continue;
     }
@@ -74,9 +75,10 @@ function resolveUnitPosition(
   unit: UnitState,
   mesoById: Map<MesoRegion["id"], MesoRegion>,
   interpolationMs: number,
+  animateMovement: boolean,
 ): { x: number; y: number } | null {
   const region = mesoById.get(unit.regionId);
-  if (unit.moveFromId && unit.moveToId) {
+  if (animateMovement && unit.moveFromId && unit.moveToId) {
     const from = mesoById.get(unit.moveFromId);
     const to = mesoById.get(unit.moveToId);
     if (from && to) {
