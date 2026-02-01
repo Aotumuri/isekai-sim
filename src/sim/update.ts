@@ -1,3 +1,4 @@
+import { WORLD_BALANCE } from "../data/balance";
 import type { WorldState } from "./world-state";
 import { updateBattles } from "./battles";
 import { updateCapitals } from "./capitals";
@@ -43,8 +44,11 @@ function stepFastTick(world: WorldState, dtMs: number): void {
   world.time.fastTick += 1;
   world.time.elapsedMs += dtMs;
   repositionUnits(world, dtMs);
-  repositionNavalUnits(world, dtMs);
-  updateAmphibiousOperations(world);
+  const navalEnabled = WORLD_BALANCE.unit.naval?.enabled !== false;
+  if (navalEnabled) {
+    repositionNavalUnits(world, dtMs);
+    updateAmphibiousOperations(world);
+  }
   updateBattles(world);
   updateOccupation(world);
   updateCapitals(world);

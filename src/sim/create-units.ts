@@ -114,17 +114,20 @@ export function createInitialUnits(
       unitIndex += 1;
     }
 
-    const navalSpawnId = pickNavalSpawnId(
-      nation.id,
-      nation.capitalMesoId,
-      portsByNation,
-      coastalSeasByNation,
-      rng,
-    );
-    if (navalSpawnId) {
-      const unitId = createUnitId(unitIndex);
-      units.push(createCombatShip(unitId, nation.id, navalSpawnId));
-      unitIndex += 1;
+    const navalEnabled = WORLD_BALANCE.unit.naval?.enabled !== false;
+    if (navalEnabled) {
+      const navalSpawnId = pickNavalSpawnId(
+        nation.id,
+        nation.capitalMesoId,
+        portsByNation,
+        coastalSeasByNation,
+        rng,
+      );
+      if (navalSpawnId) {
+        const unitId = createUnitId(unitIndex);
+        units.push(createCombatShip(unitId, nation.id, navalSpawnId));
+        unitIndex += 1;
+      }
     }
   }
 

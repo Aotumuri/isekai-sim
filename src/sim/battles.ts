@@ -1,3 +1,4 @@
+import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { UnitId, UnitState } from "./unit";
@@ -48,16 +49,19 @@ export function updateBattles(world: WorldState): void {
     );
   }
 
-  const navalUnits = world.units.filter((unit) => unit.domain === "naval");
-  if (navalUnits.length >= 2) {
-    updateNavalBattles(
-      world,
-      navalUnits,
-      warAdjacency,
-      existingByKey,
-      removedUnitIds,
-      now,
-    );
+  const navalEnabled = WORLD_BALANCE.unit.naval?.enabled !== false;
+  if (navalEnabled) {
+    const navalUnits = world.units.filter((unit) => unit.domain === "naval");
+    if (navalUnits.length >= 2) {
+      updateNavalBattles(
+        world,
+        navalUnits,
+        warAdjacency,
+        existingByKey,
+        removedUnitIds,
+        now,
+      );
+    }
   }
 
   if (removedUnitIds.size > 0) {

@@ -51,6 +51,9 @@ export const WORLD_BALANCE = {
     minPortsPerNation: 1,
   },
   unit: {
+    naval: {
+      enabled: true,
+    },
     tankShare: 0.2,
     navalTransportShare: 0.4,
     navalTransportCapacity: 10,

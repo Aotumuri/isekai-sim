@@ -52,6 +52,7 @@ export function updateProduction(world: WorldState): void {
 
   const newUnits: UnitState[] = [];
   const cityUnitsPerCycle = Math.max(0, Math.round(production.cityUnitsPerCycle));
+  const navalEnabled = WORLD_BALANCE.unit.naval?.enabled !== false;
   const portNavalUnitsPerCycle = Math.max(
     0,
     Math.round(production.portNavalUnitsPerCycle ?? 0),
@@ -144,7 +145,7 @@ export function updateProduction(world: WorldState): void {
     }
 
     const portTargets = portTargetsByNation.get(nation.id) ?? [];
-    if (portNavalUnitsPerCycle > 0 && portTargets.length > 0) {
+    if (navalEnabled && portNavalUnitsPerCycle > 0 && portTargets.length > 0) {
       for (const portId of portTargets) {
         for (let i = 0; i < portNavalUnitsPerCycle; i += 1) {
           if (!addNavalUnit(portId)) {
@@ -423,6 +424,10 @@ function pickNavalUnitType(
   resources: NationResources,
   rng: WorldState["simRng"],
 ): NavalUnitType | null {
+  const navalEnabled = WORLD_BALANCE.unit.naval?.enabled !== false;
+  if (!navalEnabled) {
+    return null;
+  }
   const canTransport = canAffordUnit(resources, "TransportShip");
   const canCombat = canAffordUnit(resources, "CombatShip");
   if (canTransport && canCombat) {
