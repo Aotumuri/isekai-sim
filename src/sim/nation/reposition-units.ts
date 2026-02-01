@@ -31,18 +31,17 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
 
   const warAdjacency = buildWarAdjacency(world.wars);
   const occupationByMesoId = world.occupation.mesoById;
-  const hasEnemyUnits = (targetId: MesoRegionId, nationId: NationId): boolean => {
-    for (const unit of landUnits) {
-      if (
-        unit.regionId === targetId &&
-        unit.nationId !== nationId &&
-        isAtWar(nationId, unit.nationId, warAdjacency)
-      ) {
-        return true;
-      }
+
+  // region -> nations that currently have land units there (fast enemy blocking checks)
+  const nationsWithLandUnitsByMesoId = new Map<MesoRegionId, Set<NationId>>();
+  for (const unit of landUnits) {
+    let set = nationsWithLandUnitsByMesoId.get(unit.regionId);
+    if (!set) {
+      set = new Set<NationId>();
+      nationsWithLandUnitsByMesoId.set(unit.regionId, set);
     }
-    return false;
-  };
+    set.add(unit.nationId);
+  }
   const liberationTargetsByNationId = collectLiberationTargetsByNation(
     occupationByMesoId,
     ownerByMesoId,
@@ -98,8 +97,21 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
       nation.unitRoles.defenseUnitIds = defenseUnits.map((unit) => unit.id);
       nation.unitRoles.occupationUnitIds = occupationUnits.map((unit) => unit.id);
     }
-    const isBlockedByEnemy = (toId: MesoRegionId): boolean =>
-      hasEnemyUnits(toId, nationId);
+    const isBlockedByEnemy = (toId: MesoRegionId): boolean => {
+      const present = nationsWithLandUnitsByMesoId.get(toId);
+      if (!present || present.size === 0) {
+        return false;
+      }
+      for (const otherNationId of present) {
+        if (otherNationId === nationId) {
+          continue;
+        }
+        if (isAtWar(nationId, otherNationId, warAdjacency)) {
+          return true;
+        }
+      }
+      return false;
+    };
     repositionNationUnits(
       nationId,
       defenseUnits,
@@ -1038,72 +1050,104 @@ function selectSpreadByDistance(
   unitCount: number,
   mesoById: Map<MesoRegionId, MesoRegion>,
 ): MesoRegionId[] {
-  const centers = new Map<MesoRegionId, { x: number; y: number }>();
-  for (const target of targets) {
-    const meso = mesoById.get(target);
-    if (meso) {
-      centers.set(target, meso.center);
-    }
+  // Farthest-point sampling with incremental distance updates.
+  // Complexity: O(n * unitCount) instead of repeatedly re-scanning selected points.
+  const n = targets.length;
+  if (n === 0 || unitCount <= 0) {
+    return [];
+  }
+  if (unitCount >= n) {
+    return targets;
   }
 
+  // Build center arrays (selectTargetsForUnits ensures centers exist when this is called).
+  const xs = new Array<number>(n);
+  const ys = new Array<number>(n);
   let sumX = 0;
   let sumY = 0;
-  for (const center of centers.values()) {
-    sumX += center.x;
-    sumY += center.y;
+  for (let i = 0; i < n; i += 1) {
+    const id = targets[i];
+    const meso = mesoById.get(id);
+    const c = meso?.center;
+    // Fallback to 0,0 if somehow missing; this keeps behavior safe.
+    const x = c?.x ?? 0;
+    const y = c?.y ?? 0;
+    xs[i] = x;
+    ys[i] = y;
+    sumX += x;
+    sumY += y;
   }
-  const count = centers.size || 1;
-  const centroid = { x: sumX / count, y: sumY / count };
 
-  let first = targets[0];
+  const cx = sumX / n;
+  const cy = sumY / n;
+
+  // Pick the first point as farthest from centroid (tie-break by id).
+  let firstIdx = 0;
   let bestDist = -1;
-  for (const target of targets) {
-    const center = centers.get(target);
-    if (!center) {
+  for (let i = 0; i < n; i += 1) {
+    const dx = xs[i] - cx;
+    const dy = ys[i] - cy;
+    const dist = dx * dx + dy * dy;
+    if (dist > bestDist || (dist === bestDist && targets[i] < targets[firstIdx])) {
+      bestDist = dist;
+      firstIdx = i;
+    }
+  }
+
+  const selected: MesoRegionId[] = [targets[firstIdx]];
+  const picked = new Array<boolean>(n).fill(false);
+  picked[firstIdx] = true;
+
+  // Track each candidate's min distance to any selected point.
+  const minDistToSelected = new Array<number>(n);
+  for (let i = 0; i < n; i += 1) {
+    if (picked[i]) {
+      minDistToSelected[i] = 0;
       continue;
     }
-    const dist = distanceSq(center, centroid);
-    if (dist > bestDist || (dist === bestDist && target < first)) {
-      bestDist = dist;
-      first = target;
-    }
+    const dx = xs[i] - xs[firstIdx];
+    const dy = ys[i] - ys[firstIdx];
+    minDistToSelected[i] = dx * dx + dy * dy;
   }
 
-  const selected: MesoRegionId[] = [first];
-  const selectedSet = new Set<MesoRegionId>(selected);
-
   while (selected.length < unitCount) {
-    let bestCandidate: MesoRegionId | null = null;
+    // Choose the point maximizing minDistToSelected (tie-break by id).
+    let bestIdx = -1;
     let bestMinDist = -1;
-    for (const target of targets) {
-      if (selectedSet.has(target)) {
+    for (let i = 0; i < n; i += 1) {
+      if (picked[i]) {
         continue;
       }
-      const center = centers.get(target);
-      if (!center) {
-        continue;
-      }
-      let minDist = Number.POSITIVE_INFINITY;
-      for (const chosen of selected) {
-        const chosenCenter = centers.get(chosen);
-        if (!chosenCenter) {
-          continue;
-        }
-        minDist = Math.min(minDist, distanceSq(center, chosenCenter));
-      }
-      if (
-        minDist > bestMinDist ||
-        (minDist === bestMinDist && target < (bestCandidate ?? target))
-      ) {
-        bestMinDist = minDist;
-        bestCandidate = target;
+      const d = minDistToSelected[i];
+      if (d > bestMinDist) {
+        bestMinDist = d;
+        bestIdx = i;
+      } else if (d === bestMinDist && bestIdx !== -1 && targets[i] < targets[bestIdx]) {
+        bestIdx = i;
       }
     }
-    if (!bestCandidate) {
+
+    if (bestIdx === -1) {
       break;
     }
-    selected.push(bestCandidate);
-    selectedSet.add(bestCandidate);
+
+    picked[bestIdx] = true;
+    selected.push(targets[bestIdx]);
+
+    // Incrementally update min distances with the newly selected point.
+    const bx = xs[bestIdx];
+    const by = ys[bestIdx];
+    for (let i = 0; i < n; i += 1) {
+      if (picked[i]) {
+        continue;
+      }
+      const dx = xs[i] - bx;
+      const dy = ys[i] - by;
+      const d = dx * dx + dy * dy;
+      if (d < minDistToSelected[i]) {
+        minDistToSelected[i] = d;
+      }
+    }
   }
 
   return selected;
