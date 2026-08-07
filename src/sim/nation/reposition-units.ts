@@ -17,6 +17,7 @@ import {
 } from "../world-cache";
 
 const LAND_TARGET_REASSIGN_INTERVAL_TICKS = 10;
+const MAX_SHARED_PATH_FIELDS = 256;
 
 interface LandMovementGroup {
   nationId: NationId;
@@ -37,6 +38,27 @@ interface LandAiRuntime {
   movementGroups: LandMovementGroup[];
   unitsExpectedToHaveTarget: Set<UnitState["id"]>;
   forceReassignment: boolean;
+  sharedPathFields: Map<string, SharedPathField>;
+  pathFieldMapVersion: number;
+  pathFieldTerritoryVersion: number;
+  pathFieldOccupationVersion: number;
+  pathFieldOccupationByMesoId: Map<MesoRegionId, NationId>;
+  pathFieldBuildingVersion: number;
+  pathFieldWarsReference: WorldState["wars"] | null;
+  pathFieldWarCount: number;
+}
+
+interface SharedPathField {
+  targetId: MesoRegionId;
+  // Keep only next hops learned from actual searches, not a full distance field.
+  nextHopByRegion: Map<MesoRegionId, MesoRegionId>;
+  unreachableRegions: Set<MesoRegionId>;
+}
+
+interface SharedPathContext {
+  nationId: NationId;
+  pathMode: "owned" | "war";
+  sharedPathFields: Map<string, SharedPathField>;
 }
 
 const landAiRuntimeByWorld = new WeakMap<WorldState, LandAiRuntime>();
@@ -50,6 +72,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     return;
   }
   const runtime = getLandAiRuntime(world);
+  invalidateSharedPathFields(runtime, world);
 
   let expectedTargetWasCleared = false;
   if (runtime.unitsExpectedToHaveTarget.size > 0) {
@@ -145,19 +168,19 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
       }
       return false;
     };
-    if (
-      progressNationUnits(
-        group.nationId,
-        group.units,
-        dtMs,
-        mesoById,
-        neighborsById,
-        ownerByMesoId,
-        occupationByMesoId,
-        warAdjacency,
-        isBlockedByEnemy,
-      )
-    ) {
+    const orderInvalidated = progressNationUnits(
+      group.nationId,
+      group.units,
+      dtMs,
+      runtime.sharedPathFields,
+      mesoById,
+      neighborsById,
+      ownerByMesoId,
+      occupationByMesoId,
+      warAdjacency,
+      isBlockedByEnemy,
+    );
+    if (orderInvalidated) {
       runtime.forceReassignment = true;
     }
   }
@@ -182,9 +205,65 @@ function getLandAiRuntime(world: WorldState): LandAiRuntime {
     movementGroups: [],
     unitsExpectedToHaveTarget: new Set(),
     forceReassignment: true,
+    sharedPathFields: new Map(),
+    pathFieldMapVersion: -1,
+    pathFieldTerritoryVersion: -1,
+    pathFieldOccupationVersion: -1,
+    pathFieldOccupationByMesoId: new Map(),
+    pathFieldBuildingVersion: -1,
+    pathFieldWarsReference: null,
+    pathFieldWarCount: -1,
   };
   landAiRuntimeByWorld.set(world, created);
   return created;
+}
+
+function invalidateSharedPathFields(runtime: LandAiRuntime, world: WorldState): void {
+  const mapChanged = runtime.pathFieldMapVersion !== world.mapVersion;
+  const territoryChanged =
+    runtime.pathFieldTerritoryVersion !== world.territoryVersion;
+  const occupationChanged =
+    runtime.pathFieldOccupationVersion !== world.occupation.version;
+  const buildingChanged =
+    runtime.pathFieldBuildingVersion !== world.buildingVersion;
+  const warsChanged =
+    runtime.pathFieldWarsReference !== world.wars ||
+    runtime.pathFieldWarCount !== world.wars.length;
+
+  if (occupationChanged) {
+    // Occupation does not change graph passability. Only fields whose exact target
+    // changed occupation need to be discarded.
+    const changedOccupationTargets = new Set<MesoRegionId>();
+    for (const [mesoId, occupier] of runtime.pathFieldOccupationByMesoId.entries()) {
+      if (world.occupation.mesoById.get(mesoId) !== occupier) {
+        changedOccupationTargets.add(mesoId);
+      }
+    }
+    for (const [mesoId, occupier] of world.occupation.mesoById.entries()) {
+      if (runtime.pathFieldOccupationByMesoId.get(mesoId) !== occupier) {
+        changedOccupationTargets.add(mesoId);
+      }
+    }
+    for (const [key, field] of runtime.sharedPathFields.entries()) {
+      if (changedOccupationTargets.has(field.targetId)) {
+        runtime.sharedPathFields.delete(key);
+      }
+    }
+    runtime.pathFieldOccupationVersion = world.occupation.version;
+    runtime.pathFieldOccupationByMesoId = new Map(world.occupation.mesoById);
+  }
+  if (buildingChanged) {
+    runtime.sharedPathFields.clear();
+    runtime.pathFieldBuildingVersion = world.buildingVersion;
+  }
+
+  if (mapChanged || territoryChanged || warsChanged) {
+    runtime.sharedPathFields.clear();
+    runtime.pathFieldMapVersion = world.mapVersion;
+    runtime.pathFieldTerritoryVersion = world.territoryVersion;
+    runtime.pathFieldWarsReference = world.wars;
+    runtime.pathFieldWarCount = world.wars.length;
+  }
 }
 
 function rebuildLandAssignments(
@@ -379,6 +458,7 @@ function progressNationUnits(
   nationId: NationId,
   orderedUnits: UnitState[],
   dtMs: number,
+  sharedPathFields: Map<string, SharedPathField>,
   mesoById: Map<MesoRegionId, MesoRegion>,
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
   ownerByMesoId: Map<MesoRegionId, NationId>,
@@ -406,6 +486,11 @@ function progressNationUnits(
             ? isPassableForNation(id, nationId, mesoById, ownerByMesoId, warAdjacency)
           : isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
         isBlockedByEnemy,
+        {
+          nationId,
+          pathMode: useWarPath ? "war" : "owned",
+          sharedPathFields,
+        },
       ) || orderInvalidated;
   }
   return orderInvalidated;
@@ -417,6 +502,7 @@ function moveUnitTowardTarget(
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
   isAllowed: (id: MesoRegionId) => boolean,
   isBlockedByEnemy: (toId: MesoRegionId) => boolean,
+  pathContext?: SharedPathContext,
 ): boolean {
   if (!unit.moveTargetId || unit.regionId === unit.moveTargetId) {
     unit.moveFromId = null;
@@ -434,7 +520,7 @@ function moveUnitTowardTarget(
   }
 
   unit.moveProgressMs += dtMs;
-  if (!ensureMoveLeg(unit, neighborsById, isAllowed)) {
+  if (!ensureMoveLeg(unit, neighborsById, isAllowed, pathContext)) {
     unit.moveTargetId = null;
     unit.moveFromId = null;
     unit.moveToId = null;
@@ -454,7 +540,6 @@ function moveUnitTowardTarget(
       unit.moveProgressMs = 0;
       return false;
     }
-
     if (unit.regionId === unit.moveTargetId) {
       unit.moveFromId = null;
       unit.moveToId = null;
@@ -464,7 +549,7 @@ function moveUnitTowardTarget(
 
     unit.moveFromId = null;
     unit.moveToId = null;
-    if (!ensureMoveLeg(unit, neighborsById, isAllowed)) {
+    if (!ensureMoveLeg(unit, neighborsById, isAllowed, pathContext)) {
       unit.moveTargetId = null;
       unit.moveFromId = null;
       unit.moveToId = null;
@@ -548,10 +633,103 @@ function findNextStep(
   return null;
 }
 
+function findSharedNextStep(
+  startId: MesoRegionId,
+  targetId: MesoRegionId,
+  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
+  isAllowed: (id: MesoRegionId) => boolean,
+  context: SharedPathContext,
+): MesoRegionId | null {
+  const key = `${context.nationId}:${context.pathMode}:${targetId}`;
+  let field = context.sharedPathFields.get(key);
+
+  const cachedNextStep = field?.nextHopByRegion.get(startId);
+  const cachedUnreachable = field?.unreachableRegions.has(startId) ?? false;
+  if (field && cachedNextStep && isAllowed(cachedNextStep)) {
+    context.sharedPathFields.delete(key);
+    context.sharedPathFields.set(key, field);
+    return cachedNextStep;
+  }
+  if (field && cachedUnreachable) {
+    context.sharedPathFields.delete(key);
+    context.sharedPathFields.set(key, field);
+    return null;
+  }
+  if (field && cachedNextStep) {
+    field.nextHopByRegion.delete(startId);
+  }
+  if (!field) {
+    field = {
+      targetId,
+      nextHopByRegion: new Map(),
+      unreachableRegions: new Set(),
+    };
+    context.sharedPathFields.set(key, field);
+  }
+
+  const nextStep = findNextStepAndPopulateCache(
+    startId,
+    targetId,
+    neighborsById,
+    isAllowed,
+    field,
+  );
+  context.sharedPathFields.delete(key);
+  context.sharedPathFields.set(key, field);
+  if (context.sharedPathFields.size > MAX_SHARED_PATH_FIELDS) {
+    const oldestKey = context.sharedPathFields.keys().next().value;
+    if (oldestKey) {
+      context.sharedPathFields.delete(oldestKey);
+    }
+  }
+  return nextStep;
+}
+
+function findNextStepAndPopulateCache(
+  startId: MesoRegionId,
+  targetId: MesoRegionId,
+  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
+  isAllowed: (id: MesoRegionId) => boolean,
+  field: SharedPathField,
+): MesoRegionId | null {
+  const queue: MesoRegionId[] = [startId];
+  const previous = new Map<MesoRegionId, MesoRegionId | null>();
+  previous.set(startId, null);
+  let head = 0;
+  while (head < queue.length) {
+    const current = queue[head];
+    head += 1;
+    const neighbors = neighborsById.get(current) ?? [];
+    for (const neighbor of neighbors) {
+      if (previous.has(neighbor) || !isAllowed(neighbor)) {
+        continue;
+      }
+      previous.set(neighbor, current);
+      if (neighbor === targetId) {
+        const path: MesoRegionId[] = [targetId];
+        let pathNode: MesoRegionId | null = previous.get(targetId) ?? null;
+        while (pathNode) {
+          path.push(pathNode);
+          pathNode = previous.get(pathNode) ?? null;
+        }
+        path.reverse();
+        for (let i = 0; i < path.length - 1; i += 1) {
+          field.nextHopByRegion.set(path[i], path[i + 1]);
+        }
+        return path[1] ?? null;
+      }
+      queue.push(neighbor);
+    }
+  }
+  field.unreachableRegions.add(startId);
+  return null;
+}
+
 function ensureMoveLeg(
   unit: UnitState,
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
   isAllowed: (id: MesoRegionId) => boolean,
+  context?: SharedPathContext,
 ): MesoRegionId | null {
   if (unit.moveFromId === unit.regionId && unit.moveToId) {
     if (isAllowed(unit.moveToId)) {
@@ -565,7 +743,15 @@ function ensureMoveLeg(
   if (!targetId) {
     return null;
   }
-  const nextStep = findNextStep(unit.regionId, targetId, neighborsById, isAllowed);
+  const nextStep = context
+    ? findSharedNextStep(
+        unit.regionId,
+        targetId,
+        neighborsById,
+        isAllowed,
+        context,
+      )
+    : findNextStep(unit.regionId, targetId, neighborsById, isAllowed);
   if (!nextStep) {
     return null;
   }
