@@ -16,6 +16,11 @@ import {
   getOwnerByMesoId,
 } from "../world-cache";
 import type { SimulationInstrumentation } from "../instrumentation";
+import {
+  getNationFrontAllocations,
+  getUnassignedLandUnitIds,
+} from "../nation-front-allocations";
+import { getFrontSide, getOpposingFrontSide } from "../land-fronts";
 
 const LAND_TARGET_REASSIGN_INTERVAL_TICKS = 10;
 const MAX_SHARED_PATH_FIELDS = 256;
@@ -35,6 +40,7 @@ interface LandAiRuntime {
   landUnitCount: number;
   warsReference: WorldState["wars"] | null;
   warCount: number;
+  frontAllocationMembershipVersion: number;
   warAdjacency: WarAdjacency;
   movementGroups: LandMovementGroup[];
   unitsExpectedToHaveTarget: Set<UnitState["id"]>;
@@ -99,6 +105,9 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     runtime.landUnitCount !== landUnits.length;
   const warsChanged =
     runtime.warsReference !== world.wars || runtime.warCount !== world.wars.length;
+  const frontAllocationChanged =
+    runtime.frontAllocationMembershipVersion !==
+    world.frontAllocations.membershipVersion;
   const periodicReassignmentDue =
     world.time.fastTick - runtime.lastAssignmentFastTick >=
     LAND_TARGET_REASSIGN_INTERVAL_TICKS;
@@ -110,6 +119,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     buildingChanged ||
     unitsChanged ||
     warsChanged ||
+    frontAllocationChanged ||
     periodicReassignmentDue;
 
   const mesoById = getMesoById(world);
@@ -161,6 +171,8 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     runtime.landUnitCount = landUnits.length;
     runtime.warsReference = world.wars;
     runtime.warCount = world.wars.length;
+    runtime.frontAllocationMembershipVersion =
+      world.frontAllocations.membershipVersion;
     runtime.forceReassignment = false;
   }
 
@@ -221,6 +233,7 @@ function getLandAiRuntime(world: WorldState): LandAiRuntime {
     landUnitCount: -1,
     warsReference: null,
     warCount: -1,
+    frontAllocationMembershipVersion: -1,
     warAdjacency: new Map(),
     movementGroups: [],
     unitsExpectedToHaveTarget: new Set(),
@@ -366,43 +379,81 @@ function rebuildLandAssignments(
   }
 
   const movementGroups: LandMovementGroup[] = [];
+  const unitById = new Map(landUnits.map((unit) => [unit.id, unit]));
   for (const [nationId, units] of unitsByNation.entries()) {
     const borderTargets = borderByNationId.get(nationId) ?? [];
     const intrusionTargets = intrusionTargetsByNationId.get(nationId) ?? [];
     const liberationTargets = liberationTargetsByNationId.get(nationId) ?? [];
     const occupationTargets = occupationTargetsByNationId.get(nationId) ?? [];
-    const orderedUnits = [...units].sort((a, b) => a.id.localeCompare(b.id));
-    const defenseCount = determineDefenseUnitCount(
-      orderedUnits.length,
-      intrusionTargets.length,
-      liberationTargets.length,
-      occupationTargets.length,
-    );
-    const defenseUnits = orderedUnits.slice(0, defenseCount);
-    const occupationUnits = orderedUnits.slice(defenseCount);
     const nation = nationById.get(nationId);
-    if (nation) {
-      nation.unitRoles.defenseUnitIds = defenseUnits.map((unit) => unit.id);
-      nation.unitRoles.occupationUnitIds = occupationUnits.map((unit) => unit.id);
+    const frontAllocations = getNationFrontAllocations(world, nationId);
+    if (frontAllocations.length === 0) {
+      movementGroups.push(
+        buildLandMovementGroup(
+          nationId,
+          units,
+          intrusionTargets,
+          liberationTargets,
+          borderTargets,
+          occupationTargets,
+          nation,
+          mesoById,
+          neighborsById,
+          ownerByMesoId,
+          occupationByMesoId,
+          warAdjacency,
+          instrumentation,
+        ),
+      );
+      continue;
     }
-    movementGroups.push({
-      nationId,
-      units: assignNationTargets(
-        nationId,
-        defenseUnits,
-        occupationUnits,
-        intrusionTargets,
-        liberationTargets,
-        borderTargets,
-        occupationTargets,
-        mesoById,
-        neighborsById,
-        ownerByMesoId,
-        occupationByMesoId,
-        warAdjacency,
-        instrumentation,
-      ),
-    });
+
+    for (const allocation of frontAllocations) {
+      const front = world.landFronts.physicalFrontsById.get(allocation.frontId);
+      if (!front) {
+        continue;
+      }
+      const friendlySide = getFrontSide(front, nationId);
+      const enemySide = getOpposingFrontSide(front, nationId);
+      if (!friendlySide || !enemySide) {
+        continue;
+      }
+      const allocatedUnits = allocation.unitIds
+        .map((unitId) => unitById.get(unitId))
+        .filter((unit): unit is UnitState => !!unit && unit.nationId === nationId);
+      if (allocatedUnits.length === 0) {
+        continue;
+      }
+      const friendlyScope = new Set(friendlySide.influenceRegionIds);
+      const frontScope = new Set([
+        ...friendlySide.influenceRegionIds,
+        ...enemySide.influenceRegionIds,
+      ]);
+      const enemyScope = new Set(enemySide.influenceRegionIds);
+      movementGroups.push(
+        buildLandMovementGroup(
+          nationId,
+          allocatedUnits,
+          intrusionTargets.filter((id) => frontScope.has(id)),
+          liberationTargets.filter((id) => frontScope.has(id)),
+          friendlySide.borderRegionIds,
+          occupationTargets.filter((id) => enemyScope.has(id)),
+          nation,
+          mesoById,
+          neighborsById,
+          ownerByMesoId,
+          occupationByMesoId,
+          warAdjacency,
+          instrumentation,
+          friendlyScope,
+        ),
+      );
+    }
+
+    const unassignedUnits = getUnassignedLandUnitIds(world, nationId)
+      .map((unitId) => unitById.get(unitId))
+      .filter((unit): unit is UnitState => !!unit && unit.nationId === nationId);
+    clearUnitMovement(unassignedUnits);
   }
 
   runtime.movementGroups = movementGroups;
@@ -415,6 +466,58 @@ function rebuildLandAssignments(
     }
   }
   runtime.unitsExpectedToHaveTarget = unitsExpectedToHaveTarget;
+}
+
+function buildLandMovementGroup(
+  nationId: NationId,
+  units: UnitState[],
+  intrusionTargets: MesoRegionId[],
+  liberationTargets: MesoRegionId[],
+  borderTargets: MesoRegionId[],
+  occupationTargets: MesoRegionId[],
+  nation: WorldState["nations"][number] | undefined,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+  occupationByMesoId: Map<MesoRegionId, NationId>,
+  warAdjacency: WarAdjacency,
+  instrumentation?: SimulationInstrumentation,
+  defenseRegionScope?: ReadonlySet<MesoRegionId>,
+): LandMovementGroup {
+  const orderedUnits = [...units].sort((a, b) => a.id.localeCompare(b.id));
+  const defenseCount = determineDefenseUnitCount(
+    orderedUnits.length,
+    intrusionTargets.length,
+    liberationTargets.length,
+    occupationTargets.length,
+  );
+  const defenseUnits = orderedUnits.slice(0, defenseCount);
+  const occupationUnits = orderedUnits.slice(defenseCount);
+  if (nation) {
+    nation.unitRoles.defenseUnitIds.push(...defenseUnits.map((unit) => unit.id));
+    nation.unitRoles.occupationUnitIds.push(
+      ...occupationUnits.map((unit) => unit.id),
+    );
+  }
+  return {
+    nationId,
+    units: assignNationTargets(
+      nationId,
+      defenseUnits,
+      occupationUnits,
+      intrusionTargets,
+      liberationTargets,
+      borderTargets,
+      occupationTargets,
+      mesoById,
+      neighborsById,
+      ownerByMesoId,
+      occupationByMesoId,
+      warAdjacency,
+      instrumentation,
+      defenseRegionScope,
+    ),
+  };
 }
 
 export function repositionNavalUnits(world: WorldState, dtMs: number): void {
@@ -481,6 +584,7 @@ function assignNationTargets(
   occupationByMesoId: Map<MesoRegionId, NationId>,
   warAdjacency: WarAdjacency,
   instrumentation?: SimulationInstrumentation,
+  defenseRegionScope?: ReadonlySet<MesoRegionId>,
 ): UnitState[] {
   const defenseStartedAt = instrumentation ? performance.now() : 0;
   assignDefenseTargets(
@@ -495,6 +599,7 @@ function assignNationTargets(
     occupationByMesoId,
     warAdjacency,
     instrumentation,
+    defenseRegionScope,
   );
   if (instrumentation) {
     instrumentation.recordDuration(
@@ -1033,6 +1138,13 @@ function collectBuildingTargets(
   return targets;
 }
 
+function filterTargetsToScope(
+  targets: MesoRegionId[],
+  scope?: ReadonlySet<MesoRegionId>,
+): MesoRegionId[] {
+  return scope ? targets.filter((targetId) => scope.has(targetId)) : targets;
+}
+
 function collectIntrusionTargetsByNation(
   units: UnitState[],
   ownerByMesoId: Map<MesoRegionId, NationId>,
@@ -1116,8 +1228,22 @@ function assignDefenseTargets(
   occupationByMesoId: Map<MesoRegionId, NationId>,
   warAdjacency: WarAdjacency,
   instrumentation?: SimulationInstrumentation,
+  regionScope?: ReadonlySet<MesoRegionId>,
 ): void {
   if (units.length === 0) {
+    return;
+  }
+  if (regionScope) {
+    assignScopedDefenseTargets(
+      units,
+      nationId,
+      intrusionTargets,
+      liberationTargets,
+      borderTargets,
+      regionScope,
+      mesoById,
+      ownerByMesoId,
+    );
     return;
   }
 
@@ -1302,6 +1428,130 @@ function assignDefenseTargets(
   }
 
   clearUnitMovement(remainingUnits);
+}
+
+function assignScopedDefenseTargets(
+  units: UnitState[],
+  nationId: NationId,
+  intrusionTargets: MesoRegionId[],
+  liberationTargets: MesoRegionId[],
+  borderTargets: MesoRegionId[],
+  regionScope: ReadonlySet<MesoRegionId>,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+): void {
+  const capitalTargets = filterTargetsToScope(
+    collectBuildingTargets(nationId, "capital", mesoById, ownerByMesoId),
+    regionScope,
+  );
+  const cityTargets = filterTargetsToScope(
+    collectBuildingTargets(nationId, "city", mesoById, ownerByMesoId),
+    regionScope,
+  );
+  const ownedTargets = filterTargetsToScope(
+    collectOwnedTargets(nationId, mesoById, ownerByMesoId),
+    regionScope,
+  );
+  const tiers = [
+    capitalTargets,
+    cityTargets,
+    intrusionTargets,
+    liberationTargets,
+    borderTargets,
+    ownedTargets,
+  ].map(uniqueSortedIds);
+  const allTargets = new Set(tiers.flat());
+  if (allTargets.size === 0) {
+    clearUnitMovement(units);
+    return;
+  }
+
+  const assignedTargets = new Set<MesoRegionId>();
+  const remainingAfterExisting: UnitState[] = [];
+  for (const unit of [...units].sort((a, b) => a.id.localeCompare(b.id))) {
+    const targetId = unit.moveTargetId;
+    if (targetId && allTargets.has(targetId) && !assignedTargets.has(targetId)) {
+      assignedTargets.add(targetId);
+    } else {
+      remainingAfterExisting.push(unit);
+    }
+  }
+
+  let remainingUnits = remainingAfterExisting;
+  for (const targets of tiers) {
+    if (remainingUnits.length === 0 || targets.length === 0) {
+      continue;
+    }
+    const targetSet = new Set(targets);
+    remainingUnits = assignUnitsOnTarget(
+      remainingUnits,
+      targetSet,
+      assignedTargets,
+    );
+    remainingUnits = assignClosestTargetsByCenter(
+      remainingUnits,
+      targetSet,
+      assignedTargets,
+      mesoById,
+    );
+  }
+
+  if (remainingUnits.length > 0) {
+    const stackTargets = pickDefenseStackTargets(
+      intrusionTargets,
+      liberationTargets,
+      borderTargets,
+      ownedTargets,
+    );
+    assignStackedTargets(
+      remainingUnits,
+      stackTargets.length > 0 ? stackTargets : [...allTargets],
+    );
+  }
+}
+
+function assignClosestTargetsByCenter(
+  units: UnitState[],
+  targetSet: Set<MesoRegionId>,
+  assignedTargets: Set<MesoRegionId>,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+): UnitState[] {
+  const remainingUnits: UnitState[] = [];
+  for (const unit of units) {
+    const candidates = [...targetSet].filter(
+      (targetId) => !assignedTargets.has(targetId),
+    );
+    if (candidates.length === 0) {
+      remainingUnits.push(unit);
+      continue;
+    }
+    const unitCenter = mesoById.get(unit.regionId)?.center;
+    const targetId = candidates.reduce((bestId, candidateId) => {
+      if (!unitCenter) {
+        return compareIds(candidateId, bestId) < 0 ? candidateId : bestId;
+      }
+      const bestCenter = mesoById.get(bestId)?.center ?? unitCenter;
+      const candidateCenter = mesoById.get(candidateId)?.center ?? unitCenter;
+      const bestDistance = distanceSq(unitCenter, bestCenter);
+      const candidateDistance = distanceSq(unitCenter, candidateCenter);
+      return candidateDistance < bestDistance ||
+        (candidateDistance === bestDistance && compareIds(candidateId, bestId) < 0)
+        ? candidateId
+        : bestId;
+    });
+    if (unit.moveTargetId !== targetId) {
+      unit.moveTargetId = targetId;
+      unit.moveFromId = null;
+      unit.moveToId = null;
+      unit.moveProgressMs = 0;
+    }
+    assignedTargets.add(targetId);
+  }
+  return remainingUnits;
+}
+
+function uniqueSortedIds(ids: MesoRegionId[]): MesoRegionId[] {
+  return [...new Set(ids)].sort(compareIds);
 }
 
 function assignOccupationTargets(
@@ -1760,6 +2010,10 @@ function distanceSq(a: { x: number; y: number }, b: { x: number; y: number }): n
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function compareIds(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 function isOwnedPassable(

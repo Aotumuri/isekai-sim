@@ -44,6 +44,8 @@ export interface WorldSummary {
   occupations: number;
   landFronts: number;
   nationFrontPlans: number;
+  frontAllocatedUnits: number;
+  frontUnassignedUnits: number;
   microRegions: number;
   mesoRegions: number;
   macroRegions: number;

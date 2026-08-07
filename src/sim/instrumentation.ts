@@ -8,6 +8,7 @@ export type SimulationMetricName =
   | "landFront.rebuild"
   | "landFront.metrics"
   | "landFront.planEvaluation"
+  | "landFront.allocation"
   | "updateOccupation"
   | "updateCapitals"
   | "surrender";
@@ -40,7 +41,11 @@ export type SimulationCounterName =
   | "landFront.metricRefreshes"
   | "landFront.frontsBuilt"
   | "landFront.planUpdates"
-  | "landFront.plansEvaluated";
+  | "landFront.plansEvaluated"
+  | "landFront.allocationRebuilds"
+  | "landFront.allocationUnitSwitches"
+  | "landFront.allocationFrontTransfers"
+  | "landFront.allocationUnassignedUnits";
 
 /**
  * Optional benchmark observer. Production worlds do not install one, so hot paths

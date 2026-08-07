@@ -151,6 +151,14 @@ export const WORLD_BALANCE = {
           retreat: 0.5,
         },
       },
+      allocation: {
+        minimumUnitsPerFront: 1,
+        retreatMinimumUnits: 1,
+        switchPenaltyDistance: 24,
+        sameFrontBonusDistance: 12,
+        surplusDistanceWeight: 0.75,
+        surplusLoadPenalty: 20,
+      },
     },
     declare: {
       slowTickRange: {

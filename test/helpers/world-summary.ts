@@ -15,6 +15,8 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     occupations: world.occupation.mesoById.size,
     landFronts: world.landFronts.physicalFronts.length,
     nationFrontPlans: world.frontPlans.plans.length,
+    frontAllocatedUnits: world.frontAllocations.frontIdByUnitId.size,
+    frontUnassignedUnits: world.frontAllocations.lastUnassignedUnitCount,
     microRegions: world.microRegions.length,
     mesoRegions: world.mesoRegions.length,
     macroRegions: world.macroRegions.length,

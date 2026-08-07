@@ -13,6 +13,7 @@ import type { WorldCache } from "./world-cache";
 import type { SimulationInstrumentation } from "./instrumentation";
 import type { LandFrontState } from "./land-fronts";
 import type { NationFrontPlanState } from "./nation-front-plans";
+import type { NationFrontAllocationState } from "./nation-front-allocations";
 
 export interface WorldState {
   width: number;
@@ -27,6 +28,7 @@ export interface WorldState {
   occupation: OccupationState;
   landFronts: LandFrontState;
   frontPlans: NationFrontPlanState;
+  frontAllocations: NationFrontAllocationState;
   mapVersion: number;
   territoryVersion: number;
   buildingVersion: number;

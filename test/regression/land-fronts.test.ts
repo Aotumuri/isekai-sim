@@ -20,6 +20,14 @@ import {
   updateNationFrontPlans,
 } from "../../src/sim/nation-front-plans";
 import {
+  createNationFrontAllocationState,
+  formatNationFrontAllocationSummary,
+  getAllocatedFrontId,
+  getNationFrontAllocations,
+  updateNationFrontAllocations,
+} from "../../src/sim/nation-front-allocations";
+import { repositionUnits } from "../../src/sim/nation/reposition-units";
+import {
   createNationResourceFlow,
   createNationResources,
   type NationRuntime,
@@ -432,6 +440,333 @@ test("evaluating plans does not mutate units, targets, wars, or world versions",
   assert.equal(world.territoryVersion, before.territoryVersion);
 });
 
+test("a land unit belongs to at most one physical front", () => {
+  const world = createAllocatedTwoFrontWorld();
+  const allocatedIds = getNationFrontAllocations(world).flatMap(
+    (allocation) => allocation.unitIds,
+  );
+
+  assert.equal(new Set(allocatedIds).size, allocatedIds.length);
+  for (const unitId of allocatedIds) {
+    assert(getAllocatedFrontId(world, unitId));
+  }
+});
+
+test("every allocated unit ID resolves to a valid land unit of the same nation", () => {
+  const world = createAllocatedTwoFrontWorld();
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+
+  for (const allocation of getNationFrontAllocations(world)) {
+    for (const unitId of allocation.unitIds) {
+      const unit = unitById.get(unitId);
+      assert(unit);
+      assert.equal(unit.domain, "land");
+      assert.equal(unit.nationId, allocation.nationId);
+    }
+  }
+});
+
+test("an extinct nation receives no front allocation", () => {
+  const world = createAllocatedTwoFrontWorld();
+  const extinctUnit = addLandUnit(world, NATION_C, "a1", "Infantry");
+  world.time.fastTick += 10;
+  updateAllocationSystem(world);
+
+  assert.equal(getNationFrontAllocations(world, NATION_C).length, 0);
+  assert.equal(getAllocatedFrontId(world, extinctUnit.id), undefined);
+});
+
+test("a peaceful nation does not use front allocation", () => {
+  const world = createSimpleBorderWorld();
+  const unit = addLandUnit(world, NATION_A, "a", "Infantry");
+
+  updateAllocationSystem(world);
+
+  assert.equal(getNationFrontAllocations(world, NATION_A).length, 0);
+  assert.equal(getAllocatedFrontId(world, unit.id), undefined);
+});
+
+test("a disappearing physical front releases its allocation", () => {
+  const world = createSimpleBorderWorld();
+  startWar(world, NATION_A, NATION_B);
+  const unit = addLandUnit(world, NATION_A, "a", "Infantry");
+  addLandUnit(world, NATION_B, "b", "Infantry");
+  updateAllocationSystem(world);
+  assert(getAllocatedFrontId(world, unit.id));
+
+  world.occupation.mesoById.set(id("b"), NATION_A);
+  world.occupation.version += 1;
+  updateAllocationSystem(world);
+
+  assert.equal(world.landFronts.physicalFronts.length, 0);
+  assert.equal(getAllocatedFrontId(world, unit.id), undefined);
+});
+
+test("ending a war releases every unit from its front", () => {
+  const world = createAllocatedTwoFrontWorld();
+  assert(world.frontAllocations.frontIdByUnitId.size > 0);
+
+  world.wars = [];
+  updateAllocationSystem(world);
+
+  assert.equal(getNationFrontAllocations(world).length, 0);
+  assert.equal(world.frontAllocations.frontIdByUnitId.size, 0);
+});
+
+test("front splitting never duplicates allocated units", () => {
+  const world = createAllocatedThreeSegmentWorld(false);
+  assertUniqueAllocatedUnits(world);
+
+  setRegionOwner(world, "a2", NATION_C);
+  setRegionOwner(world, "b2", NATION_C);
+  world.territoryVersion += 1;
+  updateAllocationSystem(world);
+
+  assert.equal(frontsBetween(world, NATION_A, NATION_B).length, 2);
+  assertUniqueAllocatedUnits(world);
+});
+
+test("front merging never duplicates allocated units", () => {
+  const world = createAllocatedThreeSegmentWorld(true);
+  assert.equal(frontsBetween(world, NATION_A, NATION_B).length, 2);
+  assertUniqueAllocatedUnits(world);
+
+  setRegionOwner(world, "a2", NATION_A);
+  setRegionOwner(world, "b2", NATION_B);
+  world.territoryVersion += 1;
+  updateAllocationSystem(world);
+
+  assert.equal(frontsBetween(world, NATION_A, NATION_B).length, 1);
+  assertUniqueAllocatedUnits(world);
+});
+
+test("allocated strength is finite and equals its units' combat strength", () => {
+  const world = createAllocatedTwoFrontWorld();
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+
+  for (const allocation of getNationFrontAllocations(world)) {
+    const expected = allocation.unitIds.reduce(
+      (total, unitId) => total + getUnitCombatStrength(unitById.get(unitId)!),
+      0,
+    );
+    assert(Number.isFinite(allocation.allocatedStrength));
+    assert.equal(allocation.allocatedStrength, expected);
+  }
+});
+
+test("allocation deficit and surplus match desired minus allocated strength", () => {
+  const world = createAllocatedTwoFrontWorld();
+
+  for (const allocation of getNationFrontAllocations(world)) {
+    assert.equal(
+      allocation.deficit,
+      Math.max(0, allocation.desiredStrength - allocation.allocatedStrength),
+    );
+    assert.equal(
+      allocation.surplus,
+      Math.max(0, allocation.allocatedStrength - allocation.desiredStrength),
+    );
+  }
+  assert.match(formatNationFrontAllocationSummary(world), /allocated|strength:/);
+  assert.match(formatNationFrontPlanSummary(world), /allocation:\n  units:/);
+});
+
+test("an allocated unit only receives a target inside its assigned front", () => {
+  const world = createAllocatedTwoFrontWorld();
+
+  repositionUnits(world, 100);
+
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+  let targetedUnitCount = 0;
+  for (const allocation of getNationFrontAllocations(world, NATION_A)) {
+    const front = world.landFronts.physicalFrontsById.get(allocation.frontId);
+    assert(front);
+    const friendly = getFrontSide(front, NATION_A);
+    const enemy = getFrontSide(front, NATION_B);
+    assert(friendly && enemy);
+    const allowedTargets = new Set([
+      ...friendly.influenceRegionIds,
+      ...enemy.influenceRegionIds,
+    ]);
+    for (const unitId of allocation.unitIds) {
+      const targetId = unitById.get(unitId)?.moveTargetId;
+      if (!targetId) {
+        continue;
+      }
+      targetedUnitCount += 1;
+      assert(
+        allowedTargets.has(targetId),
+        `${unitId} targeted ${targetId} outside ${allocation.frontId}`,
+      );
+    }
+  }
+  assert(targetedUnitCount > 0);
+});
+
+test("a wartime nation without a physical front keeps the legacy fallback", () => {
+  const world = createFrontWorld(
+    [
+      { id: "a", owner: NATION_A },
+      { id: "c", owner: NATION_C },
+      { id: "b", owner: NATION_B },
+    ],
+    [
+      ["a", "c"],
+      ["c", "b"],
+    ],
+  );
+  startWar(world, NATION_A, NATION_B);
+  const unit = addLandUnit(world, NATION_A, "a", "Infantry");
+  updateAllocationSystem(world);
+  assert.equal(getNationFrontAllocations(world, NATION_A).length, 0);
+
+  repositionUnits(world, 100);
+
+  assert(unit.moveTargetId, "legacy defense fallback should keep the unit active");
+});
+
+test("an unchanged allocation rebuild does not switch units between fronts", () => {
+  const world = createAllocatedTwoFrontWorld();
+  const before = new Map(world.frontAllocations.frontIdByUnitId);
+
+  world.time.fastTick += 10;
+  updateAllocationSystem(world);
+
+  assert.deepEqual(world.frontAllocations.frontIdByUnitId, before);
+  assert.equal(world.frontAllocations.lastUnitSwitchCount, 0);
+  assert.equal(world.frontAllocations.lastFrontTransferCount, 0);
+});
+
+test("naval units never enter land front allocation", () => {
+  const world = createAllocatedTwoFrontWorld();
+  const navalUnit = createUnitForType(
+    createUnitId(world.unitIdCounter),
+    NATION_A,
+    id("a1"),
+    "CombatShip",
+  );
+  world.unitIdCounter += 1;
+  world.units.push(navalUnit);
+  world.time.fastTick += 10;
+  updateAllocationSystem(world);
+
+  assert.equal(getAllocatedFrontId(world, navalUnit.id), undefined);
+  assert(
+    getNationFrontAllocations(world).every(
+      (allocation) => !allocation.unitIds.includes(navalUnit.id),
+    ),
+  );
+});
+
+test("a retreat front receives only a small covering allocation", () => {
+  const world = createSimpleBorderWorld();
+  startWar(world, NATION_A, NATION_B);
+  for (let index = 0; index < 5; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_A, "a", "Infantry"), 20);
+  }
+  setUnitStrength(addLandUnit(world, NATION_B, "b", "Infantry"), 500);
+
+  updateAllocationSystem(world);
+
+  const [allocation] = getNationFrontAllocations(world, NATION_A);
+  assert(allocation);
+  assert.equal(allocation.posture, "retreat");
+  assert.equal(allocation.unitIds.length, 1);
+  assert.equal(world.frontAllocations.lastUnassignedUnitCount, 4);
+});
+
+test("a moving border keeps allocation continuity when its deterministic ID changes", () => {
+  const world = createFrontWorld(
+    [
+      { id: "a1", owner: NATION_A },
+      { id: "a2", owner: NATION_A },
+      { id: "b1", owner: NATION_B },
+      { id: "b2", owner: NATION_B },
+    ],
+    [
+      ["a1", "a2"],
+      ["b1", "b2"],
+      ["a1", "b1"],
+      ["a2", "b2"],
+    ],
+  );
+  startWar(world, NATION_A, NATION_B);
+  addLandUnit(world, NATION_A, "a1", "Infantry");
+  addLandUnit(world, NATION_A, "a2", "Infantry");
+  addLandUnit(world, NATION_B, "b2", "Infantry");
+  updateAllocationSystem(world);
+  const previousFrontId = world.landFronts.physicalFronts[0]?.id;
+  assert(previousFrontId);
+
+  world.occupation.mesoById.set(id("b1"), NATION_A);
+  world.occupation.version += 1;
+  updateAllocationSystem(world);
+  const nextFrontId = world.landFronts.physicalFronts[0]?.id;
+  assert(nextFrontId);
+
+  assert.notEqual(nextFrontId, previousFrontId);
+  assert.equal(world.frontAllocations.lastFrontTransferCount, 0);
+  assert.equal(world.frontAllocations.lastUnitSwitchCount, 0);
+});
+
+function createAllocatedTwoFrontWorld(): WorldState {
+  const world = createFrontWorld(
+    [
+      { id: "a1", owner: NATION_A },
+      { id: "b1", owner: NATION_B },
+      { id: "a2", owner: NATION_A },
+      { id: "b2", owner: NATION_B },
+    ],
+    [
+      ["a1", "b1"],
+      ["a2", "b2"],
+    ],
+  );
+  startWar(world, NATION_A, NATION_B);
+  for (const regionId of ["a1", "a2"]) {
+    for (let index = 0; index < 3; index += 1) {
+      setUnitStrength(addLandUnit(world, NATION_A, regionId, "Infantry"), 100);
+    }
+  }
+  for (const regionId of ["b1", "b2"]) {
+    setUnitStrength(addLandUnit(world, NATION_B, regionId, "Infantry"), 100);
+  }
+  updateAllocationSystem(world);
+  return world;
+}
+
+function createAllocatedThreeSegmentWorld(
+  middleOwnedByThirdNation: boolean,
+): WorldState {
+  const world = createThreeSegmentWorld(middleOwnedByThirdNation);
+  startWar(world, NATION_A, NATION_B);
+  for (const regionId of ["a1", "a3"]) {
+    for (let index = 0; index < 2; index += 1) {
+      addLandUnit(world, NATION_A, regionId, "Infantry");
+    }
+  }
+  for (const regionId of ["b1", "b3"]) {
+    for (let index = 0; index < 2; index += 1) {
+      addLandUnit(world, NATION_B, regionId, "Infantry");
+    }
+  }
+  updateAllocationSystem(world);
+  return world;
+}
+
+function updateAllocationSystem(world: WorldState): void {
+  updateFrontSystem(world);
+  updateNationFrontAllocations(world);
+}
+
+function assertUniqueAllocatedUnits(world: WorldState): void {
+  const unitIds = getNationFrontAllocations(world).flatMap(
+    (allocation) => allocation.unitIds,
+  );
+  assert.equal(new Set(unitIds).size, unitIds.length);
+  assert.equal(world.frontAllocations.frontIdByUnitId.size, unitIds.length);
+}
+
 function createStrengthPlanWorld(
   friendlyStrength: number,
   enemyStrength: number,
@@ -593,6 +928,7 @@ function createFrontWorld(
     occupation,
     landFronts: createLandFrontState(),
     frontPlans: createNationFrontPlanState(),
+    frontAllocations: createNationFrontAllocationState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

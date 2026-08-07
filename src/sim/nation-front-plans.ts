@@ -7,6 +7,7 @@ import {
   type PhysicalFront,
   type PhysicalFrontSide,
 } from "./land-fronts";
+import { getFrontAllocation } from "./nation-front-allocations";
 import type { WorldState } from "./world-state";
 
 export type FrontPosture = "attack" | "hold" | "reinforce" | "retreat";
@@ -133,6 +134,7 @@ export function formatNationFrontPlanSummary(world: WorldState): string {
     if (!friendly || !enemy) {
       continue;
     }
+    const allocation = getFrontAllocation(world, plan.frontId, plan.nationId);
     lines.push(
       `${plan.nationId} vs ${enemy.nationId}`,
       `Front: ${front.id}`,
@@ -143,6 +145,15 @@ export function formatNationFrontPlanSummary(world: WorldState): string {
       `desiredStrength: ${plan.desiredStrength.toFixed(1)}`,
       `reasons: ${plan.reasonFlags.join(", ")}`,
     );
+    if (allocation) {
+      lines.push(
+        "allocation:",
+        `  units: ${allocation.unitIds.length}`,
+        `  strength: ${allocation.allocatedStrength.toFixed(1)}`,
+        `  deficit: ${allocation.deficit.toFixed(1)}`,
+        `  surplus: ${allocation.surplus.toFixed(1)}`,
+      );
+    }
   }
   return lines.join("\n");
 }
