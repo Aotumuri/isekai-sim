@@ -10,6 +10,7 @@ import { buildWarAdjacency, isAtWar } from "./war-state";
 export interface OccupationState {
   mesoById: Map<MesoRegionId, NationId>;
   macroById: Map<MacroRegionId, NationId>;
+  dirtyMesoIds: Set<MesoRegionId>;
   version: number;
 }
 
@@ -17,6 +18,7 @@ export function createOccupationState(): OccupationState {
   return {
     mesoById: new Map(),
     macroById: new Map(),
+    dirtyMesoIds: new Set(),
     version: 0,
   };
 }
@@ -26,11 +28,13 @@ export function updateOccupation(world: WorldState): void {
   const ownerByMesoId = getOwnerByMesoId(world);
   const unitsByMesoId = collectUnitsByMeso(world.units);
   const mesoOccupation = new Map<MesoRegionId, NationId>(world.occupation.mesoById);
+  const dirtyMesoIds = new Set<MesoRegionId>();
   let mesoChanged = false;
 
   for (const meso of world.mesoRegions) {
     if (!isPassable(meso)) {
       if (mesoOccupation.delete(meso.id)) {
+        dirtyMesoIds.add(meso.id);
         mesoChanged = true;
       }
       continue;
@@ -38,6 +42,7 @@ export function updateOccupation(world: WorldState): void {
     const owner = ownerByMesoId.get(meso.id);
     if (!owner) {
       if (mesoOccupation.delete(meso.id)) {
+        dirtyMesoIds.add(meso.id);
         mesoChanged = true;
       }
       continue;
@@ -46,6 +51,7 @@ export function updateOccupation(world: WorldState): void {
     const units = unitsByMesoId.get(meso.id) ?? [];
     if (units.some((unit) => unit.nationId === owner)) {
       if (mesoOccupation.delete(meso.id)) {
+        dirtyMesoIds.add(meso.id);
         mesoChanged = true;
       }
       continue;
@@ -59,6 +65,7 @@ export function updateOccupation(world: WorldState): void {
     const occupier = pickOccupier(units, owner, warAdjacency);
     if (occupier && occupier !== current) {
       mesoOccupation.set(meso.id, occupier);
+      dirtyMesoIds.add(meso.id);
       mesoChanged = true;
     }
   }
@@ -71,9 +78,36 @@ export function updateOccupation(world: WorldState): void {
 
   const macroChanged = !mapsEqual(macroOccupation, world.occupation.macroById);
   if (mesoChanged || macroChanged) {
+    if (macroChanged) {
+      markChangedMacroMesosDirty(
+        world.macroRegions,
+        world.occupation.macroById,
+        macroOccupation,
+        dirtyMesoIds,
+      );
+    }
+    for (const mesoId of dirtyMesoIds) {
+      world.occupation.dirtyMesoIds.add(mesoId);
+    }
     world.occupation.mesoById = mesoOccupation;
     world.occupation.macroById = macroOccupation;
     world.occupation.version += 1;
+  }
+}
+
+function markChangedMacroMesosDirty(
+  macroRegions: MacroRegion[],
+  previous: Map<MacroRegionId, NationId>,
+  next: Map<MacroRegionId, NationId>,
+  dirtyMesoIds: Set<MesoRegionId>,
+): void {
+  for (const macro of macroRegions) {
+    if (previous.get(macro.id) === next.get(macro.id)) {
+      continue;
+    }
+    for (const mesoId of macro.mesoRegionIds) {
+      dirtyMesoIds.add(mesoId);
+    }
   }
 }
 

@@ -1,15 +1,29 @@
 import { Graphics, type Container } from "pixi.js";
-import { clearLayer } from "../clear-layer";
-import { getMicroRegionByIdMap } from "../region-index";
 import type { MacroRegion } from "../../worldgen/macro-region";
 import type { MicroRegion } from "../../worldgen/micro-region";
-import type { Nation } from "../../worldgen/nation";
+import type { Nation, NationId } from "../../worldgen/nation";
+import { clearLayer } from "../clear-layer";
 import { findSharedSegments, type Segment } from "../meso-border-geometry";
 import { getNationColor } from "../nation-color";
+import { getMicroRegionByIdMap } from "../region-index";
 
 const BORDER_WIDTH = 2.2;
 const BORDER_ALPHA = 1.0;
 const FILL_ALPHA = 0.2;
+
+type MacroGraphics = {
+  fill: Graphics;
+  border: Graphics;
+  nationId: NationId;
+};
+
+type NationBorderCache = {
+  microRegions: MicroRegion[];
+  macroRegions: MacroRegion[];
+  graphicsByMacroId: Map<MacroRegion["id"], MacroGraphics>;
+};
+
+const borderCacheByLayer = new WeakMap<Container, NationBorderCache>();
 
 export function drawNationBorders(
   layer: Container,
@@ -17,82 +31,80 @@ export function drawNationBorders(
   macroRegions: MacroRegion[],
   nations: Nation[],
 ): void {
-  clearLayer(layer);
-
   if (macroRegions.length === 0 || nations.length === 0) {
     return;
   }
 
-  const mesoToMacroId = new Map<string, MacroRegion["id"]>();
-  const nationIdByMacroId = new Map<MacroRegion["id"], Nation["id"]>();
+  const cache = getNationBorderCache(layer, microRegions, macroRegions);
   for (const macro of macroRegions) {
-    nationIdByMacroId.set(macro.id, macro.nationId);
+    const graphics = cache.graphicsByMacroId.get(macro.id);
+    if (!graphics || graphics.nationId === macro.nationId) {
+      continue;
+    }
+    const color = getNationColor(macro.nationId);
+    graphics.fill.tint = color;
+    graphics.border.tint = color;
+    graphics.nationId = macro.nationId;
+  }
+}
+
+function getNationBorderCache(
+  layer: Container,
+  microRegions: MicroRegion[],
+  macroRegions: MacroRegion[],
+): NationBorderCache {
+  const cached = borderCacheByLayer.get(layer);
+  if (cached && cached.microRegions === microRegions && cached.macroRegions === macroRegions) {
+    return cached;
+  }
+
+  clearLayer(layer);
+
+  const mesoToMacroId = new Map<string, MacroRegion["id"]>();
+  const graphicsByMacroId = new Map<MacroRegion["id"], MacroGraphics>();
+  for (const macro of macroRegions) {
     for (const mesoId of macro.mesoRegionIds) {
       mesoToMacroId.set(mesoId, macro.id);
     }
+
+    const fill = new Graphics();
+    fill.name = `NationFill:${macro.id}`;
+    fill.beginFill(0xffffff, FILL_ALPHA);
+    fill.tint = getNationColor(macro.nationId);
+
+    const border = new Graphics();
+    border.name = `NationBorder:${macro.id}`;
+    border.lineStyle({
+      width: BORDER_WIDTH,
+      color: 0xffffff,
+      alpha: BORDER_ALPHA,
+      cap: "round",
+      join: "round",
+    });
+    border.tint = getNationColor(macro.nationId);
+
+    graphicsByMacroId.set(macro.id, {
+      fill,
+      border,
+      nationId: macro.nationId,
+    });
   }
 
-  const colorByNationId = new Map<Nation["id"], number>();
-  for (const nation of nations) {
-    colorByNationId.set(nation.id, getNationColor(nation.id));
-  }
-
-  const regionsByNationId = new Map<Nation["id"], MicroRegion[]>();
   for (const region of microRegions) {
-    if (!region.mesoRegionId) {
-      continue;
-    }
-    const macroId = mesoToMacroId.get(region.mesoRegionId);
+    const macroId = region.mesoRegionId ? mesoToMacroId.get(region.mesoRegionId) : null;
     if (!macroId) {
       continue;
     }
-    const nationId = nationIdByMacroId.get(macroId);
-    if (!nationId) {
-      continue;
-    }
-    const list = regionsByNationId.get(nationId);
-    if (list) {
-      list.push(region);
-    } else {
-      regionsByNationId.set(nationId, [region]);
+    const graphics = graphicsByMacroId.get(macroId);
+    if (graphics) {
+      drawPolygon(graphics.fill, region);
     }
   }
-
-  for (const nation of nations) {
-    const regions = regionsByNationId.get(nation.id);
-    if (!regions || regions.length === 0) {
-      continue;
-    }
-
-    const fillGraphics = new Graphics();
-    fillGraphics.beginFill(colorByNationId.get(nation.id) ?? 0xffffff, FILL_ALPHA);
-    for (const region of regions) {
-      drawPolygon(fillGraphics, region);
-    }
-    fillGraphics.endFill();
-    layer.addChild(fillGraphics);
+  for (const graphics of graphicsByMacroId.values()) {
+    graphics.fill.endFill();
   }
-
-  const graphicsByNationId = new Map<Nation["id"], Graphics>();
-  const getGraphics = (nationId: Nation["id"]): Graphics => {
-    let graphics = graphicsByNationId.get(nationId);
-    if (!graphics) {
-      graphics = new Graphics();
-      graphics.lineStyle({
-        width: BORDER_WIDTH,
-        color: colorByNationId.get(nationId) ?? 0xffffff,
-        alpha: BORDER_ALPHA,
-        cap: "round",
-        join: "round",
-      });
-      graphicsByNationId.set(nationId, graphics);
-      layer.addChild(graphics);
-    }
-    return graphics;
-  };
 
   const regionById = getMicroRegionByIdMap(microRegions);
-
   for (const region of microRegions) {
     for (const neighborId of region.neighbors) {
       if (region.id >= neighborId) {
@@ -105,7 +117,9 @@ export function drawNationBorders(
       }
 
       const macroA = region.mesoRegionId ? mesoToMacroId.get(region.mesoRegionId) : null;
-      const macroB = neighbor.mesoRegionId ? mesoToMacroId.get(neighbor.mesoRegionId) : null;
+      const macroB = neighbor.mesoRegionId
+        ? mesoToMacroId.get(neighbor.mesoRegionId)
+        : null;
       if (!macroA && !macroB) {
         continue;
       }
@@ -118,17 +132,31 @@ export function drawNationBorders(
         continue;
       }
 
-      const nationA = macroA ? nationIdByMacroId.get(macroA) ?? null : null;
-      const nationB = macroB ? nationIdByMacroId.get(macroB) ?? null : null;
-
-      if (nationA) {
-        drawSegments(getGraphics(nationA), segments);
+      if (macroA) {
+        const graphics = graphicsByMacroId.get(macroA);
+        if (graphics) {
+          drawSegments(graphics.border, segments);
+        }
       }
-      if (nationB && nationB !== nationA) {
-        drawSegments(getGraphics(nationB), segments);
+      if (macroB && macroB !== macroA) {
+        const graphics = graphicsByMacroId.get(macroB);
+        if (graphics) {
+          drawSegments(graphics.border, segments);
+        }
       }
     }
   }
+
+  for (const graphics of graphicsByMacroId.values()) {
+    layer.addChild(graphics.fill);
+  }
+  for (const graphics of graphicsByMacroId.values()) {
+    layer.addChild(graphics.border);
+  }
+
+  const cache: NationBorderCache = { microRegions, macroRegions, graphicsByMacroId };
+  borderCacheByLayer.set(layer, cache);
+  return cache;
 }
 
 function drawSegments(graphics: Graphics, segments: Segment[]): void {

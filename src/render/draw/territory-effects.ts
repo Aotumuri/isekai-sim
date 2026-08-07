@@ -1,9 +1,10 @@
-import { Container, Graphics, Sprite, Texture, Renderer, Rectangle } from "pixi.js";
-import { clearLayer } from "../clear-layer";
+import { Graphics, Texture, Renderer, Rectangle, type Container } from "pixi.js";
 import type { OccupationState } from "../../sim/occupation";
 import type { MacroRegion } from "../../worldgen/macro-region";
+import type { MesoRegionId } from "../../worldgen/meso-region";
 import type { MicroRegion } from "../../worldgen/micro-region";
 import type { NationId } from "../../worldgen/nation";
+import { clearLayer } from "../clear-layer";
 import { getNationColor } from "../nation-color";
 
 const HATCH_SPACING = 12;
@@ -12,7 +13,26 @@ const HATCH_ALPHA = 0.5;
 
 type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
 
+type TerritoryEffectEntry = {
+  graphics: Graphics;
+  nationId: NationId | null;
+  crossHatch: boolean;
+  hasGeometry: boolean;
+};
+
+type TerritoryEffectCache = {
+  microRegions: MicroRegion[];
+  macroRegions: MacroRegion[];
+  width: number;
+  height: number;
+  microByMesoId: Map<MesoRegionId, MicroRegion[]>;
+  macroByMesoId: Map<MesoRegionId, MacroRegion>;
+  allMesoIds: MesoRegionId[];
+  entriesByMesoId: Map<MesoRegionId, TerritoryEffectEntry>;
+};
+
 const hatchTextureCache = new Map<string, Texture>();
+const effectCacheByLayer = new WeakMap<Container, TerritoryEffectCache>();
 
 let sharedRenderer: Renderer | null = null;
 
@@ -36,28 +56,29 @@ function getHatchTexture(bounds: Bounds, reverse: boolean): Texture {
   const w = Math.max(0, bounds.maxX - bounds.minX);
   const h = Math.max(0, bounds.maxY - bounds.minY);
 
-  const g = new Graphics();
-  g.lineStyle({ width: HATCH_WIDTH, color: 0xffffff, alpha: 1 });
+  const graphics = new Graphics();
+  graphics.lineStyle({ width: HATCH_WIDTH, color: 0xffffff, alpha: 1 });
 
-  // Draw in local coords (0..w/h) so the texture isn't shifted/cropped by negative start positions.
   const localBounds: Bounds = { minX: 0, minY: 0, maxX: w, maxY: h };
   if (reverse) {
-    drawHatchLinesReverse(g, localBounds, HATCH_SPACING);
+    drawHatchLinesReverse(graphics, localBounds, HATCH_SPACING);
   } else {
-    drawHatchLines(g, localBounds, HATCH_SPACING);
+    drawHatchLines(graphics, localBounds, HATCH_SPACING);
   }
 
   if (!sharedRenderer) {
-    throw new Error("TerritoryEffects renderer not set. Call setTerritoryEffectsRenderer(renderer) once at init.");
+    throw new Error(
+      "TerritoryEffects renderer not set. Call setTerritoryEffectsRenderer(renderer) once at init.",
+    );
   }
-  const tex: Texture = sharedRenderer.generateTexture(g, {
+  const texture = sharedRenderer.generateTexture(graphics, {
     region: new Rectangle(0, 0, w, h),
     resolution: 1,
   });
-  g.destroy(true);
+  graphics.destroy(true);
 
-  hatchTextureCache.set(key, tex);
-  return tex;
+  hatchTextureCache.set(key, texture);
+  return texture;
 }
 
 export function drawTerritoryEffects(
@@ -67,89 +88,148 @@ export function drawTerritoryEffects(
   occupation: OccupationState,
   width: number,
   height: number,
+  dirtyMesoIds?: Iterable<MesoRegionId>,
 ): void {
-  clearLayer(layer);
+  const cache = getTerritoryEffectCache(
+    layer,
+    microRegions,
+    macroRegions,
+    width,
+    height,
+  );
+  const candidates = dirtyMesoIds ? [...new Set(dirtyMesoIds)] : cache.allMesoIds;
 
-  if (occupation.macroById.size === 0 && occupation.mesoById.size === 0) {
-    return;
-  }
-
-  const mesoToMacroId = new Map<string, MacroRegion["id"]>();
-  for (const macro of macroRegions) {
-    for (const mesoId of macro.mesoRegionIds) {
-      mesoToMacroId.set(mesoId, macro.id);
-    }
-  }
-
-  const macroOccupierByMesoId = new Map<string, NationId>();
-  for (const macro of macroRegions) {
-    const macroOccupier = occupation.macroById.get(macro.id);
-    if (!macroOccupier) {
+  const bounds: Bounds = { minX: 0, minY: 0, maxX: width, maxY: height };
+  for (const mesoId of candidates) {
+    const regions = cache.microByMesoId.get(mesoId);
+    if (!regions || regions.length === 0) {
       continue;
     }
-    for (const mesoId of macro.mesoRegionIds) {
-      macroOccupierByMesoId.set(mesoId, macroOccupier);
+
+    const macro = cache.macroByMesoId.get(mesoId);
+    const macroOccupier = macro ? occupation.macroById.get(macro.id) ?? null : null;
+    const nationId = macroOccupier ?? occupation.mesoById.get(mesoId) ?? null;
+    const crossHatch = macroOccupier !== null;
+    let entry = cache.entriesByMesoId.get(mesoId);
+
+    if (!nationId) {
+      if (entry?.graphics.visible) {
+        entry.graphics.visible = false;
+        entry.nationId = null;
+      }
+      continue;
     }
+
+    if (!entry) {
+      const graphics = new Graphics();
+      graphics.name = `TerritoryEffect:${mesoId}`;
+      layer.addChild(graphics);
+      entry = { graphics, nationId: null, crossHatch, hasGeometry: false };
+      cache.entriesByMesoId.set(mesoId, entry);
+    }
+
+    if (entry.crossHatch !== crossHatch || !entry.hasGeometry) {
+      drawMesoEffect(entry.graphics, regions, bounds, crossHatch);
+      entry.crossHatch = crossHatch;
+      entry.hasGeometry = true;
+    }
+
+    if (entry.nationId !== nationId) {
+      entry.graphics.tint = getNationColor(nationId);
+      entry.nationId = nationId;
+    }
+    entry.graphics.visible = true;
+  }
+}
+
+function getTerritoryEffectCache(
+  layer: Container,
+  microRegions: MicroRegion[],
+  macroRegions: MacroRegion[],
+  width: number,
+  height: number,
+): TerritoryEffectCache {
+  const cached = effectCacheByLayer.get(layer);
+  if (
+    cached &&
+    cached.microRegions === microRegions &&
+    cached.macroRegions === macroRegions &&
+    cached.width === width &&
+    cached.height === height
+  ) {
+    return cached;
   }
 
-  const macroRegionsByNationId = new Map<NationId, MicroRegion[]>();
-  const mesoRegionsByNationId = new Map<NationId, MicroRegion[]>();
+  clearLayer(layer);
+  const microByMesoId = new Map<MesoRegionId, MicroRegion[]>();
   for (const region of microRegions) {
     if (!region.mesoRegionId) {
       continue;
     }
-    const macroId = mesoToMacroId.get(region.mesoRegionId);
-    if (!macroId) {
-      continue;
-    }
-    const macroOccupier = macroOccupierByMesoId.get(region.mesoRegionId);
-    if (macroOccupier) {
-      const list = macroRegionsByNationId.get(macroOccupier);
-      if (list) {
-        list.push(region);
-      } else {
-        macroRegionsByNationId.set(macroOccupier, [region]);
-      }
-      continue;
-    }
-    const mesoOccupier = occupation.mesoById.get(region.mesoRegionId);
-    if (!mesoOccupier) {
-      continue;
-    }
-    const list = mesoRegionsByNationId.get(mesoOccupier);
-    if (list) {
-      list.push(region);
+    const existing = microByMesoId.get(region.mesoRegionId);
+    if (existing) {
+      existing.push(region);
     } else {
-      mesoRegionsByNationId.set(mesoOccupier, [region]);
+      microByMesoId.set(region.mesoRegionId, [region]);
     }
   }
 
-  const bounds: Bounds = { minX: 0, minY: 0, maxX: width, maxY: height };
-
-  for (const [nationId, regions] of macroRegionsByNationId.entries()) {
-    if (regions.length === 0) {
-      continue;
+  const macroByMesoId = new Map<MesoRegionId, MacroRegion>();
+  const allMesoIds: MesoRegionId[] = [];
+  for (const macro of macroRegions) {
+    for (const mesoId of macro.mesoRegionIds) {
+      macroByMesoId.set(mesoId, macro);
+      allMesoIds.push(mesoId);
     }
-
-    drawHatchedRegions(layer, nationId, regions, bounds, true);
   }
 
-  for (const [nationId, regions] of mesoRegionsByNationId.entries()) {
-    if (regions.length === 0) {
-      continue;
-    }
+  const cache: TerritoryEffectCache = {
+    microRegions,
+    macroRegions,
+    width,
+    height,
+    microByMesoId,
+    macroByMesoId,
+    allMesoIds,
+    entriesByMesoId: new Map(),
+  };
+  effectCacheByLayer.set(layer, cache);
+  return cache;
+}
 
-    drawHatchedRegions(layer, nationId, regions, bounds, false);
+function drawMesoEffect(
+  graphics: Graphics,
+  regions: MicroRegion[],
+  bounds: Bounds,
+  crossHatch: boolean,
+): void {
+  graphics.clear();
+  graphics.beginTextureFill({
+    texture: getHatchTexture(bounds, false),
+    color: 0xffffff,
+    alpha: HATCH_ALPHA,
+  });
+  for (const region of regions) {
+    drawPolygon(graphics, region);
+  }
+  graphics.endFill();
+
+  if (crossHatch) {
+    graphics.beginTextureFill({
+      texture: getHatchTexture(bounds, true),
+      color: 0xffffff,
+      alpha: HATCH_ALPHA,
+    });
+    for (const region of regions) {
+      drawPolygon(graphics, region);
+    }
+    graphics.endFill();
   }
 }
 
-function drawHatchLines(
-  graphics: Graphics,
-  bounds: { minX: number; minY: number; maxX: number; maxY: number },
-  spacing: number,
-): void {
+function drawHatchLines(graphics: Graphics, bounds: Bounds, spacing: number): void {
   const height = bounds.maxY - bounds.minY;
-  let startX = bounds.minX - height;
+  const startX = bounds.minX - height;
   const endX = bounds.maxX;
   for (let x = startX; x <= endX; x += spacing) {
     graphics.moveTo(x, bounds.minY);
@@ -157,54 +237,13 @@ function drawHatchLines(
   }
 }
 
-function drawHatchLinesReverse(
-  graphics: Graphics,
-  bounds: { minX: number; minY: number; maxX: number; maxY: number },
-  spacing: number,
-): void {
+function drawHatchLinesReverse(graphics: Graphics, bounds: Bounds, spacing: number): void {
   const height = bounds.maxY - bounds.minY;
-  let startX = bounds.minX;
+  const startX = bounds.minX;
   const endX = bounds.maxX + height;
   for (let x = startX; x <= endX; x += spacing) {
     graphics.moveTo(x, bounds.minY);
     graphics.lineTo(x - height, bounds.maxY);
-  }
-}
-
-function drawHatchedRegions(
-  layer: Container,
-  nationId: NationId,
-  regions: MicroRegion[],
-  bounds: Bounds,
-  crossHatch: boolean,
-): void {
-  const mask = new Graphics();
-  mask.beginFill(0xffffff, 1);
-  for (const region of regions) {
-    drawPolygon(mask, region);
-  }
-  mask.endFill();
-  mask.renderable = false;
-  layer.addChild(mask);
-
-  const color = getNationColor(nationId);
-
-  const hatchTex = getHatchTexture(bounds, false);
-  const hatch = new Sprite(hatchTex);
-  hatch.position.set(0, 0);
-  hatch.tint = color;
-  hatch.alpha = HATCH_ALPHA;
-  hatch.mask = mask;
-  layer.addChild(hatch);
-
-  if (crossHatch) {
-    const hatchTexRev = getHatchTexture(bounds, true);
-    const hatchRev = new Sprite(hatchTexRev);
-    hatchRev.position.set(0, 0);
-    hatchRev.tint = color;
-    hatchRev.alpha = HATCH_ALPHA;
-    hatchRev.mask = mask;
-    layer.addChild(hatchRev);
   }
 }
 

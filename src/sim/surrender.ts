@@ -16,6 +16,7 @@ export function updateSurrender(world: WorldState): void {
 
   const mesoByNation = collectMesoByNation(world.macroRegions, mesoById);
   const occupationByMesoId = world.occupation.mesoById;
+  const dirtyOccupationMesoIds = world.occupation.dirtyMesoIds;
   const nationById = new Map<NationId, WorldState["nations"][number]>();
   for (const nation of world.nations) {
     nationById.set(nation.id, nation);
@@ -143,6 +144,7 @@ export function updateSurrender(world: WorldState): void {
       nationById,
       occupationByMesoId,
       mesoById,
+      dirtyOccupationMesoIds,
     );
     occupationChanged ||= didChange.occupationChanged;
     territoryChanged ||= didChange.territoryChanged;
@@ -173,6 +175,7 @@ export function updateSurrender(world: WorldState): void {
     const releasedOccupation = releaseOccupationForEliminatedNations(
       world.occupation.mesoById,
       world.occupation.macroById,
+      world.occupation.dirtyMesoIds,
       eliminatedNationIds,
       world.macroRegions,
     );
@@ -451,6 +454,7 @@ function applyAssignments(
   nationById: Map<NationId, WorldState["nations"][number]>,
   occupationByMesoId: Map<MesoRegion["id"], NationId>,
   mesoById: Map<MesoRegion["id"], MesoRegion>,
+  dirtyMesoIds: Set<MesoRegion["id"]>,
 ): { territoryChanged: boolean; occupationChanged: boolean; buildingChanged: boolean } {
   if (assignments.size === 0) {
     return { territoryChanged: false, occupationChanged: false, buildingChanged: false };
@@ -506,6 +510,7 @@ function applyAssignments(
 
     for (const mesoId of macro.mesoRegionIds) {
       if (occupationByMesoId.delete(mesoId)) {
+        dirtyMesoIds.add(mesoId);
         occupationChanged = true;
       }
     }
@@ -601,6 +606,7 @@ function clamp(value: number, min: number, max: number): number {
 function releaseOccupationForEliminatedNations(
   occupationByMesoId: Map<MesoRegion["id"], NationId>,
   occupationByMacroId: Map<MacroRegion["id"], NationId>,
+  dirtyMesoIds: Set<MesoRegion["id"]>,
   eliminatedNationIds: Set<NationId>,
   macroRegions: MacroRegion[],
 ): boolean {
@@ -614,6 +620,7 @@ function releaseOccupationForEliminatedNations(
       continue;
     }
     occupationByMesoId.delete(mesoId);
+    dirtyMesoIds.add(mesoId);
     mesoChanged = true;
   }
 
@@ -624,6 +631,14 @@ function releaseOccupationForEliminatedNations(
   );
   const macroChanged = !mapsEqual(nextMacroOccupation, occupationByMacroId);
   if (macroChanged) {
+    for (const macro of macroRegions) {
+      if (occupationByMacroId.get(macro.id) === nextMacroOccupation.get(macro.id)) {
+        continue;
+      }
+      for (const mesoId of macro.mesoRegionIds) {
+        dirtyMesoIds.add(mesoId);
+      }
+    }
     occupationByMacroId.clear();
     for (const [macroId, occupier] of nextMacroOccupation.entries()) {
       occupationByMacroId.set(macroId, occupier);

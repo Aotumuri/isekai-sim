@@ -22,7 +22,6 @@ export function createGame(root: HTMLElement): void {
   const renderer = createRenderer(root, config);
   setTerritoryEffectsRenderer(renderer.app.renderer);
   const world = createWorld(config);
-
   drawMicroRegions(renderer.worldLayers.layers.MicroTerrain, world.microRegions);
   drawMesoBorders(renderer.worldLayers.layers.MesoBorder, world.microRegions);
   drawNationBorders(
@@ -39,6 +38,7 @@ export function createGame(root: HTMLElement): void {
     config.width,
     config.height,
   );
+  world.occupation.dirtyMesoIds.clear();
   drawCityCapitalIcons(
     renderer.worldLayers.layers.CityCapitalResourceIcons,
     world.mesoRegions,
@@ -81,7 +81,11 @@ export function createGame(root: HTMLElement): void {
         world.occupation,
         config.width,
         config.height,
+        world.occupation.dirtyMesoIds.size > 0
+          ? world.occupation.dirtyMesoIds
+          : undefined,
       );
+      world.occupation.dirtyMesoIds.clear();
       lastOccupationVersion = world.occupation.version;
       shouldRedrawIcons = true;
     }
