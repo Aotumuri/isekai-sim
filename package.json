@@ -6,7 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "npm run test:typecheck && node --import tsx --test test/regression/*.test.ts",
+    "test:typecheck": "tsc -p tsconfig.test.json",
+    "test:sim": "node --import tsx --test test/regression/simulation.test.ts",
+    "benchmark": "node --import tsx test/benchmark/run-benchmark.ts",
+    "benchmark:quick": "node --import tsx test/benchmark/run-benchmark.ts --quick",
+    "benchmark:compare": "node --import tsx test/benchmark/compare-results.ts"
   },
   "dependencies": {
     "d3-delaunay": "^6.0.4",
@@ -14,6 +20,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "tsx": "^4.23.10",
     "typescript": "^5.4.5",
     "vite": "^5.4.11"
   }

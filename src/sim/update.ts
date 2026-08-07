@@ -56,24 +56,62 @@ export function updateSimulation(world: WorldState, clock: SimClock, deltaMs: nu
   }
 }
 
-function stepFastTick(world: WorldState, dtMs: number): void {
+export function stepFastTick(world: WorldState, dtMs: number): void {
+  const instrumentation = world.instrumentation;
+  const occupationVersionBefore = instrumentation
+    ? world.occupation.version
+    : 0;
+  const territoryVersionBefore = instrumentation ? world.territoryVersion : 0;
   world.time.fastTick += 1;
   world.time.elapsedMs += dtMs;
+
+  let startedAt = instrumentation ? performance.now() : 0;
   repositionUnits(world, dtMs);
+  if (instrumentation) {
+    instrumentation.recordDuration("repositionUnits", performance.now() - startedAt);
+  }
   const navalEnabled = WORLD_BALANCE.unit.naval?.enabled !== false;
   if (navalEnabled) {
     repositionNavalUnits(world, dtMs);
     updateAmphibiousOperations(world);
   }
   updateBattles(world);
+
+  startedAt = instrumentation ? performance.now() : 0;
   updateOccupation(world);
+  if (instrumentation) {
+    instrumentation.recordDuration("updateOccupation", performance.now() - startedAt);
+    instrumentation.incrementCounter("occupation.fullRegionScans");
+    instrumentation.incrementCounter(
+      "occupation.regionsScanned",
+      world.mesoRegions.length,
+    );
+  }
+
+  startedAt = instrumentation ? performance.now() : 0;
   updateCapitals(world);
+  if (instrumentation) {
+    instrumentation.recordDuration("updateCapitals", performance.now() - startedAt);
+  }
   updateWarCooperation(world);
   updateCivilWar(world);
+
+  startedAt = instrumentation ? performance.now() : 0;
   updateSurrender(world);
+  if (instrumentation) {
+    instrumentation.recordDuration("surrender", performance.now() - startedAt);
+    instrumentation.incrementCounter(
+      "world.occupationChanges",
+      world.occupation.version - occupationVersionBefore,
+    );
+    instrumentation.incrementCounter(
+      "world.territoryChanges",
+      world.territoryVersion - territoryVersionBefore,
+    );
+  }
 }
 
-function stepSlowTick(world: WorldState, _dtMs: number): void {
+export function stepSlowTick(world: WorldState, _dtMs: number): void {
   world.time.slowTick += 1;
   updateProduction(world);
   updateWarDeclarations(world);

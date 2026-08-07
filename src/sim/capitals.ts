@@ -18,6 +18,7 @@ export function updateCapitals(world: WorldState): void {
     if (!isNationActive(nation)) {
       continue;
     }
+    world.instrumentation?.incrementCounter("capitals.activeNationScans");
     const capitalId = nation.capitalMesoId;
     const capital = mesoById.get(capitalId);
     if (!capital) {

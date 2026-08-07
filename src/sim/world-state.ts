@@ -10,6 +10,7 @@ import type { UnitState } from "./unit";
 import type { WarState } from "./war-state";
 import type { SeededRng } from "../utils/seeded-rng";
 import type { WorldCache } from "./world-cache";
+import type { SimulationInstrumentation } from "./instrumentation";
 
 export interface WorldState {
   width: number;
@@ -30,4 +31,5 @@ export interface WorldState {
   simRng: SeededRng;
   cache: WorldCache;
   time: SimTime;
+  instrumentation?: SimulationInstrumentation;
 }

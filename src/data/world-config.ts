@@ -48,7 +48,6 @@ export interface WorldConfig {
 
 // ランダムよう
 const DEFAULT_SEED = Math.floor(Math.random() * 1_000_000_000_000);
-console.log("World generation seed:", DEFAULT_SEED);
 
 export function createWorldConfig(width: number, height: number): WorldConfig {
   const { microRegion, elevation, river, mesoRegion, nation, resources } = WORLD_BALANCE;

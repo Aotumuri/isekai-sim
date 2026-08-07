@@ -19,6 +19,7 @@ const DISABLE_UNIT_ANIMATION_SPEED = 4;
 
 export function createGame(root: HTMLElement): void {
   const config = createWorldConfig(window.innerWidth, window.innerHeight);
+  console.log("World generation seed:", config.seed);
   const renderer = createRenderer(root, config);
   setTerritoryEffectsRenderer(renderer.app.renderer);
   const world = createWorld(config);

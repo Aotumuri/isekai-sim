@@ -15,6 +15,7 @@ import {
   getNeighborsById,
   getOwnerByMesoId,
 } from "../world-cache";
+import type { SimulationInstrumentation } from "../instrumentation";
 
 const LAND_TARGET_REASSIGN_INTERVAL_TICKS = 10;
 const MAX_SHARED_PATH_FIELDS = 256;
@@ -59,6 +60,7 @@ interface SharedPathContext {
   nationId: NationId;
   pathMode: "owned" | "war";
   sharedPathFields: Map<string, SharedPathField>;
+  instrumentation?: SimulationInstrumentation;
 }
 
 const landAiRuntimeByWorld = new WeakMap<WorldState, LandAiRuntime>();
@@ -72,7 +74,8 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     return;
   }
   const runtime = getLandAiRuntime(world);
-  invalidateSharedPathFields(runtime, world);
+  const instrumentation = world.instrumentation;
+  invalidateSharedPathFields(runtime, world, instrumentation);
 
   let expectedTargetWasCleared = false;
   if (runtime.unitsExpectedToHaveTarget.size > 0) {
@@ -130,6 +133,8 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     set.add(unit.nationId);
   }
   if (shouldReassign) {
+    const assignmentStartedAt = instrumentation ? performance.now() : 0;
+    instrumentation?.incrementCounter("target.reassignments");
     rebuildLandAssignments(
       world,
       runtime,
@@ -139,7 +144,14 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
       ownerByMesoId,
       occupationByMesoId,
       warAdjacency,
+      instrumentation,
     );
+    if (instrumentation) {
+      instrumentation.recordDuration(
+        "assignment.rebuild",
+        performance.now() - assignmentStartedAt,
+      );
+    }
     runtime.lastAssignmentFastTick = world.time.fastTick;
     runtime.territoryVersion = world.territoryVersion;
     runtime.occupationVersion = world.occupation.version;
@@ -152,6 +164,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     runtime.forceReassignment = false;
   }
 
+  const movementStartedAt = instrumentation ? performance.now() : 0;
   for (const group of runtime.movementGroups) {
     const isBlockedByEnemy = (toId: MesoRegionId): boolean => {
       const present = nationsWithLandUnitsByMesoId.get(toId);
@@ -179,10 +192,17 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
       occupationByMesoId,
       warAdjacency,
       isBlockedByEnemy,
+      instrumentation,
     );
     if (orderInvalidated) {
       runtime.forceReassignment = true;
     }
+  }
+  if (instrumentation) {
+    instrumentation.recordDuration(
+      "movement.progression",
+      performance.now() - movementStartedAt,
+    );
   }
 }
 
@@ -218,7 +238,11 @@ function getLandAiRuntime(world: WorldState): LandAiRuntime {
   return created;
 }
 
-function invalidateSharedPathFields(runtime: LandAiRuntime, world: WorldState): void {
+function invalidateSharedPathFields(
+  runtime: LandAiRuntime,
+  world: WorldState,
+  instrumentation?: SimulationInstrumentation,
+): void {
   const mapChanged = runtime.pathFieldMapVersion !== world.mapVersion;
   const territoryChanged =
     runtime.pathFieldTerritoryVersion !== world.territoryVersion;
@@ -229,6 +253,25 @@ function invalidateSharedPathFields(runtime: LandAiRuntime, world: WorldState): 
   const warsChanged =
     runtime.pathFieldWarsReference !== world.wars ||
     runtime.pathFieldWarCount !== world.wars.length;
+
+  if (mapChanged || territoryChanged || occupationChanged || buildingChanged || warsChanged) {
+    instrumentation?.incrementCounter("pathfinding.shared.invalidations");
+  }
+  if (mapChanged) {
+    instrumentation?.incrementCounter("pathfinding.shared.invalidation.map");
+  }
+  if (territoryChanged) {
+    instrumentation?.incrementCounter("pathfinding.shared.invalidation.territory");
+  }
+  if (occupationChanged) {
+    instrumentation?.incrementCounter("pathfinding.shared.invalidation.occupation");
+  }
+  if (buildingChanged) {
+    instrumentation?.incrementCounter("pathfinding.shared.invalidation.building");
+  }
+  if (warsChanged) {
+    instrumentation?.incrementCounter("pathfinding.shared.invalidation.wars");
+  }
 
   if (occupationChanged) {
     // Occupation does not change graph passability. Only fields whose exact target
@@ -247,17 +290,26 @@ function invalidateSharedPathFields(runtime: LandAiRuntime, world: WorldState): 
     for (const [key, field] of runtime.sharedPathFields.entries()) {
       if (changedOccupationTargets.has(field.targetId)) {
         runtime.sharedPathFields.delete(key);
+        instrumentation?.incrementCounter("pathfinding.shared.fieldsDiscarded");
       }
     }
     runtime.pathFieldOccupationVersion = world.occupation.version;
     runtime.pathFieldOccupationByMesoId = new Map(world.occupation.mesoById);
   }
   if (buildingChanged) {
+    instrumentation?.incrementCounter(
+      "pathfinding.shared.fieldsDiscarded",
+      runtime.sharedPathFields.size,
+    );
     runtime.sharedPathFields.clear();
     runtime.pathFieldBuildingVersion = world.buildingVersion;
   }
 
   if (mapChanged || territoryChanged || warsChanged) {
+    instrumentation?.incrementCounter(
+      "pathfinding.shared.fieldsDiscarded",
+      runtime.sharedPathFields.size,
+    );
     runtime.sharedPathFields.clear();
     runtime.pathFieldMapVersion = world.mapVersion;
     runtime.pathFieldTerritoryVersion = world.territoryVersion;
@@ -275,6 +327,7 @@ function rebuildLandAssignments(
   ownerByMesoId: Map<MesoRegionId, NationId>,
   occupationByMesoId: Map<MesoRegionId, NationId>,
   warAdjacency: WarAdjacency,
+  instrumentation?: SimulationInstrumentation,
 ): void {
   const liberationTargetsByNationId = collectLiberationTargetsByNation(
     occupationByMesoId,
@@ -347,6 +400,7 @@ function rebuildLandAssignments(
         ownerByMesoId,
         occupationByMesoId,
         warAdjacency,
+        instrumentation,
       ),
     });
   }
@@ -426,7 +480,9 @@ function assignNationTargets(
   ownerByMesoId: Map<MesoRegionId, NationId>,
   occupationByMesoId: Map<MesoRegionId, NationId>,
   warAdjacency: WarAdjacency,
+  instrumentation?: SimulationInstrumentation,
 ): UnitState[] {
+  const defenseStartedAt = instrumentation ? performance.now() : 0;
   assignDefenseTargets(
     defenseUnits,
     nationId,
@@ -438,7 +494,16 @@ function assignNationTargets(
     ownerByMesoId,
     occupationByMesoId,
     warAdjacency,
+    instrumentation,
   );
+  if (instrumentation) {
+    instrumentation.recordDuration(
+      "assignment.defense",
+      performance.now() - defenseStartedAt,
+    );
+  }
+
+  const attackStartedAt = instrumentation ? performance.now() : 0;
   assignOccupationTargets(
     occupationUnits,
     nationId,
@@ -447,7 +512,14 @@ function assignNationTargets(
     neighborsById,
     ownerByMesoId,
     warAdjacency,
+    instrumentation,
   );
+  if (instrumentation) {
+    instrumentation.recordDuration(
+      "assignment.attack",
+      performance.now() - attackStartedAt,
+    );
+  }
 
   return [...defenseUnits, ...occupationUnits].sort((a, b) =>
     a.id.localeCompare(b.id),
@@ -465,6 +537,7 @@ function progressNationUnits(
   occupationByMesoId: Map<MesoRegionId, NationId>,
   warAdjacency: WarAdjacency,
   isBlockedByEnemy: (toId: MesoRegionId) => boolean,
+  instrumentation?: SimulationInstrumentation,
 ): boolean {
   let orderInvalidated = false;
   for (const unit of orderedUnits) {
@@ -486,11 +559,18 @@ function progressNationUnits(
             ? isPassableForNation(id, nationId, mesoById, ownerByMesoId, warAdjacency)
           : isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
         isBlockedByEnemy,
-        {
-          nationId,
-          pathMode: useWarPath ? "war" : "owned",
-          sharedPathFields,
-        },
+        instrumentation
+          ? {
+              nationId,
+              pathMode: useWarPath ? "war" : "owned",
+              sharedPathFields,
+              instrumentation,
+            }
+          : {
+              nationId,
+              pathMode: useWarPath ? "war" : "owned",
+              sharedPathFields,
+            },
       ) || orderInvalidated;
   }
   return orderInvalidated;
@@ -540,6 +620,9 @@ function moveUnitTowardTarget(
       unit.moveProgressMs = 0;
       return false;
     }
+    if (nextId !== previousId) {
+      pathContext?.instrumentation?.incrementCounter("movement.regionArrivals");
+    }
     if (unit.regionId === unit.moveTargetId) {
       unit.moveFromId = null;
       unit.moveToId = null;
@@ -566,11 +649,15 @@ function findNearestTarget(
   assignedTargets: Set<MesoRegionId>,
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
   isAllowed: (id: MesoRegionId) => boolean,
+  instrumentation?: SimulationInstrumentation,
 ): MesoRegionId | null {
+  const startedAt = instrumentation ? performance.now() : 0;
   if (!isAllowed(startId)) {
+    recordPathfindingSearch(instrumentation, startedAt, 0, false);
     return null;
   }
   if (targetSet.has(startId) && !assignedTargets.has(startId)) {
+    recordPathfindingSearch(instrumentation, startedAt, 1, true);
     return startId;
   }
 
@@ -590,6 +677,7 @@ function findNearestTarget(
         continue;
       }
       if (targetSet.has(neighbor) && !assignedTargets.has(neighbor)) {
+        recordPathfindingSearch(instrumentation, startedAt, visited.size + 1, true);
         return neighbor;
       }
       visited.add(neighbor);
@@ -597,6 +685,7 @@ function findNearestTarget(
     }
   }
 
+  recordPathfindingSearch(instrumentation, startedAt, visited.size, false);
   return null;
 }
 
@@ -640,21 +729,26 @@ function findSharedNextStep(
   isAllowed: (id: MesoRegionId) => boolean,
   context: SharedPathContext,
 ): MesoRegionId | null {
+  const instrumentation = context.instrumentation;
+  instrumentation?.incrementCounter("pathfinding.shared.requests");
   const key = `${context.nationId}:${context.pathMode}:${targetId}`;
   let field = context.sharedPathFields.get(key);
 
   const cachedNextStep = field?.nextHopByRegion.get(startId);
   const cachedUnreachable = field?.unreachableRegions.has(startId) ?? false;
   if (field && cachedNextStep && isAllowed(cachedNextStep)) {
+    instrumentation?.incrementCounter("pathfinding.shared.hits");
     context.sharedPathFields.delete(key);
     context.sharedPathFields.set(key, field);
     return cachedNextStep;
   }
   if (field && cachedUnreachable) {
+    instrumentation?.incrementCounter("pathfinding.shared.hits");
     context.sharedPathFields.delete(key);
     context.sharedPathFields.set(key, field);
     return null;
   }
+  instrumentation?.incrementCounter("pathfinding.shared.misses");
   if (field && cachedNextStep) {
     field.nextHopByRegion.delete(startId);
   }
@@ -665,6 +759,7 @@ function findSharedNextStep(
       unreachableRegions: new Set(),
     };
     context.sharedPathFields.set(key, field);
+    instrumentation?.incrementCounter("pathfinding.shared.fieldsCreated");
   }
 
   const nextStep = findNextStepAndPopulateCache(
@@ -673,6 +768,7 @@ function findSharedNextStep(
     neighborsById,
     isAllowed,
     field,
+    instrumentation,
   );
   context.sharedPathFields.delete(key);
   context.sharedPathFields.set(key, field);
@@ -691,7 +787,9 @@ function findNextStepAndPopulateCache(
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
   isAllowed: (id: MesoRegionId) => boolean,
   field: SharedPathField,
+  instrumentation?: SimulationInstrumentation,
 ): MesoRegionId | null {
+  const startedAt = instrumentation ? performance.now() : 0;
   const queue: MesoRegionId[] = [startId];
   const previous = new Map<MesoRegionId, MesoRegionId | null>();
   previous.set(startId, null);
@@ -716,13 +814,41 @@ function findNextStepAndPopulateCache(
         for (let i = 0; i < path.length - 1; i += 1) {
           field.nextHopByRegion.set(path[i], path[i + 1]);
         }
+        instrumentation?.incrementCounter(
+          "pathfinding.shared.entriesBuilt",
+          Math.max(0, path.length - 1),
+        );
+        recordPathfindingSearch(
+          instrumentation,
+          startedAt,
+          previous.size,
+          true,
+        );
         return path[1] ?? null;
       }
       queue.push(neighbor);
     }
   }
   field.unreachableRegions.add(startId);
+  recordPathfindingSearch(instrumentation, startedAt, previous.size, false);
   return null;
+}
+
+function recordPathfindingSearch(
+  instrumentation: SimulationInstrumentation | undefined,
+  startedAt: number,
+  exploredRegions: number,
+  found: boolean,
+): void {
+  if (!instrumentation) {
+    return;
+  }
+  instrumentation.recordDuration("pathfinding.bfs", performance.now() - startedAt);
+  instrumentation.incrementCounter("pathfinding.bfs");
+  instrumentation.incrementCounter("pathfinding.exploredRegions", exploredRegions);
+  instrumentation.incrementCounter(
+    found ? "pathfinding.bfsFound" : "pathfinding.bfsUnreachable",
+  );
 }
 
 function ensureMoveLeg(
@@ -989,6 +1115,7 @@ function assignDefenseTargets(
   ownerByMesoId: Map<MesoRegionId, NationId>,
   occupationByMesoId: Map<MesoRegionId, NationId>,
   warAdjacency: WarAdjacency,
+  instrumentation?: SimulationInstrumentation,
 ): void {
   if (units.length === 0) {
     return;
@@ -1053,6 +1180,7 @@ function assignDefenseTargets(
       assignedTargets,
       neighborsById,
       (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      instrumentation,
     );
   }
 
@@ -1077,6 +1205,7 @@ function assignDefenseTargets(
       assignedTargets,
       neighborsById,
       (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      instrumentation,
     );
   }
 
@@ -1094,6 +1223,7 @@ function assignDefenseTargets(
       assignedTargets,
       neighborsById,
       (id) => isPassableForNation(id, nationId, mesoById, ownerByMesoId, warAdjacency),
+      instrumentation,
     );
   }
 
@@ -1111,6 +1241,7 @@ function assignDefenseTargets(
       assignedTargets,
       neighborsById,
       (id) => isPassableForNation(id, nationId, mesoById, ownerByMesoId, warAdjacency),
+      instrumentation,
     );
   }
 
@@ -1128,6 +1259,7 @@ function assignDefenseTargets(
       assignedTargets,
       neighborsById,
       (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      instrumentation,
     );
   }
 
@@ -1152,6 +1284,7 @@ function assignDefenseTargets(
       assignedTargets,
       neighborsById,
       (id) => isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+      instrumentation,
     );
   }
 
@@ -1179,6 +1312,7 @@ function assignOccupationTargets(
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
   ownerByMesoId: Map<MesoRegionId, NationId>,
   warAdjacency: WarAdjacency,
+  instrumentation?: SimulationInstrumentation,
 ): void {
   if (units.length === 0) {
     return;
@@ -1212,6 +1346,7 @@ function assignOccupationTargets(
     assignedTargets,
     neighborsById,
     (id) => isPassableForNation(id, nationId, mesoById, ownerByMesoId, warAdjacency),
+    instrumentation,
   );
 
   if (remainingUnits.length > 0) {
@@ -1352,6 +1487,7 @@ function assignNearestTargets(
   assignedTargets: Set<MesoRegionId>,
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
   isAllowed: (id: MesoRegionId) => boolean,
+  instrumentation?: SimulationInstrumentation,
 ): UnitState[] {
   if (targetSet.size === 0 || assignedTargets.size >= targetSet.size) {
     return units;
@@ -1369,6 +1505,7 @@ function assignNearestTargets(
       assignedTargets,
       neighborsById,
       isAllowed,
+      instrumentation,
     );
     if (target) {
       unit.moveTargetId = target;
