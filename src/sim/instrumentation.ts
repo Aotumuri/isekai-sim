@@ -11,6 +11,8 @@ export type SimulationMetricName =
   | "landFront.allocation"
   | "offensiveOperation.evaluation"
   | "offensiveOperation.targetAssignment"
+  | "retreat.evaluation"
+  | "retreat.targetAssignment"
   | "updateOccupation"
   | "updateCapitals"
   | "surrender";
@@ -63,7 +65,18 @@ export type SimulationCounterName =
   | "offensiveOperation.targetChanges"
   | "offensiveOperation.targetConcentrationTotal"
   | "offensiveOperation.targetConcentrationSamples"
-  | "offensiveOperation.targetConcentrationMax";
+  | "offensiveOperation.targetConcentrationMax"
+  | "retreat.created"
+  | "retreat.completed"
+  | "retreat.cancelled"
+  | "retreat.phaseTransitions"
+  | "retreat.rearguardUnits"
+  | "retreat.withdrawingUnits"
+  | "retreat.arrivedUnits"
+  | "retreat.regroupedToFront"
+  | "retreat.returnedToDefense"
+  | "retreat.targetAssignments"
+  | "retreat.unitTargetSwitches";
 
 /**
  * Optional benchmark observer. Production worlds do not install one, so hot paths

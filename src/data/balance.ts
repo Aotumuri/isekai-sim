@@ -186,6 +186,23 @@ export const WORLD_BALANCE = {
         historyLimit: 256,
         timelineLimit: 512,
       },
+      retreat: {
+        persistenceTicks: 20,
+        extremeDisadvantageRatio: 0.22,
+        rearguardStrengthFraction: 0.3,
+        minimumRearguardStrengthFraction: 0.2,
+        maximumRearguardStrengthFraction: 0.4,
+        minimumUnits: 2,
+        fallbackClusterSize: 3,
+        minimumFallbackDepth: 2,
+        arrivalRadius: 0,
+        arrivalRatio: 0.65,
+        regroupTicks: 30,
+        maximumRegroupTicks: 100,
+        restartCooldownTicks: 120,
+        historyLimit: 256,
+        timelineLimit: 512,
+      },
     },
     declare: {
       slowTickRange: {

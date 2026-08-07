@@ -25,6 +25,7 @@ import {
   getOffensiveOperationForFront,
   type OffensiveOperation,
 } from "../offensive-operations";
+import { getRetreatPlans, type RetreatPlan } from "../retreat-plans";
 
 const LAND_TARGET_REASSIGN_INTERVAL_TICKS = 10;
 const MAX_SHARED_PATH_FIELDS = 256;
@@ -32,6 +33,7 @@ const MAX_SHARED_PATH_FIELDS = 256;
 interface LandMovementGroup {
   nationId: NationId;
   units: UnitState[];
+  controlledOnly?: boolean;
 }
 
 interface LandAiRuntime {
@@ -46,6 +48,7 @@ interface LandAiRuntime {
   warCount: number;
   frontAllocationMembershipVersion: number;
   offensiveOperationVersion: number;
+  retreatPlanVersion: number;
   warAdjacency: WarAdjacency;
   movementGroups: LandMovementGroup[];
   unitsExpectedToHaveTarget: Set<UnitState["id"]>;
@@ -115,6 +118,8 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     world.frontAllocations.membershipVersion;
   const offensiveOperationChanged =
     runtime.offensiveOperationVersion !== world.offensiveOperations.version;
+  const retreatPlanChanged =
+    runtime.retreatPlanVersion !== world.retreatPlans.version;
   const periodicReassignmentDue =
     world.time.fastTick - runtime.lastAssignmentFastTick >=
     LAND_TARGET_REASSIGN_INTERVAL_TICKS;
@@ -128,6 +133,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     warsChanged ||
     frontAllocationChanged ||
     offensiveOperationChanged ||
+    retreatPlanChanged ||
     periodicReassignmentDue;
 
   const mesoById = getMesoById(world);
@@ -182,6 +188,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     runtime.frontAllocationMembershipVersion =
       world.frontAllocations.membershipVersion;
     runtime.offensiveOperationVersion = world.offensiveOperations.version;
+    runtime.retreatPlanVersion = world.retreatPlans.version;
     runtime.forceReassignment = false;
   }
 
@@ -213,6 +220,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
       occupationByMesoId,
       warAdjacency,
       isBlockedByEnemy,
+      group.controlledOnly ?? false,
       instrumentation,
     );
     if (orderInvalidated) {
@@ -244,6 +252,7 @@ function getLandAiRuntime(world: WorldState): LandAiRuntime {
     warCount: -1,
     frontAllocationMembershipVersion: -1,
     offensiveOperationVersion: -1,
+    retreatPlanVersion: -1,
     warAdjacency: new Map(),
     movementGroups: [],
     unitsExpectedToHaveTarget: new Set(),
@@ -397,24 +406,71 @@ function rebuildLandAssignments(
     const occupationTargets = occupationTargetsByNationId.get(nationId) ?? [];
     const nation = nationById.get(nationId);
     const frontAllocations = getNationFrontAllocations(world, nationId);
+    const retreatPlans = getRetreatPlans(world, nationId);
+    const retreatUnitIds = new Set(
+      retreatPlans.flatMap((retreat) => [
+        ...retreat.rearguardUnitIds,
+        ...retreat.retreatingUnitIds,
+      ]),
+    );
+    const normalNationUnits = units.filter((unit) => !retreatUnitIds.has(unit.id));
+    for (const retreat of retreatPlans) {
+      const rearguardUnits = retreat.rearguardUnitIds
+        .map((unitId) => unitById.get(unitId))
+        .filter((unit): unit is UnitState => !!unit && unit.nationId === nationId);
+      const withdrawingUnits = retreat.retreatingUnitIds
+        .map((unitId) => unitById.get(unitId))
+        .filter((unit): unit is UnitState => !!unit && unit.nationId === nationId);
+      if (rearguardUnits.length > 0) {
+        movementGroups.push(
+          buildRetreatRearguardMovementGroup(
+            world,
+            retreat,
+            rearguardUnits,
+            intrusionTargets,
+            liberationTargets,
+            nation,
+            mesoById,
+            neighborsById,
+            ownerByMesoId,
+            occupationByMesoId,
+            warAdjacency,
+            instrumentation,
+          ),
+        );
+      }
+      if (withdrawingUnits.length > 0) {
+        movementGroups.push(
+          buildRetreatMovementGroup(
+            world,
+            retreat,
+            withdrawingUnits,
+            nation,
+            instrumentation,
+          ),
+        );
+      }
+    }
     if (frontAllocations.length === 0) {
-      movementGroups.push(
-        buildLandMovementGroup(
-          nationId,
-          units,
-          intrusionTargets,
-          liberationTargets,
-          borderTargets,
-          occupationTargets,
-          nation,
-          mesoById,
-          neighborsById,
-          ownerByMesoId,
-          occupationByMesoId,
-          warAdjacency,
-          instrumentation,
-        ),
-      );
+      if (normalNationUnits.length > 0) {
+        movementGroups.push(
+          buildLandMovementGroup(
+            nationId,
+            normalNationUnits,
+            intrusionTargets,
+            liberationTargets,
+            borderTargets,
+            occupationTargets,
+            nation,
+            mesoById,
+            neighborsById,
+            ownerByMesoId,
+            occupationByMesoId,
+            warAdjacency,
+            instrumentation,
+          ),
+        );
+      }
       continue;
     }
 
@@ -430,7 +486,12 @@ function rebuildLandAssignments(
       }
       const allocatedUnits = allocation.unitIds
         .map((unitId) => unitById.get(unitId))
-        .filter((unit): unit is UnitState => !!unit && unit.nationId === nationId);
+        .filter(
+          (unit): unit is UnitState =>
+            !!unit &&
+            unit.nationId === nationId &&
+            !retreatUnitIds.has(unit.id),
+        );
       if (allocatedUnits.length === 0) {
         continue;
       }
@@ -499,7 +560,12 @@ function rebuildLandAssignments(
 
     const unassignedUnits = getUnassignedLandUnitIds(world, nationId)
       .map((unitId) => unitById.get(unitId))
-      .filter((unit): unit is UnitState => !!unit && unit.nationId === nationId);
+      .filter(
+        (unit): unit is UnitState =>
+          !!unit &&
+          unit.nationId === nationId &&
+          !retreatUnitIds.has(unit.id),
+      );
     clearUnitMovement(unassignedUnits);
   }
 
@@ -617,6 +683,98 @@ function buildOperationMovementGroup(
     );
   }
   return { nationId: operation.nationId, units: orderedUnits };
+}
+
+function buildRetreatRearguardMovementGroup(
+  world: WorldState,
+  retreat: RetreatPlan,
+  units: UnitState[],
+  intrusionTargets: MesoRegionId[],
+  liberationTargets: MesoRegionId[],
+  nation: WorldState["nations"][number] | undefined,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+  occupationByMesoId: Map<MesoRegionId, NationId>,
+  warAdjacency: WarAdjacency,
+  instrumentation?: SimulationInstrumentation,
+): LandMovementGroup {
+  const front = world.landFronts.physicalFrontsById.get(retreat.frontId);
+  const friendlySide = front ? getFrontSide(front, retreat.nationId) : undefined;
+  const enemySide = front ? getOpposingFrontSide(front, retreat.nationId) : undefined;
+  if (!friendlySide || !enemySide) {
+    clearUnitMovement(units);
+    nation?.unitRoles.defenseUnitIds.push(...units.map((unit) => unit.id));
+    return { nationId: retreat.nationId, units: [...units].sort(compareUnitIds) };
+  }
+  const frontScope = new Set([
+    ...friendlySide.influenceRegionIds,
+    ...enemySide.influenceRegionIds,
+  ]);
+  return buildLandMovementGroup(
+    retreat.nationId,
+    units,
+    intrusionTargets.filter((id) => frontScope.has(id)),
+    liberationTargets.filter((id) => frontScope.has(id)),
+    friendlySide.borderRegionIds,
+    [],
+    nation,
+    mesoById,
+    neighborsById,
+    ownerByMesoId,
+    occupationByMesoId,
+    warAdjacency,
+    instrumentation,
+    new Set(friendlySide.influenceRegionIds),
+  );
+}
+
+function buildRetreatMovementGroup(
+  world: WorldState,
+  retreat: RetreatPlan,
+  units: UnitState[],
+  nation: WorldState["nations"][number] | undefined,
+  instrumentation?: SimulationInstrumentation,
+): LandMovementGroup {
+  const startedAt = instrumentation ? performance.now() : 0;
+  const orderedUnits = [...units].sort(compareUnitIds);
+  let assignmentCount = 0;
+  let switchCount = 0;
+  for (const unit of orderedUnits) {
+    const targetId =
+      retreat.unitTargetRegionIds.get(unit.id) ?? retreat.fallbackRegionIds[0];
+    if (!targetId || unit.moveTargetId === targetId) {
+      continue;
+    }
+    if (unit.moveTargetId) {
+      switchCount += 1;
+    }
+    unit.moveTargetId = targetId;
+    unit.moveFromId = null;
+    unit.moveToId = null;
+    unit.moveProgressMs = 0;
+    assignmentCount += 1;
+  }
+  nation?.unitRoles.defenseUnitIds.push(...orderedUnits.map((unit) => unit.id));
+  world.retreatPlans.targetAssignmentCount += assignmentCount;
+  world.retreatPlans.unitTargetSwitchCount += switchCount;
+  instrumentation?.incrementCounter("retreat.targetAssignments", assignmentCount);
+  instrumentation?.incrementCounter("retreat.unitTargetSwitches", switchCount);
+  if (instrumentation) {
+    instrumentation.recordDuration(
+      "retreat.targetAssignment",
+      performance.now() - startedAt,
+    );
+  }
+  return {
+    nationId: retreat.nationId,
+    units: orderedUnits,
+    controlledOnly: true,
+  };
+}
+
+function compareUnitIds(a: UnitState, b: UnitState): number {
+  return a.id.localeCompare(b.id);
 }
 
 export function repositionNavalUnits(world: WorldState, dtMs: number): void {
@@ -741,18 +899,21 @@ function progressNationUnits(
   occupationByMesoId: Map<MesoRegionId, NationId>,
   warAdjacency: WarAdjacency,
   isBlockedByEnemy: (toId: MesoRegionId) => boolean,
+  controlledOnly: boolean,
   instrumentation?: SimulationInstrumentation,
 ): boolean {
   let orderInvalidated = false;
   for (const unit of orderedUnits) {
-    const useWarPath = shouldUseWarPath(
-      unit,
-      nationId,
-      ownerByMesoId,
-      occupationByMesoId,
-      mesoById,
-      warAdjacency,
-    );
+    const useWarPath =
+      !controlledOnly &&
+      shouldUseWarPath(
+        unit,
+        nationId,
+        ownerByMesoId,
+        occupationByMesoId,
+        mesoById,
+        warAdjacency,
+      );
     orderInvalidated =
       moveUnitTowardTarget(
         unit,
@@ -761,7 +922,15 @@ function progressNationUnits(
         (id) =>
           useWarPath
             ? isPassableForNation(id, nationId, mesoById, ownerByMesoId, warAdjacency)
-          : isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
+            : controlledOnly
+              ? isControlledPassable(
+                  id,
+                  nationId,
+                  mesoById,
+                  ownerByMesoId,
+                  occupationByMesoId,
+                )
+              : isOwnedPassable(id, nationId, mesoById, ownerByMesoId),
         isBlockedByEnemy,
         instrumentation
           ? {
@@ -2122,6 +2291,21 @@ function isOwnedPassable(
   ownerByMesoId: Map<MesoRegionId, NationId>,
 ): boolean {
   if (ownerByMesoId.get(id) !== nationId) {
+    return false;
+  }
+  const meso = mesoById.get(id);
+  return !!meso && isPassable(meso);
+}
+
+function isControlledPassable(
+  id: MesoRegionId,
+  nationId: NationId,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+  ownerByMesoId: Map<MesoRegionId, NationId>,
+  occupationByMesoId: Map<MesoRegionId, NationId>,
+): boolean {
+  const controller = occupationByMesoId.get(id) ?? ownerByMesoId.get(id);
+  if (controller !== nationId) {
     return false;
   }
   const meso = mesoById.get(id);

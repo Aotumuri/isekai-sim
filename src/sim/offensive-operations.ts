@@ -200,6 +200,13 @@ export function updateOffensiveOperations(world: WorldState): void {
       if (state.operationsByFrontNation.has(createFrontNationKey(plan.frontId, nationId))) {
         continue;
       }
+      if (
+        world.retreatPlans.plansByFrontNation.has(
+          createFrontNationKey(plan.frontId, nationId),
+        )
+      ) {
+        continue;
+      }
       const operation = createOperation(world, plan);
       if (!operation) {
         continue;
@@ -266,6 +273,29 @@ export function getOffensiveOperationForUnit(
   return operationId
     ? world.offensiveOperations.operationsById.get(operationId)
     : undefined;
+}
+
+/** Immediately releases operation membership before a RetreatPlan claims the force. */
+export function cancelOffensiveOperationForRetreat(
+  world: WorldState,
+  frontId: FrontId,
+  nationId: NationId,
+): boolean {
+  const state = world.offensiveOperations;
+  const operation = state.operationsByFrontNation.get(
+    createFrontNationKey(frontId, nationId),
+  );
+  if (!operation || operation.phase === "recovering") {
+    return false;
+  }
+  const previousMembership = state.operationIdByUnitId;
+  finishOperation(world, operation, "cancelled", "posture-changed");
+  rebuildOperationIndexes(state);
+  if (!areAssignmentMapsEqual(previousMembership, state.operationIdByUnitId)) {
+    state.membershipVersion += 1;
+  }
+  state.version += 1;
+  return true;
 }
 
 export function formatOffensiveOperationSummary(world: WorldState): string {

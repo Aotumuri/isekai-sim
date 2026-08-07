@@ -37,6 +37,7 @@ export interface NationFrontAllocationState {
   version: number;
   membershipVersion: number;
   sourcePlanVersion: number;
+  sourceRetreatMembershipVersion: number;
   unitsReference: UnitState[] | null;
   unitIdCounter: number;
   landUnitCount: number;
@@ -77,6 +78,7 @@ export function createNationFrontAllocationState(): NationFrontAllocationState {
     version: 0,
     membershipVersion: 0,
     sourcePlanVersion: -1,
+    sourceRetreatMembershipVersion: -1,
     unitsReference: null,
     unitIdCounter: -1,
     landUnitCount: -1,
@@ -96,7 +98,11 @@ export function updateNationFrontAllocations(world: WorldState): void {
     state.unitsReference !== world.units ||
     state.unitIdCounter !== world.unitIdCounter ||
     state.landUnitCount !== landUnits.length;
-  if (state.sourcePlanVersion === world.frontPlans.version && !unitsChanged) {
+  if (
+    state.sourcePlanVersion === world.frontPlans.version &&
+    state.sourceRetreatMembershipVersion === world.retreatPlans.membershipVersion &&
+    !unitsChanged
+  ) {
     return;
   }
 
@@ -132,7 +138,9 @@ export function updateNationFrontAllocations(world: WorldState): void {
     if (!activeNationIds.has(nationId)) {
       continue;
     }
-    const units = unitsByNationId.get(nationId) ?? [];
+    const units = (unitsByNationId.get(nationId) ?? []).filter(
+      (unit) => !world.retreatPlans.retreatIdByUnitId.has(unit.id),
+    );
     const result = allocateNationUnits(
       world,
       nationId,
@@ -177,6 +185,7 @@ export function updateNationFrontAllocations(world: WorldState): void {
     state.membershipVersion += 1;
   }
   state.sourcePlanVersion = world.frontPlans.version;
+  state.sourceRetreatMembershipVersion = world.retreatPlans.membershipVersion;
   state.unitsReference = world.units;
   state.unitIdCounter = world.unitIdCounter;
   state.landUnitCount = landUnits.length;

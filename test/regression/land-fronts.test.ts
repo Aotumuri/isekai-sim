@@ -38,6 +38,14 @@ import {
   type OffensiveOperation,
 } from "../../src/sim/offensive-operations";
 import {
+  createRetreatPlanState,
+  formatRetreatPlanSummary,
+  getRetreatPlanForUnit,
+  getRetreatPlans,
+  updateRetreatPlans,
+  type RetreatPlan,
+} from "../../src/sim/retreat-plans";
+import {
   createNationResourceFlow,
   createNationResources,
   type NationRuntime,
@@ -1080,6 +1088,397 @@ test("attacking operation units deliberately share one to three targets", () => 
   assert(Math.max(...counts.values()) >= 2);
 });
 
+test("only a retreat posture creates a RetreatPlan", () => {
+  const world = createRetreatCandidateWorld();
+  assert.equal(planFor(world, NATION_A).posture, "retreat");
+
+  updateRetreatPlans(world);
+
+  assert.equal(getRetreatPlans(world, NATION_A).length, 1);
+});
+
+test("attack, hold, and reinforce postures do not create RetreatPlans", () => {
+  for (const posture of ["attack", "hold", "reinforce"] as const) {
+    const world = createRetreatCandidateWorld();
+    planFor(world, NATION_A).posture = posture;
+    updateRetreatPlans(world);
+    assert.equal(getRetreatPlans(world, NATION_A).length, 0, posture);
+  }
+});
+
+test("non-extreme retreat posture must persist before starting withdrawal", () => {
+  const world = createRetreatCandidateWorld();
+  const front = getPhysicalFrontsForNation(world, NATION_A)[0];
+  assert(front);
+  const friendly = getFrontSide(front, NATION_A);
+  const enemy = getFrontSide(front, NATION_B);
+  assert(friendly && enemy);
+  friendly.strength = 30;
+  enemy.strength = 100;
+
+  updateRetreatPlans(world);
+  assert.equal(getRetreatPlans(world, NATION_A).length, 0);
+  world.time.fastTick += WORLD_BALANCE.war.landFront.retreat.persistenceTicks - 1;
+  updateRetreatPlans(world);
+  assert.equal(getRetreatPlans(world, NATION_A).length, 0);
+  world.time.fastTick += 1;
+  updateRetreatPlans(world);
+  assert.equal(getRetreatPlans(world, NATION_A).length, 1);
+});
+
+test("fallback selection strongly prefers the friendly capital cluster", () => {
+  const world = createRetreatWorld();
+  assert(onlyRetreat(world).fallbackRegionIds.includes(id("a-cap")));
+});
+
+test("rearguard and withdrawing forces never overlap", () => {
+  const world = createRetreatWorld();
+  const retreat = onlyRetreat(world);
+  const rearguard = new Set(retreat.rearguardUnitIds);
+
+  assert(retreat.rearguardUnitIds.length > 0);
+  assert(retreat.retreatingUnitIds.length > 0);
+  assert(retreat.retreatingUnitIds.every((unitId) => !rearguard.has(unitId)));
+});
+
+test("rearguard retains a bounded covering share of initial strength", () => {
+  const retreat = onlyRetreat(createRetreatWorld());
+  const share =
+    retreat.initialRearguardStrength /
+    (retreat.initialRearguardStrength + retreat.initialRetreatingStrength);
+
+  assert(share >= 0.2 && share <= 0.4);
+});
+
+test("a unit never belongs to multiple RetreatPlans", () => {
+  const world = createRetreatWorld();
+  updateRetreatPlans(world);
+  const unitIds = getRetreatPlans(world).flatMap((retreat) => [
+    ...retreat.rearguardUnitIds,
+    ...retreat.retreatingUnitIds,
+  ]);
+
+  assert.equal(new Set(unitIds).size, unitIds.length);
+  assert.equal(world.retreatPlans.retreatIdByUnitId.size, unitIds.length);
+});
+
+test("OffensiveOperation membership is released before retreat membership", () => {
+  const world = createOperationWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  planFor(world, NATION_A).posture = "retreat";
+  updateRetreatPlans(world);
+  world.time.fastTick += WORLD_BALANCE.war.landFront.retreat.persistenceTicks;
+  updateRetreatPlans(world);
+  const retreat = onlyRetreat(world);
+
+  assert.equal(operation.outcome, "cancelled");
+  for (const unitId of [
+    ...retreat.rearguardUnitIds,
+    ...retreat.retreatingUnitIds,
+  ]) {
+    assert.equal(getOffensiveOperationForUnit(world, unitId), undefined);
+  }
+});
+
+test("fallback regions remain under friendly effective control", () => {
+  const world = createRetreatWorld();
+  const retreat = onlyRetreat(world);
+  const ownerByRegion = new Map<MesoRegionId, NationId>();
+  for (const macro of world.macroRegions) {
+    for (const regionId of macro.mesoRegionIds) ownerByRegion.set(regionId, macro.nationId);
+  }
+
+  assert(
+    retreat.fallbackRegionIds.every(
+      (regionId) =>
+        (world.occupation.mesoById.get(regionId) ?? ownerByRegion.get(regionId)) ===
+        NATION_A,
+    ),
+  );
+});
+
+test("fallback selection excludes sea regions", () => {
+  const world = createRetreatCandidateWorld();
+  const capital = world.mesoRegions.find((region) => region.id === id("a-cap"));
+  assert(capital);
+  capital.type = "sea";
+
+  updateRetreatPlans(world);
+
+  assert(
+    onlyRetreat(world).fallbackRegionIds.every(
+      (regionId) => world.mesoRegions.find((region) => region.id === regionId)?.type !== "sea",
+    ),
+  );
+});
+
+test("fallback selection excludes regions occupied by enemy units", () => {
+  const world = createRetreatCandidateWorld();
+  addLandUnit(world, NATION_B, "a-cap", "Infantry");
+
+  updateRetreatPlans(world);
+
+  assert(!onlyRetreat(world).fallbackRegionIds.includes(id("a-cap")));
+});
+
+test("fallback regions form a compact cluster", () => {
+  const world = createRetreatWorld();
+  const fallback = onlyRetreat(world).fallbackRegionIds;
+
+  assert(fallback.length >= 1 && fallback.length <= 3);
+  for (const regionId of fallback) {
+    assert(isWithinTestDistance(world, fallback[0], regionId, 2));
+  }
+});
+
+test("withdrawing units do not pursue enemy Front targets", () => {
+  const world = createRetreatWorld();
+  const retreat = onlyRetreat(world);
+  repositionUnits(world, 100);
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+
+  for (const unitId of retreat.retreatingUnitIds) {
+    assert(retreat.fallbackRegionIds.includes(unitById.get(unitId)?.moveTargetId ?? id("")));
+    assert.notEqual(unitById.get(unitId)?.moveTargetId, id("b-front"));
+  }
+});
+
+test("withdrawing units prioritize their assigned fallback targets", () => {
+  const world = createRetreatWorld();
+  const retreat = onlyRetreat(world);
+  repositionUnits(world, 100);
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+
+  for (const [unitId, targetId] of retreat.unitTargetRegionIds) {
+    assert.equal(unitById.get(unitId)?.moveTargetId, targetId);
+  }
+});
+
+test("an active retreat safely survives disappearance of its original Front", () => {
+  const world = createRetreatWorld();
+  const retreatId = onlyRetreat(world).id;
+  world.landFronts.physicalFronts = [];
+  world.landFronts.physicalFrontsById.clear();
+
+  updateRetreatPlans(world);
+
+  assert.equal(getRetreatPlans(world)[0]?.id, retreatId);
+});
+
+test("war end cancels and archives an active retreat", () => {
+  const world = createRetreatWorld();
+  world.wars = [];
+
+  updateRetreatPlans(world);
+
+  assert.equal(getRetreatPlans(world).length, 0);
+  assert.equal(world.retreatPlans.history.at(-1)?.completionReason, "war-ended");
+});
+
+test("nation elimination cleans up an active retreat", () => {
+  const world = createRetreatWorld();
+  const nation = world.nations.find((candidate) => candidate.id === NATION_A);
+  assert(nation);
+  nation.macroRegionIds = [];
+
+  updateRetreatPlans(world);
+
+  assert.equal(getRetreatPlans(world).length, 0);
+  assert.equal(
+    world.retreatPlans.history.at(-1)?.completionReason,
+    "nation-eliminated",
+  );
+});
+
+test("regrouping units do not immediately enter a new offensive operation", () => {
+  const world = createRetreatWorld();
+  const retreat = onlyRetreat(world);
+  moveRetreatingForceToFallback(world, retreat);
+  updateRetreatPlans(world);
+  assert.equal(retreat.phase, "regrouping");
+  planFor(world, NATION_A).posture = "attack";
+
+  updateNationFrontAllocations(world);
+  updateOffensiveOperations(world);
+
+  assert.equal(getOffensiveOperations(world, NATION_A).length, 0);
+});
+
+test("completed retreat units return to normal Front allocation", () => {
+  const world = createRetreatWorld();
+  const retreat = onlyRetreat(world);
+  const retreatingIds = [...retreat.retreatingUnitIds];
+  moveRetreatingForceToFallback(world, retreat);
+  updateRetreatPlans(world);
+  world.time.fastTick += WORLD_BALANCE.war.landFront.retreat.regroupTicks;
+  updateRetreatPlans(world);
+  planFor(world, NATION_A).posture = "hold";
+  updateNationFrontAllocations(world);
+
+  assert.equal(getRetreatPlans(world).length, 0);
+  assert(retreatingIds.some((unitId) => getAllocatedFrontId(world, unitId)));
+});
+
+test("all RetreatPlan region references are valid", () => {
+  const world = createRetreatWorld();
+  const validRegionIds = new Set(world.mesoRegions.map((region) => region.id));
+
+  for (const retreat of getRetreatPlans(world)) {
+    assert(retreat.fallbackRegionIds.every((regionId) => validRegionIds.has(regionId)));
+    assert(
+      [...retreat.unitTargetRegionIds.values()].every((regionId) =>
+        validRegionIds.has(regionId),
+      ),
+    );
+  }
+});
+
+test("RetreatPlan numeric state contains no NaN or Infinity", () => {
+  const world = createRetreatWorld();
+  const retreat = onlyRetreat(world);
+  for (const value of [
+    retreat.createdAtTick,
+    retreat.startedAtTick,
+    retreat.phaseStartedAtTick,
+    retreat.initialUnitCount,
+    retreat.initialRearguardUnitCount,
+    retreat.initialRetreatingUnitCount,
+    retreat.initialFriendlyStrength,
+    retreat.initialEnemyStrength,
+    retreat.initialRearguardStrength,
+    retreat.initialRetreatingStrength,
+    retreat.currentRetreatingStrength,
+    retreat.arrivedUnitCount,
+    retreat.arrivedStrength,
+  ]) {
+    assert(Number.isFinite(value));
+  }
+  assert.match(formatRetreatPlanSummary(world), /fallback:/);
+});
+
+test("naval units never enter RetreatPlans", () => {
+  const world = createRetreatCandidateWorld();
+  const naval = createUnitForType(
+    createUnitId(world.unitIdCounter),
+    NATION_A,
+    id("a-cap"),
+    "CombatShip",
+  );
+  world.unitIdCounter += 1;
+  world.units.push(naval);
+  updateNationFrontAllocations(world);
+  updateRetreatPlans(world);
+
+  assert.equal(getRetreatPlanForUnit(world, naval.id), undefined);
+});
+
+test("retreat movement creates no path loop", () => {
+  const world = createRetreatWorld();
+  for (let tick = 0; tick < 40; tick += 1) {
+    world.time.fastTick += 1;
+    repositionUnits(world, 100);
+  }
+
+  for (const unit of world.units.filter((candidate) => candidate.domain === "land")) {
+    assert(Number.isFinite(unit.moveProgressMs));
+    assert(unit.moveFromId === null || unit.moveFromId !== unit.moveToId);
+  }
+});
+
+test("active retreat units are temporarily unavailable to Front allocation", () => {
+  const world = createRetreatWorld();
+  const retreat = onlyRetreat(world);
+  const committed = [
+    ...retreat.rearguardUnitIds,
+    ...retreat.retreatingUnitIds,
+  ];
+
+  updateNationFrontAllocations(world);
+
+  assert(committed.every((unitId) => !world.frontAllocations.frontIdByUnitId.has(unitId)));
+});
+
+test("RetreatPlan creation and fallback assignment are fixed-seed deterministic", () => {
+  const worldA = createRetreatWorld();
+  const worldB = createRetreatWorld();
+  const retreatA = onlyRetreat(worldA);
+  const retreatB = onlyRetreat(worldB);
+
+  assert.deepEqual(
+    {
+      rearguard: retreatA.rearguardUnitIds,
+      withdrawing: retreatA.retreatingUnitIds,
+      fallback: retreatA.fallbackRegionIds,
+      targets: [...retreatA.unitTargetRegionIds],
+    },
+    {
+      rearguard: retreatB.rearguardUnitIds,
+      withdrawing: retreatB.retreatingUnitIds,
+      fallback: retreatB.fallbackRegionIds,
+      targets: [...retreatB.unitTargetRegionIds],
+    },
+  );
+});
+
+function createRetreatCandidateWorld(): WorldState {
+  const world = createFrontWorld(
+    [
+      { id: "a-cap", owner: NATION_A, building: "capital" },
+      { id: "a-city", owner: NATION_A, building: "city" },
+      { id: "a-safe", owner: NATION_A },
+      { id: "a-alt", owner: NATION_A },
+      { id: "a-front", owner: NATION_A },
+      { id: "b-front", owner: NATION_B },
+    ],
+    [
+      ["a-cap", "a-city"],
+      ["a-city", "a-safe"],
+      ["a-city", "a-alt"],
+      ["a-safe", "a-alt"],
+      ["a-safe", "a-front"],
+      ["a-front", "b-front"],
+    ],
+  );
+  startWar(world, NATION_A, NATION_B);
+  for (let index = 0; index < 8; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_A, "a-front", "Infantry"), 20);
+    setUnitStrength(addLandUnit(world, NATION_B, "b-front", "Infantry"), 100);
+  }
+  updateAllocationSystem(world);
+  return world;
+}
+
+function createRetreatWorld(): WorldState {
+  const world = createRetreatCandidateWorld();
+  updateRetreatPlans(world);
+  assert.equal(getRetreatPlans(world, NATION_A).length, 1);
+  return world;
+}
+
+function onlyRetreat(world: WorldState): RetreatPlan {
+  const retreats = getRetreatPlans(world, NATION_A);
+  assert.equal(retreats.length, 1);
+  return retreats[0];
+}
+
+function moveRetreatingForceToFallback(
+  world: WorldState,
+  retreat: RetreatPlan,
+): void {
+  const fallbackId = retreat.fallbackRegionIds[0];
+  assert(fallbackId);
+  const retreatingIds = new Set(retreat.retreatingUnitIds);
+  for (const unit of world.units) {
+    if (!retreatingIds.has(unit.id)) continue;
+    unit.regionId = retreat.unitTargetRegionIds.get(unit.id) ?? fallbackId;
+    unit.moveTargetId = unit.regionId;
+    unit.moveFromId = null;
+    unit.moveToId = null;
+    unit.moveProgressMs = 0;
+  }
+}
+
 function createOperationWorld(): WorldState {
   const world = createFrontWorld(
     [
@@ -1387,6 +1786,7 @@ function createFrontWorld(
     frontPlans: createNationFrontPlanState(),
     frontAllocations: createNationFrontAllocationState(),
     offensiveOperations: createOffensiveOperationState(),
+    retreatPlans: createRetreatPlanState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

@@ -94,6 +94,60 @@ export function assertWorldInvariants(world: WorldState): void {
       assert(mesoIds.has(targetId), `${operation.id} supporting target is missing`);
     }
   }
+  const retreatIds = new Set(world.retreatPlans.plans.map((retreat) => retreat.id));
+  assert.equal(
+    retreatIds.size,
+    world.retreatPlans.plans.length,
+    "retreat plan IDs must be unique",
+  );
+  const retreatUnitIds = new Set<string>();
+  for (const retreat of world.retreatPlans.plans) {
+    assert(nationIds.has(retreat.nationId), `${retreat.id} nation is missing`);
+    assert(nationIds.has(retreat.enemyNationId), `${retreat.id} enemy is missing`);
+    for (const fallbackId of retreat.fallbackRegionIds) {
+      assert(mesoIds.has(fallbackId), `${retreat.id} fallback is missing`);
+    }
+    const rearguardIds = new Set(retreat.rearguardUnitIds);
+    for (const unitId of retreat.retreatingUnitIds) {
+      assert(!rearguardIds.has(unitId), `${retreat.id} force groups overlap`);
+    }
+    for (const unitId of [
+      ...retreat.rearguardUnitIds,
+      ...retreat.retreatingUnitIds,
+    ]) {
+      assert(unitIds.has(unitId), `${retreat.id} references missing ${unitId}`);
+      assert(!retreatUnitIds.has(unitId), `${unitId} belongs to multiple retreats`);
+      assert(
+        !world.offensiveOperations.operationIdByUnitId.has(unitId),
+        `${unitId} belongs to a retreat and offensive operation`,
+      );
+      retreatUnitIds.add(unitId);
+    }
+    const initialRearguardIds = new Set(retreat.initialRearguardUnitIds);
+    assert(
+      retreat.initialRetreatingUnitIds.every(
+        (unitId) => !initialRearguardIds.has(unitId),
+      ),
+      `${retreat.id} initial force groups overlap`,
+    );
+    for (const value of [
+      retreat.createdAtTick,
+      retreat.startedAtTick,
+      retreat.phaseStartedAtTick,
+      retreat.initialUnitCount,
+      retreat.initialRearguardUnitCount,
+      retreat.initialRetreatingUnitCount,
+      retreat.initialFriendlyStrength,
+      retreat.initialEnemyStrength,
+      retreat.initialRearguardStrength,
+      retreat.initialRetreatingStrength,
+      retreat.currentRetreatingStrength,
+      retreat.arrivedUnitCount,
+      retreat.arrivedStrength,
+    ]) {
+      assert(Number.isFinite(value), `${retreat.id} numeric state must be finite`);
+    }
+  }
 }
 
 export function assertUnitRoleReferences(world: WorldState): void {
@@ -148,6 +202,20 @@ export function semanticWorldSignature(world: WorldState): unknown {
       targets: [...operation.unitTargetRegionIds.entries()],
       outcome: operation.outcome,
       reason: operation.completionReason,
+    })),
+    retreatPlans: world.retreatPlans.plans.map((retreat) => ({
+      id: retreat.id,
+      nation: retreat.nationId,
+      enemy: retreat.enemyNationId,
+      front: retreat.frontId,
+      phase: retreat.phase,
+      rearguard: [...retreat.rearguardUnitIds],
+      withdrawing: [...retreat.retreatingUnitIds],
+      fallback: [...retreat.fallbackRegionIds],
+      targets: [...retreat.unitTargetRegionIds.entries()],
+      arrived: retreat.arrivedUnitCount,
+      outcome: retreat.outcome,
+      reason: retreat.completionReason,
     })),
   };
 }

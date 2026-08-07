@@ -37,6 +37,34 @@ export function summarizeWorld(world: WorldState): WorldSummary {
         : 0,
     operationMaxTargetConcentration:
       world.offensiveOperations.maxTargetConcentration,
+    activeRetreatPlans: world.retreatPlans.plans.length,
+    retreatCommittedUnits: world.retreatPlans.retreatIdByUnitId.size,
+    retreatsCreated: world.retreatPlans.createdCount,
+    retreatsCompleted: world.retreatPlans.completedCount,
+    retreatsCancelled: world.retreatPlans.cancelledCount,
+    retreatSuccessRatePercent:
+      world.retreatPlans.createdCount > 0
+        ? (world.retreatPlans.successfulCount / world.retreatPlans.createdCount) * 100
+        : 0,
+    retreatArrivedUnits: world.retreatPlans.arrivedUnitCount,
+    retreatStrengthLossRatePercent:
+      world.retreatPlans.initialRetreatingStrength > 0
+        ? Math.max(
+            0,
+            (1 -
+              (world.retreatPlans.survivingRetreatingStrength +
+                world.retreatPlans.plans.reduce(
+                  (total, retreat) =>
+                    total + retreat.currentRetreatingStrength,
+                  0,
+                )) /
+                world.retreatPlans.initialRetreatingStrength) *
+              100,
+          )
+        : 0,
+    retreatRegroupedToFront: world.retreatPlans.regroupedToDefensiveFrontCount,
+    retreatReturnedToDefense: world.retreatPlans.returnedToHoldOrReinforceCount,
+    retreatUnitTargetSwitches: world.retreatPlans.unitTargetSwitchCount,
     microRegions: world.microRegions.length,
     mesoRegions: world.mesoRegions.length,
     macroRegions: world.macroRegions.length,
