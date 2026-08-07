@@ -11,6 +11,7 @@ import type { WarState } from "./war-state";
 import type { SeededRng } from "../utils/seeded-rng";
 import type { WorldCache } from "./world-cache";
 import type { SimulationInstrumentation } from "./instrumentation";
+import type { LandFrontState } from "./land-fronts";
 
 export interface WorldState {
   width: number;
@@ -23,6 +24,7 @@ export interface WorldState {
   wars: WarState[];
   battles: BattleState[];
   occupation: OccupationState;
+  landFronts: LandFrontState;
   mapVersion: number;
   territoryVersion: number;
   buildingVersion: number;

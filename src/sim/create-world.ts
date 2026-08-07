@@ -19,6 +19,7 @@ import {
   type NationRuntime,
 } from "./nation-runtime";
 import { createOccupationState } from "./occupation";
+import { createLandFrontState } from "./land-fronts";
 import { nextScheduledTickRange } from "./schedule";
 import { addTestWar } from "./test-war";
 import { createSimTime } from "./time";
@@ -81,6 +82,7 @@ export function createWorld(config: WorldConfig): WorldState {
   // addTestWar(wars, mesoRegions, macroRegions, rng, time.fastTick);
   const battles: BattleState[] = [];
   const occupation = createOccupationState();
+  const landFronts = createLandFrontState();
   const mapVersion = 0;
   const territoryVersion = 0;
   const buildingVersion = 0;
@@ -97,6 +99,7 @@ export function createWorld(config: WorldConfig): WorldState {
     wars,
     battles,
     occupation,
+    landFronts,
     mapVersion,
     territoryVersion,
     buildingVersion,

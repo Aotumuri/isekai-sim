@@ -10,6 +10,7 @@ import { updateProduction } from "./production";
 import { updateSurrender } from "./surrender";
 import { updateWarCooperation } from "./war-cooperation";
 import { updateWarDeclarations } from "./war-declaration";
+import { updateLandFronts } from "./land-fronts";
 import {
   FAST_TICK_MS,
   SLOW_TICK_MS,
@@ -115,4 +116,5 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   world.time.slowTick += 1;
   updateProduction(world);
   updateWarDeclarations(world);
+  updateLandFronts(world);
 }

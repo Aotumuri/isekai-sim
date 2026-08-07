@@ -42,6 +42,7 @@ export interface WorldSummary {
   wars: number;
   battles: number;
   occupations: number;
+  landFronts: number;
   microRegions: number;
   mesoRegions: number;
   macroRegions: number;

@@ -128,6 +128,12 @@ export const WORLD_BALANCE = {
   },
   war: {
     macroOccupationRatio: 0.6,
+    landFront: {
+      // One region is the smallest useful depth: it includes immediate reserves
+      // without merging armies from otherwise separate fronts.
+      influenceDistance: 1,
+      metricsRefreshIntervalTicks: 10,
+    },
     declare: {
       slowTickRange: {
         min: 5,

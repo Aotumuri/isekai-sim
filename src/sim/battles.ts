@@ -4,6 +4,7 @@ import type { NationId } from "../worldgen/nation";
 import type { UnitId, UnitState } from "./unit";
 import type { WorldState } from "./world-state";
 import { getMesoById } from "./world-cache";
+import { getUnitCombatStrength, getUnitDamageWeight } from "./unit-strength";
 import {
   addWarContribution,
   buildWarAdjacency,
@@ -453,7 +454,7 @@ function isUnitAlive(unit: UnitState, removedUnitIds: Set<UnitId>): boolean {
 function sumStrength(units: UnitState[]): number {
   let total = 0;
   for (const unit of units) {
-    total += getUnitStrength(unit);
+    total += getUnitCombatStrength(unit);
   }
   return total;
 }
@@ -464,28 +465,6 @@ function sumDamageWeight(units: UnitState[]): number {
     total += getUnitDamageWeight(unit);
   }
   return total;
-}
-
-function getUnitStrength(unit: UnitState): number {
-  return getUnitDamageWeight(unit) * Math.max(0, unit.combatPower);
-}
-
-function getUnitDamageWeight(unit: UnitState): number {
-  const avgFill = getAverageEquipmentFill(unit);
-  const orgFactor = 0.5 + unit.org * 0.5;
-  const equipmentFactor = 0.5 + avgFill * 0.5;
-  return Math.max(0, unit.manpower) * orgFactor * equipmentFactor;
-}
-
-function getAverageEquipmentFill(unit: UnitState): number {
-  if (unit.equipment.length === 0) {
-    return 1;
-  }
-  let sum = 0;
-  for (const slot of unit.equipment) {
-    sum += slot.fill;
-  }
-  return sum / unit.equipment.length;
 }
 
 function applyDamage(

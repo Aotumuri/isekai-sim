@@ -5,6 +5,8 @@ export type SimulationMetricName =
   | "assignment.attack"
   | "movement.progression"
   | "pathfinding.bfs"
+  | "landFront.rebuild"
+  | "landFront.metrics"
   | "updateOccupation"
   | "updateCapitals"
   | "surrender";
@@ -32,7 +34,10 @@ export type SimulationCounterName =
   | "occupation.regionsScanned"
   | "capitals.activeNationScans"
   | "world.occupationChanges"
-  | "world.territoryChanges";
+  | "world.territoryChanges"
+  | "landFront.rebuilds"
+  | "landFront.metricRefreshes"
+  | "landFront.frontsBuilt";
 
 /**
  * Optional benchmark observer. Production worlds do not install one, so hot paths

@@ -13,6 +13,7 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     wars: world.wars.length,
     battles: world.battles.length,
     occupations: world.occupation.mesoById.size,
+    landFronts: world.landFronts.fronts.length,
     microRegions: world.microRegions.length,
     mesoRegions: world.mesoRegions.length,
     macroRegions: world.macroRegions.length,
