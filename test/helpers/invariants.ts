@@ -72,6 +72,28 @@ export function assertWorldInvariants(world: WorldState): void {
     assert(mesoIds.has(mesoId), `occupation references missing ${mesoId}`);
     assert(nationIds.has(occupier), `occupation references missing ${occupier}`);
   }
+  const operationIds = new Set(
+    world.offensiveOperations.operations.map((operation) => operation.id),
+  );
+  assert.equal(
+    operationIds.size,
+    world.offensiveOperations.operations.length,
+    "operation IDs must be unique",
+  );
+  for (const operation of world.offensiveOperations.operations) {
+    assert(nationIds.has(operation.nationId), `${operation.id} nation is missing`);
+    assert(
+      mesoIds.has(operation.primaryTargetRegionId),
+      `${operation.id} primary target is missing`,
+    );
+    assert(
+      mesoIds.has(operation.stagingRegionId),
+      `${operation.id} staging region is missing`,
+    );
+    for (const targetId of operation.supportingTargetRegionIds) {
+      assert(mesoIds.has(targetId), `${operation.id} supporting target is missing`);
+    }
+  }
 }
 
 export function assertUnitRoleReferences(world: WorldState): void {
@@ -114,5 +136,18 @@ export function semanticWorldSignature(world: WorldState): unknown {
       battle.defenderNationId,
     ]),
     occupation: [...world.occupation.mesoById.entries()],
+    offensiveOperations: world.offensiveOperations.operations.map((operation) => ({
+      id: operation.id,
+      nation: operation.nationId,
+      front: operation.frontId,
+      phase: operation.phase,
+      primary: operation.primaryTargetRegionId,
+      supporting: [...operation.supportingTargetRegionIds],
+      staging: operation.stagingRegionId,
+      units: [...operation.assignedUnitIds],
+      targets: [...operation.unitTargetRegionIds.entries()],
+      outcome: operation.outcome,
+      reason: operation.completionReason,
+    })),
   };
 }

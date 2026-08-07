@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { WORLD_BALANCE } from "../../src/data/balance";
 import type { MicroRegionId } from "../../src/worldgen/micro-region";
 import type { MesoRegion, MesoRegionId } from "../../src/worldgen/meso-region";
 import { createMacroRegionId, type MacroRegion } from "../../src/worldgen/macro-region";
@@ -27,6 +28,15 @@ import {
   updateNationFrontAllocations,
 } from "../../src/sim/nation-front-allocations";
 import { repositionUnits } from "../../src/sim/nation/reposition-units";
+import {
+  createOffensiveOperationState,
+  formatOffensiveOperationSummary,
+  getOffensiveOperationForFront,
+  getOffensiveOperationForUnit,
+  getOffensiveOperations,
+  updateOffensiveOperations,
+  type OffensiveOperation,
+} from "../../src/sim/offensive-operations";
 import {
   createNationResourceFlow,
   createNationResources,
@@ -709,6 +719,453 @@ test("a moving border keeps allocation continuity when its deterministic ID chan
   assert.equal(world.frontAllocations.lastUnitSwitchCount, 0);
 });
 
+test("only an attack front creates an offensive operation", () => {
+  const world = createOperationWorld();
+
+  updateOffensiveOperations(world);
+
+  const [operation] = getOffensiveOperations(world, NATION_A);
+  assert(operation);
+  assert.equal(planFor(world, NATION_A).posture, "attack");
+  assert.equal(operation.frontId, planFor(world, NATION_A).frontId);
+});
+
+test("hold, reinforce, and retreat fronts do not start operations", () => {
+  for (const posture of ["hold", "reinforce", "retreat"] as const) {
+    const world = createOperationWorld();
+    planFor(world, NATION_A).posture = posture;
+
+    updateOffensiveOperations(world);
+
+    assert.equal(getOffensiveOperations(world, NATION_A).length, 0, posture);
+  }
+});
+
+test("a nation respects the active offensive operation limit", () => {
+  const world = createAllocatedTwoFrontWorld();
+
+  updateOffensiveOperations(world);
+
+  assert.equal(
+    getOffensiveOperations(world, NATION_A).length,
+    WORLD_BALANCE.war.landFront.offensiveOperation.maxActivePerNation,
+  );
+});
+
+test("a land unit never belongs to multiple offensive operations", () => {
+  const world = createOperationWorld();
+  updateOffensiveOperations(world);
+  const unitIds = getOffensiveOperations(world).flatMap(
+    (operation) => operation.assignedUnitIds,
+  );
+
+  assert.equal(new Set(unitIds).size, unitIds.length);
+  assert.equal(world.offensiveOperations.operationIdByUnitId.size, unitIds.length);
+  for (const unitId of unitIds) {
+    assert(getOffensiveOperationForUnit(world, unitId));
+  }
+});
+
+test("operation units come only from the same Front allocation", () => {
+  const world = createOperationWorld();
+  updateOffensiveOperations(world);
+
+  for (const operation of getOffensiveOperations(world)) {
+    const allocation = world.frontAllocations.allocationsByFrontNation.get(
+      `${operation.frontId}::${operation.nationId}`,
+    );
+    assert(allocation);
+    const allocatedIds = new Set(allocation.unitIds);
+    assert(operation.assignedUnitIds.every((unitId) => allocatedIds.has(unitId)));
+  }
+});
+
+test("the primary operation target is on the enemy side of its Front", () => {
+  const world = createOperationClusterWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  const front = world.landFronts.physicalFrontsById.get(operation.frontId);
+  assert(front);
+  const enemy = getFrontSide(front, NATION_B);
+  assert(enemy);
+
+  assert(enemy.influenceRegionIds.includes(operation.primaryTargetRegionId));
+});
+
+test("supporting operation targets stay within two meso regions of primary", () => {
+  const world = createOperationClusterWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+
+  assert(operation.supportingTargetRegionIds.length > 0);
+  for (const targetId of operation.supportingTargetRegionIds) {
+    assert(
+      isWithinTestDistance(
+        world,
+        operation.primaryTargetRegionId,
+        targetId,
+        WORLD_BALANCE.war.landFront.offensiveOperation.supportingTargetRadius,
+      ),
+    );
+  }
+});
+
+test("preparing operation units stage instead of immediately attacking", () => {
+  const world = createOperationWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+
+  repositionUnits(world, 100);
+
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+  assert.equal(operation.phase, "preparing");
+  for (const unitId of operation.assignedUnitIds) {
+    assert.equal(unitById.get(unitId)?.moveTargetId, operation.stagingRegionId);
+    assert.notEqual(unitById.get(unitId)?.moveTargetId, operation.primaryTargetRegionId);
+  }
+});
+
+test("staged operation force transitions from preparing to attacking", () => {
+  const world = createOperationWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+
+  advanceOperationEvaluation(
+    world,
+    WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks,
+  );
+
+  assert.equal(operation.phase, "attacking");
+  assert(
+    world.offensiveOperations.timeline.some(
+      (event) =>
+        event.operationId === operation.id &&
+        event.type === "phase-transition",
+    ),
+  );
+});
+
+test("occupying the primary target completes an attacking operation", () => {
+  const world = createOperationWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  advanceOperationEvaluation(
+    world,
+    WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks,
+  );
+  world.occupation.mesoById.set(operation.primaryTargetRegionId, NATION_A);
+  world.occupation.version += 1;
+
+  updateOffensiveOperations(world);
+
+  assert.equal(operation.phase, "recovering");
+  assert.equal(operation.outcome, "success");
+  assert.equal(operation.completionReason, "primary-target-occupied");
+});
+
+test("a disappearing Front cancels its offensive operation", () => {
+  const world = createOperationWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  world.landFronts.physicalFronts = [];
+  world.landFronts.physicalFrontsById.clear();
+
+  updateOffensiveOperations(world);
+
+  assert.equal(operation.outcome, "cancelled");
+  assert.equal(operation.completionReason, "front-disappeared");
+});
+
+test("ending the war cancels its offensive operation", () => {
+  const world = createOperationWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  world.wars = [];
+
+  updateOffensiveOperations(world);
+
+  assert.equal(operation.outcome, "cancelled");
+  assert.equal(operation.completionReason, "war-ended");
+});
+
+test("leaving attack posture cancels an offensive operation", () => {
+  const world = createOperationWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  planFor(world, NATION_A).posture = "reinforce";
+
+  updateOffensiveOperations(world);
+
+  assert.equal(operation.outcome, "cancelled");
+  assert.equal(operation.completionReason, "posture-changed");
+});
+
+test("operation completion keeps the nation in recovery cooldown", () => {
+  const world = createOperationWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  advanceOperationEvaluation(
+    world,
+    WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks,
+  );
+  world.occupation.mesoById.set(operation.primaryTargetRegionId, NATION_A);
+  world.occupation.version += 1;
+  updateOffensiveOperations(world);
+  const createdCount = world.offensiveOperations.createdCount;
+
+  advanceOperationEvaluation(
+    world,
+    WORLD_BALANCE.war.landFront.offensiveOperation.recoveryTicks - 1,
+  );
+
+  assert.equal(operation.phase, "recovering");
+  assert.equal(world.offensiveOperations.createdCount, createdCount);
+});
+
+test("operation target remains stable during minimum commitment", () => {
+  const world = createOperationClusterWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  const primary = operation.primaryTargetRegionId;
+  const supporting = [...operation.supportingTargetRegionIds];
+  advanceOperationEvaluation(
+    world,
+    WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks,
+  );
+
+  advanceOperationEvaluation(
+    world,
+    WORLD_BALANCE.war.landFront.offensiveOperation.minimumCommitTicks - 1,
+  );
+
+  assert.equal(operation.primaryTargetRegionId, primary);
+  assert.deepEqual(operation.supportingTargetRegionIds, supporting);
+  assert.equal(world.offensiveOperations.targetChangeCount, 0);
+});
+
+test("every operation region reference resolves to a valid meso region", () => {
+  const world = createOperationClusterWorld();
+  updateOffensiveOperations(world);
+  const validIds = new Set(world.mesoRegions.map((region) => region.id));
+
+  for (const operation of getOffensiveOperations(world)) {
+    assert(validIds.has(operation.primaryTargetRegionId));
+    assert(validIds.has(operation.stagingRegionId));
+    assert(
+      operation.supportingTargetRegionIds.every((regionId) => validIds.has(regionId)),
+    );
+  }
+});
+
+test("normal Front units retain Front behavior during an operation", () => {
+  const world = createOperationWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  const operationUnitIds = new Set(operation.assignedUnitIds);
+  const allocation = world.frontAllocations.allocationsByNationId.get(NATION_A)?.[0];
+  assert(allocation);
+
+  repositionUnits(world, 100);
+
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+  const normalUnits = allocation.unitIds
+    .filter((unitId) => !operationUnitIds.has(unitId))
+    .map((unitId) => unitById.get(unitId));
+  assert(normalUnits.length > 0);
+  assert(normalUnits.every((unit) => unit?.moveTargetId));
+  assert(
+    normalUnits.every(
+      (unit) => unit?.moveTargetId !== operation.primaryTargetRegionId,
+    ),
+  );
+});
+
+test("naval units never enter an offensive operation", () => {
+  const world = createOperationWorld();
+  const navalUnit = createUnitForType(
+    createUnitId(world.unitIdCounter),
+    NATION_A,
+    id("a"),
+    "CombatShip",
+  );
+  world.unitIdCounter += 1;
+  world.units.push(navalUnit);
+  updateAllocationSystem(world);
+  updateOffensiveOperations(world);
+
+  assert.equal(getOffensiveOperationForUnit(world, navalUnit.id), undefined);
+  assert(
+    getOffensiveOperations(world).every(
+      (operation) => !operation.assignedUnitIds.includes(navalUnit.id),
+    ),
+  );
+});
+
+test("operation movement creates no pathfinding loop", () => {
+  const world = createOperationWorld();
+  updateOffensiveOperations(world);
+  advanceOperationEvaluation(
+    world,
+    WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks,
+  );
+
+  for (let tick = 0; tick < 40; tick += 1) {
+    world.time.fastTick += 1;
+    repositionUnits(world, 100);
+  }
+
+  for (const unit of world.units.filter((candidate) => candidate.domain === "land")) {
+    assert(Number.isFinite(unit.moveProgressMs));
+    assert(unit.moveFromId === null || unit.moveFromId !== unit.moveToId);
+  }
+});
+
+test("offensive operation numeric state never contains NaN or Infinity", () => {
+  const world = createOperationClusterWorld();
+  updateOffensiveOperations(world);
+
+  for (const operation of getOffensiveOperations(world)) {
+    for (const value of [
+      operation.assignedStrength,
+      operation.initialAssignedStrength,
+      operation.initialFriendlyStrength,
+      operation.initialEnemyStrength,
+      operation.initialStrengthRatio,
+      operation.startedAtTick,
+      operation.phaseStartedAtTick,
+      operation.minimumCommitUntilTick,
+      operation.expiresAtTick,
+    ]) {
+      assert(Number.isFinite(value));
+    }
+  }
+  assert.match(formatOffensiveOperationSummary(world), /primary:/);
+});
+
+test("an expired attack records failure and enters recovery", () => {
+  const world = createOperationWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  advanceOperationEvaluation(
+    world,
+    WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks,
+  );
+
+  world.time.fastTick = operation.expiresAtTick;
+  updateOffensiveOperations(world);
+
+  assert.equal(operation.phase, "recovering");
+  assert.equal(operation.outcome, "failure");
+  assert.equal(operation.completionReason, "attack-expired");
+});
+
+test("attacking operation units deliberately share one to three targets", () => {
+  const world = createOperationClusterWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  advanceOperationEvaluation(
+    world,
+    WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks,
+  );
+  repositionUnits(world, 100);
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+  const counts = new Map<MesoRegionId, number>();
+  for (const unitId of operation.assignedUnitIds) {
+    const targetId = unitById.get(unitId)?.moveTargetId;
+    assert(targetId);
+    counts.set(targetId, (counts.get(targetId) ?? 0) + 1);
+  }
+
+  assert(counts.size >= 1 && counts.size <= 3);
+  assert(Math.max(...counts.values()) >= 2);
+});
+
+function createOperationWorld(): WorldState {
+  const world = createFrontWorld(
+    [
+      { id: "a", owner: NATION_A },
+      { id: "b", owner: NATION_B },
+    ],
+    [["a", "b"]],
+  );
+  startWar(world, NATION_A, NATION_B);
+  for (let index = 0; index < 6; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_A, "a", "Infantry"), 100);
+  }
+  for (let index = 0; index < 2; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_B, "b", "Infantry"), 50);
+  }
+  updateAllocationSystem(world);
+  return world;
+}
+
+function createOperationClusterWorld(): WorldState {
+  const world = createFrontWorld(
+    [
+      { id: "a", owner: NATION_A },
+      { id: "b0", owner: NATION_B },
+      { id: "b1", owner: NATION_B, building: "capital" },
+      { id: "b2", owner: NATION_B, building: "city" },
+    ],
+    [
+      ["a", "b0"],
+      ["b0", "b1"],
+      ["b0", "b2"],
+      ["b1", "b2"],
+    ],
+  );
+  startWar(world, NATION_A, NATION_B);
+  for (let index = 0; index < 8; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_A, "a", "Infantry"), 100);
+  }
+  for (let index = 0; index < 2; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_B, "b0", "Infantry"), 50);
+  }
+  updateAllocationSystem(world);
+  return world;
+}
+
+function onlyOperation(world: WorldState, nationId: NationId): OffensiveOperation {
+  const operations = getOffensiveOperations(world, nationId);
+  assert.equal(operations.length, 1);
+  return operations[0];
+}
+
+function advanceOperationEvaluation(world: WorldState, fastTicks: number): void {
+  world.time.fastTick += fastTicks;
+  updateOffensiveOperations(world);
+}
+
+function isWithinTestDistance(
+  world: WorldState,
+  startId: MesoRegionId,
+  targetId: MesoRegionId,
+  maxDistance: number,
+): boolean {
+  const mesoById = new Map(world.mesoRegions.map((region) => [region.id, region]));
+  const queue: Array<{ id: MesoRegionId; distance: number }> = [
+    { id: startId, distance: 0 },
+  ];
+  const visited = new Set<MesoRegionId>([startId]);
+  for (let head = 0; head < queue.length; head += 1) {
+    const current = queue[head];
+    if (current.id === targetId) {
+      return true;
+    }
+    if (current.distance >= maxDistance) {
+      continue;
+    }
+    for (const neighbor of mesoById.get(current.id)?.neighbors ?? []) {
+      if (visited.has(neighbor.id)) {
+        continue;
+      }
+      visited.add(neighbor.id);
+      queue.push({ id: neighbor.id, distance: current.distance + 1 });
+    }
+  }
+  return false;
+}
+
 function createAllocatedTwoFrontWorld(): WorldState {
   const world = createFrontWorld(
     [
@@ -929,6 +1386,7 @@ function createFrontWorld(
     landFronts: createLandFrontState(),
     frontPlans: createNationFrontPlanState(),
     frontAllocations: createNationFrontAllocationState(),
+    offensiveOperations: createOffensiveOperationState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

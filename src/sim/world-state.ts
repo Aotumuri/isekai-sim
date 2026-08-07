@@ -14,6 +14,7 @@ import type { SimulationInstrumentation } from "./instrumentation";
 import type { LandFrontState } from "./land-fronts";
 import type { NationFrontPlanState } from "./nation-front-plans";
 import type { NationFrontAllocationState } from "./nation-front-allocations";
+import type { OffensiveOperationState } from "./offensive-operations";
 
 export interface WorldState {
   width: number;
@@ -29,6 +30,7 @@ export interface WorldState {
   landFronts: LandFrontState;
   frontPlans: NationFrontPlanState;
   frontAllocations: NationFrontAllocationState;
+  offensiveOperations: OffensiveOperationState;
   mapVersion: number;
   territoryVersion: number;
   buildingVersion: number;

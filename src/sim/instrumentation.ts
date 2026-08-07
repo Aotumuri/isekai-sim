@@ -9,6 +9,8 @@ export type SimulationMetricName =
   | "landFront.metrics"
   | "landFront.planEvaluation"
   | "landFront.allocation"
+  | "offensiveOperation.evaluation"
+  | "offensiveOperation.targetAssignment"
   | "updateOccupation"
   | "updateCapitals"
   | "surrender";
@@ -45,7 +47,23 @@ export type SimulationCounterName =
   | "landFront.allocationRebuilds"
   | "landFront.allocationUnitSwitches"
   | "landFront.allocationFrontTransfers"
-  | "landFront.allocationUnassignedUnits";
+  | "landFront.allocationUnassignedUnits"
+  | "offensiveOperation.created"
+  | "offensiveOperation.completed"
+  | "offensiveOperation.failed"
+  | "offensiveOperation.cancelled"
+  | "offensiveOperation.phaseTransitions"
+  | "offensiveOperation.unitAssignments"
+  | "offensiveOperation.targetAssignments"
+  | "offensiveOperation.unitTargetSwitches"
+  | "offensiveOperation.preparingTicks"
+  | "offensiveOperation.attackingTicks"
+  | "offensiveOperation.activeSamples"
+  | "offensiveOperation.activeSampleCount"
+  | "offensiveOperation.targetChanges"
+  | "offensiveOperation.targetConcentrationTotal"
+  | "offensiveOperation.targetConcentrationSamples"
+  | "offensiveOperation.targetConcentrationMax";
 
 /**
  * Optional benchmark observer. Production worlds do not install one, so hot paths

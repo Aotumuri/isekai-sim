@@ -21,6 +21,10 @@ import {
   getUnassignedLandUnitIds,
 } from "../nation-front-allocations";
 import { getFrontSide, getOpposingFrontSide } from "../land-fronts";
+import {
+  getOffensiveOperationForFront,
+  type OffensiveOperation,
+} from "../offensive-operations";
 
 const LAND_TARGET_REASSIGN_INTERVAL_TICKS = 10;
 const MAX_SHARED_PATH_FIELDS = 256;
@@ -41,6 +45,7 @@ interface LandAiRuntime {
   warsReference: WorldState["wars"] | null;
   warCount: number;
   frontAllocationMembershipVersion: number;
+  offensiveOperationVersion: number;
   warAdjacency: WarAdjacency;
   movementGroups: LandMovementGroup[];
   unitsExpectedToHaveTarget: Set<UnitState["id"]>;
@@ -108,6 +113,8 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
   const frontAllocationChanged =
     runtime.frontAllocationMembershipVersion !==
     world.frontAllocations.membershipVersion;
+  const offensiveOperationChanged =
+    runtime.offensiveOperationVersion !== world.offensiveOperations.version;
   const periodicReassignmentDue =
     world.time.fastTick - runtime.lastAssignmentFastTick >=
     LAND_TARGET_REASSIGN_INTERVAL_TICKS;
@@ -120,6 +127,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     unitsChanged ||
     warsChanged ||
     frontAllocationChanged ||
+    offensiveOperationChanged ||
     periodicReassignmentDue;
 
   const mesoById = getMesoById(world);
@@ -173,6 +181,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     runtime.warCount = world.wars.length;
     runtime.frontAllocationMembershipVersion =
       world.frontAllocations.membershipVersion;
+    runtime.offensiveOperationVersion = world.offensiveOperations.version;
     runtime.forceReassignment = false;
   }
 
@@ -234,6 +243,7 @@ function getLandAiRuntime(world: WorldState): LandAiRuntime {
     warsReference: null,
     warCount: -1,
     frontAllocationMembershipVersion: -1,
+    offensiveOperationVersion: -1,
     warAdjacency: new Map(),
     movementGroups: [],
     unitsExpectedToHaveTarget: new Set(),
@@ -424,30 +434,67 @@ function rebuildLandAssignments(
       if (allocatedUnits.length === 0) {
         continue;
       }
+      const operation = getOffensiveOperationForFront(
+        world,
+        allocation.frontId,
+        nationId,
+      );
+      const activeOperation =
+        operation && operation.phase !== "recovering" ? operation : undefined;
+      const operationUnitIds = new Set(activeOperation?.assignedUnitIds ?? []);
+      const normalFrontUnits = allocatedUnits.filter(
+        (unit) => !operationUnitIds.has(unit.id),
+      );
+      const operationUnits = activeOperation
+        ? allocatedUnits.filter((unit) => operationUnitIds.has(unit.id))
+        : [];
+      const operationTargetIds = new Set(
+        activeOperation
+          ? [
+              activeOperation.primaryTargetRegionId,
+              ...activeOperation.supportingTargetRegionIds,
+            ]
+          : [],
+      );
       const friendlyScope = new Set(friendlySide.influenceRegionIds);
       const frontScope = new Set([
         ...friendlySide.influenceRegionIds,
         ...enemySide.influenceRegionIds,
       ]);
       const enemyScope = new Set(enemySide.influenceRegionIds);
-      movementGroups.push(
-        buildLandMovementGroup(
-          nationId,
-          allocatedUnits,
-          intrusionTargets.filter((id) => frontScope.has(id)),
-          liberationTargets.filter((id) => frontScope.has(id)),
-          friendlySide.borderRegionIds,
-          occupationTargets.filter((id) => enemyScope.has(id)),
-          nation,
-          mesoById,
-          neighborsById,
-          ownerByMesoId,
-          occupationByMesoId,
-          warAdjacency,
-          instrumentation,
-          friendlyScope,
-        ),
-      );
+      if (normalFrontUnits.length > 0) {
+        movementGroups.push(
+          buildLandMovementGroup(
+            nationId,
+            normalFrontUnits,
+            intrusionTargets.filter((id) => frontScope.has(id)),
+            liberationTargets.filter((id) => frontScope.has(id)),
+            friendlySide.borderRegionIds,
+            occupationTargets.filter(
+              (id) => enemyScope.has(id) && !operationTargetIds.has(id),
+            ),
+            nation,
+            mesoById,
+            neighborsById,
+            ownerByMesoId,
+            occupationByMesoId,
+            warAdjacency,
+            instrumentation,
+            friendlyScope,
+          ),
+        );
+      }
+      if (activeOperation && operationUnits.length > 0) {
+        movementGroups.push(
+          buildOperationMovementGroup(
+            world,
+            activeOperation,
+            operationUnits,
+            nation,
+            instrumentation,
+          ),
+        );
+      }
     }
 
     const unassignedUnits = getUnassignedLandUnitIds(world, nationId)
@@ -518,6 +565,58 @@ function buildLandMovementGroup(
       defenseRegionScope,
     ),
   };
+}
+
+function buildOperationMovementGroup(
+  world: WorldState,
+  operation: OffensiveOperation,
+  units: UnitState[],
+  nation: WorldState["nations"][number] | undefined,
+  instrumentation?: SimulationInstrumentation,
+): LandMovementGroup {
+  const startedAt = instrumentation ? performance.now() : 0;
+  let assignmentCount = 0;
+  let switchCount = 0;
+  const orderedUnits = [...units].sort((a, b) => a.id.localeCompare(b.id));
+  for (const unit of orderedUnits) {
+    const targetId =
+      operation.phase === "preparing"
+        ? operation.stagingRegionId
+        : (operation.unitTargetRegionIds.get(unit.id) ??
+          operation.primaryTargetRegionId);
+    if (unit.moveTargetId === targetId) {
+      continue;
+    }
+    if (unit.moveTargetId) {
+      switchCount += 1;
+    }
+    unit.moveTargetId = targetId;
+    unit.moveFromId = null;
+    unit.moveToId = null;
+    unit.moveProgressMs = 0;
+    assignmentCount += 1;
+  }
+  if (operation.phase === "preparing") {
+    nation?.unitRoles.defenseUnitIds.push(...orderedUnits.map((unit) => unit.id));
+  } else {
+    nation?.unitRoles.occupationUnitIds.push(...orderedUnits.map((unit) => unit.id));
+  }
+  world.offensiveOperations.unitTargetSwitchCount += switchCount;
+  instrumentation?.incrementCounter(
+    "offensiveOperation.targetAssignments",
+    assignmentCount,
+  );
+  instrumentation?.incrementCounter(
+    "offensiveOperation.unitTargetSwitches",
+    switchCount,
+  );
+  if (instrumentation) {
+    instrumentation.recordDuration(
+      "offensiveOperation.targetAssignment",
+      performance.now() - startedAt,
+    );
+  }
+  return { nationId: operation.nationId, units: orderedUnits };
 }
 
 export function repositionNavalUnits(world: WorldState, dtMs: number): void {

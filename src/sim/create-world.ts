@@ -22,6 +22,7 @@ import { createOccupationState } from "./occupation";
 import { createLandFrontState } from "./land-fronts";
 import { createNationFrontPlanState } from "./nation-front-plans";
 import { createNationFrontAllocationState } from "./nation-front-allocations";
+import { createOffensiveOperationState } from "./offensive-operations";
 import { nextScheduledTickRange } from "./schedule";
 import { addTestWar } from "./test-war";
 import { createSimTime } from "./time";
@@ -87,6 +88,7 @@ export function createWorld(config: WorldConfig): WorldState {
   const landFronts = createLandFrontState();
   const frontPlans = createNationFrontPlanState();
   const frontAllocations = createNationFrontAllocationState();
+  const offensiveOperations = createOffensiveOperationState();
   const mapVersion = 0;
   const territoryVersion = 0;
   const buildingVersion = 0;
@@ -106,6 +108,7 @@ export function createWorld(config: WorldConfig): WorldState {
     landFronts,
     frontPlans,
     frontAllocations,
+    offensiveOperations,
     mapVersion,
     territoryVersion,
     buildingVersion,

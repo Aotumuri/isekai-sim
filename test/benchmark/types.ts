@@ -46,6 +46,15 @@ export interface WorldSummary {
   nationFrontPlans: number;
   frontAllocatedUnits: number;
   frontUnassignedUnits: number;
+  activeOffensiveOperations: number;
+  recoveringOffensiveOperations: number;
+  operationAssignedUnits: number;
+  operationsCreated: number;
+  operationsCompleted: number;
+  operationsFailed: number;
+  operationsCancelled: number;
+  operationSuccessRatePercent: number;
+  operationMaxTargetConcentration: number;
   microRegions: number;
   mesoRegions: number;
   macroRegions: number;
