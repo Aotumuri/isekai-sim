@@ -1,5 +1,6 @@
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
+import { isNationActive } from "./nation-active";
 import type { WorldState } from "./world-state";
 import { getMesoById, getOwnerByMesoId } from "./world-cache";
 
@@ -14,6 +15,9 @@ export function updateCapitals(world: WorldState): void {
   let buildingChanged = false;
 
   for (const nation of world.nations) {
+    if (!isNationActive(nation)) {
+      continue;
+    }
     const capitalId = nation.capitalMesoId;
     const capital = mesoById.get(capitalId);
     if (!capital) {

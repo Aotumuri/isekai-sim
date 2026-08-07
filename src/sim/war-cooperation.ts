@@ -4,6 +4,7 @@ import type { MesoRegion } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { WarState } from "./war-state";
 import { buildWarAdjacency } from "./war-state";
+import { isNationActive } from "./nation-active";
 import type { WorldState } from "./world-state";
 import { getMesoById } from "./world-cache";
 
@@ -27,6 +28,9 @@ export function updateWarCooperation(world: WorldState): void {
   const warRoleCountsByNation = collectWarRoleCounts(world.wars);
 
   for (const nation of world.nations) {
+    if (!isNationActive(nation)) {
+      continue;
+    }
     const nextBoost = Math.max(
       0,
       nation.warCooperationBoost - cooperationBalance.civilWarBoostDecay,

@@ -18,6 +18,8 @@ import {
 } from "./time";
 
 const MAX_FRAME_MS = 250;
+const MAX_FAST_TICKS_PER_FRAME = 8;
+const FAST_TICK_BUDGET_MS = 8;
 
 export function updateSimulation(world: WorldState, clock: SimClock, deltaMs: number): void {
   const clampedDelta = Math.min(MAX_FRAME_MS, Math.max(0, deltaMs));
@@ -29,12 +31,26 @@ export function updateSimulation(world: WorldState, clock: SimClock, deltaMs: nu
   clock.accumulatorMs += scaledMs;
   clock.slowAccumulatorMs += scaledMs;
 
-  while (clock.accumulatorMs >= FAST_TICK_MS) {
+  let processedFastTicks = 0;
+  const fastTickBudgetStartedAt =
+    clock.accumulatorMs >= FAST_TICK_MS ? performance.now() : 0;
+  while (
+    clock.accumulatorMs >= FAST_TICK_MS &&
+    processedFastTicks < MAX_FAST_TICKS_PER_FRAME
+  ) {
     clock.accumulatorMs -= FAST_TICK_MS;
     stepFastTick(world, FAST_TICK_MS);
+    processedFastTicks += 1;
+    if (performance.now() - fastTickBudgetStartedAt >= FAST_TICK_BUDGET_MS) {
+      break;
+    }
   }
 
-  while (clock.slowAccumulatorMs >= SLOW_TICK_MS) {
+  const dueSlowTicks = Math.floor(world.time.elapsedMs / SLOW_TICK_MS);
+  while (
+    clock.slowAccumulatorMs >= SLOW_TICK_MS &&
+    world.time.slowTick < dueSlowTicks
+  ) {
     clock.slowAccumulatorMs -= SLOW_TICK_MS;
     stepSlowTick(world, SLOW_TICK_MS);
   }

@@ -3,6 +3,7 @@ import type { MacroRegion } from "../worldgen/macro-region";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { createUnitForType } from "./create-units";
+import { isNationActive } from "./nation-active";
 import type { NationResourceFlow, NationResources } from "./nation-runtime";
 import { nextScheduledTickRange } from "./schedule";
 import { createUnitId, type NavalUnitType, type UnitState, type UnitType } from "./unit";
@@ -17,6 +18,9 @@ export function updateProduction(world: WorldState): void {
   const previousResources = new Map<NationId, NationResources>();
   const flowByNation = new Map<NationId, NationResourceFlow>();
   for (const nation of world.nations) {
+    if (!isNationActive(nation)) {
+      continue;
+    }
     previousResources.set(nation.id, cloneResources(nation.resources));
     flowByNation.set(nation.id, createEmptyFlow());
   }
@@ -61,6 +65,9 @@ export function updateProduction(world: WorldState): void {
   const hasCap = maxUnitsPerNation > 0;
 
   for (const nation of world.nations) {
+    if (!isNationActive(nation)) {
+      continue;
+    }
     if (world.time.slowTick < nation.nextUnitProductionTick) {
       continue;
     }
@@ -226,6 +233,9 @@ function finalizeResourceFlows(
   previousResources: Map<NationId, NationResources>,
 ): void {
   for (const nation of world.nations) {
+    if (!isNationActive(nation)) {
+      continue;
+    }
     const flow = getFlow(flowByNation, nation.id);
     const previous = previousResources.get(nation.id);
     if (previous) {
@@ -332,6 +342,9 @@ function applyResourceOutputs(
   const fuelAvailability = new Map<NationId, boolean>();
 
   for (const nation of nations) {
+    if (!isNationActive(nation)) {
+      continue;
+    }
     const resources = nation.resources;
     const flow = getFlow(flowByNation, nation.id);
     const output = outputs.get(nation.id);

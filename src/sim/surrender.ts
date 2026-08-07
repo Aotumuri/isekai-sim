@@ -4,6 +4,7 @@ import type { NationId } from "../worldgen/nation";
 import { WORLD_BALANCE } from "../data/balance";
 import type { UnitState } from "./unit";
 import { buildWarAdjacency, isAtWar } from "./war-state";
+import { isNationActive } from "./nation-active";
 import type { WorldState } from "./world-state";
 import { getMesoById } from "./world-cache";
 
@@ -37,6 +38,9 @@ export function updateSurrender(world: WorldState): void {
 
   const surrendering: NationId[] = [];
   for (const nation of world.nations) {
+    if (!isNationActive(nation)) {
+      continue;
+    }
     const isAtWar = (warAdjacency.get(nation.id)?.size ?? 0) > 0;
     if (!isAtWar) {
       nation.surrenderScore = 0;
