@@ -133,6 +133,24 @@ export const WORLD_BALANCE = {
       // without merging armies from otherwise separate fronts.
       influenceDistance: 1,
       metricsRefreshIntervalTicks: 10,
+      plan: {
+        // Entry thresholds are deliberately wider than continuation thresholds
+        // so small strength changes do not flip a posture every slow tick.
+        attackEnterRatio: 1.6,
+        attackContinueRatio: 1.4,
+        attackOpportunityRatio: 1.45,
+        reinforceEnterRatio: 0.8,
+        reinforceContinueRatio: 0.95,
+        retreatEnterRatio: 0.4,
+        retreatContinueRatio: 0.55,
+        capitalRetreatFloorRatio: 0.2,
+        desiredStrengthMultiplier: {
+          attack: 1.6,
+          hold: 1.1,
+          reinforce: 1.3,
+          retreat: 0.5,
+        },
+      },
     },
     declare: {
       slowTickRange: {

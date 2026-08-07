@@ -11,35 +11,46 @@ import { getMesoById, getNeighborsById, getOwnerByMesoId } from "./world-cache";
 
 export type FrontId = string & { __brand: "FrontId" };
 
-export interface LandFront {
-  id: FrontId;
+export interface FrontBorderEdge {
+  regionAId: MesoRegionId;
+  regionBId: MesoRegionId;
+}
+
+export interface PhysicalFrontSide {
   nationId: NationId;
-  enemyNationId: NationId;
-  friendlyBorderRegionIds: MesoRegionId[];
-  enemyBorderRegionIds: MesoRegionId[];
-  friendlyInfluenceRegionIds: MesoRegionId[];
-  enemyInfluenceRegionIds: MesoRegionId[];
-  friendlyUnitIds: UnitId[];
-  enemyUnitIds: UnitId[];
-  friendlyStrength: number;
-  enemyStrength: number;
-  strengthRatio: number;
-  friendlyUnitCount: number;
-  enemyUnitCount: number;
+  borderRegionIds: MesoRegionId[];
+  influenceRegionIds: MesoRegionId[];
+  unitIds: UnitId[];
+  unitCount: number;
+  strength: number;
+  nearbyCityCount: number;
+  hasNearbyCapital: boolean;
+}
+
+/**
+ * Objective geometry and metrics for one physical A-B border component.
+ * Nation-specific strategy belongs in NationFrontPlan, never in this record.
+ */
+export interface PhysicalFront {
+  id: FrontId;
+  nationAId: NationId;
+  nationBId: NationId;
+  sideA: PhysicalFrontSide;
+  sideB: PhysicalFrontSide;
+  borderEdges: FrontBorderEdge[];
   borderLength: number;
-  nearbyFriendlyCityCount: number;
-  hasNearbyFriendlyCapital: boolean;
-  nearbyEnemyCityCount: number;
-  hasNearbyEnemyCapital: boolean;
   createdAtTick: number;
 }
 
 export interface LandFrontState {
-  fronts: LandFront[];
-  frontsByNationId: Map<NationId, LandFront[]>;
+  physicalFronts: PhysicalFront[];
+  physicalFrontsById: Map<FrontId, PhysicalFront>;
+  physicalFrontsByNationId: Map<NationId, PhysicalFront[]>;
   version: number;
+  metricsVersion: number;
   territoryVersion: number;
   occupationVersion: number;
+  buildingVersion: number;
   warsReference: WarState[] | null;
   warCount: number;
   unitsReference: UnitState[] | null;
@@ -48,25 +59,23 @@ export interface LandFrontState {
   lastMetricsFastTick: number;
 }
 
-interface BorderContact {
-  regionAId: MesoRegionId;
-  regionBId: MesoRegionId;
-}
-
 interface NationPairContacts {
   nationAId: NationId;
   nationBId: NationId;
   regionIds: Set<MesoRegionId>;
-  contacts: BorderContact[];
+  contacts: FrontBorderEdge[];
 }
 
 export function createLandFrontState(): LandFrontState {
   return {
-    fronts: [],
-    frontsByNationId: new Map(),
+    physicalFronts: [],
+    physicalFrontsById: new Map(),
+    physicalFrontsByNationId: new Map(),
     version: 0,
+    metricsVersion: 0,
     territoryVersion: -1,
     occupationVersion: -1,
+    buildingVersion: -1,
     warsReference: null,
     warCount: -1,
     unitsReference: null,
@@ -90,6 +99,7 @@ export function updateLandFronts(world: WorldState): void {
   }
 
   const landUnitCount = countLandUnits(world.units);
+  const buildingsChanged = state.buildingVersion !== world.buildingVersion;
   const unitsChanged =
     state.unitsReference !== world.units ||
     state.unitIdCounter !== world.unitIdCounter ||
@@ -99,7 +109,7 @@ export function updateLandFronts(world: WorldState): void {
     Math.round(WORLD_BALANCE.war.landFront.metricsRefreshIntervalTicks),
   );
   const metricsDue = world.time.fastTick - state.lastMetricsFastTick >= refreshInterval;
-  if (!unitsChanged && !metricsDue) {
+  if (!buildingsChanged && !unitsChanged && !metricsDue) {
     return;
   }
 
@@ -114,11 +124,48 @@ export function updateLandFronts(world: WorldState): void {
   }
 }
 
-export function getLandFrontsForNation(
+export function getPhysicalFronts(world: WorldState): readonly PhysicalFront[] {
+  return world.landFronts.physicalFronts;
+}
+
+export function getPhysicalFront(
+  world: WorldState,
+  frontId: FrontId,
+): PhysicalFront | undefined {
+  return world.landFronts.physicalFrontsById.get(frontId);
+}
+
+export function getPhysicalFrontsForNation(
   world: WorldState,
   nationId: NationId,
-): readonly LandFront[] {
-  return world.landFronts.frontsByNationId.get(nationId) ?? [];
+): readonly PhysicalFront[] {
+  return world.landFronts.physicalFrontsByNationId.get(nationId) ?? [];
+}
+
+export function getFrontSide(
+  front: PhysicalFront,
+  nationId: NationId,
+): PhysicalFrontSide | undefined {
+  if (front.nationAId === nationId) {
+    return front.sideA;
+  }
+  if (front.nationBId === nationId) {
+    return front.sideB;
+  }
+  return undefined;
+}
+
+export function getOpposingFrontSide(
+  front: PhysicalFront,
+  nationId: NationId,
+): PhysicalFrontSide | undefined {
+  if (front.nationAId === nationId) {
+    return front.sideB;
+  }
+  if (front.nationBId === nationId) {
+    return front.sideA;
+  }
+  return undefined;
 }
 
 export function formatLandFrontSummary(
@@ -127,19 +174,19 @@ export function formatLandFrontSummary(
 ): string {
   const includeRegionIds = options.includeRegionIds ?? false;
   const lines: string[] = [];
-  for (const front of world.landFronts.fronts) {
+  for (const front of world.landFronts.physicalFronts) {
     lines.push(
-      `${front.nationId} vs ${front.enemyNationId}`,
+      `${front.nationAId} - ${front.nationBId}`,
       `${front.id}`,
-      `  friendly regions: ${front.friendlyBorderRegionIds.length}`,
-      `  enemy regions: ${front.enemyBorderRegionIds.length}`,
-      `  units: ${front.friendlyUnitCount} vs ${front.enemyUnitCount}`,
-      `  strength: ${front.friendlyStrength.toFixed(1)} vs ${front.enemyStrength.toFixed(1)}`,
+      `  border regions: ${front.sideA.borderRegionIds.length} vs ${front.sideB.borderRegionIds.length}`,
+      `  border edges: ${front.borderLength}`,
+      `  units: ${front.sideA.unitCount} vs ${front.sideB.unitCount}`,
+      `  strength: ${front.sideA.strength.toFixed(1)} vs ${front.sideB.strength.toFixed(1)}`,
     );
     if (includeRegionIds) {
       lines.push(
-        `  friendly IDs: ${front.friendlyBorderRegionIds.join(", ")}`,
-        `  enemy IDs: ${front.enemyBorderRegionIds.join(", ")}`,
+        `  side A IDs: ${front.sideA.borderRegionIds.join(", ")}`,
+        `  side B IDs: ${front.sideB.borderRegionIds.join(", ")}`,
       );
     }
   }
@@ -149,7 +196,7 @@ export function formatLandFrontSummary(
 function rebuildLandFronts(world: WorldState): void {
   const state = world.landFronts;
   const startedAt = world.instrumentation ? performance.now() : 0;
-  const previousById = new Map(state.fronts.map((front) => [front.id, front]));
+  const previousById = state.physicalFrontsById;
   const mesoById = getMesoById(world);
   const neighborsById = getNeighborsById(world);
   const ownerByMesoId = getOwnerByMesoId(world);
@@ -170,80 +217,83 @@ function rebuildLandFronts(world: WorldState): void {
     activeNationIds,
     warAdjacency,
   );
-  const fronts: LandFront[] = [];
+  const physicalFronts: PhysicalFront[] = [];
 
   for (const contacts of [...contactsByPair.values()].sort(comparePairContacts)) {
     const components = splitContactComponents(contacts, neighborsById);
     for (const component of components) {
-      const sideA = [...component].filter(
-        (id) => effectiveControllerByMesoId.get(id) === contacts.nationAId,
-      );
-      const sideB = [...component].filter(
-        (id) => effectiveControllerByMesoId.get(id) === contacts.nationBId,
-      );
-      if (sideA.length === 0 || sideB.length === 0) {
+      const sideARegionIds = [...component]
+        .filter(
+          (id) => effectiveControllerByMesoId.get(id) === contacts.nationAId,
+        )
+        .sort(compareIds);
+      const sideBRegionIds = [...component]
+        .filter(
+          (id) => effectiveControllerByMesoId.get(id) === contacts.nationBId,
+        )
+        .sort(compareIds);
+      if (sideARegionIds.length === 0 || sideBRegionIds.length === 0) {
         continue;
       }
-      sideA.sort(compareIds);
-      sideB.sort(compareIds);
-      const borderLength = countComponentContacts(component, contacts.contacts);
+
       const influenceDistance = Math.max(
         0,
         Math.round(WORLD_BALANCE.war.landFront.influenceDistance),
       );
       const influenceA = collectInfluenceRegionIds(
-        sideA,
+        sideARegionIds,
         contacts.nationAId,
         influenceDistance,
         neighborsById,
         effectiveControllerByMesoId,
       );
       const influenceB = collectInfluenceRegionIds(
-        sideB,
+        sideBRegionIds,
         contacts.nationBId,
         influenceDistance,
         neighborsById,
         effectiveControllerByMesoId,
       );
-      const buildingsA = collectNearbyBuildings(influenceA, mesoById);
-      const buildingsB = collectNearbyBuildings(influenceB, mesoById);
-      fronts.push(
-        createDirectedFront(
-          contacts.nationAId,
-          contacts.nationBId,
-          sideA,
-          sideB,
-          influenceA,
-          influenceB,
-          buildingsA,
-          buildingsB,
-          borderLength,
-          previousById,
-          world.time.fastTick,
-        ),
-        createDirectedFront(
-          contacts.nationBId,
-          contacts.nationAId,
-          sideB,
-          sideA,
-          influenceB,
-          influenceA,
-          buildingsB,
-          buildingsA,
-          borderLength,
-          previousById,
-          world.time.fastTick,
-        ),
+      const borderEdges = collectComponentBorderEdges(component, contacts.contacts);
+      const id = createFrontId(
+        contacts.nationAId,
+        contacts.nationBId,
+        sideARegionIds[0],
+        sideBRegionIds[0],
       );
+      physicalFronts.push({
+        id,
+        nationAId: contacts.nationAId,
+        nationBId: contacts.nationBId,
+        sideA: createPhysicalFrontSide(
+          contacts.nationAId,
+          sideARegionIds,
+          influenceA,
+          mesoById,
+        ),
+        sideB: createPhysicalFrontSide(
+          contacts.nationBId,
+          sideBRegionIds,
+          influenceB,
+          mesoById,
+        ),
+        borderEdges,
+        borderLength: borderEdges.length,
+        createdAtTick: previousById.get(id)?.createdAtTick ?? world.time.fastTick,
+      });
     }
   }
 
-  fronts.sort(compareFronts);
-  state.fronts = fronts;
-  state.frontsByNationId = indexFrontsByNation(fronts);
+  physicalFronts.sort(comparePhysicalFronts);
+  state.physicalFronts = physicalFronts;
+  state.physicalFrontsById = new Map(
+    physicalFronts.map((front) => [front.id, front]),
+  );
+  state.physicalFrontsByNationId = indexPhysicalFrontsByNation(physicalFronts);
   state.version += 1;
   state.territoryVersion = world.territoryVersion;
   state.occupationVersion = world.occupation.version;
+  state.buildingVersion = world.buildingVersion;
   state.warsReference = world.wars;
   state.warCount = world.wars.length;
   refreshLandFrontMetrics(world, countLandUnits(world.units));
@@ -254,8 +304,30 @@ function rebuildLandFronts(world: WorldState): void {
       performance.now() - startedAt,
     );
     world.instrumentation.incrementCounter("landFront.rebuilds");
-    world.instrumentation.incrementCounter("landFront.frontsBuilt", fronts.length);
+    world.instrumentation.incrementCounter(
+      "landFront.frontsBuilt",
+      physicalFronts.length,
+    );
   }
+}
+
+function createPhysicalFrontSide(
+  nationId: NationId,
+  borderRegionIds: MesoRegionId[],
+  influenceRegionIds: MesoRegionId[],
+  mesoById: Map<MesoRegionId, MesoRegion>,
+): PhysicalFrontSide {
+  const buildings = collectNearbyBuildings(influenceRegionIds, mesoById);
+  return {
+    nationId,
+    borderRegionIds,
+    influenceRegionIds,
+    unitIds: [],
+    unitCount: 0,
+    strength: 0,
+    nearbyCityCount: buildings.cityCount,
+    hasNearbyCapital: buildings.hasCapital,
+  };
 }
 
 function buildEffectiveControllerByMesoId(
@@ -363,49 +435,6 @@ function splitContactComponents(
   return components;
 }
 
-function createDirectedFront(
-  nationId: NationId,
-  enemyNationId: NationId,
-  friendlyBorderRegionIds: MesoRegionId[],
-  enemyBorderRegionIds: MesoRegionId[],
-  friendlyInfluenceRegionIds: MesoRegionId[],
-  enemyInfluenceRegionIds: MesoRegionId[],
-  friendlyBuildings: { cityCount: number; hasCapital: boolean },
-  enemyBuildings: { cityCount: number; hasCapital: boolean },
-  borderLength: number,
-  previousById: Map<FrontId, LandFront>,
-  currentTick: number,
-): LandFront {
-  const id = createFrontId(
-    nationId,
-    enemyNationId,
-    friendlyBorderRegionIds[0],
-    enemyBorderRegionIds[0],
-  );
-  return {
-    id,
-    nationId,
-    enemyNationId,
-    friendlyBorderRegionIds,
-    enemyBorderRegionIds,
-    friendlyInfluenceRegionIds,
-    enemyInfluenceRegionIds,
-    friendlyUnitIds: [],
-    enemyUnitIds: [],
-    friendlyStrength: 0,
-    enemyStrength: 0,
-    strengthRatio: 0,
-    friendlyUnitCount: 0,
-    enemyUnitCount: 0,
-    borderLength,
-    nearbyFriendlyCityCount: friendlyBuildings.cityCount,
-    hasNearbyFriendlyCapital: friendlyBuildings.hasCapital,
-    nearbyEnemyCityCount: enemyBuildings.cityCount,
-    hasNearbyEnemyCapital: enemyBuildings.hasCapital,
-    createdAtTick: previousById.get(id)?.createdAtTick ?? currentTick,
-  };
-}
-
 function collectInfluenceRegionIds(
   borderRegionIds: MesoRegionId[],
   nationId: NationId,
@@ -457,6 +486,7 @@ function collectNearbyBuildings(
 
 function refreshLandFrontMetrics(world: WorldState, landUnitCount: number): void {
   const state = world.landFronts;
+  const mesoById = getMesoById(world);
   const landUnitsByRegion = new Map<MesoRegionId, UnitState[]>();
   for (const unit of world.units) {
     if (unit.domain !== "land") {
@@ -470,30 +500,35 @@ function refreshLandFrontMetrics(world: WorldState, landUnitCount: number): void
     }
   }
 
-  for (const front of state.fronts) {
-    const friendlyUnits = collectUnitsInInfluence(
-      front.friendlyInfluenceRegionIds,
-      front.nationId,
-      landUnitsByRegion,
-    );
-    const enemyUnits = collectUnitsInInfluence(
-      front.enemyInfluenceRegionIds,
-      front.enemyNationId,
-      landUnitsByRegion,
-    );
-    front.friendlyUnitIds = friendlyUnits.map((unit) => unit.id).sort(compareIds);
-    front.enemyUnitIds = enemyUnits.map((unit) => unit.id).sort(compareIds);
-    front.friendlyUnitCount = friendlyUnits.length;
-    front.enemyUnitCount = enemyUnits.length;
-    front.friendlyStrength = sumFiniteStrength(friendlyUnits);
-    front.enemyStrength = sumFiniteStrength(enemyUnits);
-    front.strengthRatio = finiteRatio(front.friendlyStrength, front.enemyStrength);
+  for (const front of state.physicalFronts) {
+    refreshFrontSideMetrics(front.sideA, landUnitsByRegion, mesoById);
+    refreshFrontSideMetrics(front.sideB, landUnitsByRegion, mesoById);
   }
 
   state.unitsReference = world.units;
   state.unitIdCounter = world.unitIdCounter;
   state.landUnitCount = landUnitCount;
   state.lastMetricsFastTick = world.time.fastTick;
+  state.buildingVersion = world.buildingVersion;
+  state.metricsVersion += 1;
+}
+
+function refreshFrontSideMetrics(
+  side: PhysicalFrontSide,
+  unitsByRegion: Map<MesoRegionId, UnitState[]>,
+  mesoById: Map<MesoRegionId, MesoRegion>,
+): void {
+  const units = collectUnitsInInfluence(
+    side.influenceRegionIds,
+    side.nationId,
+    unitsByRegion,
+  );
+  side.unitIds = units.map((unit) => unit.id).sort(compareIds);
+  side.unitCount = units.length;
+  side.strength = sumFiniteStrength(units);
+  const buildings = collectNearbyBuildings(side.influenceRegionIds, mesoById);
+  side.nearbyCityCount = buildings.cityCount;
+  side.hasNearbyCapital = buildings.hasCapital;
 }
 
 function collectUnitsInInfluence(
@@ -523,44 +558,54 @@ function sumFiniteStrength(units: UnitState[]): number {
   return Number.isFinite(total) ? total : 0;
 }
 
-function finiteRatio(friendlyStrength: number, enemyStrength: number): number {
-  const ratio = friendlyStrength / Math.max(1, enemyStrength);
-  return Number.isFinite(ratio) ? ratio : 0;
-}
-
-function countComponentContacts(
+function collectComponentBorderEdges(
   component: Set<MesoRegionId>,
-  contacts: BorderContact[],
-): number {
-  let count = 0;
-  for (const contact of contacts) {
-    if (component.has(contact.regionAId) && component.has(contact.regionBId)) {
-      count += 1;
-    }
-  }
-  return count;
+  contacts: FrontBorderEdge[],
+): FrontBorderEdge[] {
+  return contacts
+    .filter(
+      (contact) =>
+        component.has(contact.regionAId) && component.has(contact.regionBId),
+    )
+    .sort((a, b) => {
+      const sideACompare = compareIds(a.regionAId, b.regionAId);
+      return sideACompare !== 0
+        ? sideACompare
+        : compareIds(a.regionBId, b.regionBId);
+    });
 }
 
 function createFrontId(
-  nationId: NationId,
-  enemyNationId: NationId,
-  firstFriendlyId: MesoRegionId,
-  firstEnemyId: MesoRegionId,
+  nationAId: NationId,
+  nationBId: NationId,
+  firstSideAId: MesoRegionId,
+  firstSideBId: MesoRegionId,
 ): FrontId {
-  return `front-${nationId}-${enemyNationId}-${firstFriendlyId}-${firstEnemyId}` as FrontId;
+  return `front-${nationAId}-${nationBId}-${firstSideAId}-${firstSideBId}` as FrontId;
 }
 
-function indexFrontsByNation(fronts: LandFront[]): Map<NationId, LandFront[]> {
-  const result = new Map<NationId, LandFront[]>();
-  for (const front of fronts) {
-    const list = result.get(front.nationId);
-    if (list) {
-      list.push(front);
-    } else {
-      result.set(front.nationId, [front]);
-    }
+function indexPhysicalFrontsByNation(
+  physicalFronts: PhysicalFront[],
+): Map<NationId, PhysicalFront[]> {
+  const result = new Map<NationId, PhysicalFront[]>();
+  for (const front of physicalFronts) {
+    addFrontToNationIndex(result, front.nationAId, front);
+    addFrontToNationIndex(result, front.nationBId, front);
   }
   return result;
+}
+
+function addFrontToNationIndex(
+  index: Map<NationId, PhysicalFront[]>,
+  nationId: NationId,
+  front: PhysicalFront,
+): void {
+  const list = index.get(nationId);
+  if (list) {
+    list.push(front);
+  } else {
+    index.set(nationId, [front]);
+  }
 }
 
 function countLandUnits(units: UnitState[]): number {
@@ -578,13 +623,8 @@ function comparePairContacts(a: NationPairContacts, b: NationPairContacts): numb
   return nationCompare !== 0 ? nationCompare : compareIds(a.nationBId, b.nationBId);
 }
 
-function compareFronts(a: LandFront, b: LandFront): number {
-  const nationCompare = compareIds(a.nationId, b.nationId);
-  if (nationCompare !== 0) {
-    return nationCompare;
-  }
-  const enemyCompare = compareIds(a.enemyNationId, b.enemyNationId);
-  return enemyCompare !== 0 ? enemyCompare : compareIds(a.id, b.id);
+function comparePhysicalFronts(a: PhysicalFront, b: PhysicalFront): number {
+  return compareIds(a.id, b.id);
 }
 
 function compareIds(a: string, b: string): number {

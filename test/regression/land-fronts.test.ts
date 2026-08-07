@@ -8,9 +8,17 @@ import { SeededRng } from "../../src/utils/seeded-rng";
 import { createUnitForType } from "../../src/sim/create-units";
 import {
   createLandFrontState,
-  getLandFrontsForNation,
+  getFrontSide,
+  getPhysicalFrontsForNation,
   updateLandFronts,
 } from "../../src/sim/land-fronts";
+import {
+  createNationFrontPlanState,
+  formatNationFrontPlanSummary,
+  getFrontPlan,
+  getNationFrontPlans,
+  updateNationFrontPlans,
+} from "../../src/sim/nation-front-plans";
 import {
   createNationResourceFlow,
   createNationResources,
@@ -59,9 +67,10 @@ test("a continuous border between the same enemies creates one front", () => {
 
   const fronts = frontsBetween(world, NATION_A, NATION_B);
   assert.equal(fronts.length, 1);
-  assert.deepEqual(fronts[0].friendlyBorderRegionIds, ids("a1", "a2"));
-  assert.deepEqual(fronts[0].enemyBorderRegionIds, ids("b1", "b2"));
+  assert.deepEqual(getFrontSide(fronts[0], NATION_A)?.borderRegionIds, ids("a1", "a2"));
+  assert.deepEqual(getFrontSide(fronts[0], NATION_B)?.borderRegionIds, ids("b1", "b2"));
   assert.equal(fronts[0].borderLength, 2);
+  assert.equal(fronts[0].borderEdges.length, 2);
 });
 
 test("two geographically separated contacts create two fronts", () => {
@@ -89,31 +98,36 @@ test("a peaceful border creates no front", () => {
 
   updateLandFronts(world);
 
-  assert.equal(world.landFronts.fronts.length, 0);
+  assert.equal(world.landFronts.physicalFronts.length, 0);
 });
 
 test("starting a war creates a front on the next front update", () => {
   const world = createSimpleBorderWorld();
   updateLandFronts(world);
-  assert.equal(world.landFronts.fronts.length, 0);
+  assert.equal(world.landFronts.physicalFronts.length, 0);
 
   startWar(world, NATION_A, NATION_B);
   updateLandFronts(world);
 
-  assert.equal(frontsBetween(world, NATION_A, NATION_B).length, 1);
-  assert.equal(frontsBetween(world, NATION_B, NATION_A).length, 1);
+  const fromA = frontsBetween(world, NATION_A, NATION_B);
+  const fromB = frontsBetween(world, NATION_B, NATION_A);
+  assert.equal(world.landFronts.physicalFronts.length, 1);
+  assert.equal(fromA.length, 1);
+  assert.equal(fromB.length, 1);
+  assert.strictEqual(fromA[0], fromB[0]);
+  assert.equal(fromA[0].id, fromB[0].id);
 });
 
 test("ending a war removes its fronts", () => {
   const world = createSimpleBorderWorld();
   startWar(world, NATION_A, NATION_B);
   updateLandFronts(world);
-  assert.equal(world.landFronts.fronts.length, 2);
+  assert.equal(world.landFronts.physicalFronts.length, 1);
 
   world.wars = [];
   updateLandFronts(world);
 
-  assert.equal(world.landFronts.fronts.length, 0);
+  assert.equal(world.landFronts.physicalFronts.length, 0);
 });
 
 test("territory changes can split one front into two", () => {
@@ -158,7 +172,7 @@ test("occupation changes the effective controller at a contact", () => {
   updateLandFronts(world);
   const occupiedFront = frontsBetween(world, NATION_A, NATION_B);
   assert.equal(occupiedFront.length, 1);
-  assert.deepEqual(occupiedFront[0].enemyBorderRegionIds, ids("c1"));
+  assert.deepEqual(getFrontSide(occupiedFront[0], NATION_B)?.borderRegionIds, ids("c1"));
 
   world.occupation.mesoById.delete(id("c1"));
   world.occupation.version += 1;
@@ -173,8 +187,8 @@ test("inactive nations do not receive or create fronts", () => {
 
   updateLandFronts(world);
 
-  assert.equal(world.landFronts.fronts.length, 0);
-  assert.equal(getLandFrontsForNation(world, NATION_B).length, 0);
+  assert.equal(world.landFronts.physicalFronts.length, 0);
+  assert.equal(getPhysicalFrontsForNation(world, NATION_B).length, 0);
 });
 
 test("front border lists contain unique valid region IDs", () => {
@@ -183,11 +197,11 @@ test("front border lists contain unique valid region IDs", () => {
   updateLandFronts(world);
   const validIds = new Set(world.mesoRegions.map((meso) => meso.id));
 
-  for (const front of world.landFronts.fronts) {
-    const friendly = new Set(front.friendlyBorderRegionIds);
-    const enemy = new Set(front.enemyBorderRegionIds);
-    assert.equal(friendly.size, front.friendlyBorderRegionIds.length);
-    assert.equal(enemy.size, front.enemyBorderRegionIds.length);
+  for (const front of world.landFronts.physicalFronts) {
+    const friendly = new Set(front.sideA.borderRegionIds);
+    const enemy = new Set(front.sideB.borderRegionIds);
+    assert.equal(friendly.size, front.sideA.borderRegionIds.length);
+    assert.equal(enemy.size, front.sideB.borderRegionIds.length);
     for (const regionId of [...friendly, ...enemy]) {
       assert(validIds.has(regionId), `${front.id} contains invalid ${regionId}`);
     }
@@ -223,20 +237,264 @@ test("strength uses battle strength within a one-region influence depth", () => 
 
   const front = frontsBetween(world, NATION_A, NATION_B)[0];
   assert(front);
-  assert.deepEqual(front.friendlyUnitIds, [borderUnit.id, rearUnit.id].sort());
-  assert(!front.friendlyUnitIds.includes(deepUnit.id));
-  assert.deepEqual(front.enemyUnitIds, [enemyUnit.id]);
+  const friendly = getFrontSide(front, NATION_A);
+  const enemy = getFrontSide(front, NATION_B);
+  assert(friendly && enemy);
+  assert.deepEqual(friendly.unitIds, [borderUnit.id, rearUnit.id].sort());
+  assert(!friendly.unitIds.includes(deepUnit.id));
+  assert.deepEqual(enemy.unitIds, [enemyUnit.id]);
   assert.equal(
-    front.friendlyStrength,
+    friendly.strength,
     getUnitCombatStrength(borderUnit) + getUnitCombatStrength(rearUnit),
   );
-  assert.equal(front.nearbyFriendlyCityCount, 1);
-  assert.equal(front.hasNearbyFriendlyCapital, true);
-  assert.equal(front.hasNearbyEnemyCapital, true);
-  for (const value of [front.friendlyStrength, front.enemyStrength, front.strengthRatio]) {
+  assert.equal(friendly.nearbyCityCount, 1);
+  assert.equal(friendly.hasNearbyCapital, true);
+  assert.equal(enemy.hasNearbyCapital, true);
+  for (const value of [friendly.strength, enemy.strength]) {
     assert(Number.isFinite(value));
   }
 });
+
+test("overwhelming superiority produces an attack plan", () => {
+  const world = createStrengthPlanWorld(200, 100);
+
+  const plan = planFor(world, NATION_A);
+
+  assert.equal(plan.posture, "attack");
+  assert.equal(plan.desiredStrength, 160);
+  assert(plan.reasonFlags.includes("strength-superiority"));
+  assert.match(formatNationFrontPlanSummary(world), /posture: attack/);
+});
+
+test("balanced strength produces a hold plan", () => {
+  const world = createStrengthPlanWorld(100, 100);
+
+  const plan = planFor(world, NATION_A);
+
+  assert.equal(plan.posture, "hold");
+  assert.equal(plan.desiredStrength, 110);
+  assert(plan.reasonFlags.includes("forces-balanced"));
+});
+
+test("a moderate disadvantage produces a reinforce plan", () => {
+  const world = createStrengthPlanWorld(60, 100);
+
+  const plan = planFor(world, NATION_A);
+
+  assert.equal(plan.posture, "reinforce");
+  assert.equal(plan.desiredStrength, 130);
+  assert(plan.reasonFlags.includes("strength-disadvantage"));
+});
+
+test("an extreme disadvantage produces a retreat plan", () => {
+  const world = createStrengthPlanWorld(20, 100);
+
+  const plan = planFor(world, NATION_A);
+
+  assert.equal(plan.posture, "retreat");
+  assert.equal(plan.desiredStrength, 50);
+  assert(plan.reasonFlags.includes("strength-disadvantage"));
+});
+
+test("a nearby friendly capital raises front priority", () => {
+  const world = createStrengthPlanWorld(100, 100);
+  const baselinePlan = planFor(world, NATION_A);
+  const geometryVersion = world.landFronts.version;
+  const friendlyRegion = world.mesoRegions.find((region) => region.id === id("a"));
+  assert(friendlyRegion);
+  friendlyRegion.building = "capital";
+  world.buildingVersion += 1;
+  updateFrontSystem(world);
+  const capitalPlan = planFor(world, NATION_A);
+
+  assert(capitalPlan.priority > baselinePlan.priority);
+  assert(capitalPlan.reasonFlags.includes("capital-threatened"));
+  assert.equal(world.landFronts.version, geometryVersion);
+});
+
+test("a nearby enemy capital raises attack priority", () => {
+  const baseline = createStrengthPlanWorld(200, 100);
+  const capital = createStrengthPlanWorld(200, 100, null, "capital");
+
+  const baselinePlan = planFor(baseline, NATION_A);
+  const capitalPlan = planFor(capital, NATION_A);
+
+  assert.equal(capitalPlan.posture, "attack");
+  assert(capitalPlan.priority > baselinePlan.priority);
+  assert(capitalPlan.reasonFlags.includes("enemy-capital-nearby"));
+});
+
+test("a peaceful border has no nation front plans", () => {
+  const world = createSimpleBorderWorld();
+
+  updateLandFronts(world);
+  updateNationFrontPlans(world);
+
+  assert.equal(getNationFrontPlans(world).length, 0);
+});
+
+test("ending a war removes all plans for its physical front", () => {
+  const world = createStrengthPlanWorld(100, 100);
+  assert.equal(getNationFrontPlans(world).length, 2);
+
+  world.wars = [];
+  updateFrontSystem(world);
+
+  assert.equal(world.landFronts.physicalFronts.length, 0);
+  assert.equal(getNationFrontPlans(world).length, 0);
+});
+
+test("front split and merge replace plans without leaving invalid references", () => {
+  const world = createThreeSegmentWorld(false);
+  startWar(world, NATION_A, NATION_B);
+  updateFrontSystem(world);
+  assertPlanReferencesAreValid(world, 1);
+
+  setRegionOwner(world, "a2", NATION_C);
+  setRegionOwner(world, "b2", NATION_C);
+  world.territoryVersion += 1;
+  updateFrontSystem(world);
+  assertPlanReferencesAreValid(world, 2);
+
+  setRegionOwner(world, "a2", NATION_A);
+  setRegionOwner(world, "b2", NATION_B);
+  world.territoryVersion += 1;
+  updateFrontSystem(world);
+  assertPlanReferencesAreValid(world, 1);
+});
+
+test("priority and desired strength are finite for zero-strength fronts", () => {
+  const world = createStrengthPlanWorld(0, 0);
+
+  for (const plan of getNationFrontPlans(world)) {
+    assert(Number.isFinite(plan.priority));
+    assert(Number.isFinite(plan.desiredStrength));
+    assert(plan.priority >= 0 && plan.priority <= 100);
+    assert(plan.desiredStrength >= 0);
+  }
+});
+
+test("attack posture uses hysteresis near its exit threshold", () => {
+  const world = createStrengthPlanWorld(170, 100);
+  const friendlyUnit = world.units.find((unit) => unit.nationId === NATION_A);
+  assert(friendlyUnit);
+  assert.equal(planFor(world, NATION_A).posture, "attack");
+
+  setUnitStrength(friendlyUnit, 150);
+  world.time.fastTick += 10;
+  updateFrontSystem(world);
+  const maintained = planFor(world, NATION_A);
+  assert.equal(maintained.posture, "attack");
+  assert(maintained.reasonFlags.includes("posture-maintained"));
+
+  setUnitStrength(friendlyUnit, 130);
+  world.time.fastTick += 10;
+  updateFrontSystem(world);
+  assert.equal(planFor(world, NATION_A).posture, "hold");
+});
+
+test("two nation plans reference one physical front without duplicating geometry", () => {
+  const world = createStrengthPlanWorld(200, 100);
+  const [front] = world.landFronts.physicalFronts;
+  assert(front);
+  const plans = getNationFrontPlans(world);
+
+  assert.equal(world.landFronts.physicalFronts.length, 1);
+  assert.equal(plans.length, 2);
+  assert(plans.every((plan) => plan.frontId === front.id));
+  assert.equal(getFrontPlan(world, front.id, NATION_A)?.frontId, front.id);
+  assert.equal(getFrontPlan(world, front.id, NATION_B)?.frontId, front.id);
+  assert(!("sideA" in plans[0]));
+  assert(!("borderEdges" in plans[0]));
+  assert.notEqual(front.sideA.strength, front.sideB.strength);
+});
+
+test("evaluating plans does not mutate units, targets, wars, or world versions", () => {
+  const world = createSimpleBorderWorld();
+  startWar(world, NATION_A, NATION_B);
+  addLandUnit(world, NATION_A, "a", "Infantry");
+  addLandUnit(world, NATION_B, "b", "Infantry");
+  updateLandFronts(world);
+  const before = {
+    units: structuredClone(world.units),
+    wars: structuredClone(world.wars),
+    occupation: [...world.occupation.mesoById],
+    occupationVersion: world.occupation.version,
+    territoryVersion: world.territoryVersion,
+  };
+
+  updateNationFrontPlans(world);
+
+  assert.deepEqual(world.units, before.units);
+  assert.deepEqual(world.wars, before.wars);
+  assert.deepEqual([...world.occupation.mesoById], before.occupation);
+  assert.equal(world.occupation.version, before.occupationVersion);
+  assert.equal(world.territoryVersion, before.territoryVersion);
+});
+
+function createStrengthPlanWorld(
+  friendlyStrength: number,
+  enemyStrength: number,
+  friendlyBuilding: MesoRegion["building"] = null,
+  enemyBuilding: MesoRegion["building"] = null,
+): WorldState {
+  const world = createFrontWorld(
+    [
+      { id: "a", owner: NATION_A, building: friendlyBuilding },
+      { id: "b", owner: NATION_B, building: enemyBuilding },
+    ],
+    [["a", "b"]],
+  );
+  startWar(world, NATION_A, NATION_B);
+  if (friendlyStrength > 0) {
+    setUnitStrength(
+      addLandUnit(world, NATION_A, "a", "Infantry"),
+      friendlyStrength,
+    );
+  }
+  if (enemyStrength > 0) {
+    setUnitStrength(addLandUnit(world, NATION_B, "b", "Infantry"), enemyStrength);
+  }
+  updateFrontSystem(world);
+  return world;
+}
+
+function updateFrontSystem(world: WorldState): void {
+  updateLandFronts(world);
+  updateNationFrontPlans(world);
+}
+
+function planFor(world: WorldState, nationId: NationId) {
+  const front = getPhysicalFrontsForNation(world, nationId)[0];
+  assert(front);
+  const plan = getFrontPlan(world, front.id, nationId);
+  assert(plan);
+  return plan;
+}
+
+function setUnitStrength(
+  unit: ReturnType<typeof addLandUnit>,
+  desiredStrength: number,
+): void {
+  const currentStrength = getUnitCombatStrength(unit);
+  assert(currentStrength > 0);
+  unit.manpower *= desiredStrength / currentStrength;
+  assert(Math.abs(getUnitCombatStrength(unit) - desiredStrength) < 0.0001);
+}
+
+function assertPlanReferencesAreValid(
+  world: WorldState,
+  expectedPhysicalFronts: number,
+): void {
+  assert.equal(world.landFronts.physicalFronts.length, expectedPhysicalFronts);
+  assert.equal(world.frontPlans.plans.length, expectedPhysicalFronts * 2);
+  const validFrontIds = new Set(
+    world.landFronts.physicalFronts.map((front) => front.id),
+  );
+  for (const plan of world.frontPlans.plans) {
+    assert(validFrontIds.has(plan.frontId));
+  }
+}
 
 function createSimpleBorderWorld(inactiveNationIds = new Set<NationId>()): WorldState {
   return createFrontWorld(
@@ -334,6 +592,7 @@ function createFrontWorld(
     battles: [],
     occupation,
     landFronts: createLandFrontState(),
+    frontPlans: createNationFrontPlanState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,
@@ -373,8 +632,10 @@ function startWar(world: WorldState, nationAId: NationId, nationBId: NationId): 
 }
 
 function frontsBetween(world: WorldState, nationId: NationId, enemyNationId: NationId) {
-  return getLandFrontsForNation(world, nationId).filter(
-    (front) => front.enemyNationId === enemyNationId,
+  return getPhysicalFrontsForNation(world, nationId).filter(
+    (front) =>
+      (front.nationAId === nationId && front.nationBId === enemyNationId) ||
+      (front.nationBId === nationId && front.nationAId === enemyNationId),
   );
 }
 

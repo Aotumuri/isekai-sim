@@ -7,6 +7,7 @@ export type SimulationMetricName =
   | "pathfinding.bfs"
   | "landFront.rebuild"
   | "landFront.metrics"
+  | "landFront.planEvaluation"
   | "updateOccupation"
   | "updateCapitals"
   | "surrender";
@@ -37,7 +38,9 @@ export type SimulationCounterName =
   | "world.territoryChanges"
   | "landFront.rebuilds"
   | "landFront.metricRefreshes"
-  | "landFront.frontsBuilt";
+  | "landFront.frontsBuilt"
+  | "landFront.planUpdates"
+  | "landFront.plansEvaluated";
 
 /**
  * Optional benchmark observer. Production worlds do not install one, so hot paths
