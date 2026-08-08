@@ -89,10 +89,8 @@ export function attachFrontDebugOverlay(
       drawPhysicalFrontBoundary(layer, world, front, borderSegments);
     });
     const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
-    const occupied: LabelRect[] = [];
     world.landFronts.operationalSectors.forEach((sector, index) => {
       const color = FRONT_COLORS[index % FRONT_COLORS.length];
-      drawSector(layer, world, sector, color, borderSegments);
       const label = createSectorLabel(
         world,
         sector,
@@ -100,7 +98,16 @@ export function attachFrontDebugOverlay(
         unitById,
         sector.id === selectedSectorId,
       );
-      placeLabel(label, getFrontAnchor(sector, world), index, occupied, world.width, world.height);
+      label.visible = sector.id === selectedSectorId;
+      drawSector(layer, world, sector, color, borderSegments, {
+        showLabel: () => {
+          label.visible = true;
+        },
+        hideLabel: () => {
+          label.visible = selectedSectorId === sector.id;
+        },
+      });
+      placeLabel(label, getFrontAnchor(sector, world), index, [], world.width, world.height);
       layer.addChild(label);
     });
     if (selectedSectorId && !world.landFronts.operationalSectorsById.has(selectedSectorId)) {
@@ -177,9 +184,12 @@ export function attachFrontDebugOverlay(
       borderSegments,
       10 / renderer.worldContainer.scale.x,
     );
-    const nextSelection = clickedSectorId && world.landFronts.operationalSectorsById.has(clickedSectorId)
-      ? clickedSectorId
-      : null;
+    const nextSelection =
+      clickedSectorId &&
+      clickedSectorId !== selectedSectorId &&
+      world.landFronts.operationalSectorsById.has(clickedSectorId)
+        ? clickedSectorId
+        : null;
     if (selectedSectorId === nextSelection) {
       return;
     }
@@ -214,11 +224,14 @@ function drawSector(
   sector: OperationalSector,
   color: number,
   borderSegments: ReadonlyMap<string, readonly Segment[]>,
+  labelEvents: { showLabel: () => void; hideLabel: () => void },
 ): void {
   const geometry = new Graphics();
   geometry.name = `SectorDebugGeometry:${sector.id}`;
   geometry.eventMode = "static";
   geometry.cursor = "pointer";
+  geometry.on("pointerover", labelEvents.showLabel);
+  geometry.on("pointerout", labelEvents.hideLabel);
   geometry.lineStyle({ width: 14, color: 0xffffff, alpha: 0.001, cap: "round", join: "round" });
   drawBorderEdges(geometry, sector.frontline.borderEdges, borderSegments, world);
   geometry.lineStyle({ width: 4, color, alpha: 0.98, cap: "round", join: "round" });
@@ -260,7 +273,7 @@ function createSectorLabel(
 ): Container {
   const container = new Container();
   container.name = `SectorDebugLabel:${front.id}`;
-  container.eventMode = "static";
+  container.eventMode = "none";
   const text = new Text(formatSectorLabel(world, front, unitById, selected), LABEL_STYLE);
   text.resolution = 2;
   const bounds = text.getLocalBounds();
