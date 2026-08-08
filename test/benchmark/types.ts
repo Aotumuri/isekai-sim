@@ -6,6 +6,7 @@ export const BENCHMARK_SCENARIOS = [
   "late-game",
   "retreat-heavy",
   "capital-threat",
+  "strategic-reserve",
 ] as const;
 
 export type BenchmarkScenarioName = (typeof BENCHMARK_SCENARIOS)[number];
@@ -21,6 +22,7 @@ export interface BenchmarkOptions {
   mode: BenchmarkMode;
   frameDeltaMs: number;
   quick: boolean;
+  reserveEnabled: boolean;
 }
 
 export interface MetricSummary {
@@ -81,7 +83,27 @@ export interface WorldSummary {
   capitalFallbackSelections: number;
   capitalOperationCancellations: number;
   capitalFalls: number;
+  firstCapitalFallTick: number;
   capitalUnguardedTicks: number;
+  reserveNations: number;
+  reserveUnits: number;
+  reserveStrength: number;
+  desiredReserveStrength: number;
+  readyReserves: number;
+  deployingReserves: number;
+  returningReserves: number;
+  reserveFormations: number;
+  reserveMembershipChanges: number;
+  reserveDeployments: number;
+  reserveDeployedUnits: number;
+  reserveAverageUnits: number;
+  reserveAverageStrength: number;
+  reserveArrivalLatency: number;
+  capitalReserveArrivalLatency: number;
+  reserveFrontDeficitImprovement: number;
+  reserveRetreatFallbackArrivals: number;
+  reserveReturnsStarted: number;
+  reserveReturnsCompleted: number;
   microRegions: number;
   mesoRegions: number;
   macroRegions: number;
@@ -101,6 +123,7 @@ export interface BenchmarkResult {
   processedSlowTicks: number;
   speed: number;
   frameDeltaMs: number;
+  reserveEnabled: boolean;
   virtualElapsedMs: number;
   wallClockMs: number;
   effectiveSimulationSpeed: number;

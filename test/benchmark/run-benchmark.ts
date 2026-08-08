@@ -36,6 +36,10 @@ function parseArguments(args: string[]): ParsedArguments {
   if (mode !== "throughput" && mode !== "frame-loop") {
     throw new Error(`Unknown benchmark mode: ${mode}`);
   }
+  const reserveMode = readOption(args, "--reserve") ?? "on";
+  if (reserveMode !== "on" && reserveMode !== "off") {
+    throw new Error(`Unknown reserve mode: ${reserveMode}`);
+  }
   return {
     options: {
       scenario: scenario as BenchmarkScenarioName,
@@ -47,6 +51,7 @@ function parseArguments(args: string[]): ParsedArguments {
       mode,
       frameDeltaMs: readNumber(args, "--frame-ms", 1_000 / 60),
       quick,
+      reserveEnabled: reserveMode === "on",
     },
     outputPath: readOption(args, "--output"),
   };

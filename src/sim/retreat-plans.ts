@@ -499,7 +499,9 @@ function createRetreatPlan(
     .map((unitId) => world.units.find((unit) => unit.id === unitId))
     .filter(
       (unit): unit is UnitState =>
-        isRetreatLandUnit(unit, plan.nationId) && !alreadyCommitted.has(unit.id),
+        isRetreatLandUnit(unit, plan.nationId) &&
+        !alreadyCommitted.has(unit.id) &&
+        !world.strategicReserves.reserveNationByUnitId.has(unit.id),
     );
   if (allocatedUnits.length < WORLD_BALANCE.war.landFront.retreat.minimumUnits) {
     return null;

@@ -14,6 +14,8 @@ export type SimulationMetricName =
   | "retreat.evaluation"
   | "retreat.targetAssignment"
   | "capitalDefense.evaluation"
+  | "strategicReserve.evaluation"
+  | "strategicReserve.targetAssignment"
   | "updateOccupation"
   | "updateCapitals"
   | "surrender";
@@ -85,7 +87,29 @@ export type SimulationCounterName =
   | "capitalDefense.fallbackSelections"
   | "capitalDefense.operationCancellations"
   | "capitalDefense.capitalFalls"
-  | "capitalDefense.unguardedTicks";
+  | "capitalDefense.unguardedTicks"
+  | "strategicReserve.formations"
+  | "strategicReserve.membershipChanges"
+  | "strategicReserve.deployments"
+  | "strategicReserve.deployments.capital-critical"
+  | "strategicReserve.deployments.front-severe-deficit"
+  | "strategicReserve.deployments.retreat-fallback-threat"
+  | "strategicReserve.deployments.front-collapse"
+  | "strategicReserve.deployments.reserve-reforming"
+  | "strategicReserve.deployedUnits"
+  | "strategicReserve.arrivals"
+  | "strategicReserve.arrivalLatencyTicks"
+  | "strategicReserve.capitalArrivals"
+  | "strategicReserve.capitalArrivalLatencyTicks"
+  | "strategicReserve.frontDeficitImprovement"
+  | "strategicReserve.retreatFallbackArrivals"
+  | "strategicReserve.returnsStarted"
+  | "strategicReserve.returnsCompleted"
+  | "strategicReserve.sampleCount"
+  | "strategicReserve.sampledUnits"
+  | "strategicReserve.sampledStrength"
+  | "strategicReserve.targetAssignments"
+  | "strategicReserve.unitTargetSwitches";
 
 /**
  * Optional benchmark observer. Production worlds do not install one, so hot paths

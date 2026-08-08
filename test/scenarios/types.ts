@@ -5,6 +5,7 @@ export interface ScenarioOptions {
   width: number;
   height: number;
   quick: boolean;
+  reserveEnabled?: boolean;
 }
 
 export type ScenarioSetup = (world: WorldState, options: ScenarioOptions) => void;

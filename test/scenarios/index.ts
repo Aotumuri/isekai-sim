@@ -8,6 +8,7 @@ import { setupLateGame } from "./late-game";
 import { setupManyUnits } from "./many-units";
 import { setupRetreatHeavy } from "./retreat-heavy";
 import { setupCapitalThreat } from "./capital-threat";
+import { setupStrategicReserve } from "./strategic-reserve";
 import type { ScenarioOptions, ScenarioSetup } from "./types";
 
 const scenarioSetups: Record<BenchmarkScenarioName, ScenarioSetup> = {
@@ -18,6 +19,7 @@ const scenarioSetups: Record<BenchmarkScenarioName, ScenarioSetup> = {
   "late-game": setupLateGame,
   "retreat-heavy": setupRetreatHeavy,
   "capital-threat": setupCapitalThreat,
+  "strategic-reserve": setupStrategicReserve,
 };
 
 export function createScenarioWorld(
@@ -25,6 +27,7 @@ export function createScenarioWorld(
   options: ScenarioOptions,
 ): WorldState {
   const world = createSeededWorld(options);
+  world.strategicReserves.enabled = options.reserveEnabled ?? true;
   scenarioSetups[name](world, options);
   return world;
 }

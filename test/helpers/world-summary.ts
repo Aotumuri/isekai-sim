@@ -29,6 +29,7 @@ export function summarizeWorld(world: WorldState): WorldSummary {
   const resolvedOperations =
     world.offensiveOperations.completedCount +
     world.offensiveOperations.failedCount;
+  const reserveState = world.strategicReserves;
   return {
     nations: world.nations.length,
     activeNations,
@@ -112,7 +113,52 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     capitalOperationCancellations:
       world.capitalDefense.operationCancellationCount,
     capitalFalls: world.capitalDefense.capitalFallCount,
+    firstCapitalFallTick: world.capitalDefense.capitalFallTicks[0] ?? -1,
     capitalUnguardedTicks: world.capitalDefense.unguardedTickCount,
+    reserveNations: reserveState.reserves.length,
+    reserveUnits: reserveState.reserveNationByUnitId.size,
+    reserveStrength: reserveState.reserves.reduce(
+      (total, reserve) => total + reserve.totalStrength,
+      0,
+    ),
+    desiredReserveStrength: reserveState.reserves.reduce(
+      (total, reserve) => total + reserve.desiredReserveStrength,
+      0,
+    ),
+    readyReserves: reserveState.reserves.filter(
+      (reserve) => reserve.status === "ready",
+    ).length,
+    deployingReserves: reserveState.reserves.filter(
+      (reserve) => reserve.status === "deploying",
+    ).length,
+    returningReserves: reserveState.reserves.filter(
+      (reserve) => reserve.status === "returning",
+    ).length,
+    reserveFormations: reserveState.formationCount,
+    reserveMembershipChanges: reserveState.membershipChangeCount,
+    reserveDeployments: reserveState.deploymentCount,
+    reserveDeployedUnits: reserveState.deployedUnitCount,
+    reserveAverageUnits:
+      reserveState.sampleCount > 0
+        ? reserveState.sampledUnitCount / reserveState.sampleCount
+        : 0,
+    reserveAverageStrength:
+      reserveState.sampleCount > 0
+        ? reserveState.sampledStrength / reserveState.sampleCount
+        : 0,
+    reserveArrivalLatency:
+      reserveState.arrivalLatencySampleCount > 0
+        ? reserveState.arrivalLatencyTicks / reserveState.arrivalLatencySampleCount
+        : 0,
+    capitalReserveArrivalLatency:
+      reserveState.capitalArrivalLatencySampleCount > 0
+        ? reserveState.capitalArrivalLatencyTicks /
+          reserveState.capitalArrivalLatencySampleCount
+        : 0,
+    reserveFrontDeficitImprovement: reserveState.frontDeficitImprovement,
+    reserveRetreatFallbackArrivals: reserveState.retreatFallbackArrivalCount,
+    reserveReturnsStarted: reserveState.returnStartedCount,
+    reserveReturnsCompleted: reserveState.returnCompletedCount,
     microRegions: world.microRegions.length,
     mesoRegions: world.mesoRegions.length,
     macroRegions: world.macroRegions.length,

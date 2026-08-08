@@ -3,6 +3,7 @@ import { updateCapitalDefense } from "../../src/sim/capital-defense";
 import { updateLandFronts } from "../../src/sim/land-fronts";
 import { updateNationFrontAllocations } from "../../src/sim/nation-front-allocations";
 import { updateNationFrontPlans } from "../../src/sim/nation-front-plans";
+import { updateStrategicReserves } from "../../src/sim/strategic-reserves";
 import { createUnitId } from "../../src/sim/unit";
 import type { WorldState } from "../../src/sim/world-state";
 import type { MesoRegionId } from "../../src/worldgen/meso-region";
@@ -11,6 +12,9 @@ import { buildOwnerByMesoId, startAdjacentWars } from "./scenario-utils";
 import type { ScenarioSetup } from "./types";
 
 export const setupCapitalThreat: ScenarioSetup = (world, options) => {
+  for (const nation of world.nations) {
+    nation.nextWarDeclarationTick = Number.POSITIVE_INFINITY;
+  }
   if (startAdjacentWars(world, 1) !== 1) {
     throw new Error("capital-threat requires an adjacent war");
   }
@@ -34,13 +38,6 @@ export const setupCapitalThreat: ScenarioSetup = (world, options) => {
   if (!attacker || !defender || !threatenedCapital) {
     throw new Error("capital-threat nations or threatened capital are missing");
   }
-  if (defenderCapital && defenderCapital.id !== threatenedCapital.id) {
-    defenderCapital.building = "city";
-  }
-  threatenedCapital.building = "capital";
-  defender.capitalMesoId = threatenedCapital.id;
-  world.buildingVersion += 1;
-
   world.units = world.units.filter(
     (unit) => unit.nationId !== attacker.id && unit.nationId !== defender.id,
   );
@@ -63,9 +60,31 @@ export const setupCapitalThreat: ScenarioSetup = (world, options) => {
     );
   }
 
+  if (defenderCapital && defenderCapital.id !== threatenedCapital.id) {
+    defenderCapital.building = "city";
+  }
+  threatenedCapital.building = "capital";
+  defender.capitalMesoId = threatenedCapital.id;
+  world.buildingVersion += 1;
+
+  // Form the reserve before hostilities while the real capital is still safe.
+  // This preserves the scenario's geography and measures pre-positioning rather
+  // than creating troops after the emergency has already begun.
+  const activeWars = world.wars;
+  world.wars = [];
   updateLandFronts(world);
   updateCapitalDefense(world);
   updateNationFrontPlans(world);
+  updateNationFrontAllocations(world);
+  updateStrategicReserves(world);
+  updateNationFrontAllocations(world);
+
+  world.wars = activeWars;
+  updateLandFronts(world);
+  updateCapitalDefense(world);
+  updateNationFrontPlans(world);
+  updateNationFrontAllocations(world);
+  updateStrategicReserves(world);
   updateNationFrontAllocations(world);
 };
 

@@ -171,6 +171,82 @@ export function assertWorldInvariants(world: WorldState): void {
       assert(Number.isFinite(value), `${retreat.id} numeric state must be finite`);
     }
   }
+  const reserveNationIds = new Set<string>();
+  const reserveUnitIds = new Set<string>();
+  for (const reserve of world.strategicReserves.reserves) {
+    assert(
+      nationIds.has(reserve.nationId),
+      `${reserve.nationId} reserve nation is missing`,
+    );
+    assert(
+      !reserveNationIds.has(reserve.nationId),
+      `${reserve.nationId} has multiple reserve states`,
+    );
+    reserveNationIds.add(reserve.nationId);
+    for (const regionId of reserve.stagingRegionIds) {
+      const region = world.mesoRegions.find((candidate) => candidate.id === regionId);
+      assert(region && region.type !== "sea", `${reserve.nationId} staging is invalid`);
+    }
+    for (const unitId of reserve.unitIds) {
+      const unit = world.units.find((candidate) => candidate.id === unitId);
+      assert(unit, `${reserve.nationId} reserve references missing ${unitId}`);
+      assert.equal(unit.domain, "land", `${unitId} reserve unit must be land`);
+      assert.equal(unit.nationId, reserve.nationId, `${unitId} reserve owner differs`);
+      assert(!reserveUnitIds.has(unitId), `${unitId} belongs to multiple reserves`);
+      assert(
+        !world.frontAllocations.frontIdByUnitId.has(unitId),
+        `${unitId} belongs to reserve and Front allocation`,
+      );
+      assert(
+        !world.offensiveOperations.operationIdByUnitId.has(unitId),
+        `${unitId} belongs to reserve and offensive operation`,
+      );
+      assert(
+        !world.retreatPlans.retreatIdByUnitId.has(unitId),
+        `${unitId} belongs to reserve and retreat`,
+      );
+      reserveUnitIds.add(unitId);
+    }
+    if (reserve.deployment) {
+      for (const regionId of reserve.deployment.targetRegionIds) {
+        const region = world.mesoRegions.find((candidate) => candidate.id === regionId);
+        assert(region && region.type !== "sea", `${reserve.nationId} deployment target is invalid`);
+      }
+      for (const unitId of reserve.deployment.unitIds) {
+        assert(
+          reserveUnitIds.has(unitId),
+          `${unitId} deployment unit is not a reserve member`,
+        );
+      }
+      for (const [unitId, regionId] of reserve.deployment.unitTargetRegionIds) {
+        assert(
+          reserve.deployment.unitIds.includes(unitId),
+          `${unitId} has a target outside its deployment`,
+        );
+        assert(mesoIds.has(regionId), `${unitId} reserve target is invalid`);
+      }
+      for (const value of [
+        reserve.deployment.startedAtTick,
+        reserve.deployment.initialTargetDeficit,
+        reserve.deployment.lastEffectiveDeficit,
+        reserve.deployment.lastArrivedUnitCount,
+      ]) {
+        assert(Number.isFinite(value), `${reserve.nationId} deployment numeric state must be finite`);
+      }
+    }
+    for (const value of [
+      reserve.totalStrength,
+      reserve.desiredReserveStrength,
+      reserve.cooldownUntilTick,
+    ]) {
+      assert(Number.isFinite(value), `${reserve.nationId} reserve numeric state must be finite`);
+    }
+  }
+  assert.equal(
+    world.strategicReserves.reserveNationByUnitId.size,
+    reserveUnitIds.size,
+    "reserve membership index must match reserve states",
+  );
 }
 
 export function assertUnitRoleReferences(world: WorldState): void {
@@ -251,6 +327,25 @@ export function semanticWorldSignature(world: WorldState): unknown {
       enemy: assessment.enemyStrength,
       minimum: assessment.minimumDefenseStrength,
       started: assessment.emergencyStartedAtTick,
+    })),
+    strategicReserves: world.strategicReserves.reserves.map((reserve) => ({
+      nation: reserve.nationId,
+      units: [...reserve.unitIds],
+      strength: reserve.totalStrength,
+      desired: reserve.desiredReserveStrength,
+      staging: [...reserve.stagingRegionIds],
+      status: reserve.status,
+      deployment: reserve.deployment
+        ? {
+            type: reserve.deployment.targetType,
+            front: reserve.deployment.targetFrontId,
+            targets: [...reserve.deployment.targetRegionIds],
+            units: [...reserve.deployment.unitIds],
+            unitTargets: [...reserve.deployment.unitTargetRegionIds.entries()],
+            status: reserve.deployment.status,
+            reasons: [...reserve.deployment.reasonFlags],
+          }
+        : null,
     })),
   };
 }

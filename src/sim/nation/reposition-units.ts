@@ -26,6 +26,11 @@ import {
   type OffensiveOperation,
 } from "../offensive-operations";
 import { getRetreatPlans, type RetreatPlan } from "../retreat-plans";
+import {
+  getNationReserveState,
+  getReserveTargetForUnit,
+  type NationReserveState,
+} from "../strategic-reserves";
 
 const LAND_TARGET_REASSIGN_INTERVAL_TICKS = 10;
 const MAX_SHARED_PATH_FIELDS = 256;
@@ -49,6 +54,7 @@ interface LandAiRuntime {
   frontAllocationMembershipVersion: number;
   offensiveOperationVersion: number;
   retreatPlanVersion: number;
+  strategicReserveVersion: number;
   warAdjacency: WarAdjacency;
   movementGroups: LandMovementGroup[];
   unitsExpectedToHaveTarget: Set<UnitState["id"]>;
@@ -120,6 +126,8 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     runtime.offensiveOperationVersion !== world.offensiveOperations.version;
   const retreatPlanChanged =
     runtime.retreatPlanVersion !== world.retreatPlans.version;
+  const strategicReserveChanged =
+    runtime.strategicReserveVersion !== world.strategicReserves.version;
   const periodicReassignmentDue =
     world.time.fastTick - runtime.lastAssignmentFastTick >=
     LAND_TARGET_REASSIGN_INTERVAL_TICKS;
@@ -134,6 +142,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     frontAllocationChanged ||
     offensiveOperationChanged ||
     retreatPlanChanged ||
+    strategicReserveChanged ||
     periodicReassignmentDue;
 
   const mesoById = getMesoById(world);
@@ -189,6 +198,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
       world.frontAllocations.membershipVersion;
     runtime.offensiveOperationVersion = world.offensiveOperations.version;
     runtime.retreatPlanVersion = world.retreatPlans.version;
+    runtime.strategicReserveVersion = world.strategicReserves.version;
     runtime.forceReassignment = false;
   }
 
@@ -253,6 +263,7 @@ function getLandAiRuntime(world: WorldState): LandAiRuntime {
     frontAllocationMembershipVersion: -1,
     offensiveOperationVersion: -1,
     retreatPlanVersion: -1,
+    strategicReserveVersion: -1,
     warAdjacency: new Map(),
     movementGroups: [],
     unitsExpectedToHaveTarget: new Set(),
@@ -407,13 +418,39 @@ function rebuildLandAssignments(
     const nation = nationById.get(nationId);
     const frontAllocations = getNationFrontAllocations(world, nationId);
     const retreatPlans = getRetreatPlans(world, nationId);
+    const reserve = getNationReserveState(world, nationId);
+    const reserveUnitIds = new Set(reserve?.unitIds ?? []);
     const retreatUnitIds = new Set(
       retreatPlans.flatMap((retreat) => [
         ...retreat.rearguardUnitIds,
         ...retreat.retreatingUnitIds,
       ]),
     );
-    const normalNationUnits = units.filter((unit) => !retreatUnitIds.has(unit.id));
+    const normalNationUnits = units.filter(
+      (unit) =>
+        !retreatUnitIds.has(unit.id) && !reserveUnitIds.has(unit.id),
+    );
+    if (reserve) {
+      const reserveUnits = reserve.unitIds
+        .map((unitId) => unitById.get(unitId))
+        .filter(
+          (unit): unit is UnitState =>
+            !!unit &&
+            unit.nationId === nationId &&
+            !retreatUnitIds.has(unit.id),
+        );
+      if (reserveUnits.length > 0) {
+        movementGroups.push(
+          buildReserveMovementGroup(
+            world,
+            reserve,
+            reserveUnits,
+            nation,
+            instrumentation,
+          ),
+        );
+      }
+    }
     for (const retreat of retreatPlans) {
       const rearguardUnits = retreat.rearguardUnitIds
         .map((unitId) => unitById.get(unitId))
@@ -490,7 +527,8 @@ function rebuildLandAssignments(
           (unit): unit is UnitState =>
             !!unit &&
             unit.nationId === nationId &&
-            !retreatUnitIds.has(unit.id),
+            !retreatUnitIds.has(unit.id) &&
+            !reserveUnitIds.has(unit.id),
         );
       if (allocatedUnits.length === 0) {
         continue;
@@ -564,7 +602,8 @@ function rebuildLandAssignments(
         (unit): unit is UnitState =>
           !!unit &&
           unit.nationId === nationId &&
-          !retreatUnitIds.has(unit.id),
+          !retreatUnitIds.has(unit.id) &&
+          !reserveUnitIds.has(unit.id),
       );
     clearUnitMovement(unassignedUnits);
   }
@@ -579,6 +618,57 @@ function rebuildLandAssignments(
     }
   }
   runtime.unitsExpectedToHaveTarget = unitsExpectedToHaveTarget;
+}
+
+function buildReserveMovementGroup(
+  world: WorldState,
+  reserve: NationReserveState,
+  units: UnitState[],
+  nation: WorldState["nations"][number] | undefined,
+  instrumentation?: SimulationInstrumentation,
+): LandMovementGroup {
+  const startedAt = instrumentation ? performance.now() : 0;
+  const orderedUnits = [...units].sort(compareUnitIds);
+  let assignmentCount = 0;
+  let switchCount = 0;
+  for (const unit of orderedUnits) {
+    const targetId = getReserveTargetForUnit(reserve, unit.id);
+    if (!targetId) {
+      if (unit.moveTargetId) switchCount += 1;
+      unit.moveTargetId = null;
+      unit.moveFromId = null;
+      unit.moveToId = null;
+      unit.moveProgressMs = 0;
+      continue;
+    }
+    if (unit.moveTargetId === targetId) continue;
+    if (unit.moveTargetId) switchCount += 1;
+    unit.moveTargetId = targetId;
+    unit.moveFromId = null;
+    unit.moveToId = null;
+    unit.moveProgressMs = 0;
+    assignmentCount += 1;
+  }
+  nation?.unitRoles.defenseUnitIds.push(...orderedUnits.map((unit) => unit.id));
+  instrumentation?.incrementCounter(
+    "strategicReserve.targetAssignments",
+    assignmentCount,
+  );
+  instrumentation?.incrementCounter(
+    "strategicReserve.unitTargetSwitches",
+    switchCount,
+  );
+  if (instrumentation) {
+    instrumentation.recordDuration(
+      "strategicReserve.targetAssignment",
+      performance.now() - startedAt,
+    );
+  }
+  return {
+    nationId: reserve.nationId,
+    units: orderedUnits,
+    controlledOnly: true,
+  };
 }
 
 function buildLandMovementGroup(

@@ -58,11 +58,18 @@ import {
 } from "../../src/sim/nation-runtime";
 import { createOccupationState } from "../../src/sim/occupation";
 import { createSimTime } from "../../src/sim/time";
-import { createUnitId, type LandUnitType } from "../../src/sim/unit";
+import { createUnitId, type LandUnitType, type UnitType } from "../../src/sim/unit";
 import { getUnitCombatStrength } from "../../src/sim/unit-strength";
 import { declareWar } from "../../src/sim/war-state";
 import { createWorldCache } from "../../src/sim/world-cache";
 import type { WorldState } from "../../src/sim/world-state";
+import {
+  createStrategicReserveState,
+  formatStrategicReserveSummary,
+  getNationReserveState,
+  getReserveTargetForUnit,
+  updateStrategicReserves,
+} from "../../src/sim/strategic-reserves";
 
 const NATION_A = createNationId(0);
 const NATION_B = createNationId(1);
@@ -1692,6 +1699,443 @@ test("capital defense decisions are fixed-seed deterministic", () => {
   );
 });
 
+test("a small nation does not form a Strategic Reserve", () => {
+  const world = createReserveWorld(3, 2, 3);
+  updateStrategicReserves(world);
+  assert.equal(getNationReserveState(world, NATION_A), undefined);
+});
+
+test("a normal nation deliberately forms a Strategic Reserve", () => {
+  const world = createFormedReserveWorld();
+  const reserve = getNationReserveState(world, NATION_A);
+  assert(reserve);
+  assert(reserve.unitIds.length > 0);
+  assert(reserve.totalStrength > 0);
+  assert(reserve.desiredReserveStrength > 0);
+  assert.match(formatStrategicReserveSummary(world), /Strategic Reserve/);
+});
+
+test("Reserve membership never overlaps Front Allocation", () => {
+  const world = createFormedReserveWorld();
+  const reserve = getNationReserveState(world, NATION_A);
+  assert(reserve);
+  for (const unitId of reserve.unitIds) {
+    assert.equal(getAllocatedFrontId(world, unitId), undefined);
+  }
+});
+
+test("Reserve membership never overlaps OffensiveOperation", () => {
+  const world = createFormedReserveWorld();
+  updateOffensiveOperations(world);
+  const reserveIds = new Set(
+    getNationReserveState(world, NATION_A)?.unitIds ?? [],
+  );
+  for (const unitId of world.offensiveOperations.operationIdByUnitId.keys()) {
+    assert(!reserveIds.has(unitId));
+  }
+});
+
+test("Reserve membership never overlaps RetreatPlan", () => {
+  const world = createRetreatSupportedReserveWorld();
+  const reserveIds = new Set(
+    getNationReserveState(world, NATION_A)?.unitIds ?? [],
+  );
+  for (const unitId of world.retreatPlans.retreatIdByUnitId.keys()) {
+    assert(!reserveIds.has(unitId));
+  }
+});
+
+test("Reserve staging regions are safe friendly land away from the Front", () => {
+  const world = createFormedReserveWorld();
+  const reserve = getNationReserveState(world, NATION_A);
+  assert(reserve);
+  const frontRegions = new Set(
+    getPhysicalFrontsForNation(world, NATION_A).flatMap(
+      (front) => getFrontSide(front, NATION_A)?.borderRegionIds ?? [],
+    ),
+  );
+  for (const regionId of reserve.stagingRegionIds) {
+    const region = world.mesoRegions.find((candidate) => candidate.id === regionId);
+    const macro = world.macroRegions.find((candidate) =>
+      candidate.mesoRegionIds.includes(regionId),
+    );
+    assert(region && region.type !== "sea");
+    assert.equal(world.occupation.mesoById.get(regionId) ?? macro?.nationId, NATION_A);
+    assert(!frontRegions.has(regionId));
+    assert(!world.units.some((unit) => unit.nationId === NATION_B && unit.regionId === regionId));
+  }
+});
+
+test("critical Capital Emergency deploys the entire Reserve", () => {
+  const world = createCriticalReserveWorld();
+  const reserve = getNationReserveState(world, NATION_A);
+  assert(reserve?.deployment);
+  assert.equal(reserve.deployment.targetType, "capital-defense");
+  assert.deepEqual(reserve.deployment.unitIds, reserve.unitIds);
+  assert(reserve.deployment.reasonFlags.includes("capital-critical"));
+});
+
+test("a merely threatened capital does not deploy the entire Reserve", () => {
+  const world = createFormedReserveWorld();
+  setTestCapital(world, NATION_A, "a-fallback");
+  updateCapitalDefense(world);
+  assert.equal(getCapitalDefenseAssessment(world, NATION_A)?.threatLevel, "threatened");
+  updateNationFrontPlans(world);
+  updateNationFrontAllocations(world);
+  updateStrategicReserves(world);
+  const reserve = getNationReserveState(world, NATION_A);
+  assert(reserve);
+  assert(
+    !reserve.deployment || reserve.deployment.unitIds.length < reserve.unitIds.length,
+  );
+});
+
+test("a severe reinforce deficit receives a bounded Reserve detachment", () => {
+  const world = createReinforceReserveWorld();
+  const reserve = getNationReserveState(world, NATION_A);
+  assert(reserve?.deployment);
+  assert.equal(reserve.deployment.targetType, "front-reinforcement");
+  const allocation = getNationFrontAllocations(world, NATION_A).find(
+    (candidate) => candidate.frontId === reserve.deployment?.targetFrontId,
+  );
+  assert(allocation);
+  const deployedStrength = reserve.deployment.unitIds.reduce((total, unitId) => {
+    const unit = world.units.find((candidate) => candidate.id === unitId);
+    return total + (unit ? getUnitCombatStrength(unit) : 0);
+  }, 0);
+  const largestUnit = Math.max(
+    ...reserve.deployment.unitIds.map((unitId) => {
+      const unit = world.units.find((candidate) => candidate.id === unitId);
+      return unit ? getUnitCombatStrength(unit) : 0;
+    }),
+  );
+  assert(deployedStrength <= allocation.deficit * 1.1 + largestUnit);
+});
+
+test("Reserve moves ahead to an active Retreat fallback", () => {
+  const world = createRetreatSupportedReserveWorld();
+  const retreat = getRetreatPlans(world, NATION_A)[0];
+  const reserve = getNationReserveState(world, NATION_A);
+  assert(retreat && reserve?.deployment);
+  assert.equal(reserve.deployment.targetType, "retreat-support");
+  repositionUnits(world, 0);
+  for (const unitId of reserve.deployment.unitIds) {
+    const unit = world.units.find((candidate) => candidate.id === unitId);
+    assert(unit?.moveTargetId);
+    assert(retreat.fallbackRegionIds.includes(unit.moveTargetId));
+  }
+});
+
+test("a deployed Reserve never targets an unrelated Front", () => {
+  const world = createRetreatSupportedReserveWorld();
+  const retreat = getRetreatPlans(world, NATION_A)[0];
+  const reserve = getNationReserveState(world, NATION_A);
+  assert(retreat && reserve?.deployment);
+  for (const unitId of reserve.deployment.unitIds) {
+    const target = getReserveTargetForUnit(reserve, unitId);
+    assert(target && retreat.fallbackRegionIds.includes(target));
+  }
+});
+
+test("a collapsed Front deploys Reserve to its replacement line", () => {
+  const world = createFormedReserveWorld();
+  for (let index = 0; index < 40; index += 1) {
+    addLandUnit(world, NATION_B, "b-front", "Infantry");
+  }
+  updateFrontSystem(world);
+  updateNationFrontAllocations(world);
+  updateRetreatPlans(world);
+  const retreat = getRetreatPlans(world, NATION_A)[0];
+  assert(retreat?.reasonFlags.includes("front-collapse"));
+  world.occupation.mesoById.set(id("a-front"), NATION_B);
+  world.occupation.version += 1;
+  updateFrontSystem(world);
+  updateNationFrontAllocations(world);
+  updateStrategicReserves(world);
+  const reserve = getNationReserveState(world, NATION_A);
+  assert.equal(reserve?.deployment?.targetType, "front-collapse");
+  assert(reserve.deployment.targetFrontId);
+  assert(world.landFronts.physicalFrontsById.has(reserve.deployment.targetFrontId));
+});
+
+test("resolved deployment returns Reserve units to staging", () => {
+  const world = createReinforceReserveWorld();
+  const reserve = getNationReserveState(world, NATION_A);
+  assert(reserve?.deployment);
+  world.wars = [];
+  world.time.fastTick += 100;
+  updateStrategicReserves(world);
+  assert.equal(reserve.status, "returning");
+  moveReserveToStaging(world, reserve);
+  updateStrategicReserves(world);
+  assert.equal(reserve.status, "ready");
+  assert.equal(reserve.deployment, undefined);
+});
+
+test("returning Reserve units cannot be reclaimed by Front Allocation", () => {
+  const world = createReinforceReserveWorld();
+  const reserve = getNationReserveState(world, NATION_A);
+  assert(reserve?.deployment);
+  world.wars = [];
+  world.time.fastTick += 100;
+  updateStrategicReserves(world);
+  updateNationFrontAllocations(world);
+  for (const unitId of reserve.unitIds) {
+    assert.equal(getAllocatedFrontId(world, unitId), undefined);
+  }
+});
+
+test("critical emergency does not reform depleted Reserve membership", () => {
+  const world = createCriticalReserveWorld();
+  const reserve = getNationReserveState(world, NATION_A);
+  assert(reserve && reserve.unitIds.length > 0);
+  const removedId = reserve.unitIds[0];
+  const before = reserve.unitIds.length;
+  world.units = world.units.filter((unit) => unit.id !== removedId);
+  updateStrategicReserves(world);
+  assert.equal(reserve.unitIds.length, before - 1);
+});
+
+test("a new land unit can fill a Reserve shortfall", () => {
+  const world = createFormedReserveWorld();
+  const reserve = getNationReserveState(world, NATION_A);
+  assert(reserve && reserve.unitIds.length > 0);
+  const removedId = reserve.unitIds[0];
+  world.units = world.units.filter((unit) => unit.id !== removedId);
+  const replacement = addLandUnit(world, NATION_A, "a-rear", "Infantry");
+  updateStrategicReserves(world);
+  assert(reserve.unitIds.includes(replacement.id));
+});
+
+test("stable Reserve membership does not oscillate every evaluation", () => {
+  const world = createFormedReserveWorld();
+  const reserve = getNationReserveState(world, NATION_A);
+  assert(reserve);
+  const initial = [...reserve.unitIds];
+  for (let index = 0; index < 5; index += 1) {
+    world.time.fastTick += 10;
+    updateStrategicReserves(world);
+    updateNationFrontAllocations(world);
+  }
+  assert.deepEqual(reserve.unitIds, initial);
+});
+
+test("inactive nation Reserve state is cleaned up", () => {
+  const world = createFormedReserveWorld();
+  const nation = world.nations.find((candidate) => candidate.id === NATION_A);
+  assert(nation);
+  nation.macroRegionIds = [];
+  updateStrategicReserves(world);
+  assert.equal(getNationReserveState(world, NATION_A), undefined);
+});
+
+test("war end cleans up active Reserve deployment", () => {
+  const world = createReinforceReserveWorld();
+  const reserve = getNationReserveState(world, NATION_A);
+  assert(reserve?.deployment);
+  world.wars = [];
+  world.time.fastTick += 100;
+  updateStrategicReserves(world);
+  assert.equal(reserve.deployment?.status, "returning");
+  assert.equal(reserve.status, "returning");
+});
+
+test("Reserve staging and deployment references are always valid", () => {
+  const world = createCriticalReserveWorld();
+  const validIds = new Set(world.mesoRegions.map((region) => region.id));
+  const reserve = getNationReserveState(world, NATION_A);
+  assert(reserve);
+  for (const regionId of [
+    ...reserve.stagingRegionIds,
+    ...(reserve.deployment?.targetRegionIds ?? []),
+  ]) {
+    assert(validIds.has(regionId));
+  }
+});
+
+test("naval units never enter Strategic Reserve", () => {
+  const world = createReserveWorld(10, 8, 12);
+  const naval = addUnit(world, NATION_A, "a-cap", "CombatShip");
+  updateStrategicReserves(world);
+  assert(!getNationReserveState(world, NATION_A)?.unitIds.includes(naval.id));
+});
+
+test("Strategic Reserve numeric state never contains NaN or Infinity", () => {
+  const world = createReinforceReserveWorld();
+  const reserve = getNationReserveState(world, NATION_A);
+  assert(reserve);
+  for (const value of [
+    reserve.totalStrength,
+    reserve.desiredReserveStrength,
+    reserve.cooldownUntilTick,
+    reserve.deployment?.startedAtTick ?? 0,
+    reserve.deployment?.initialTargetDeficit ?? 0,
+    reserve.deployment?.lastEffectiveDeficit ?? 0,
+  ]) {
+    assert(Number.isFinite(value));
+  }
+});
+
+test("Strategic Reserve decisions are fixed-seed deterministic", () => {
+  const worldA = createReinforceReserveWorld();
+  const worldB = createReinforceReserveWorld();
+  assert.deepEqual(
+    reserveDecisionSnapshot(worldA, NATION_A),
+    reserveDecisionSnapshot(worldB, NATION_A),
+  );
+});
+
+function createReserveWorld(
+  friendlyFrontUnits: number,
+  enemyFrontUnits: number,
+  totalFriendlyUnits: number,
+): WorldState {
+  const world = createFrontWorld(
+    [
+      { id: "a-cap", owner: NATION_A, building: "capital" },
+      { id: "a-stage", owner: NATION_A, building: "city" },
+      { id: "a-rear", owner: NATION_A },
+      { id: "a-fallback", owner: NATION_A },
+      { id: "a-front", owner: NATION_A },
+      { id: "b-front", owner: NATION_B, building: "capital" },
+    ],
+    [
+      ["a-cap", "a-stage"],
+      ["a-stage", "a-rear"],
+      ["a-stage", "a-fallback"],
+      ["a-fallback", "a-front"],
+      ["a-front", "b-front"],
+    ],
+  );
+  startWar(world, NATION_A, NATION_B);
+  for (let index = 0; index < friendlyFrontUnits; index += 1) {
+    addLandUnit(world, NATION_A, "a-front", "Infantry");
+  }
+  for (
+    let index = friendlyFrontUnits;
+    index < totalFriendlyUnits;
+    index += 1
+  ) {
+    addLandUnit(world, NATION_A, "a-rear", "Infantry");
+  }
+  for (let index = 0; index < enemyFrontUnits; index += 1) {
+    addLandUnit(world, NATION_B, "b-front", "Infantry");
+  }
+  updateAllocationSystem(world);
+  return world;
+}
+
+function createFormedReserveWorld(): WorldState {
+  const world = createReserveWorld(10, 8, 12);
+  updateStrategicReserves(world);
+  updateNationFrontAllocations(world);
+  const reserve = getNationReserveState(world, NATION_A);
+  assert(reserve && reserve.unitIds.length > 0);
+  return world;
+}
+
+function createReinforceReserveWorld(): WorldState {
+  const world = createFormedReserveWorld();
+  for (let index = 0; index < 16; index += 1) {
+    addLandUnit(world, NATION_B, "b-front", "Infantry");
+  }
+  updateFrontSystem(world);
+  updateNationFrontAllocations(world);
+  assert.equal(planFor(world, NATION_A).posture, "reinforce");
+  updateStrategicReserves(world);
+  return world;
+}
+
+function createCriticalReserveWorld(): WorldState {
+  const world = createFormedReserveWorld();
+  addLandUnit(world, NATION_B, "a-stage", "Infantry");
+  updateCapitalDefense(world);
+  assert.equal(getCapitalDefenseAssessment(world, NATION_A)?.threatLevel, "critical");
+  updateNationFrontPlans(world);
+  updateNationFrontAllocations(world);
+  updateStrategicReserves(world);
+  return world;
+}
+
+function createRetreatSupportedReserveWorld(): WorldState {
+  const world = createFormedReserveWorld();
+  for (let index = 0; index < 40; index += 1) {
+    addLandUnit(world, NATION_B, "b-front", "Infantry");
+  }
+  updateFrontSystem(world);
+  updateNationFrontAllocations(world);
+  assert.equal(planFor(world, NATION_A).posture, "retreat");
+  updateRetreatPlans(world);
+  const retreat = getRetreatPlans(world, NATION_A)[0];
+  assert(retreat);
+  const pressureRegionId = retreat.fallbackRegionIds[0];
+  assert(pressureRegionId);
+  const pressureRegion = world.mesoRegions.find(
+    (region) => region.id === pressureRegionId,
+  );
+  assert(pressureRegion);
+  addUnitAtRegion(world, NATION_B, pressureRegion.id, "Infantry");
+  updateStrategicReserves(world);
+  return world;
+}
+
+function setTestCapital(
+  world: WorldState,
+  nationId: NationId,
+  regionId: string,
+): void {
+  const nation = world.nations.find((candidate) => candidate.id === nationId);
+  const previous = world.mesoRegions.find(
+    (region) => region.id === nation?.capitalMesoId,
+  );
+  const next = world.mesoRegions.find((region) => region.id === id(regionId));
+  assert(nation && next);
+  if (previous && previous.id !== next.id) previous.building = "city";
+  next.building = "capital";
+  nation.capitalMesoId = next.id;
+  world.buildingVersion += 1;
+}
+
+function moveReserveToStaging(
+  world: WorldState,
+  reserve: NonNullable<ReturnType<typeof getNationReserveState>>,
+): void {
+  assert(reserve.stagingRegionIds.length > 0);
+  for (let index = 0; index < reserve.unitIds.length; index += 1) {
+    const unit = world.units.find(
+      (candidate) => candidate.id === reserve.unitIds[index],
+    );
+    assert(unit);
+    unit.regionId = reserve.stagingRegionIds[index % reserve.stagingRegionIds.length];
+    unit.moveTargetId = unit.regionId;
+    unit.moveFromId = null;
+    unit.moveToId = null;
+    unit.moveProgressMs = 0;
+  }
+}
+
+function reserveDecisionSnapshot(world: WorldState, nationId: NationId) {
+  const reserve = getNationReserveState(world, nationId);
+  assert(reserve);
+  return {
+    unitIds: [...reserve.unitIds],
+    totalStrength: reserve.totalStrength,
+    desiredStrength: reserve.desiredReserveStrength,
+    stagingRegionIds: [...reserve.stagingRegionIds],
+    status: reserve.status,
+    deployment: reserve.deployment
+      ? {
+          targetType: reserve.deployment.targetType,
+          targetFrontId: reserve.deployment.targetFrontId,
+          targetRegionIds: [...reserve.deployment.targetRegionIds],
+          unitIds: [...reserve.deployment.unitIds],
+          unitTargets: [...reserve.deployment.unitTargetRegionIds.entries()],
+          reasonFlags: [...reserve.deployment.reasonFlags],
+        }
+      : null,
+  };
+}
+
 function createCapitalDefenseWorld(
   friendlyFrontStrength: number,
   enemyFrontStrength: number,
@@ -2189,6 +2633,7 @@ function createFrontWorld(
     offensiveOperations: createOffensiveOperationState(),
     retreatPlans: createRetreatPlanState(),
     capitalDefense: createCapitalDefenseState(),
+    strategicReserves: createStrategicReserveState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,
@@ -2261,6 +2706,32 @@ function addLandUnit(
     createUnitId(world.unitIdCounter),
     nationId,
     id(regionId),
+    type,
+  );
+  world.unitIdCounter += 1;
+  world.units.push(unit);
+  return unit;
+}
+
+function addUnit(
+  world: WorldState,
+  nationId: NationId,
+  regionId: string,
+  type: UnitType,
+) {
+  return addUnitAtRegion(world, nationId, id(regionId), type);
+}
+
+function addUnitAtRegion(
+  world: WorldState,
+  nationId: NationId,
+  regionId: MesoRegionId,
+  type: UnitType,
+) {
+  const unit = createUnitForType(
+    createUnitId(world.unitIdCounter),
+    nationId,
+    regionId,
     type,
   );
   world.unitIdCounter += 1;

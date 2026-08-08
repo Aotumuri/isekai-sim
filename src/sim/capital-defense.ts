@@ -57,6 +57,7 @@ export interface CapitalDefenseState {
   fallbackSelectionCount: number;
   operationCancellationCount: number;
   capitalFallCount: number;
+  capitalFallTicks: number[];
   unguardedTickCount: number;
   lastEvaluationTick: number;
   lastObservedCapitalFallCount: number;
@@ -81,6 +82,7 @@ export function createCapitalDefenseState(): CapitalDefenseState {
     fallbackSelectionCount: 0,
     operationCancellationCount: 0,
     capitalFallCount: 0,
+    capitalFallTicks: [],
     unguardedTickCount: 0,
     lastEvaluationTick: 0,
     lastObservedCapitalFallCount: 0,
@@ -179,6 +181,9 @@ export function updateCapitalDefense(world: WorldState): void {
   const newFalls = Math.max(0, observedFalls - state.lastObservedCapitalFallCount);
   if (newFalls > 0) {
     state.capitalFallCount += newFalls;
+    for (let index = 0; index < newFalls; index += 1) {
+      state.capitalFallTicks.push(now);
+    }
     world.instrumentation?.incrementCounter("capitalDefense.capitalFalls", newFalls);
   }
   state.lastObservedCapitalFallCount = observedFalls;

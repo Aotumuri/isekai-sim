@@ -19,6 +19,7 @@ import {
 } from "./offensive-operations";
 import { updateRetreatPlans } from "./retreat-plans";
 import { updateCapitalDefense } from "./capital-defense";
+import { updateStrategicReserves } from "./strategic-reserves";
 import {
   FAST_TICK_MS,
   SLOW_TICK_MS,
@@ -129,6 +130,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateNationFrontPlans(world);
   updateRetreatPlans(world);
   cancelOffensiveOperationsForCapitalEmergency(world);
+  updateStrategicReserves(world);
   updateNationFrontAllocations(world);
   updateOffensiveOperations(world);
 }

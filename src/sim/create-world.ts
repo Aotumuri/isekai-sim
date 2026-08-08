@@ -25,6 +25,7 @@ import { createNationFrontAllocationState } from "./nation-front-allocations";
 import { createOffensiveOperationState } from "./offensive-operations";
 import { createRetreatPlanState } from "./retreat-plans";
 import { createCapitalDefenseState } from "./capital-defense";
+import { createStrategicReserveState } from "./strategic-reserves";
 import { nextScheduledTickRange } from "./schedule";
 import { addTestWar } from "./test-war";
 import { createSimTime } from "./time";
@@ -93,6 +94,7 @@ export function createWorld(config: WorldConfig): WorldState {
   const offensiveOperations = createOffensiveOperationState();
   const retreatPlans = createRetreatPlanState();
   const capitalDefense = createCapitalDefenseState();
+  const strategicReserves = createStrategicReserveState();
   const mapVersion = 0;
   const territoryVersion = 0;
   const buildingVersion = 0;
@@ -115,6 +117,7 @@ export function createWorld(config: WorldConfig): WorldState {
     offensiveOperations,
     retreatPlans,
     capitalDefense,
+    strategicReserves,
     mapVersion,
     territoryVersion,
     buildingVersion,
