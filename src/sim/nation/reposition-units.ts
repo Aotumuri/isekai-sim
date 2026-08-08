@@ -36,6 +36,7 @@ import {
   getReorganizationTargetForUnit,
   type ReorganizationPlan,
 } from "../reorganization";
+import { getFrontlineAssignment, getFrontlineTargetForUnit, getOrderedFrontlineRegionIds } from "../frontline-coverage";
 
 const LAND_TARGET_REASSIGN_INTERVAL_TICKS = 10;
 const MAX_SHARED_PATH_FIELDS = 256;
@@ -577,6 +578,12 @@ function rebuildLandAssignments(
       const normalFrontUnits = allocatedUnits.filter(
         (unit) => !operationUnitIds.has(unit.id),
       );
+      const coverageUnits = normalFrontUnits.filter((unit) =>
+        getFrontlineAssignment(world, unit.id)?.sectorId === allocation.frontId,
+      );
+      const localFrontUnits = normalFrontUnits.filter((unit) =>
+        !getFrontlineAssignment(world, unit.id),
+      );
       const operationUnits = activeOperation
         ? allocatedUnits.filter((unit) => operationUnitIds.has(unit.id))
         : [];
@@ -594,11 +601,16 @@ function rebuildLandAssignments(
         ...enemySide.influenceRegionIds,
       ]);
       const enemyScope = new Set(enemySide.influenceRegionIds);
-      if (normalFrontUnits.length > 0) {
+      if (coverageUnits.length > 0) {
+        movementGroups.push(
+          buildFrontlineCoverageMovementGroup(world, coverageUnits, nation, instrumentation),
+        );
+      }
+      if (localFrontUnits.length > 0) {
         movementGroups.push(
           buildLandMovementGroup(
             nationId,
-            normalFrontUnits,
+            localFrontUnits,
             intrusionTargets.filter((id) => frontScope.has(id)),
             liberationTargets.filter((id) => frontScope.has(id)),
             friendlySide.borderRegionIds,
@@ -652,6 +664,30 @@ function rebuildLandAssignments(
     }
   }
   runtime.unitsExpectedToHaveTarget = unitsExpectedToHaveTarget;
+}
+
+function buildFrontlineCoverageMovementGroup(
+  world: WorldState,
+  units: UnitState[],
+  nation: WorldState["nations"][number] | undefined,
+  instrumentation?: SimulationInstrumentation,
+): LandMovementGroup {
+  let assignments = 0;
+  let switches = 0;
+  for (const unit of units.sort(compareUnitIds)) {
+    const targetId = getFrontlineTargetForUnit(world, unit.id);
+    if (!targetId || unit.moveTargetId === targetId) continue;
+    if (unit.moveTargetId) switches += 1;
+    unit.moveTargetId = targetId;
+    unit.moveFromId = null;
+    unit.moveToId = null;
+    unit.moveProgressMs = 0;
+    assignments += 1;
+  }
+  nation?.unitRoles.defenseUnitIds.push(...units.map((unit) => unit.id));
+  instrumentation?.incrementCounter("frontlineCoverage.targetAssignments", assignments);
+  instrumentation?.incrementCounter("frontlineCoverage.assignmentSwitches", switches);
+  return { nationId: units[0]?.nationId ?? nation?.id as NationId, units, controlledOnly: true };
 }
 
 function buildReorganizationMovementGroup(
@@ -872,6 +908,25 @@ function buildRetreatRearguardMovementGroup(
     clearUnitMovement(units);
     nation?.unitRoles.defenseUnitIds.push(...units.map((unit) => unit.id));
     return { nationId: retreat.nationId, units: [...units].sort(compareUnitIds) };
+  }
+  const line = getOrderedFrontlineRegionIds(world, retreat.frontId, retreat.nationId);
+  if (line.length > 0) {
+    const orderedUnits = [...units].sort(compareUnitIds);
+    for (let index = 0; index < orderedUnits.length; index += 1) {
+      const positionIndex = orderedUnits.length === 1
+        ? Math.floor((line.length - 1) / 2)
+        : Math.round(index * (line.length - 1) / (orderedUnits.length - 1));
+      const targetId = line[positionIndex];
+      const unit = orderedUnits[index];
+      if (targetId && unit.moveTargetId !== targetId) {
+        unit.moveTargetId = targetId;
+        unit.moveFromId = null;
+        unit.moveToId = null;
+        unit.moveProgressMs = 0;
+      }
+    }
+    nation?.unitRoles.defenseUnitIds.push(...orderedUnits.map((unit) => unit.id));
+    return { nationId: retreat.nationId, units: orderedUnits, controlledOnly: true };
   }
   const frontScope = new Set([
     ...friendlySide.influenceRegionIds,

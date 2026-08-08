@@ -21,6 +21,7 @@ import { getUnitCombatStrength } from "./unit-strength";
 import { buildWarAdjacency, isAtWar } from "./war-state";
 import type { WorldState } from "./world-state";
 import { getMesoById, getNeighborsById, getOwnerByMesoId } from "./world-cache";
+import { getFrontlineCoverage } from "./frontline-coverage";
 
 export type OperationId = string & { __brand: "OperationId" };
 
@@ -576,7 +577,13 @@ function createOperation(
   const allocationUnits = allocation.unitIds
     .map((unitId) => unitById.get(unitId))
     .filter(isOperationalLandUnit);
-  if (allocationUnits.length < settings.minimumFrontUnits) {
+  const defensiveIds = new Set(
+    getFrontlineCoverage(world, plan.frontId, plan.nationId)?.positions.flatMap(
+      (position) => position.defenderUnitIds,
+    ) ?? [],
+  );
+  const surplusUnits = allocationUnits.filter((unit) => !defensiveIds.has(unit.id));
+  if (allocationUnits.length < settings.minimumFrontUnits || surplusUnits.length < 2) {
     return null;
   }
   const targets = selectOperationTargets(world, front, plan, allocationUnits);
@@ -584,7 +591,7 @@ function createOperation(
     return null;
   }
   const assignedUnits = selectOperationUnits(
-    allocationUnits,
+    surplusUnits,
     targets.stagingRegionId,
     world,
   );
@@ -794,25 +801,50 @@ function refreshOperationUnitAssignment(
   const allocationUnits = allocation.unitIds
     .map((unitId) => unitById.get(unitId))
     .filter(isOperationalLandUnit);
-  const allocationIds = new Set(allocationUnits.map((unit) => unit.id));
-  const retainedIds = operation.assignedUnitIds.filter((unitId) =>
-    allocationIds.has(unitId),
+  const defensiveIds = new Set(
+    getFrontlineCoverage(world, operation.frontId, operation.nationId)?.positions.flatMap(
+      (position) => position.defenderUnitIds,
+    ) ?? [],
   );
+  const operationEligibleUnits = allocationUnits.filter(
+    (unit) => !defensiveIds.has(unit.id) || operation.assignedUnitIds.includes(unit.id),
+  );
+  const allocationIds = new Set(operationEligibleUnits.map((unit) => unit.id));
+  const coverage = getFrontlineCoverage(world, operation.frontId, operation.nationId);
+  const maximumOperationStrength = Math.max(
+    0,
+    allocation.allocatedStrength - (coverage?.minimumRequiredStrength ?? 0),
+  );
+  const retainedIds: UnitId[] = [];
+  let retainedStrength = 0;
+  for (const unitId of operation.assignedUnitIds) {
+    const unit = unitById.get(unitId);
+    const strength = unit ? finiteUnitStrength(unit) : 0;
+    if (!allocationIds.has(unitId) || retainedStrength + strength > maximumOperationStrength) continue;
+    retainedIds.push(unitId);
+    retainedStrength += strength;
+  }
   const retainedSet = new Set(retainedIds);
   const settings = WORLD_BALANCE.war.landFront.offensiveOperation;
   const desiredCount = clamp(
-    Math.ceil(allocationUnits.length * settings.forceFraction),
-    Math.min(2, allocationUnits.length),
-    Math.max(0, allocationUnits.length - 1),
+    Math.ceil(operationEligibleUnits.length * settings.forceFraction),
+    Math.min(2, operationEligibleUnits.length),
+    operationEligibleUnits.length,
   );
   const candidates = selectOperationUnits(
-    allocationUnits.filter((unit) => !retainedSet.has(unit.id)),
+    operationEligibleUnits.filter((unit) => !retainedSet.has(unit.id)),
     operation.stagingRegionId,
     world,
   );
-  const addedIds = candidates
-    .slice(0, Math.max(0, desiredCount - retainedIds.length))
-    .map((unit) => unit.id);
+  const addedIds: UnitId[] = [];
+  let assignedStrength = retainedStrength;
+  for (const unit of candidates) {
+    if (retainedIds.length + addedIds.length >= desiredCount) break;
+    const strength = finiteUnitStrength(unit);
+    if (assignedStrength + strength > maximumOperationStrength) continue;
+    addedIds.push(unit.id);
+    assignedStrength += strength;
+  }
   const nextIds = [...retainedIds, ...addedIds].sort(compareIds);
   const changed = !arraysEqual(operation.assignedUnitIds, nextIds);
   if (addedIds.length > 0) {

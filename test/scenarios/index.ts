@@ -10,6 +10,7 @@ import { setupRetreatHeavy } from "./retreat-heavy";
 import { setupCapitalThreat } from "./capital-threat";
 import { setupStrategicReserve } from "./strategic-reserve";
 import { setupReorganizationHeavy } from "./reorganization-heavy";
+import { setupLongFrontline } from "./long-frontline";
 import type { ScenarioOptions, ScenarioSetup } from "./types";
 
 const scenarioSetups: Record<BenchmarkScenarioName, ScenarioSetup> = {
@@ -22,6 +23,7 @@ const scenarioSetups: Record<BenchmarkScenarioName, ScenarioSetup> = {
   "capital-threat": setupCapitalThreat,
   "strategic-reserve": setupStrategicReserve,
   "reorganization-heavy": setupReorganizationHeavy,
+  "long-frontline": setupLongFrontline,
 };
 
 export function createScenarioWorld(

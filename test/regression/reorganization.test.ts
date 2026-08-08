@@ -33,6 +33,7 @@ import { createSimTime } from "../../src/sim/time";
 import { createUnitId, type UnitState } from "../../src/sim/unit";
 import { declareWar } from "../../src/sim/war-state";
 import type { WorldState } from "../../src/sim/world-state";
+import { createFrontlineCoverageState } from "../../src/sim/frontline-coverage";
 import { createWorldCache } from "../../src/sim/world-cache";
 import { createMacroRegionId, type MacroRegion } from "../../src/worldgen/macro-region";
 import type { MicroRegionId } from "../../src/worldgen/micro-region";
@@ -397,6 +398,7 @@ function createReorganizationWorld(): { world: WorldState; unit: UnitState } {
     landFronts: createLandFrontState(),
     frontPlans: createNationFrontPlanState(),
     frontAllocations: createNationFrontAllocationState(),
+    frontlineCoverage: createFrontlineCoverageState(),
     offensiveOperations: createOffensiveOperationState(),
     retreatPlans: createRetreatPlanState(),
     capitalDefense: createCapitalDefenseState(),

@@ -8,6 +8,7 @@ export const BENCHMARK_SCENARIOS = [
   "capital-threat",
   "strategic-reserve",
   "reorganization-heavy",
+  "long-frontline",
 ] as const;
 
 export type BenchmarkScenarioName = (typeof BENCHMARK_SCENARIOS)[number];
@@ -53,6 +54,20 @@ export interface WorldSummary {
   nationFrontPlans: number;
   frontAllocatedUnits: number;
   frontUnassignedUnits: number;
+  frontlineSegments: number;
+  frontlineCoveredSegments: number;
+  frontlineWeakSegments: number;
+  frontlineGapSegments: number;
+  frontlineCoveragePercent: number;
+  frontlineAverageGapLength: number;
+  frontlineMaximumGapLength: number;
+  frontlineUniqueDefenderPositions: number;
+  frontlineDefenderCount: number;
+  frontlineDefenderStrength: number;
+  frontlineMinimumRequiredStrength: number;
+  frontlineOffensiveSurplusStrength: number;
+  frontlineAssignmentSwitches: number;
+  frontlineBreakthroughs: number;
   activeOffensiveOperations: number;
   recoveringOffensiveOperations: number;
   operationAssignedUnits: number;
@@ -98,6 +113,7 @@ export interface WorldSummary {
   reserveFormations: number;
   reserveMembershipChanges: number;
   reserveDeployments: number;
+  reserveGapOrBreakthroughDeployments: number;
   reserveDeployedUnits: number;
   reserveAverageUnits: number;
   reserveAverageStrength: number;

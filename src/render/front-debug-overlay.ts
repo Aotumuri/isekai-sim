@@ -14,6 +14,7 @@ import type { WorldState } from "../sim/world-state";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { MicroRegion } from "../worldgen/micro-region";
 import type { NationId } from "../worldgen/nation";
+import { getFrontlineCoverage } from "../sim/frontline-coverage";
 import type { Vec2 } from "../utils/vector";
 import { clearLayer } from "./clear-layer";
 import { findSharedSegments, type Segment } from "./meso-border-geometry";
@@ -50,6 +51,7 @@ interface OverlayVersions {
   plans: number;
   operations: number;
   retreats: number;
+  coverage: number;
   reserveDeployments: string;
 }
 
@@ -353,6 +355,15 @@ export function formatSectorLabel(
   ];
   if (selected) {
     lines.push(`cells ${sector.frontline.sideARegionIds.length}+${sector.frontline.sideBRegionIds.length}`);
+    for (const nationId of [sector.nationAId, sector.nationBId]) {
+      const coverage = getFrontlineCoverage(world, sector.id, nationId);
+      if (!coverage) continue;
+      lines.push(
+        `LINE ${nationId} ${coverage.coveredSegments}/${coverage.weakSegments}/${coverage.gapSegments} covered/weak/gap | ${(coverage.coverageRatio * 100).toFixed(0)}%`,
+        `  defense ${formatStrength(coverage.defenderStrength)} / ${formatStrength(coverage.minimumRequiredStrength)} | surplus ${formatStrength(coverage.offensiveSurplusStrength)}`,
+        `  max gap ${coverage.maxGapLength} | breakthroughs ${coverage.breakthroughCount}`,
+      );
+    }
   }
   appendOperationalDetails(lines, world, sector, unitById);
   return lines.join("\n");
@@ -402,6 +413,14 @@ function drawFrontMarkers(
   color: number,
 ): void {
   for (const nationId of [front.nationAId, front.nationBId]) {
+    const coverage = getFrontlineCoverage(world, front.id, nationId);
+    if (coverage) {
+      for (const position of coverage.positions) {
+        const markerColor = position.state === "covered" ? 0x55d67a : position.state === "weak" ? 0xffc247 : 0xff4f64;
+        const label = position.state === "covered" ? `${position.defenderUnitIds.length}` : position.state === "weak" ? "!" : "×";
+        drawMarker(layer, world, position.friendlyRegionId, label, markerColor, "circle");
+      }
+    }
     const operation = getOffensiveOperationForFront(world, front.id, nationId);
     if (operation) {
       drawMarker(layer, world, operation.stagingRegionId, "S", color, "circle");
@@ -489,6 +508,7 @@ function readVersions(world: WorldState): OverlayVersions {
     plans: world.frontPlans.version,
     operations: world.offensiveOperations.version,
     retreats: world.retreatPlans.version,
+    coverage: world.frontlineCoverage.version,
     reserveDeployments: world.strategicReserves.reserves
       .map((reserve) => {
         const deployment = reserve.deployment;
@@ -503,7 +523,8 @@ function readVersions(world: WorldState): OverlayVersions {
 function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
   return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
     a.plans === b.plans && a.operations === b.operations &&
-    a.retreats === b.retreats && a.reserveDeployments === b.reserveDeployments;
+    a.retreats === b.retreats && a.coverage === b.coverage &&
+    a.reserveDeployments === b.reserveDeployments;
 }
 
 function mesoPairKey(a: MesoRegionId, b: MesoRegionId): string {

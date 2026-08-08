@@ -166,6 +166,21 @@ export const WORLD_BALANCE = {
         surplusDistanceWeight: 0.75,
         surplusLoadPenalty: 20,
       },
+      frontlineCoverage: {
+        // Holding fronts use every available defender; attacking fronts keep a
+        // coherent skeleton and expose only the remainder to Operations.
+        attackMinimumStrengthRatio: 0.45,
+        emergencyMinimumStrengthRatio: 0.3,
+        weakStrengthRatio: 0.45,
+        coveredStrengthRatio: 0.9,
+        nearbyCoverageDistance: 1,
+        switchPenalty: 120,
+        threatEnemyStrengthWeight: 1,
+        cityThreatBonus: 2_000,
+        capitalThreatBonus: 5_000,
+        enemyOperationThreatBonus: 3_000,
+        seriousGapLength: 2,
+      },
       capitalDefense: {
         // Two meso regions gives a threatened capital one defensive line in
         // addition to the capital itself without treating the whole nation as

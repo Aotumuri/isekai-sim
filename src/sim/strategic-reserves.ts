@@ -643,6 +643,27 @@ function findDeploymentTrigger(
     };
   }
 
+  const coverageGap = world.frontlineCoverage.coverages
+    .filter((coverage) => coverage.nationId === reserve.nationId &&
+      (coverage.maxGapLength >= WORLD_BALANCE.war.landFront.frontlineCoverage.seriousGapLength || coverage.breakthroughCount > 0))
+    .sort((a, b) => b.breakthroughCount - a.breakthroughCount || b.maxGapLength - a.maxGapLength || compareIds(a.sectorId, b.sectorId))[0];
+  if (coverageGap) {
+    const gapPositions = coverageGap.positions.filter((position) => position.state === "gap");
+    const targets = (gapPositions.length ? gapPositions : coverageGap.positions)
+      .sort((a, b) => b.threat - a.threat || a.segmentIndex - b.segmentIndex)
+      .slice(0, Math.max(1, coverageGap.maxGapLength))
+      .map((position) => position.friendlyRegionId);
+    return {
+      targetType: "front-collapse",
+      targetFrontId: coverageGap.sectorId,
+      targetRegionIds: targets,
+      targetStrength: Math.max(0, coverageGap.minimumRequiredStrength - coverageGap.defenderStrength),
+      initialDeficit: Math.max(0, coverageGap.minimumRequiredStrength - coverageGap.defenderStrength),
+      reason: "front-collapse",
+      capitalEmergencyStartedAtTick: null,
+    };
+  }
+
   const severe = world.frontAllocations.allocations
     .filter(
       (allocation) =>

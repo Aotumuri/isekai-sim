@@ -28,6 +28,7 @@ import {
 import {
   createNationFrontAllocationState,
   formatNationFrontAllocationSummary,
+  getFrontAllocation,
   getAllocatedFrontId,
   getNationFrontAllocations,
   updateNationFrontAllocations,
@@ -71,6 +72,11 @@ import {
   updateStrategicReserves,
 } from "../../src/sim/strategic-reserves";
 import { createReorganizationState } from "../../src/sim/reorganization";
+import {
+  createFrontlineCoverageState,
+  getFrontlineCoverage,
+  updateFrontlineCoverage,
+} from "../../src/sim/frontline-coverage";
 
 const NATION_A = createNationId(0);
 const NATION_B = createNationId(1);
@@ -111,6 +117,92 @@ test("a continuous border between the same enemies creates one front", () => {
   assert.deepEqual(getFrontSide(fronts[0], NATION_B)?.borderRegionIds, ids("b1", "b2"));
   assert.equal(fronts[0].borderLength, 2);
   assert.equal(fronts[0].borderEdges.length, 2);
+});
+
+test("frontline coverage creates topology-ordered positions and spreads defenders", () => {
+  const specs: RegionSpec[] = [];
+  const edges: Edge[] = [];
+  for (let index = 0; index < 6; index += 1) {
+    specs.push({ id: `la${index}`, owner: NATION_A }, { id: `lb${index}`, owner: NATION_B });
+    edges.push([`la${index}`, `lb${index}`]);
+    if (index > 0) edges.push([`la${index - 1}`, `la${index}`], [`lb${index - 1}`, `lb${index}`]);
+  }
+  const world = createFrontWorld(specs, edges);
+  startWar(world, NATION_A, NATION_B);
+  for (const region of ["la0", "la2", "la5"]) addLandUnit(world, NATION_A, region, "Infantry");
+  for (const region of ["lb0", "lb3", "lb5"]) addLandUnit(world, NATION_B, region, "Infantry");
+  updateAllocationSystem(world);
+  const plan = world.frontPlans.plans.find((candidate) => candidate.nationId === NATION_A);
+  assert(plan);
+  plan.posture = "hold";
+  const allocation = getFrontAllocation(world, plan.frontId, NATION_A);
+  assert(allocation);
+  allocation.posture = "hold";
+  updateFrontlineCoverage(world);
+  const coverage = getFrontlineCoverage(world, plan.frontId, NATION_A);
+  assert(coverage);
+  assert.equal(coverage.positions.length, 6);
+  assert.equal(coverage.defenderCount, 3);
+  const assignedIndices = coverage.positions.filter((position) => position.defenderUnitIds.length > 0).map((position) => position.segmentIndex);
+  assert.deepEqual(assignedIndices, [0, 3, 5]);
+  assert.equal(new Set(coverage.positions.flatMap((position) => position.defenderUnitIds)).size, 3);
+  assert(coverage.maxGapLength <= 1, "adjacent defenders should provide sparse continuous coverage");
+
+  const stableAssignments = new Map(world.frontlineCoverage.assignmentByUnitId);
+  world.frontAllocations.version += 1;
+  updateFrontlineCoverage(world);
+  assert.deepEqual(world.frontlineCoverage.assignmentByUnitId, stableAssignments);
+
+  for (const region of ["la1", "la3", "la4"]) addLandUnit(world, NATION_A, region, "Infantry");
+  updateAllocationSystem(world);
+  const nextPlan = world.frontPlans.plans.find((candidate) => candidate.nationId === NATION_A);
+  assert(nextPlan);
+  nextPlan.posture = "hold";
+  const nextAllocation = getFrontAllocation(world, nextPlan.frontId, NATION_A);
+  assert(nextAllocation);
+  nextAllocation.posture = "hold";
+  updateFrontlineCoverage(world);
+  const fullCoverage = getFrontlineCoverage(world, nextPlan.frontId, NATION_A);
+  assert(fullCoverage);
+  assert(fullCoverage.positions.every((position) => position.defenderUnitIds.length > 0));
+  assert.equal(fullCoverage.gapSegments, 0);
+});
+
+test("offensive operations use only strength surplus to minimum frontline coverage", () => {
+  const world = createOperationWorld();
+  const plan = planFor(world, NATION_A);
+  updateFrontlineCoverage(world);
+  const coverage = getFrontlineCoverage(world, plan.frontId, NATION_A);
+  assert(coverage);
+  const defenderIds = new Set(coverage.positions.flatMap((position) => position.defenderUnitIds));
+  assert(defenderIds.size > 0);
+  updateOffensiveOperations(world);
+  const operation = getOffensiveOperationForFront(world, plan.frontId, NATION_A);
+  assert(operation);
+  assert(operation.assignedUnitIds.every((unitId) => !defenderIds.has(unitId)));
+  assert(operation.assignedStrength <= coverage.offensiveSurplusStrength);
+});
+
+test("coverage detects loss of meaningful strength and war end cleans ownership", () => {
+  const world = createOperationWorld();
+  const plan = planFor(world, NATION_A);
+  updateFrontlineCoverage(world);
+  const initial = getFrontlineCoverage(world, plan.frontId, NATION_A);
+  assert(initial && initial.defenderCount > 0);
+  for (const unit of world.units) {
+    if (unit.nationId === NATION_A && unit.domain === "land") unit.manpower = 0;
+  }
+  world.frontAllocations.version += 1;
+  updateFrontlineCoverage(world);
+  const depleted = getFrontlineCoverage(world, plan.frontId, NATION_A);
+  assert(depleted);
+  assert(depleted.gapSegments > 0);
+
+  world.wars = [];
+  updateAllocationSystem(world);
+  updateFrontlineCoverage(world);
+  assert.equal(world.frontlineCoverage.coverages.length, 0);
+  assert.equal(world.frontlineCoverage.assignmentByUnitId.size, 0);
 });
 
 test("a long physical front is partitioned into deterministic operational sectors", () => {
@@ -2704,6 +2796,7 @@ function createFrontWorld(
     landFronts: createLandFrontState(),
     frontPlans: createNationFrontPlanState(),
     frontAllocations: createNationFrontAllocationState(),
+    frontlineCoverage: createFrontlineCoverageState(),
     offensiveOperations: createOffensiveOperationState(),
     retreatPlans: createRetreatPlanState(),
     capitalDefense: createCapitalDefenseState(),

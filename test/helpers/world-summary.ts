@@ -35,6 +35,9 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     (total, nation) => total + nation.initialUnitCount,
     0,
   );
+  const coverage = world.frontlineCoverage.coverages;
+  const frontlineSegments = coverage.reduce((total, item) => total + item.positions.length, 0);
+  const gapRuns = coverage.filter((item) => item.maxGapLength > 0);
   return {
     nations: world.nations.length,
     activeNations,
@@ -49,6 +52,24 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     nationFrontPlans: world.frontPlans.plans.length,
     frontAllocatedUnits: world.frontAllocations.frontIdByUnitId.size,
     frontUnassignedUnits: world.frontAllocations.lastUnassignedUnitCount,
+    frontlineSegments,
+    frontlineCoveredSegments: coverage.reduce((total, item) => total + item.coveredSegments, 0),
+    frontlineWeakSegments: coverage.reduce((total, item) => total + item.weakSegments, 0),
+    frontlineGapSegments: coverage.reduce((total, item) => total + item.gapSegments, 0),
+    frontlineCoveragePercent: frontlineSegments > 0
+      ? coverage.reduce((total, item) => total + item.coverageRatio * item.positions.length, 0) / frontlineSegments * 100
+      : 100,
+    frontlineAverageGapLength: gapRuns.length > 0
+      ? gapRuns.reduce((total, item) => total + item.averageGapLength, 0) / gapRuns.length
+      : 0,
+    frontlineMaximumGapLength: coverage.reduce((maximum, item) => Math.max(maximum, item.maxGapLength), 0),
+    frontlineUniqueDefenderPositions: coverage.reduce((total, item) => total + item.positions.filter((position) => position.defenderUnitIds.length > 0).length, 0),
+    frontlineDefenderCount: world.frontlineCoverage.assignmentByUnitId.size,
+    frontlineDefenderStrength: coverage.reduce((total, item) => total + item.defenderStrength, 0),
+    frontlineMinimumRequiredStrength: coverage.reduce((total, item) => total + item.minimumRequiredStrength, 0),
+    frontlineOffensiveSurplusStrength: coverage.reduce((total, item) => total + item.offensiveSurplusStrength, 0),
+    frontlineAssignmentSwitches: world.frontlineCoverage.totalAssignmentSwitches,
+    frontlineBreakthroughs: world.frontlineCoverage.breakthroughEvents,
     activeOffensiveOperations: world.offensiveOperations.operations.filter(
       (operation) => operation.phase !== "recovering",
     ).length,
@@ -143,6 +164,7 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     reserveFormations: reserveState.formationCount,
     reserveMembershipChanges: reserveState.membershipChangeCount,
     reserveDeployments: reserveState.deploymentCount,
+    reserveGapOrBreakthroughDeployments: reserveState.deploymentCountByReason["front-collapse"],
     reserveDeployedUnits: reserveState.deployedUnitCount,
     reserveAverageUnits:
       reserveState.sampleCount > 0
