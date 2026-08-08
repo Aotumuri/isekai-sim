@@ -49,6 +49,7 @@ export interface WorldSummary {
   battles: number;
   occupations: number;
   landFronts: number;
+  operationalSectors: number;
   nationFrontPlans: number;
   frontAllocatedUnits: number;
   frontUnassignedUnits: number;

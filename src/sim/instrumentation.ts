@@ -55,6 +55,7 @@ export type SimulationCounterName =
   | "landFront.rebuilds"
   | "landFront.metricRefreshes"
   | "landFront.frontsBuilt"
+  | "landFront.sectorsBuilt"
   | "landFront.planUpdates"
   | "landFront.plansEvaluated"
   | "landFront.allocationRebuilds"

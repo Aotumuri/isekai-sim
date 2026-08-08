@@ -113,6 +113,79 @@ test("a continuous border between the same enemies creates one front", () => {
   assert.equal(fronts[0].borderEdges.length, 2);
 });
 
+test("a long physical front is partitioned into deterministic operational sectors", () => {
+  const specs: RegionSpec[] = [];
+  const edges: Edge[] = [];
+  for (let index = 0; index < 16; index += 1) {
+    specs.push(
+      { id: `a${index}`, owner: NATION_A },
+      { id: `b${index}`, owner: NATION_B },
+    );
+    edges.push([`a${index}`, `b${index}`]);
+    if (index > 0) {
+      edges.push(
+        [`a${index - 1}`, `a${index}`],
+        [`b${index - 1}`, `b${index}`],
+      );
+    }
+  }
+  const build = (): WorldState => {
+    const world = createFrontWorld(specs, edges);
+    startWar(world, NATION_A, NATION_B);
+    updateLandFronts(world);
+    return world;
+  };
+  const world = build();
+  const repeated = build();
+  const front = world.landFronts.physicalFronts[0];
+  const sectors = world.landFronts.operationalSectors;
+
+  assert.equal(world.landFronts.physicalFronts.length, 1);
+  assert(sectors.length > 1);
+  assert.equal(
+    sectors.reduce((total, sector) => total + sector.borderLength, 0),
+    front.borderLength,
+  );
+  assert(sectors.every((sector) => sector.physicalFrontId === front.id));
+  assert(sectors.every((sector) => sector.frontline.borderEdges === sector.borderEdges));
+  assert.deepEqual(
+    sectors.map((sector) => sector.id),
+    repeated.landFronts.operationalSectors.map((sector) => sector.id),
+  );
+
+  updateNationFrontPlans(world);
+  assert.equal(world.frontPlans.plans.length, sectors.length * 2);
+});
+
+test("small border movement preserves overlapping operational sector IDs", () => {
+  const specs: RegionSpec[] = [];
+  const edges: Edge[] = [];
+  for (let index = 0; index < 16; index += 1) {
+    specs.push(
+      { id: `a${index}`, owner: NATION_A },
+      { id: `b${index}`, owner: NATION_B },
+    );
+    edges.push([`a${index}`, `b${index}`]);
+    if (index > 0) {
+      edges.push(
+        [`a${index - 1}`, `a${index}`],
+        [`b${index - 1}`, `b${index}`],
+      );
+    }
+  }
+  const world = createFrontWorld(specs, edges);
+  startWar(world, NATION_A, NATION_B);
+  updateLandFronts(world);
+  const before = new Set(world.landFronts.operationalSectors.map((sector) => sector.id));
+
+  setRegionOwner(world, "a0", NATION_B);
+  world.territoryVersion += 1;
+  updateLandFronts(world);
+
+  const retained = world.landFronts.operationalSectors.filter((sector) => before.has(sector.id));
+  assert(retained.length >= Math.max(1, before.size - 1));
+});
+
 test("two geographically separated contacts create two fronts", () => {
   const world = createFrontWorld(
     [

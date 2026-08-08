@@ -133,6 +133,13 @@ export const WORLD_BALANCE = {
       // without merging armies from otherwise separate fronts.
       influenceDistance: 1,
       metricsRefreshIntervalTicks: 10,
+      sector: {
+        // Sectors are split by border-graph diameter, not by list position or
+        // a fixed number of regions. Short/local fronts therefore remain one
+        // command area while long or strongly curved fronts are partitioned.
+        maximumGraphDiameter: 7,
+        minimumBorderEdges: 3,
+      },
       plan: {
         // Entry thresholds are deliberately wider than continuation thresholds
         // so small strength changes do not flip a posture every slow tick.

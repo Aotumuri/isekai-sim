@@ -446,7 +446,7 @@ function calculateDesiredReserveStrength(
   ) {
     return 0;
   }
-  const fronts = world.landFronts.physicalFrontsByNationId.get(nationId) ?? [];
+  const fronts = world.landFronts.operationalSectorsByNationId.get(nationId) ?? [];
   const hasWar = world.wars.some(
     (war) => war.nationAId === nationId || war.nationBId === nationId,
   );
@@ -659,7 +659,7 @@ function findDeploymentTrigger(
         compareIds(a.frontId, b.frontId),
     )[0];
   if (severe) {
-    const front = world.landFronts.physicalFrontsById.get(severe.frontId);
+    const front = world.landFronts.operationalSectorsById.get(severe.frontId);
     const friendly = front ? getFrontSide(front, reserve.nationId) : undefined;
     if (friendly && friendly.borderRegionIds.length > 0) {
       return {
@@ -949,7 +949,7 @@ function deploymentShouldReturn(
   }
   return (
     !deployment.targetFrontId ||
-    !world.landFronts.physicalFrontsById.has(deployment.targetFrontId) ||
+    !world.landFronts.operationalSectorsById.has(deployment.targetFrontId) ||
     (deployment.status === "engaged" &&
       elapsed >= WORLD_BALANCE.war.landFront.strategicReserve.stableFrontTicks)
   );
@@ -995,7 +995,7 @@ function findFrontCollapseTrigger(
   if (!hasRecentCollapseRetreat) return null;
   const previous = world.strategicReserves.previousFrontIdsByNationId.get(nationId);
   if (!previous || previous.size === 0) return null;
-  const current = world.landFronts.physicalFrontsByNationId.get(nationId) ?? [];
+  const current = world.landFronts.operationalSectorsByNationId.get(nationId) ?? [];
   const currentIds = new Set(current.map((front) => front.id));
   const removedEnemyIds = new Set<NationId>();
   for (const frontId of previous) {
@@ -1076,7 +1076,7 @@ function selectStagingRegions(
     .distanceByRegionId;
   const enemyRegionIds = getEnemyRegionIds(world, nationId);
   const fronts =
-    world.landFronts.physicalFrontsByNationId.get(nationId) ?? [];
+    world.landFronts.operationalSectorsByNationId.get(nationId) ?? [];
   const frontDistanceMaps = fronts.flatMap((front) => {
     const field = getFrontDistanceField(world, front.id, nationId);
     return field ? [field.distanceByRegionId] : [];
@@ -1247,7 +1247,7 @@ function rebuildReserveMembershipIndex(state: StrategicReserveState): void {
 function captureCurrentFronts(world: WorldState): void {
   const frontIdsByNationId = new Map<NationId, Set<FrontId>>();
   const enemyByFrontNation = new Map<string, NationId>();
-  for (const front of world.landFronts.physicalFronts) {
+  for (const front of world.landFronts.operationalSectors) {
     for (const nationId of [front.nationAId, front.nationBId]) {
       let ids = frontIdsByNationId.get(nationId);
       if (!ids) {

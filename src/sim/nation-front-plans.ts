@@ -8,7 +8,7 @@ import {
   getFrontSide,
   getOpposingFrontSide,
   type FrontId,
-  type PhysicalFront,
+  type OperationalSector,
   type PhysicalFrontSide,
 } from "./land-fronts";
 import { getFrontAllocation } from "./nation-front-allocations";
@@ -29,7 +29,9 @@ export type FrontPlanReason =
 
 /** Nation-owned intent. Objective geometry and metrics remain on PhysicalFront. */
 export interface NationFrontPlan {
+  /** Operational-sector identifier. Kept as frontId for API compatibility. */
   frontId: FrontId;
+  physicalFrontId: FrontId;
   nationId: NationId;
   posture: FrontPosture;
   /** 0-100 allocation priority; 100 is most urgent or valuable. */
@@ -39,6 +41,9 @@ export interface NationFrontPlan {
   reasonFlags: FrontPlanReason[];
   evaluatedAtTick: number;
 }
+
+/** Preferred name for the post-sector hierarchy. */
+export type NationSectorPlan = NationFrontPlan;
 
 export interface NationFrontPlanState {
   plans: NationFrontPlan[];
@@ -75,7 +80,7 @@ export function updateNationFrontPlans(world: WorldState): void {
   const startedAt = world.instrumentation ? performance.now() : 0;
   const previousPlans = state.plansByFrontNation;
   const plans: NationFrontPlan[] = [];
-  for (const front of world.landFronts.physicalFronts) {
+  for (const front of world.landFronts.operationalSectors) {
     plans.push(
       evaluateNationFrontPlan(
         world,
@@ -124,18 +129,42 @@ export function getNationFrontPlans(
     : (world.frontPlans.plansByNationId.get(nationId) ?? []);
 }
 
+export function getNationSectorPlans(
+  world: WorldState,
+  nationId?: NationId,
+): readonly NationSectorPlan[] {
+  return getNationFrontPlans(world, nationId);
+}
+
 export function getFrontPlan(
   world: WorldState,
   frontId: FrontId,
   nationId: NationId,
 ): NationFrontPlan | undefined {
-  return world.frontPlans.plansByFrontNation.get(createPlanKey(frontId, nationId));
+  const exact = world.frontPlans.plansByFrontNation.get(
+    createPlanKey(frontId, nationId),
+  );
+  if (exact) return exact;
+  return (world.landFronts.operationalSectorsByFrontId.get(frontId) ?? [])
+    .map((sector) =>
+      world.frontPlans.plansByFrontNation.get(createPlanKey(sector.id, nationId)),
+    )
+    .filter((plan): plan is NationFrontPlan => !!plan)
+    .sort((a, b) => b.priority - a.priority || compareIds(a.frontId, b.frontId))[0];
+}
+
+export function getSectorPlan(
+  world: WorldState,
+  sectorId: FrontId,
+  nationId: NationId,
+): NationSectorPlan | undefined {
+  return world.frontPlans.plansByFrontNation.get(createPlanKey(sectorId, nationId));
 }
 
 export function formatNationFrontPlanSummary(world: WorldState): string {
   const lines: string[] = [];
   for (const plan of world.frontPlans.plans) {
-    const front = world.landFronts.physicalFrontsById.get(plan.frontId);
+    const front = world.landFronts.operationalSectorsById.get(plan.frontId);
     if (!front) {
       continue;
     }
@@ -170,7 +199,7 @@ export function formatNationFrontPlanSummary(world: WorldState): string {
 
 function evaluateNationFrontPlan(
   world: WorldState,
-  front: PhysicalFront,
+  front: OperationalSector,
   nationId: NationId,
   previousPlan: NationFrontPlan | undefined,
   currentTick: number,
@@ -220,6 +249,7 @@ function evaluateNationFrontPlan(
   );
   return {
     frontId: front.id,
+    physicalFrontId: front.physicalFrontId,
     nationId,
     posture,
     priority: applyCapitalPriority(priority, capitalThreatLevel),

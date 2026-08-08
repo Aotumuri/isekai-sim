@@ -9,7 +9,7 @@ import {
   getFrontSide,
   getOpposingFrontSide,
   type FrontId,
-  type PhysicalFront,
+  type OperationalSector,
 } from "./land-fronts";
 import {
   getFrontAllocation,
@@ -398,7 +398,10 @@ function advanceOperation(
     finishOperation(world, operation, "cancelled", "war-ended");
     return { keep: true, changed: true };
   }
-  let front = world.landFronts.physicalFrontsById.get(operation.frontId);
+  let front = world.landFronts.operationalSectorsById.get(operation.frontId);
+  if (front && !world.landFronts.physicalFrontsById.has(front.physicalFrontId)) {
+    front = undefined;
+  }
   if (!front) {
     const replacement = findContinuationFront(world, operation);
     if (!replacement) {
@@ -514,9 +517,12 @@ function advanceOperation(
 function findContinuationFront(
   world: WorldState,
   operation: OffensiveOperation,
-): PhysicalFront | undefined {
-  return world.landFronts.physicalFronts
+): OperationalSector | undefined {
+  return world.landFronts.operationalSectors
     .filter((front) => {
+      if (!world.landFronts.physicalFrontsById.has(front.physicalFrontId)) {
+        return false;
+      }
       const samePair =
         (front.nationAId === operation.nationId &&
           front.nationBId === operation.enemyNationId) ||
@@ -552,7 +558,7 @@ function createOperation(
   plan: NationFrontPlan,
 ): OffensiveOperation | null {
   const settings = WORLD_BALANCE.war.landFront.offensiveOperation;
-  const front = world.landFronts.physicalFrontsById.get(plan.frontId);
+  const front = world.landFronts.operationalSectorsById.get(plan.frontId);
   const allocation = getFrontAllocation(world, plan.frontId, plan.nationId);
   if (
     !front ||
@@ -630,7 +636,7 @@ function createOperation(
 
 function selectOperationTargets(
   world: WorldState,
-  front: PhysicalFront,
+  front: OperationalSector,
   plan: NationFrontPlan,
   allocationUnits: UnitState[],
 ): OperationTargetSelection | null {
@@ -1000,7 +1006,7 @@ function getStagedUnitRatio(
 function isTargetReachableWithinFront(
   world: WorldState,
   operation: OffensiveOperation,
-  front: PhysicalFront,
+  front: OperationalSector,
 ): boolean {
   const friendly = getFrontSide(front, operation.nationId);
   const enemy = getOpposingFrontSide(front, operation.nationId);
@@ -1038,7 +1044,7 @@ function hasOccupiedSupportingMajority(
 function collectOperationReasons(
   world: WorldState,
   plan: NationFrontPlan,
-  front: PhysicalFront,
+  front: OperationalSector,
   targets: OperationTargetSelection,
   strengthRatio: number,
 ): OffensiveOperationReason[] {
@@ -1315,7 +1321,7 @@ function isRegionControlledBy(
   return (occupier ?? owner) === nationId;
 }
 
-function frontSideStrength(front: PhysicalFront, nationId: NationId): number {
+function frontSideStrength(front: OperationalSector, nationId: NationId): number {
   return finiteNumber(getFrontSide(front, nationId)?.strength ?? 0);
 }
 

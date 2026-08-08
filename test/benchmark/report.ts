@@ -61,6 +61,7 @@ function formatWorld(start: WorldSummary, end: WorldSummary): string[] {
     ["battles", "battles"],
     ["occupations", "occupations"],
     ["physical land fronts", "landFronts"],
+    ["operational sectors", "operationalSectors"],
     ["nation front plans", "nationFrontPlans"],
     ["front allocated units", "frontAllocatedUnits"],
     ["front unassigned units", "frontUnassignedUnits"],

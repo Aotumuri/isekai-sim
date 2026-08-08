@@ -15,7 +15,7 @@ import {
   getFrontSide,
   getOpposingFrontSide,
   type FrontId,
-  type PhysicalFront,
+  type OperationalSector,
 } from "./land-fronts";
 import {
   getFrontAllocation,
@@ -482,7 +482,7 @@ function createRetreatPlan(
   world: WorldState,
   plan: NationFrontPlan,
 ): RetreatPlan | null {
-  const front = world.landFronts.physicalFrontsById.get(plan.frontId);
+  const front = world.landFronts.operationalSectorsById.get(plan.frontId);
   const allocation = getFrontAllocation(world, plan.frontId, plan.nationId);
   if (!front || !allocation) {
     return null;
@@ -657,7 +657,7 @@ function updateRetreatPosturePersistence(world: WorldState): void {
 }
 
 function isRetreatStartReady(world: WorldState, plan: NationFrontPlan): boolean {
-  const front = world.landFronts.physicalFrontsById.get(plan.frontId);
+  const front = world.landFronts.operationalSectorsById.get(plan.frontId);
   const friendly = front ? getFrontSide(front, plan.nationId) : undefined;
   const enemy = front ? getOpposingFrontSide(front, plan.nationId) : undefined;
   if (!front || !friendly || !enemy) {
@@ -955,10 +955,10 @@ function assignFallbackTargets(
 }
 
 function remapRetreatFront(world: WorldState, retreat: RetreatPlan): boolean {
-  if (world.landFronts.physicalFrontsById.has(retreat.frontId)) {
+  if (world.landFronts.operationalSectorsById.has(retreat.frontId)) {
     return false;
   }
-  const candidates = world.landFronts.physicalFronts.filter((front) =>
+  const candidates = world.landFronts.operationalSectors.filter((front) =>
     isSameNationPair(front, retreat.nationId, retreat.enemyNationId),
   );
   if (candidates.length === 0) {
@@ -985,7 +985,7 @@ function hasDefensiveFrontNearFallback(
   retreat: RetreatPlan,
 ): boolean {
   const neighborsById = getNeighborsById(world);
-  return world.landFronts.physicalFronts.some((front) => {
+  return world.landFronts.operationalSectors.some((front) => {
     if (!isSameNationPair(front, retreat.nationId, retreat.enemyNationId)) {
       return false;
     }
@@ -1062,7 +1062,7 @@ function sampleDefensivePostureReturns(world: WorldState): void {
       ) {
         return false;
       }
-      const front = world.landFronts.physicalFrontsById.get(plan.frontId);
+      const front = world.landFronts.operationalSectorsById.get(plan.frontId);
       return (
         !!front &&
         isSameNationPair(front, pending.nationId, pending.enemyNationId)
@@ -1188,10 +1188,10 @@ function collectFallbackFrontSources(
   nationId: NationId,
   enemyNationId: NationId,
 ): MesoRegionId[] {
-  const exact = world.landFronts.physicalFrontsById.get(frontId);
+  const exact = world.landFronts.operationalSectorsById.get(frontId);
   const sources = exact ? getFrontSide(exact, nationId)?.borderRegionIds ?? [] : [];
   if (sources.length > 0) return [...sources];
-  return world.landFronts.physicalFronts
+  return world.landFronts.operationalSectors
     .filter((front) => isSameNationPair(front, nationId, enemyNationId))
     .flatMap((front) => getFrontSide(front, nationId)?.borderRegionIds ?? []);
 }
@@ -1215,7 +1215,7 @@ function effectiveController(
 }
 
 function frontFallbackDistance(
-  front: PhysicalFront,
+  front: OperationalSector,
   retreat: RetreatPlan,
   neighborsById: Map<MesoRegionId, MesoRegionId[]>,
 ): number {
@@ -1261,7 +1261,7 @@ function graphDistanceWithin(
 }
 
 function isSameNationPair(
-  front: PhysicalFront,
+  front: OperationalSector,
   nationId: NationId,
   enemyNationId: NationId,
 ): boolean {

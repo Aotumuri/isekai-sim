@@ -5,7 +5,7 @@ import {
   getFrontSide,
   getOpposingFrontSide,
   type FrontId,
-  type PhysicalFront,
+  type OperationalSector,
 } from "./land-fronts";
 import { isNationActive } from "./nation-active";
 import type { UnitId } from "./unit";
@@ -64,7 +64,7 @@ export interface CapitalDefenseState {
 }
 
 interface FrontThreatCandidate {
-  front: PhysicalFront;
+  front: OperationalSector;
   distance: number;
   enemyStrength: number;
 }
@@ -295,7 +295,7 @@ function assessCapitalDefense(
   const friendlyStrength = sumStrength(friendlyUnits);
   const enemyStrength = sumStrength(enemyUnits);
   const nationalLandStrength = sumStrength(nationalUnits);
-  const frontCandidates = (world.landFronts.physicalFrontsByNationId.get(nationId) ?? [])
+  const frontCandidates = (world.landFronts.operationalSectorsByNationId.get(nationId) ?? [])
     .map((front) => createFrontThreatCandidate(front, nationId, distances))
     .filter((candidate): candidate is FrontThreatCandidate => !!candidate)
     .sort(
@@ -363,7 +363,7 @@ function assessCapitalDefense(
 }
 
 function createFrontThreatCandidate(
-  front: PhysicalFront,
+  front: OperationalSector,
   nationId: NationId,
   distances: Map<MesoRegionId, number>,
 ): FrontThreatCandidate | null {

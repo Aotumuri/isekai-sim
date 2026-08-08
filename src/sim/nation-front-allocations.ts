@@ -10,7 +10,7 @@ import {
   getFrontSide,
   getOpposingFrontSide,
   type FrontId,
-  type PhysicalFront,
+  type OperationalSector,
   type PhysicalFrontSide,
 } from "./land-fronts";
 import type { FrontPosture, NationFrontPlan } from "./nation-front-plans";
@@ -60,7 +60,7 @@ interface FrontGeometrySnapshot {
 
 interface FrontAllocationContext {
   plan: NationFrontPlan;
-  front: PhysicalFront;
+  front: OperationalSector;
   friendlySide: PhysicalFrontSide;
   distanceByRegionId: Map<MesoRegionId, number>;
 }
@@ -499,7 +499,7 @@ function createAllocationContexts(
 ): FrontAllocationContext[] {
   const contexts: FrontAllocationContext[] = [];
   for (const plan of plans) {
-    const front = world.landFronts.physicalFrontsById.get(plan.frontId);
+    const front = world.landFronts.operationalSectorsById.get(plan.frontId);
     if (!front) {
       continue;
     }
@@ -652,7 +652,7 @@ function captureFrontGeometry(
   world: WorldState,
 ): Map<FrontId, FrontGeometrySnapshot> {
   const result = new Map<FrontId, FrontGeometrySnapshot>();
-  for (const front of world.landFronts.physicalFronts) {
+  for (const front of world.landFronts.operationalSectors) {
     result.set(front.id, {
       nationAId: front.nationAId,
       nationBId: front.nationBId,
@@ -673,16 +673,16 @@ function matchPreviousFrontsToCurrent(
 ): Map<FrontId, FrontId> {
   const result = new Map<FrontId, FrontId>();
   for (const [previousFrontId, previous] of previousGeometryById.entries()) {
-    if (world.landFronts.physicalFrontsById.has(previousFrontId)) {
+    if (world.landFronts.operationalSectorsById.has(previousFrontId)) {
       result.set(previousFrontId, previousFrontId);
       continue;
     }
-    const candidates = world.landFronts.physicalFronts.filter(
+    const candidates = world.landFronts.operationalSectors.filter(
       (front) =>
         front.nationAId === previous.nationAId &&
         front.nationBId === previous.nationBId,
     );
-    let best: PhysicalFront | undefined;
+    let best: OperationalSector | undefined;
     let bestOverlap = 0;
     for (const candidate of candidates) {
       const overlap = countFrontRegionOverlap(previous.regionIds, candidate);
@@ -710,7 +710,7 @@ function matchPreviousFrontsToCurrent(
 
 function countFrontRegionOverlap(
   previousRegionIds: ReadonlySet<MesoRegionId>,
-  current: PhysicalFront,
+  current: OperationalSector,
 ): number {
   let overlap = 0;
   const currentRegionIds = new Set([

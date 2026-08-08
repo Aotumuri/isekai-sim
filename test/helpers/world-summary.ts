@@ -45,6 +45,7 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     battles: world.battles.length,
     occupations: world.occupation.mesoById.size,
     landFronts: world.landFronts.physicalFronts.length,
+    operationalSectors: world.landFronts.operationalSectors.length,
     nationFrontPlans: world.frontPlans.plans.length,
     frontAllocatedUnits: world.frontAllocations.frontIdByUnitId.size,
     frontUnassignedUnits: world.frontAllocations.lastUnassignedUnitCount,

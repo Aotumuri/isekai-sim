@@ -1,6 +1,6 @@
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
-import type { FrontId, PhysicalFront } from "./land-fronts";
+import type { FrontId, OperationalSector } from "./land-fronts";
 import { getUnitCombatStrength } from "./unit-strength";
 import { buildWarAdjacency, isAtWar, type WarAdjacency } from "./war-state";
 import type { WorldState } from "./world-state";
@@ -187,7 +187,7 @@ export function getControlledFrontDistanceField(
   frontId: FrontId,
   nationId: NationId,
 ): ControlledDistanceField | undefined {
-  const front = world.landFronts.physicalFrontsById.get(frontId);
+  const front = world.landFronts.operationalSectorsById.get(frontId);
   const side = front ? getFrontSide(front, nationId) : undefined;
   return side
     ? getControlledDistanceField(world, nationId, side.borderRegionIds)
@@ -199,7 +199,7 @@ export function getNearestControlledFrontDistanceField(
   nationId: NationId,
 ): ControlledDistanceField {
   const sources = (
-    world.landFronts.physicalFrontsByNationId.get(nationId) ?? []
+    world.landFronts.operationalSectorsByNationId.get(nationId) ?? []
   ).flatMap((front) => getFrontSide(front, nationId)?.borderRegionIds ?? []);
   return getControlledDistanceField(world, nationId, sources);
 }
@@ -221,7 +221,7 @@ export function getFrontDistanceField(
     return cached;
   }
 
-  const front = world.landFronts.physicalFrontsById.get(frontId);
+  const front = world.landFronts.operationalSectorsById.get(frontId);
   const side = front ? getFrontSide(front, nationId) : undefined;
   if (!front || !side) return undefined;
   const startedAt = world.instrumentation ? performance.now() : 0;
@@ -249,7 +249,7 @@ export function getFrontDistanceField(
  * consumer happens to ask first.
  */
 export function prepareFrontDistanceFields(world: WorldState): void {
-  for (const front of world.landFronts.physicalFronts) {
+  for (const front of world.landFronts.operationalSectors) {
     getFrontDistanceField(world, front.id, front.sideA.nationId);
     getFrontDistanceField(world, front.id, front.sideB.nationId);
   }
@@ -272,7 +272,7 @@ export function nearestFront(
   regionId: MesoRegionId,
 ): { frontId: FrontId; distance: number } | undefined {
   let nearest: { frontId: FrontId; distance: number } | undefined;
-  for (const front of world.landFronts.physicalFrontsByNationId.get(nationId) ?? []) {
+  for (const front of world.landFronts.operationalSectorsByNationId.get(nationId) ?? []) {
     const distance = getDistanceToFront(world, front.id, nationId, regionId);
     if (
       distance !== undefined &&
@@ -603,7 +603,7 @@ function createAiGeographyState(): AiGeographyCacheState {
 }
 
 function getFrontSide(
-  front: PhysicalFront,
+  front: OperationalSector,
   nationId: NationId,
 ) {
   if (front.sideA.nationId === nationId) return front.sideA;

@@ -544,7 +544,7 @@ function rebuildLandAssignments(
     }
 
     for (const allocation of frontAllocations) {
-      const front = world.landFronts.physicalFrontsById.get(allocation.frontId);
+      const front = world.landFronts.operationalSectorsById.get(allocation.frontId);
       if (!front) {
         continue;
       }
@@ -865,7 +865,7 @@ function buildRetreatRearguardMovementGroup(
   warAdjacency: WarAdjacency,
   instrumentation?: SimulationInstrumentation,
 ): LandMovementGroup {
-  const front = world.landFronts.physicalFrontsById.get(retreat.frontId);
+  const front = world.landFronts.operationalSectorsById.get(retreat.frontId);
   const friendlySide = front ? getFrontSide(front, retreat.nationId) : undefined;
   const enemySide = front ? getOpposingFrontSide(front, retreat.nationId) : undefined;
   if (!friendlySide || !enemySide) {
