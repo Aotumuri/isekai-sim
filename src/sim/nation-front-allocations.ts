@@ -46,6 +46,7 @@ export interface NationFrontAllocationState {
   unitsReference: UnitState[] | null;
   unitIdCounter: number;
   landUnitCount: number;
+  inputSnapshot: FrontAllocationInputSnapshot | null;
   lastUnitSwitchCount: number;
   lastFrontTransferCount: number;
   lastUnassignedUnitCount: number;
@@ -56,6 +57,23 @@ interface FrontGeometrySnapshot {
   nationAId: NationId;
   nationBId: NationId;
   regionIds: Set<MesoRegionId>;
+}
+
+interface FrontAllocationInputSnapshot {
+  frontVersion: number;
+  territoryVersion: number;
+  occupationVersion: number;
+  activeNationIds: NationId[];
+  plans: Array<Pick<NationFrontPlan, "frontId" | "nationId" | "posture" | "priority" | "desiredStrength">>;
+  units: Array<{
+    id: UnitId;
+    nationId: NationId;
+    regionId: MesoRegionId;
+    strength: number;
+    retreatId: string;
+    reserveNationId: string;
+    reorganizationPlanId: string;
+  }>;
 }
 
 interface FrontAllocationContext {
@@ -87,6 +105,7 @@ export function createNationFrontAllocationState(): NationFrontAllocationState {
     unitsReference: null,
     unitIdCounter: -1,
     landUnitCount: -1,
+    inputSnapshot: null,
     lastUnitSwitchCount: 0,
     lastFrontTransferCount: 0,
     lastUnassignedUnitCount: 0,
@@ -97,19 +116,15 @@ export function createNationFrontAllocationState(): NationFrontAllocationState {
 export function updateNationFrontAllocations(world: WorldState): void {
   const state = world.frontAllocations;
   const landUnits = world.units.filter((unit) => unit.domain === "land");
-  const unitsChanged =
-    state.unitsReference !== world.units ||
-    state.unitIdCounter !== world.unitIdCounter ||
-    state.landUnitCount !== landUnits.length;
   if (
-    state.sourcePlanVersion === world.frontPlans.version &&
-    state.sourceRetreatMembershipVersion === world.retreatPlans.membershipVersion &&
-    state.sourceReserveMembershipVersion ===
-      world.strategicReserves.membershipVersion &&
-    state.sourceReorganizationMembershipVersion ===
-      world.reorganization.membershipVersion &&
-    !unitsChanged
+    state.inputSnapshot &&
+    allocationInputMatches(state.inputSnapshot, world, landUnits)
   ) {
+    state.lastUnitSwitchCount = 0;
+    state.lastFrontTransferCount = 0;
+    world.instrumentation?.incrementCounter(
+      "landFront.allocationSkippedRebuilds",
+    );
     return;
   }
 
@@ -206,6 +221,7 @@ export function updateNationFrontAllocations(world: WorldState): void {
   state.unitsReference = world.units;
   state.unitIdCounter = world.unitIdCounter;
   state.landUnitCount = landUnits.length;
+  state.inputSnapshot = captureAllocationInput(world, landUnits);
   state.lastUnitSwitchCount = switchCount;
   state.lastFrontTransferCount = frontTransferCount;
   state.lastUnassignedUnitCount = unassignedUnitCount;
@@ -264,6 +280,81 @@ export function releaseUnitFromFrontAllocation(
   state.frontIdByUnitId.delete(unitId);
   state.membershipVersion += 1;
   state.version += 1;
+  state.inputSnapshot = null;
+  return true;
+}
+
+function captureAllocationInput(
+  world: WorldState,
+  landUnits: readonly UnitState[],
+): FrontAllocationInputSnapshot {
+  return {
+    frontVersion: world.landFronts.version,
+    territoryVersion: world.territoryVersion,
+    occupationVersion: world.occupation.version,
+    activeNationIds: world.nations.filter(isNationActive).map((nation) => nation.id),
+    plans: world.frontPlans.plans.map((plan) => ({
+      frontId: plan.frontId,
+      nationId: plan.nationId,
+      posture: plan.posture,
+      priority: plan.priority,
+      desiredStrength: plan.desiredStrength,
+    })),
+    units: landUnits.map((unit) => ({
+      id: unit.id,
+      nationId: unit.nationId,
+      regionId: unit.regionId,
+      strength: finiteUnitStrength(unit),
+      retreatId: world.retreatPlans.retreatIdByUnitId.get(unit.id) ?? "",
+      reserveNationId:
+        world.strategicReserves.reserveNationByUnitId.get(unit.id) ?? "",
+      reorganizationPlanId:
+        world.reorganization.planIdByUnitId.get(unit.id) ?? "",
+    })),
+  };
+}
+
+function allocationInputMatches(
+  snapshot: FrontAllocationInputSnapshot,
+  world: WorldState,
+  landUnits: readonly UnitState[],
+): boolean {
+  if (
+    snapshot.frontVersion !== world.landFronts.version ||
+    snapshot.territoryVersion !== world.territoryVersion ||
+    snapshot.occupationVersion !== world.occupation.version ||
+    snapshot.plans.length !== world.frontPlans.plans.length ||
+    snapshot.units.length !== landUnits.length
+  ) return false;
+  const activeNations = world.nations.filter(isNationActive);
+  if (snapshot.activeNationIds.length !== activeNations.length) return false;
+  for (let index = 0; index < activeNations.length; index += 1) {
+    if (snapshot.activeNationIds[index] !== activeNations[index].id) return false;
+  }
+  for (let index = 0; index < world.frontPlans.plans.length; index += 1) {
+    const before = snapshot.plans[index];
+    const after = world.frontPlans.plans[index];
+    if (
+      before.frontId !== after.frontId ||
+      before.nationId !== after.nationId ||
+      before.posture !== after.posture ||
+      before.priority !== after.priority ||
+      before.desiredStrength !== after.desiredStrength
+    ) return false;
+  }
+  for (let index = 0; index < landUnits.length; index += 1) {
+    const before = snapshot.units[index];
+    const after = landUnits[index];
+    if (
+      before.id !== after.id ||
+      before.nationId !== after.nationId ||
+      before.regionId !== after.regionId ||
+      before.strength !== finiteUnitStrength(after) ||
+      before.retreatId !== (world.retreatPlans.retreatIdByUnitId.get(after.id) ?? "") ||
+      before.reserveNationId !== (world.strategicReserves.reserveNationByUnitId.get(after.id) ?? "") ||
+      before.reorganizationPlanId !== (world.reorganization.planIdByUnitId.get(after.id) ?? "")
+    ) return false;
+  }
   return true;
 }
 

@@ -100,12 +100,15 @@ export function updateNationFrontPlans(world: WorldState): void {
   }
   plans.sort(comparePlans);
 
+  const decisionsChanged = !plansHaveSameDecisions(state.plans, plans);
   state.plans = plans;
   state.plansByNationId = indexPlansByNation(plans);
   state.plansByFrontNation = new Map(
     plans.map((plan) => [createPlanKey(plan.frontId, plan.nationId), plan]),
   );
-  state.version += 1;
+  if (decisionsChanged) {
+    state.version += 1;
+  }
   state.physicalFrontVersion = world.landFronts.version;
   state.physicalFrontMetricsVersion = world.landFronts.metricsVersion;
   state.capitalDefenseVersion = world.capitalDefense.version;
@@ -118,6 +121,28 @@ export function updateNationFrontPlans(world: WorldState): void {
     world.instrumentation.incrementCounter("landFront.planUpdates");
     world.instrumentation.incrementCounter("landFront.plansEvaluated", plans.length);
   }
+}
+
+function plansHaveSameDecisions(
+  before: readonly NationFrontPlan[],
+  after: readonly NationFrontPlan[],
+): boolean {
+  if (before.length !== after.length) return false;
+  for (let index = 0; index < before.length; index += 1) {
+    const a = before[index];
+    const b = after[index];
+    if (
+      a.frontId !== b.frontId ||
+      a.physicalFrontId !== b.physicalFrontId ||
+      a.nationId !== b.nationId ||
+      a.posture !== b.posture ||
+      a.priority !== b.priority ||
+      a.desiredStrength !== b.desiredStrength ||
+      a.reasonFlags.length !== b.reasonFlags.length ||
+      a.reasonFlags.some((reason, reasonIndex) => reason !== b.reasonFlags[reasonIndex])
+    ) return false;
+  }
+  return true;
 }
 
 export function getNationFrontPlans(

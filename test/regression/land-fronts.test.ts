@@ -72,11 +72,14 @@ import {
   updateStrategicReserves,
 } from "../../src/sim/strategic-reserves";
 import { createReorganizationState } from "../../src/sim/reorganization";
+import { updateBattles } from "../../src/sim/battles";
 import {
   createFrontlineCoverageState,
   getFrontlineCoverage,
   updateFrontlineCoverage,
 } from "../../src/sim/frontline-coverage";
+import { BenchmarkMetrics } from "../benchmark/metrics";
+import { createTestScenario } from "../helpers/test-scenario";
 
 const NATION_A = createNationId(0);
 const NATION_B = createNationId(1);
@@ -149,9 +152,13 @@ test("frontline coverage creates topology-ordered positions and spreads defender
   assert(coverage.maxGapLength <= 1, "adjacent defenders should provide sparse continuous coverage");
 
   const stableAssignments = new Map(world.frontlineCoverage.assignmentByUnitId);
+  const stableAssignmentObjects = new Map(stableAssignments);
   world.frontAllocations.version += 1;
   updateFrontlineCoverage(world);
   assert.deepEqual(world.frontlineCoverage.assignmentByUnitId, stableAssignments);
+  for (const [unitId, assignment] of world.frontlineCoverage.assignmentByUnitId) {
+    assert.equal(assignment, stableAssignmentObjects.get(unitId));
+  }
 
   for (const region of ["la1", "la3", "la4"]) addLandUnit(world, NATION_A, region, "Infantry");
   updateAllocationSystem(world);
@@ -166,6 +173,37 @@ test("frontline coverage creates topology-ordered positions and spreads defender
   assert(fullCoverage);
   assert(fullCoverage.positions.every((position) => position.defenderUnitIds.length > 0));
   assert.equal(fullCoverage.gapSegments, 0);
+});
+
+test("unchanged coverage and allocation inputs skip full rebuilds", () => {
+  const world = createTestScenario("active-war");
+  const metrics = new BenchmarkMetrics();
+  world.instrumentation = metrics;
+  updateLandFronts(world);
+  updateCapitalDefense(world);
+  updateNationFrontPlans(world);
+  updateNationFrontAllocations(world);
+  updateFrontlineCoverage(world);
+
+  updateNationFrontAllocations(world);
+  updateFrontlineCoverage(world);
+
+  assert.equal(metrics.getCounter("landFront.allocationRebuilds"), 1);
+  assert.equal(metrics.getCounter("landFront.allocationSkippedRebuilds"), 1);
+  assert.equal(metrics.getCounter("frontlineCoverage.dirtyRebuilds"), 1);
+  assert.equal(metrics.getCounter("frontlineCoverage.skippedRebuilds"), 1);
+});
+
+test("battle indexing is reused while membership and movement are unchanged", () => {
+  const world = createTestScenario("active-war");
+  const metrics = new BenchmarkMetrics();
+  world.instrumentation = metrics;
+
+  updateBattles(world);
+  updateBattles(world);
+
+  assert.equal(metrics.getCounter("battle.index.rebuilds"), 1);
+  assert.equal(metrics.getCounter("battle.index.reuses"), 1);
 });
 
 test("offensive operations use only strength surplus to minimum frontline coverage", () => {

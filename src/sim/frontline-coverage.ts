@@ -60,7 +60,9 @@ export interface FrontlineCoverageState {
   sourceAllocationVersion: number;
   sourceFrontVersion: number;
   sourceOperationMembershipVersion: number;
+  sourceOperationVersion: number;
   sourceOccupationVersion: number;
+  sourceBuildingVersion: number;
   totalAssignmentSwitches: number;
   breakthroughEvents: number;
 }
@@ -75,7 +77,9 @@ export function createFrontlineCoverageState(): FrontlineCoverageState {
     sourceAllocationVersion: -1,
     sourceFrontVersion: -1,
     sourceOperationMembershipVersion: -1,
+    sourceOperationVersion: -1,
     sourceOccupationVersion: -1,
+    sourceBuildingVersion: -1,
     totalAssignmentSwitches: 0,
     breakthroughEvents: 0,
   };
@@ -114,12 +118,21 @@ export function getOrderedFrontlineRegionIds(
 
 export function updateFrontlineCoverage(world: WorldState): void {
   const state = world.frontlineCoverage;
-  if (
-    state.sourceAllocationVersion === world.frontAllocations.version &&
-    state.sourceFrontVersion === world.landFronts.version &&
-    state.sourceOperationMembershipVersion === world.offensiveOperations.membershipVersion &&
-    state.sourceOccupationVersion === world.occupation.version
-  ) return;
+  world.instrumentation?.incrementCounter("frontlineCoverage.evaluations");
+  if (coverageInputIsCurrent(state, world)) {
+    world.instrumentation?.incrementCounter("frontlineCoverage.skippedRebuilds");
+    world.instrumentation?.incrementCounter("assignment.skippedRebuilds");
+    world.instrumentation?.incrementCounter(
+      "assignment.reusedUnits",
+      state.assignmentByUnitId.size,
+    );
+    world.instrumentation?.incrementCounter(
+      "frontlineCoverage.assignmentReused",
+      state.assignmentByUnitId.size,
+    );
+    return;
+  }
+  world.instrumentation?.incrementCounter("frontlineCoverage.dirtyRebuilds");
 
   const startedAt = world.instrumentation ? performance.now() : 0;
   const previousAssignments = state.assignmentByUnitId;
@@ -211,7 +224,9 @@ export function updateFrontlineCoverage(world: WorldState): void {
   state.sourceAllocationVersion = world.frontAllocations.version;
   state.sourceFrontVersion = world.landFronts.version;
   state.sourceOperationMembershipVersion = world.offensiveOperations.membershipVersion;
+  state.sourceOperationVersion = world.offensiveOperations.version;
   state.sourceOccupationVersion = world.occupation.version;
+  state.sourceBuildingVersion = world.buildingVersion;
   state.totalAssignmentSwitches += switches;
   state.breakthroughEvents += breakthroughs;
   if (membershipChanged) state.membershipVersion += 1;
@@ -361,18 +376,52 @@ function selectDistributedPositions(positions: FrontlineDefensivePosition[], cou
 function assignDefenders(world: WorldState, sectorId: SectorId, units: UnitState[], targets: FrontlineDefensivePosition[], previous: ReadonlyMap<UnitId, FrontlineDefensiveAssignment>, next: Map<UnitId, FrontlineDefensiveAssignment>): void {
   const meso = getMesoById(world);
   const remaining = [...targets];
+  let reusedAssignments = 0;
+  let createdAssignments = 0;
   for (const unit of [...units].sort((a, b) => compareIds(a.id, b.id))) {
     const prior = previous.get(unit.id);
     let target = remaining.find((position) => position.id === prior?.defensivePositionId);
     if (!target) target = remaining.sort((a, b) => positionDistance(unit, a, meso) - positionDistance(unit, b, meso) || b.threat - a.threat || a.segmentIndex - b.segmentIndex)[0];
     if (!target) break;
-    next.set(unit.id, {
-      sectorId,
-      defensivePositionId: target.id,
-      targetRegionId: target.friendlyRegionId,
-    });
+    if (
+      prior?.sectorId === sectorId &&
+      prior.defensivePositionId === target.id &&
+      prior.targetRegionId === target.friendlyRegionId
+    ) {
+      next.set(unit.id, prior);
+      reusedAssignments += 1;
+    } else {
+      next.set(unit.id, {
+        sectorId,
+        defensivePositionId: target.id,
+        targetRegionId: target.friendlyRegionId,
+      });
+      createdAssignments += 1;
+    }
     remaining.splice(remaining.indexOf(target), 1);
   }
+  world.instrumentation?.incrementCounter(
+    "frontlineCoverage.assignmentReused",
+    reusedAssignments,
+  );
+  world.instrumentation?.incrementCounter(
+    "frontlineCoverage.assignmentCreated",
+    createdAssignments,
+  );
+}
+
+function coverageInputIsCurrent(
+  state: FrontlineCoverageState,
+  world: WorldState,
+): boolean {
+  return (
+    state.sourceAllocationVersion !== world.frontAllocations.version ||
+    state.sourceFrontVersion !== world.landFronts.version ||
+    state.sourceOperationMembershipVersion !== world.offensiveOperations.membershipVersion ||
+    state.sourceOperationVersion !== world.offensiveOperations.version ||
+    state.sourceOccupationVersion !== world.occupation.version ||
+    state.sourceBuildingVersion !== world.buildingVersion
+  ) === false;
 }
 
 function evaluatePositions(world: WorldState, positions: FrontlineDefensivePosition[], units: UnitState[], assignments: ReadonlyMap<UnitId, FrontlineDefensiveAssignment>, minimumStrength: number): void {

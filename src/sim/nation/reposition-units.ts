@@ -154,7 +154,6 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     strategicReserveChanged ||
     reorganizationChanged ||
     periodicReassignmentDue;
-
   const mesoById = getMesoById(world);
   const neighborsById = getNeighborsById(world);
   const ownerByMesoId = getOwnerByMesoId(world);
@@ -195,22 +194,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
         performance.now() - assignmentStartedAt,
       );
     }
-    runtime.lastAssignmentFastTick = world.time.fastTick;
-    runtime.territoryVersion = world.territoryVersion;
-    runtime.occupationVersion = world.occupation.version;
-    runtime.buildingVersion = world.buildingVersion;
-    runtime.unitIdCounter = world.unitIdCounter;
-    runtime.unitsReference = world.units;
-    runtime.landUnitCount = landUnits.length;
-    runtime.warsReference = world.wars;
-    runtime.warCount = world.wars.length;
-    runtime.frontAllocationMembershipVersion =
-      world.frontAllocations.membershipVersion;
-    runtime.offensiveOperationVersion = world.offensiveOperations.version;
-    runtime.retreatPlanVersion = world.retreatPlans.version;
-    runtime.strategicReserveVersion = world.strategicReserves.version;
-    runtime.reorganizationVersion = world.reorganization.version;
-    runtime.forceReassignment = false;
+    updateAssignmentRuntimeSources(runtime, world, landUnits);
   }
 
   const movementStartedAt = instrumentation ? performance.now() : 0;
@@ -291,6 +275,29 @@ function getLandAiRuntime(world: WorldState): LandAiRuntime {
   };
   landAiRuntimeByWorld.set(world, created);
   return created;
+}
+
+function updateAssignmentRuntimeSources(
+  runtime: LandAiRuntime,
+  world: WorldState,
+  landUnits: readonly UnitState[],
+): void {
+  runtime.lastAssignmentFastTick = world.time.fastTick;
+  runtime.territoryVersion = world.territoryVersion;
+  runtime.occupationVersion = world.occupation.version;
+  runtime.buildingVersion = world.buildingVersion;
+  runtime.unitIdCounter = world.unitIdCounter;
+  runtime.unitsReference = world.units;
+  runtime.landUnitCount = landUnits.length;
+  runtime.warsReference = world.wars;
+  runtime.warCount = world.wars.length;
+  runtime.frontAllocationMembershipVersion =
+    world.frontAllocations.membershipVersion;
+  runtime.offensiveOperationVersion = world.offensiveOperations.version;
+  runtime.retreatPlanVersion = world.retreatPlans.version;
+  runtime.strategicReserveVersion = world.strategicReserves.version;
+  runtime.reorganizationVersion = world.reorganization.version;
+  runtime.forceReassignment = false;
 }
 
 function invalidateSharedPathFields(
@@ -674,9 +681,14 @@ function buildFrontlineCoverageMovementGroup(
 ): LandMovementGroup {
   let assignments = 0;
   let switches = 0;
+  let reusedTargets = 0;
   for (const unit of units.sort(compareUnitIds)) {
     const targetId = getFrontlineTargetForUnit(world, unit.id);
-    if (!targetId || unit.moveTargetId === targetId) continue;
+    if (!targetId) continue;
+    if (unit.moveTargetId === targetId) {
+      reusedTargets += 1;
+      continue;
+    }
     if (unit.moveTargetId) switches += 1;
     unit.moveTargetId = targetId;
     unit.moveFromId = null;
@@ -687,6 +699,11 @@ function buildFrontlineCoverageMovementGroup(
   nation?.unitRoles.defenseUnitIds.push(...units.map((unit) => unit.id));
   instrumentation?.incrementCounter("frontlineCoverage.targetAssignments", assignments);
   instrumentation?.incrementCounter("frontlineCoverage.assignmentSwitches", switches);
+  instrumentation?.incrementCounter("movement.reusedTargets", reusedTargets);
+  instrumentation?.incrementCounter(
+    "movement.avoidedRepositionUpdates",
+    reusedTargets,
+  );
   return { nationId: units[0]?.nationId ?? nation?.id as NationId, units, controlledOnly: true };
 }
 
@@ -701,6 +718,7 @@ function buildReorganizationMovementGroup(
   const targetId = getReorganizationTargetForUnit(world, unit.id);
   let assignmentCount = 0;
   let switchCount = 0;
+  let reusedTargets = 0;
   if (plan.phase === "moving-to-rear" && targetId) {
     if (unit.moveTargetId !== targetId) {
       if (unit.moveTargetId) switchCount += 1;
@@ -709,6 +727,8 @@ function buildReorganizationMovementGroup(
       unit.moveToId = null;
       unit.moveProgressMs = 0;
       assignmentCount += 1;
+    } else {
+      reusedTargets += 1;
     }
   } else if (unit.moveTargetId || unit.moveToId || unit.moveFromId) {
     if (unit.moveTargetId) switchCount += 1;
@@ -722,6 +742,11 @@ function buildReorganizationMovementGroup(
   instrumentation?.incrementCounter(
     "reorganization.unitTargetSwitches",
     switchCount,
+  );
+  instrumentation?.incrementCounter("movement.reusedTargets", reusedTargets);
+  instrumentation?.incrementCounter(
+    "movement.avoidedRepositionUpdates",
+    reusedTargets,
   );
   if (instrumentation) {
     instrumentation.recordDuration(
@@ -743,6 +768,7 @@ function buildReserveMovementGroup(
   const orderedUnits = [...units].sort(compareUnitIds);
   let assignmentCount = 0;
   let switchCount = 0;
+  let reusedTargets = 0;
   for (const unit of orderedUnits) {
     const targetId = getReserveTargetForUnit(reserve, unit.id);
     if (!targetId) {
@@ -753,7 +779,10 @@ function buildReserveMovementGroup(
       unit.moveProgressMs = 0;
       continue;
     }
-    if (unit.moveTargetId === targetId) continue;
+    if (unit.moveTargetId === targetId) {
+      reusedTargets += 1;
+      continue;
+    }
     if (unit.moveTargetId) switchCount += 1;
     unit.moveTargetId = targetId;
     unit.moveFromId = null;
@@ -769,6 +798,11 @@ function buildReserveMovementGroup(
   instrumentation?.incrementCounter(
     "strategicReserve.unitTargetSwitches",
     switchCount,
+  );
+  instrumentation?.incrementCounter("movement.reusedTargets", reusedTargets);
+  instrumentation?.incrementCounter(
+    "movement.avoidedRepositionUpdates",
+    reusedTargets,
   );
   if (instrumentation) {
     instrumentation.recordDuration(
@@ -845,6 +879,7 @@ function buildOperationMovementGroup(
   const startedAt = instrumentation ? performance.now() : 0;
   let assignmentCount = 0;
   let switchCount = 0;
+  let reusedTargets = 0;
   const orderedUnits = [...units].sort((a, b) => a.id.localeCompare(b.id));
   for (const unit of orderedUnits) {
     const targetId =
@@ -853,6 +888,7 @@ function buildOperationMovementGroup(
         : (operation.unitTargetRegionIds.get(unit.id) ??
           operation.primaryTargetRegionId);
     if (unit.moveTargetId === targetId) {
+      reusedTargets += 1;
       continue;
     }
     if (unit.moveTargetId) {
@@ -877,6 +913,11 @@ function buildOperationMovementGroup(
   instrumentation?.incrementCounter(
     "offensiveOperation.unitTargetSwitches",
     switchCount,
+  );
+  instrumentation?.incrementCounter("movement.reusedTargets", reusedTargets);
+  instrumentation?.incrementCounter(
+    "movement.avoidedRepositionUpdates",
+    reusedTargets,
   );
   if (instrumentation) {
     instrumentation.recordDuration(
@@ -961,10 +1002,14 @@ function buildRetreatMovementGroup(
   const orderedUnits = [...units].sort(compareUnitIds);
   let assignmentCount = 0;
   let switchCount = 0;
+  let reusedTargets = 0;
   for (const unit of orderedUnits) {
     const targetId =
       retreat.unitTargetRegionIds.get(unit.id) ?? retreat.fallbackRegionIds[0];
     if (!targetId || unit.moveTargetId === targetId) {
+      if (targetId) {
+        reusedTargets += 1;
+      }
       continue;
     }
     if (unit.moveTargetId) {
@@ -981,6 +1026,11 @@ function buildRetreatMovementGroup(
   world.retreatPlans.unitTargetSwitchCount += switchCount;
   instrumentation?.incrementCounter("retreat.targetAssignments", assignmentCount);
   instrumentation?.incrementCounter("retreat.unitTargetSwitches", switchCount);
+  instrumentation?.incrementCounter("movement.reusedTargets", reusedTargets);
+  instrumentation?.incrementCounter(
+    "movement.avoidedRepositionUpdates",
+    reusedTargets,
+  );
   if (instrumentation) {
     instrumentation.recordDuration(
       "retreat.targetAssignment",

@@ -91,7 +91,11 @@ export function stepFastTick(world: WorldState, dtMs: number): void {
     repositionNavalUnits(world, dtMs);
     updateAmphibiousOperations(world);
   }
+  startedAt = instrumentation ? performance.now() : 0;
   updateBattles(world);
+  if (instrumentation) {
+    instrumentation.recordDuration("battle.update", performance.now() - startedAt);
+  }
 
   startedAt = instrumentation ? performance.now() : 0;
   updateOccupation(world);

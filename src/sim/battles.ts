@@ -28,17 +28,72 @@ export function createBattleId(index: number): BattleId {
   return `battle-${index}` as BattleId;
 }
 
+interface LandBattleIndex {
+  unitsReference: UnitState[];
+  unitSnapshots: LandBattleUnitSnapshot[];
+  warSnapshots: BattleWarSnapshot[];
+  warAdjacency: WarAdjacency;
+  landUnits: UnitState[];
+  unitsByMesoId: Map<MesoRegionId, Map<NationId, UnitState[]>>;
+  attackersByTarget: Map<MesoRegionId, Map<NationId, UnitState[]>>;
+}
+
+interface LandBattleUnitSnapshot {
+  id: UnitId;
+  nationId: NationId;
+  regionId: MesoRegionId;
+  moveToId: MesoRegionId | null;
+}
+
+interface BattleWarSnapshot {
+  nationAId: NationId;
+  nationBId: NationId;
+}
+
+const landBattleIndexByWorld = new WeakMap<WorldState, LandBattleIndex>();
+
 export function updateBattles(world: WorldState): void {
   if (world.wars.length === 0 || world.units.length < 2) {
     return;
   }
 
-  const warAdjacency = buildWarAdjacency(world.wars);
+  let landIndex = landBattleIndexByWorld.get(world);
+  if (landIndex && landBattleIndexIsValid(landIndex, world)) {
+    world.instrumentation?.incrementCounter("battle.index.reuses");
+  } else {
+    const warAdjacency = buildWarAdjacency(world.wars);
+    const landUnits = world.units.filter((unit) => unit.domain === "land");
+    const unitsByMesoId = collectUnitsByMesoAndNation(landUnits);
+    landIndex = {
+      unitsReference: world.units,
+      unitSnapshots: landUnits.map((unit) => ({
+        id: unit.id,
+        nationId: unit.nationId,
+        regionId: unit.regionId,
+        moveToId: unit.moveToId,
+      })),
+      warSnapshots: world.wars.map((war) => ({
+        nationAId: war.nationAId,
+        nationBId: war.nationBId,
+      })),
+      warAdjacency,
+      landUnits,
+      unitsByMesoId,
+      attackersByTarget: collectAttackersByTarget(
+        landUnits,
+        unitsByMesoId,
+        warAdjacency,
+      ),
+    };
+    landBattleIndexByWorld.set(world, landIndex);
+    world.instrumentation?.incrementCounter("battle.index.rebuilds");
+  }
+  const warAdjacency = landIndex.warAdjacency;
   const existingByKey = indexExistingBattles(world.battles);
   const now = world.time.fastTick;
   const removedUnitIds = new Set<UnitId>();
 
-  const landUnits = world.units.filter((unit) => unit.domain === "land");
+  const landUnits = landIndex.landUnits;
   if (landUnits.length >= 2) {
     updateLandBattles(
       world,
@@ -47,6 +102,8 @@ export function updateBattles(world: WorldState): void {
       existingByKey,
       removedUnitIds,
       now,
+      landIndex.unitsByMesoId,
+      landIndex.attackersByTarget,
     );
   }
 
@@ -67,6 +124,7 @@ export function updateBattles(world: WorldState): void {
 
   if (removedUnitIds.size > 0) {
     world.units = world.units.filter((unit) => !removedUnitIds.has(unit.id));
+    landBattleIndexByWorld.delete(world);
   }
 
   if (world.battles.length > 0) {
@@ -81,10 +139,9 @@ function updateLandBattles(
   existingByKey: Map<string, BattleState>,
   removedUnitIds: Set<UnitId>,
   now: number,
+  unitsByMesoId: Map<MesoRegionId, Map<NationId, UnitState[]>>,
+  attackersByTarget: Map<MesoRegionId, Map<NationId, UnitState[]>>,
 ): void {
-  const unitsByMesoId = collectUnitsByMesoAndNation(landUnits);
-  const attackersByTarget = collectAttackersByTarget(landUnits, unitsByMesoId, warAdjacency);
-
   for (const [mesoId, attackersByNation] of attackersByTarget.entries()) {
     const defendersByNation = unitsByMesoId.get(mesoId);
     if (!defendersByNation || defendersByNation.size === 0) {
@@ -133,6 +190,36 @@ function updateLandBattles(
       }
     }
   }
+}
+
+function landBattleIndexIsValid(
+  index: LandBattleIndex,
+  world: WorldState,
+): boolean {
+  if (index.unitsReference !== world.units) return false;
+  if (index.warSnapshots.length !== world.wars.length) return false;
+  for (let warIndex = 0; warIndex < world.wars.length; warIndex += 1) {
+    const war = world.wars[warIndex];
+    const snapshot = index.warSnapshots[warIndex];
+    if (
+      snapshot.nationAId !== war.nationAId ||
+      snapshot.nationBId !== war.nationBId
+    ) return false;
+  }
+  let landIndex = 0;
+  for (const unit of world.units) {
+    if (unit.domain !== "land") continue;
+    const snapshot = index.unitSnapshots[landIndex];
+    if (
+      !snapshot ||
+      snapshot.id !== unit.id ||
+      snapshot.nationId !== unit.nationId ||
+      snapshot.regionId !== unit.regionId ||
+      snapshot.moveToId !== unit.moveToId
+    ) return false;
+    landIndex += 1;
+  }
+  return landIndex === index.unitSnapshots.length;
 }
 
 function updateNavalBattles(
