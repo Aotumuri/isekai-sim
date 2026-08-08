@@ -17,7 +17,7 @@ import type { Renderer } from "./renderer";
 
 /** Change this one value to change the development overlay's initial state. */
 export const DEFAULT_FRONT_DEBUG_OVERLAY = true;
-export const FRONT_DEBUG_OVERLAY_SHORTCUT = "F8";
+export const FRONT_DEBUG_OVERLAY_SHORTCUT = "KeyF";
 
 const FRONT_COLORS = [
   0x00e5ff, 0xffd740, 0xff5c8a, 0x69f0ae, 0xb388ff, 0xff8a65,
