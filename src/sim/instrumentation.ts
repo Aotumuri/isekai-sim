@@ -16,6 +16,10 @@ export type SimulationMetricName =
   | "capitalDefense.evaluation"
   | "strategicReserve.evaluation"
   | "strategicReserve.targetAssignment"
+  | "reorganization.evaluation"
+  | "reorganization.reinforcement"
+  | "reorganization.resourceUpdates"
+  | "reorganization.targetAssignment"
   | "updateOccupation"
   | "updateCapitals"
   | "surrender";
@@ -109,7 +113,25 @@ export type SimulationCounterName =
   | "strategicReserve.sampledUnits"
   | "strategicReserve.sampledStrength"
   | "strategicReserve.targetAssignments"
-  | "strategicReserve.unitTargetSwitches";
+  | "strategicReserve.unitTargetSwitches"
+  | "reorganization.created"
+  | "reorganization.completed"
+  | "reorganization.cancelled"
+  | "reorganization.interrupted"
+  | "reorganization.organizationRecovered"
+  | "reorganization.manpowerReinforced"
+  | "reorganization.equipmentReinforced"
+  | "reorganization.manpowerConsumed"
+  | "reorganization.equipmentConsumed"
+  | "reorganization.durationTicks"
+  | "reorganization.returnedToFront"
+  | "reorganization.returnedToReserve"
+  | "reorganization.emergencyDeployments"
+  | "reorganization.resourceShortages"
+  | "reorganization.waitingForManpower"
+  | "reorganization.waitingForEquipment"
+  | "reorganization.targetAssignments"
+  | "reorganization.unitTargetSwitches";
 
 /**
  * Optional benchmark observer. Production worlds do not install one, so hot paths

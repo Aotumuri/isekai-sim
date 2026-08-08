@@ -9,6 +9,7 @@ import { setupManyUnits } from "./many-units";
 import { setupRetreatHeavy } from "./retreat-heavy";
 import { setupCapitalThreat } from "./capital-threat";
 import { setupStrategicReserve } from "./strategic-reserve";
+import { setupReorganizationHeavy } from "./reorganization-heavy";
 import type { ScenarioOptions, ScenarioSetup } from "./types";
 
 const scenarioSetups: Record<BenchmarkScenarioName, ScenarioSetup> = {
@@ -20,6 +21,7 @@ const scenarioSetups: Record<BenchmarkScenarioName, ScenarioSetup> = {
   "retreat-heavy": setupRetreatHeavy,
   "capital-threat": setupCapitalThreat,
   "strategic-reserve": setupStrategicReserve,
+  "reorganization-heavy": setupReorganizationHeavy,
 };
 
 export function createScenarioWorld(
@@ -28,6 +30,7 @@ export function createScenarioWorld(
 ): WorldState {
   const world = createSeededWorld(options);
   world.strategicReserves.enabled = options.reserveEnabled ?? true;
+  world.reorganization.enabled = options.reorganizationEnabled ?? true;
   scenarioSetups[name](world, options);
   return world;
 }

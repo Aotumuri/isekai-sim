@@ -7,6 +7,7 @@ export const BENCHMARK_SCENARIOS = [
   "retreat-heavy",
   "capital-threat",
   "strategic-reserve",
+  "reorganization-heavy",
 ] as const;
 
 export type BenchmarkScenarioName = (typeof BENCHMARK_SCENARIOS)[number];
@@ -23,6 +24,7 @@ export interface BenchmarkOptions {
   frameDeltaMs: number;
   quick: boolean;
   reserveEnabled: boolean;
+  reorganizationEnabled: boolean;
 }
 
 export interface MetricSummary {
@@ -104,6 +106,32 @@ export interface WorldSummary {
   reserveRetreatFallbackArrivals: number;
   reserveReturnsStarted: number;
   reserveReturnsCompleted: number;
+  activeReorganizationPlans: number;
+  movingReorganizationPlans: number;
+  reorganizingUnits: number;
+  reorganizationPlansCreated: number;
+  reorganizationPlansCompleted: number;
+  reorganizationPlansCancelled: number;
+  reorganizationInterruptions: number;
+  reorganizationOrganizationRecovered: number;
+  reorganizationManpowerReinforced: number;
+  reorganizationEquipmentReinforced: number;
+  reorganizationManpowerConsumed: number;
+  reorganizationEquipmentConsumed: number;
+  averageReorganizationDuration: number;
+  reorganizationReturnedToFront: number;
+  reorganizationReturnedToReserve: number;
+  retreatSurvivorsReinserted: number;
+  reserveSurvivorsReinserted: number;
+  emergencyEarlyDeployments: number;
+  reorganizationResourceShortages: number;
+  unitsWaitingForManpower: number;
+  unitsWaitingForEquipment: number;
+  observedUnitDestructions: number;
+  averageDestroyedUnitLifetime: number;
+  newUnitsProduced: number;
+  observedNationEliminations: number;
+  firstNationEliminationTick: number;
   microRegions: number;
   mesoRegions: number;
   macroRegions: number;
@@ -124,6 +152,7 @@ export interface BenchmarkResult {
   speed: number;
   frameDeltaMs: number;
   reserveEnabled: boolean;
+  reorganizationEnabled: boolean;
   virtualElapsedMs: number;
   wallClockMs: number;
   effectiveSimulationSpeed: number;

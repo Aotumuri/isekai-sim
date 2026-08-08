@@ -247,6 +247,65 @@ export function assertWorldInvariants(world: WorldState): void {
     reserveUnitIds.size,
     "reserve membership index must match reserve states",
   );
+  const reorganizationIds = new Set<string>();
+  const reorganizationUnitIds = new Set<string>();
+  for (const plan of world.reorganization.plans) {
+    assert(!reorganizationIds.has(plan.id), `${plan.id} must be unique`);
+    reorganizationIds.add(plan.id);
+    assert(nationIds.has(plan.nationId), `${plan.id} nation is missing`);
+    assert(unitIds.has(plan.unitId), `${plan.id} unit is missing`);
+    assert(mesoIds.has(plan.locationRegionId), `${plan.id} rear region is missing`);
+    const unit = world.units.find((candidate) => candidate.id === plan.unitId);
+    assert(unit && unit.domain === "land", `${plan.id} must reference a land unit`);
+    assert.equal(unit.nationId, plan.nationId, `${plan.id} unit owner differs`);
+    assert(
+      !reorganizationUnitIds.has(plan.unitId),
+      `${plan.unitId} belongs to multiple reorganization plans`,
+    );
+    assert(
+      !world.frontAllocations.frontIdByUnitId.has(plan.unitId),
+      `${plan.unitId} belongs to Reorganization and Front allocation`,
+    );
+    assert(
+      !world.offensiveOperations.operationIdByUnitId.has(plan.unitId),
+      `${plan.unitId} belongs to Reorganization and Offensive Operation`,
+    );
+    assert(
+      !world.retreatPlans.retreatIdByUnitId.has(plan.unitId),
+      `${plan.unitId} belongs to Reorganization and Retreat`,
+    );
+    assert(
+      !world.strategicReserves.reserveNationByUnitId.has(plan.unitId),
+      `${plan.unitId} belongs to Reorganization and Strategic Reserve`,
+    );
+    for (const value of [
+      plan.startedAtTick,
+      plan.phaseStartedAtTick,
+      plan.targetTerritoryVersion,
+      plan.targetOccupationVersion,
+      plan.targetFrontVersion,
+      plan.initialManpowerRatio,
+      plan.initialEquipmentRatio,
+      plan.initialOrganizationRatio,
+      plan.organizationRecovered,
+      plan.manpowerReinforced,
+      plan.equipmentReinforced,
+      plan.manpowerResourceConsumed,
+      plan.equipmentStockConsumed,
+      plan.interruptionCount,
+    ]) {
+      assert(Number.isFinite(value), `${plan.id} numeric state must be finite`);
+    }
+    for (const value of plan.equipmentTargetRatioByKey.values()) {
+      assert(Number.isFinite(value), `${plan.id} equipment target must be finite`);
+    }
+    reorganizationUnitIds.add(plan.unitId);
+  }
+  assert.equal(
+    world.reorganization.planIdByUnitId.size,
+    reorganizationUnitIds.size,
+    "reorganization membership index must match active plans",
+  );
 }
 
 export function assertUnitRoleReferences(world: WorldState): void {
@@ -346,6 +405,27 @@ export function semanticWorldSignature(world: WorldState): unknown {
             reasons: [...reserve.deployment.reasonFlags],
           }
         : null,
+    })),
+    reorganization: world.reorganization.plans.map((plan) => ({
+      id: plan.id,
+      nation: plan.nationId,
+      unit: plan.unitId,
+      location: plan.locationRegionId,
+      phase: plan.phase,
+      started: plan.startedAtTick,
+      phaseStarted: plan.phaseStartedAtTick,
+      initial: [
+        plan.initialOrganizationRatio,
+        plan.initialManpowerRatio,
+        plan.initialEquipmentRatio,
+      ],
+      reasons: [...plan.reasonFlags],
+      recovered: [
+        plan.organizationRecovered,
+        plan.manpowerReinforced,
+        plan.equipmentReinforced,
+      ],
+      outcome: plan.outcome,
     })),
   };
 }

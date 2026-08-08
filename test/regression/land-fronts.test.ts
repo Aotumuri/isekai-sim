@@ -70,6 +70,7 @@ import {
   getReserveTargetForUnit,
   updateStrategicReserves,
 } from "../../src/sim/strategic-reserves";
+import { createReorganizationState } from "../../src/sim/reorganization";
 
 const NATION_A = createNationId(0);
 const NATION_B = createNationId(1);
@@ -2634,6 +2635,7 @@ function createFrontWorld(
     retreatPlans: createRetreatPlanState(),
     capitalDefense: createCapitalDefenseState(),
     strategicReserves: createStrategicReserveState(),
+    reorganization: createReorganizationState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

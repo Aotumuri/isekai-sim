@@ -295,6 +295,74 @@ export function isStrategicReserveUnit(
   return world.strategicReserves.reserveNationByUnitId.has(unitId);
 }
 
+/** Releases reserve ownership before another exclusive land-AI system claims it. */
+export function releaseStrategicReserveUnit(
+  world: WorldState,
+  unitId: UnitId,
+): boolean {
+  const state = world.strategicReserves;
+  const nationId = state.reserveNationByUnitId.get(unitId);
+  const reserve = nationId ? state.reservesByNationId.get(nationId) : undefined;
+  if (!reserve) return false;
+  reserve.unitIds = reserve.unitIds.filter((id) => id !== unitId);
+  reserve.membershipStartedAtTickByUnitId.delete(unitId);
+  if (reserve.deployment) {
+    reserve.deployment.unitIds = reserve.deployment.unitIds.filter(
+      (id) => id !== unitId,
+    );
+    reserve.deployment.unitTargetRegionIds.delete(unitId);
+    if (reserve.deployment.unitIds.length === 0) {
+      reserve.deployment = undefined;
+      reserve.status = "forming";
+    }
+  }
+  const unit = world.units.find((candidate) => candidate.id === unitId);
+  reserve.totalStrength = Math.max(
+    0,
+    reserve.totalStrength - (unit ? finiteUnitStrength(unit) : 0),
+  );
+  state.reserveNationByUnitId.delete(unitId);
+  state.membershipVersion += 1;
+  state.membershipChangeCount += 1;
+  state.version += 1;
+  world.instrumentation?.incrementCounter("strategicReserve.membershipChanges");
+  recordEvent(world, reserve.nationId, "membership-changed", `released:${unitId}`);
+  return true;
+}
+
+/** Restores a ready unit to an existing reserve deficit without a second owner. */
+export function assignUnitToStrategicReserve(
+  world: WorldState,
+  unitId: UnitId,
+): boolean {
+  const unit = world.units.find((candidate) => candidate.id === unitId);
+  if (!unit || unit.domain !== "land") return false;
+  if (
+    world.reorganization.planIdByUnitId.has(unitId) ||
+    world.retreatPlans.retreatIdByUnitId.has(unitId) ||
+    world.offensiveOperations.operationIdByUnitId.has(unitId) ||
+    world.frontAllocations.frontIdByUnitId.has(unitId)
+  ) {
+    return false;
+  }
+  const state = world.strategicReserves;
+  const reserve = state.reservesByNationId.get(unit.nationId);
+  if (!reserve || reserve.stagingRegionIds.length === 0) return false;
+  if (reserve.unitIds.includes(unitId)) return true;
+  reserve.unitIds.push(unitId);
+  reserve.unitIds.sort(compareIds);
+  reserve.membershipStartedAtTickByUnitId.set(unitId, world.time.fastTick);
+  reserve.totalStrength += finiteUnitStrength(unit);
+  reserve.status = reserve.deployment ? reserve.status : "forming";
+  state.reserveNationByUnitId.set(unitId, unit.nationId);
+  state.membershipVersion += 1;
+  state.membershipChangeCount += 1;
+  state.version += 1;
+  world.instrumentation?.incrementCounter("strategicReserve.membershipChanges");
+  recordEvent(world, reserve.nationId, "membership-changed", `returned:${unitId}`);
+  return true;
+}
+
 export function getReserveTargetForUnit(
   reserve: NationReserveState,
   unitId: UnitId,
@@ -447,6 +515,7 @@ function reconcileReserveMembership(
           !memberIds.has(unit.id) &&
           !world.retreatPlans.retreatIdByUnitId.has(unit.id) &&
           !world.offensiveOperations.operationIdByUnitId.has(unit.id) &&
+          !world.reorganization.planIdByUnitId.has(unit.id) &&
           isReserveFormationCandidate(world, unit),
       )
       .sort((a, b) => compareReserveCandidates(world, a, b));

@@ -23,6 +23,7 @@ export function runBenchmark(options: BenchmarkOptions): BenchmarkResult {
       speed: options.speed,
       frameDeltaMs: options.frameDeltaMs,
       reserveEnabled: options.reserveEnabled,
+      reorganizationEnabled: options.reorganizationEnabled,
       virtualElapsedMs: run.virtualElapsedMs,
       wallClockMs: run.wallClockMs,
       effectiveSimulationSpeed: run.effectiveSimulationSpeed,

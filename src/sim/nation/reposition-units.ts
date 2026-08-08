@@ -31,6 +31,11 @@ import {
   getReserveTargetForUnit,
   type NationReserveState,
 } from "../strategic-reserves";
+import {
+  getReorganizationPlans,
+  getReorganizationTargetForUnit,
+  type ReorganizationPlan,
+} from "../reorganization";
 
 const LAND_TARGET_REASSIGN_INTERVAL_TICKS = 10;
 const MAX_SHARED_PATH_FIELDS = 256;
@@ -55,6 +60,7 @@ interface LandAiRuntime {
   offensiveOperationVersion: number;
   retreatPlanVersion: number;
   strategicReserveVersion: number;
+  reorganizationVersion: number;
   warAdjacency: WarAdjacency;
   movementGroups: LandMovementGroup[];
   unitsExpectedToHaveTarget: Set<UnitState["id"]>;
@@ -128,6 +134,8 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     runtime.retreatPlanVersion !== world.retreatPlans.version;
   const strategicReserveChanged =
     runtime.strategicReserveVersion !== world.strategicReserves.version;
+  const reorganizationChanged =
+    runtime.reorganizationVersion !== world.reorganization.version;
   const periodicReassignmentDue =
     world.time.fastTick - runtime.lastAssignmentFastTick >=
     LAND_TARGET_REASSIGN_INTERVAL_TICKS;
@@ -143,6 +151,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     offensiveOperationChanged ||
     retreatPlanChanged ||
     strategicReserveChanged ||
+    reorganizationChanged ||
     periodicReassignmentDue;
 
   const mesoById = getMesoById(world);
@@ -199,6 +208,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     runtime.offensiveOperationVersion = world.offensiveOperations.version;
     runtime.retreatPlanVersion = world.retreatPlans.version;
     runtime.strategicReserveVersion = world.strategicReserves.version;
+    runtime.reorganizationVersion = world.reorganization.version;
     runtime.forceReassignment = false;
   }
 
@@ -264,6 +274,7 @@ function getLandAiRuntime(world: WorldState): LandAiRuntime {
     offensiveOperationVersion: -1,
     retreatPlanVersion: -1,
     strategicReserveVersion: -1,
+    reorganizationVersion: -1,
     warAdjacency: new Map(),
     movementGroups: [],
     unitsExpectedToHaveTarget: new Set(),
@@ -418,8 +429,12 @@ function rebuildLandAssignments(
     const nation = nationById.get(nationId);
     const frontAllocations = getNationFrontAllocations(world, nationId);
     const retreatPlans = getRetreatPlans(world, nationId);
+    const reorganizationPlans = getReorganizationPlans(world, nationId);
     const reserve = getNationReserveState(world, nationId);
     const reserveUnitIds = new Set(reserve?.unitIds ?? []);
+    const reorganizationUnitIds = new Set(
+      reorganizationPlans.map((plan) => plan.unitId),
+    );
     const retreatUnitIds = new Set(
       retreatPlans.flatMap((retreat) => [
         ...retreat.rearguardUnitIds,
@@ -428,8 +443,24 @@ function rebuildLandAssignments(
     );
     const normalNationUnits = units.filter(
       (unit) =>
-        !retreatUnitIds.has(unit.id) && !reserveUnitIds.has(unit.id),
+        !retreatUnitIds.has(unit.id) &&
+        !reserveUnitIds.has(unit.id) &&
+        !reorganizationUnitIds.has(unit.id),
     );
+    for (const plan of reorganizationPlans) {
+      const unit = unitById.get(plan.unitId);
+      if (unit && unit.nationId === nationId) {
+        movementGroups.push(
+          buildReorganizationMovementGroup(
+            world,
+            plan,
+            unit,
+            nation,
+            instrumentation,
+          ),
+        );
+      }
+    }
     if (reserve) {
       const reserveUnits = reserve.unitIds
         .map((unitId) => unitById.get(unitId))
@@ -437,7 +468,8 @@ function rebuildLandAssignments(
           (unit): unit is UnitState =>
             !!unit &&
             unit.nationId === nationId &&
-            !retreatUnitIds.has(unit.id),
+            !retreatUnitIds.has(unit.id) &&
+            !reorganizationUnitIds.has(unit.id),
         );
       if (reserveUnits.length > 0) {
         movementGroups.push(
@@ -528,7 +560,8 @@ function rebuildLandAssignments(
             !!unit &&
             unit.nationId === nationId &&
             !retreatUnitIds.has(unit.id) &&
-            !reserveUnitIds.has(unit.id),
+            !reserveUnitIds.has(unit.id) &&
+            !reorganizationUnitIds.has(unit.id),
         );
       if (allocatedUnits.length === 0) {
         continue;
@@ -603,7 +636,8 @@ function rebuildLandAssignments(
           !!unit &&
           unit.nationId === nationId &&
           !retreatUnitIds.has(unit.id) &&
-          !reserveUnitIds.has(unit.id),
+          !reserveUnitIds.has(unit.id) &&
+          !reorganizationUnitIds.has(unit.id),
       );
     clearUnitMovement(unassignedUnits);
   }
@@ -618,6 +652,48 @@ function rebuildLandAssignments(
     }
   }
   runtime.unitsExpectedToHaveTarget = unitsExpectedToHaveTarget;
+}
+
+function buildReorganizationMovementGroup(
+  world: WorldState,
+  plan: ReorganizationPlan,
+  unit: UnitState,
+  nation: WorldState["nations"][number] | undefined,
+  instrumentation?: SimulationInstrumentation,
+): LandMovementGroup {
+  const startedAt = instrumentation ? performance.now() : 0;
+  const targetId = getReorganizationTargetForUnit(world, unit.id);
+  let assignmentCount = 0;
+  let switchCount = 0;
+  if (plan.phase === "moving-to-rear" && targetId) {
+    if (unit.moveTargetId !== targetId) {
+      if (unit.moveTargetId) switchCount += 1;
+      unit.moveTargetId = targetId;
+      unit.moveFromId = null;
+      unit.moveToId = null;
+      unit.moveProgressMs = 0;
+      assignmentCount += 1;
+    }
+  } else if (unit.moveTargetId || unit.moveToId || unit.moveFromId) {
+    if (unit.moveTargetId) switchCount += 1;
+    clearUnitMovement([unit]);
+  }
+  nation?.unitRoles.defenseUnitIds.push(unit.id);
+  instrumentation?.incrementCounter(
+    "reorganization.targetAssignments",
+    assignmentCount,
+  );
+  instrumentation?.incrementCounter(
+    "reorganization.unitTargetSwitches",
+    switchCount,
+  );
+  if (instrumentation) {
+    instrumentation.recordDuration(
+      "reorganization.targetAssignment",
+      performance.now() - startedAt,
+    );
+  }
+  return { nationId: plan.nationId, units: [unit], controlledOnly: true };
 }
 
 function buildReserveMovementGroup(

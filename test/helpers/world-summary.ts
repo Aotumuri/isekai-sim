@@ -30,6 +30,11 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     world.offensiveOperations.completedCount +
     world.offensiveOperations.failedCount;
   const reserveState = world.strategicReserves;
+  const reorganization = world.reorganization;
+  const initialUnitCount = world.nations.reduce(
+    (total, nation) => total + nation.initialUnitCount,
+    0,
+  );
   return {
     nations: world.nations.length,
     activeNations,
@@ -159,6 +164,44 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     reserveRetreatFallbackArrivals: reserveState.retreatFallbackArrivalCount,
     reserveReturnsStarted: reserveState.returnStartedCount,
     reserveReturnsCompleted: reserveState.returnCompletedCount,
+    activeReorganizationPlans: reorganization.plans.length,
+    movingReorganizationPlans: reorganization.plans.filter(
+      (plan) => plan.phase === "moving-to-rear",
+    ).length,
+    reorganizingUnits: reorganization.plans.filter(
+      (plan) => plan.phase === "reorganizing",
+    ).length,
+    reorganizationPlansCreated: reorganization.createdCount,
+    reorganizationPlansCompleted: reorganization.completedCount,
+    reorganizationPlansCancelled: reorganization.cancelledCount,
+    reorganizationInterruptions: reorganization.interruptedCount,
+    reorganizationOrganizationRecovered: reorganization.organizationRecovered,
+    reorganizationManpowerReinforced: reorganization.manpowerReinforced,
+    reorganizationEquipmentReinforced: reorganization.equipmentReinforced,
+    reorganizationManpowerConsumed: reorganization.manpowerResourceConsumed,
+    reorganizationEquipmentConsumed: reorganization.equipmentStockConsumed,
+    averageReorganizationDuration:
+      reorganization.completedCount > 0
+        ? reorganization.totalDurationTicks / reorganization.completedCount
+        : 0,
+    reorganizationReturnedToFront: reorganization.returnedToFrontCount,
+    reorganizationReturnedToReserve: reorganization.returnedToReserveCount,
+    retreatSurvivorsReinserted: reorganization.retreatSurvivorsReturnedCount,
+    reserveSurvivorsReinserted: reorganization.reserveSurvivorsReturnedCount,
+    emergencyEarlyDeployments: reorganization.emergencyEarlyDeploymentCount,
+    reorganizationResourceShortages: reorganization.resourceShortageCount,
+    unitsWaitingForManpower: reorganization.unitsWaitingForManpower,
+    unitsWaitingForEquipment: reorganization.unitsWaitingForEquipment,
+    observedUnitDestructions: reorganization.destroyedUnitCount,
+    averageDestroyedUnitLifetime:
+      reorganization.destroyedUnitCount > 0
+        ? reorganization.destroyedUnitLifetimeTicks /
+          reorganization.destroyedUnitCount
+        : 0,
+    newUnitsProduced: Math.max(0, world.unitIdCounter - initialUnitCount),
+    observedNationEliminations: reorganization.nationEliminationCount,
+    firstNationEliminationTick:
+      reorganization.firstNationEliminationTick ?? -1,
     microRegions: world.microRegions.length,
     mesoRegions: world.mesoRegions.length,
     macroRegions: world.macroRegions.length,

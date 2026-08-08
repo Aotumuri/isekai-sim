@@ -43,6 +43,7 @@ export interface NationFrontAllocationState {
   sourcePlanVersion: number;
   sourceRetreatMembershipVersion: number;
   sourceReserveMembershipVersion: number;
+  sourceReorganizationMembershipVersion: number;
   unitsReference: UnitState[] | null;
   unitIdCounter: number;
   landUnitCount: number;
@@ -85,6 +86,7 @@ export function createNationFrontAllocationState(): NationFrontAllocationState {
     sourcePlanVersion: -1,
     sourceRetreatMembershipVersion: -1,
     sourceReserveMembershipVersion: -1,
+    sourceReorganizationMembershipVersion: -1,
     unitsReference: null,
     unitIdCounter: -1,
     landUnitCount: -1,
@@ -109,6 +111,8 @@ export function updateNationFrontAllocations(world: WorldState): void {
     state.sourceRetreatMembershipVersion === world.retreatPlans.membershipVersion &&
     state.sourceReserveMembershipVersion ===
       world.strategicReserves.membershipVersion &&
+    state.sourceReorganizationMembershipVersion ===
+      world.reorganization.membershipVersion &&
     !unitsChanged
   ) {
     return;
@@ -149,7 +153,8 @@ export function updateNationFrontAllocations(world: WorldState): void {
     const units = (unitsByNationId.get(nationId) ?? []).filter(
       (unit) =>
         !world.retreatPlans.retreatIdByUnitId.has(unit.id) &&
-        !world.strategicReserves.reserveNationByUnitId.has(unit.id),
+        !world.strategicReserves.reserveNationByUnitId.has(unit.id) &&
+        !world.reorganization.planIdByUnitId.has(unit.id),
     );
     const result = allocateNationUnits(
       world,
@@ -206,6 +211,8 @@ export function updateNationFrontAllocations(world: WorldState): void {
   state.sourceRetreatMembershipVersion = world.retreatPlans.membershipVersion;
   state.sourceReserveMembershipVersion =
     world.strategicReserves.membershipVersion;
+  state.sourceReorganizationMembershipVersion =
+    world.reorganization.membershipVersion;
   state.unitsReference = world.units;
   state.unitIdCounter = world.unitIdCounter;
   state.landUnitCount = landUnits.length;
@@ -233,6 +240,41 @@ export function updateNationFrontAllocations(world: WorldState): void {
       unassignedUnitCount,
     );
   }
+}
+
+/** Immediately releases a unit before Reorganization claims exclusive ownership. */
+export function releaseUnitFromFrontAllocation(
+  world: WorldState,
+  unitId: UnitId,
+): boolean {
+  const state = world.frontAllocations;
+  const frontId = state.frontIdByUnitId.get(unitId);
+  if (!frontId) return false;
+  const unit = world.units.find((candidate) => candidate.id === unitId);
+  const allocation = unit
+    ? state.allocationsByFrontNation.get(
+        createAllocationKey(frontId, unit.nationId),
+      )
+    : undefined;
+  if (allocation) {
+    allocation.unitIds = allocation.unitIds.filter((id) => id !== unitId);
+    allocation.allocatedStrength = Math.max(
+      0,
+      allocation.allocatedStrength - (unit ? finiteUnitStrength(unit) : 0),
+    );
+    allocation.deficit = Math.max(
+      0,
+      allocation.desiredStrength - allocation.allocatedStrength,
+    );
+    allocation.surplus = Math.max(
+      0,
+      allocation.allocatedStrength - allocation.desiredStrength,
+    );
+  }
+  state.frontIdByUnitId.delete(unitId);
+  state.membershipVersion += 1;
+  state.version += 1;
+  return true;
 }
 
 export function getNationFrontAllocations(

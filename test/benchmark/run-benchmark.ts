@@ -40,6 +40,10 @@ function parseArguments(args: string[]): ParsedArguments {
   if (reserveMode !== "on" && reserveMode !== "off") {
     throw new Error(`Unknown reserve mode: ${reserveMode}`);
   }
+  const reorganizationMode = readOption(args, "--reorganization") ?? "on";
+  if (reorganizationMode !== "on" && reorganizationMode !== "off") {
+    throw new Error(`Unknown reorganization mode: ${reorganizationMode}`);
+  }
   return {
     options: {
       scenario: scenario as BenchmarkScenarioName,
@@ -52,6 +56,7 @@ function parseArguments(args: string[]): ParsedArguments {
       frameDeltaMs: readNumber(args, "--frame-ms", 1_000 / 60),
       quick,
       reserveEnabled: reserveMode === "on",
+      reorganizationEnabled: reorganizationMode === "on",
     },
     outputPath: readOption(args, "--output"),
   };

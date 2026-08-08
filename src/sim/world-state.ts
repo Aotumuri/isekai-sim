@@ -18,6 +18,7 @@ import type { OffensiveOperationState } from "./offensive-operations";
 import type { RetreatPlanState } from "./retreat-plans";
 import type { CapitalDefenseState } from "./capital-defense";
 import type { StrategicReserveState } from "./strategic-reserves";
+import type { ReorganizationState } from "./reorganization";
 
 export interface WorldState {
   width: number;
@@ -37,6 +38,7 @@ export interface WorldState {
   retreatPlans: RetreatPlanState;
   capitalDefense: CapitalDefenseState;
   strategicReserves: StrategicReserveState;
+  reorganization: ReorganizationState;
   mapVersion: number;
   territoryVersion: number;
   buildingVersion: number;
