@@ -1,6 +1,7 @@
 import type { MacroRegion, MacroRegionId } from "../worldgen/macro-region";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
+import type { AiGeographyCacheState } from "./ai-geography";
 import type { WorldState } from "./world-state";
 
 export interface WorldCache {
@@ -18,6 +19,7 @@ export interface WorldCache {
   cityTargetsKey: string;
   portTargetsByNation: Map<NationId, MesoRegionId[]>;
   portTargetsKey: string;
+  aiGeography?: AiGeographyCacheState;
 }
 
 export function createWorldCache(): WorldCache {

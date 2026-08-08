@@ -34,6 +34,20 @@ export function formatBenchmarkReport(result: BenchmarkResult): string {
   if (requests > 0) {
     lines.push(`${"pathfinding.shared.hitRate".padEnd(29)} ${((hits / requests) * 100).toFixed(1)}%`);
   }
+  for (const layer of [
+    "topology",
+    "controlledDistance",
+    "frontDistance",
+    "safety",
+  ]) {
+    const layerRequests =
+      result.counters[`aiGeography.${layer}.requests`] ?? 0;
+    if (layerRequests === 0) continue;
+    const layerHits = result.counters[`aiGeography.${layer}.hits`] ?? 0;
+    lines.push(
+      `${`aiGeography.${layer}.hitRate`.padEnd(29)} ${((layerHits / layerRequests) * 100).toFixed(1)}%`,
+    );
+  }
   return lines.join("\n");
 }
 
@@ -153,6 +167,10 @@ function preferredMetricOrder(metrics: Record<string, MetricSummary>): string[] 
     "landFront.metrics",
     "landFront.planEvaluation",
     "landFront.allocation",
+    "aiGeography.controlledTopology",
+    "aiGeography.controlledDistance",
+    "aiGeography.frontDistance",
+    "aiGeography.dynamicSafety",
     "offensiveOperation.evaluation",
     "offensiveOperation.targetAssignment",
     "retreat.evaluation",

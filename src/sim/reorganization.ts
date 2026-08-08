@@ -2,6 +2,12 @@ import { WORLD_BALANCE } from "../data/balance";
 import type { EquipmentKey } from "../data/equipment-catalog";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
+import {
+  getControlledTopology,
+  getDynamicSafetyLayer,
+  getEnemyRegionIds,
+  getNearestControlledFrontDistanceField,
+} from "./ai-geography";
 import { getCapitalDefenseAssessment } from "./capital-defense";
 import { isNationActive } from "./nation-active";
 import { releaseUnitFromFrontAllocation } from "./nation-front-allocations";
@@ -14,7 +20,7 @@ import type { UnitId, UnitState } from "./unit";
 import { getUnitCombatStrength } from "./unit-strength";
 import { buildWarAdjacency, isAtWar } from "./war-state";
 import type { WorldState } from "./world-state";
-import { getMesoById, getNeighborsById, getOwnerByMesoId } from "./world-cache";
+import { getMesoById, getOwnerByMesoId } from "./world-cache";
 
 export type ReorganizationPlanId = string & {
   __brand: "ReorganizationPlanId";
@@ -134,9 +140,9 @@ export interface ReorganizationState {
 
 interface RearAreaContext {
   nationId: NationId;
-  controlledRegionIds: Set<MesoRegionId>;
+  controlledRegionIds: ReadonlySet<MesoRegionId>;
   safeRegionIds: Set<MesoRegionId>;
-  componentByRegionId: Map<MesoRegionId, number>;
+  componentByRegionId: ReadonlyMap<MesoRegionId, number>;
   candidatesByComponent: Map<number, MesoRegionId[]>;
   priorityByRegionId: Map<MesoRegionId, number>;
 }
@@ -893,68 +899,20 @@ function buildRearAreaContext(
   nationId: NationId,
 ): RearAreaContext {
   const mesoById = getMesoById(world);
-  const neighborsById = getNeighborsById(world);
-  const ownerByMesoId = getOwnerByMesoId(world);
-  const controlledRegionIds = new Set<MesoRegionId>();
-  for (const region of world.mesoRegions) {
-    if (
-      region.type !== "sea" &&
-      effectiveController(region.id, ownerByMesoId, world.occupation.mesoById) ===
-        nationId
-    ) {
-      controlledRegionIds.add(region.id);
-    }
-  }
-
-  const componentByRegionId = new Map<MesoRegionId, number>();
-  let component = 0;
-  for (const source of [...controlledRegionIds].sort(compareIds)) {
-    if (componentByRegionId.has(source)) continue;
-    const queue = [source];
-    componentByRegionId.set(source, component);
-    for (let head = 0; head < queue.length; head += 1) {
-      for (const neighborId of neighborsById.get(queue[head]) ?? []) {
-        if (
-          !controlledRegionIds.has(neighborId) ||
-          componentByRegionId.has(neighborId)
-        ) {
-          continue;
-        }
-        componentByRegionId.set(neighborId, component);
-        queue.push(neighborId);
-      }
-    }
-    component += 1;
-  }
-
-  const frontSources = (
-    world.landFronts.physicalFrontsByNationId.get(nationId) ?? []
-  ).flatMap((front) => {
-    if (front.sideA.nationId === nationId) return front.sideA.borderRegionIds;
-    if (front.sideB.nationId === nationId) return front.sideB.borderRegionIds;
-    return [];
-  });
-  const frontDistance = buildControlledDistanceField(
-    frontSources,
-    controlledRegionIds,
-    neighborsById,
-  );
-  const warAdjacency = buildWarAdjacency(world.wars);
-  const enemyRegionIds = new Set(
-    world.units
-      .filter(
-        (unit) =>
-          unit.domain === "land" &&
-          isAtWar(nationId, unit.nationId, warAdjacency),
-      )
-      .map((unit) => unit.regionId),
-  );
-  const battleRegionIds = new Set(world.battles.map((battle) => battle.mesoId));
+  const topology = getControlledTopology(world, nationId);
+  const controlledRegionIds = topology.controlledRegionIds;
+  const componentByRegionId = topology.componentByRegionId;
+  const frontDistance = getNearestControlledFrontDistanceField(world, nationId);
+  const enemyRegionIds = getEnemyRegionIds(world, nationId);
+  const battleRegionIds = getDynamicSafetyLayer(world).battleRegionIds;
   const safeRegionIds = new Set<MesoRegionId>();
   const minimumDistance =
     WORLD_BALANCE.war.landFront.reorganization.minimumEnemyFrontDistance;
   for (const regionId of controlledRegionIds) {
-    const distance = frontSources.length > 0 ? frontDistance.get(regionId) : Infinity;
+    const distance =
+      frontDistance.sourceRegionIds.length > 0
+        ? frontDistance.distanceByRegionId.get(regionId)
+        : Infinity;
     if (
       distance !== undefined &&
       distance >= minimumDistance &&
@@ -1037,32 +995,6 @@ function selectRearRegion(
       const distanceB = unitCenter && centerB ? distanceSquared(unitCenter, centerB) : 0;
       return distanceA - distanceB || compareIds(a, b);
     })[0];
-}
-
-function buildControlledDistanceField(
-  sources: MesoRegionId[],
-  controlledRegionIds: ReadonlySet<MesoRegionId>,
-  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
-): Map<MesoRegionId, number> {
-  const distances = new Map<MesoRegionId, number>();
-  const queue: MesoRegionId[] = [];
-  for (const source of [...new Set(sources)].sort(compareIds)) {
-    if (!controlledRegionIds.has(source) || distances.has(source)) continue;
-    distances.set(source, 0);
-    queue.push(source);
-  }
-  for (let head = 0; head < queue.length; head += 1) {
-    const current = queue[head];
-    const distance = distances.get(current) ?? 0;
-    for (const neighborId of neighborsById.get(current) ?? []) {
-      if (!controlledRegionIds.has(neighborId) || distances.has(neighborId)) {
-        continue;
-      }
-      distances.set(neighborId, distance + 1);
-      queue.push(neighborId);
-    }
-  }
-  return distances;
 }
 
 function isPlanTargetSafeAndReachable(

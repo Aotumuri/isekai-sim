@@ -2,6 +2,12 @@ import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import {
+  getControlledDistanceField,
+  getControlledRegions,
+  getEnemyStrengthByRegion,
+  isSafeControlledRegion,
+} from "./ai-geography";
+import {
   getCapitalDefenseAssessment,
   recordCapitalFallbackSelection,
 } from "./capital-defense";
@@ -614,14 +620,11 @@ function collectRelatedUnassignedUnitIds(
   nationId: NationId,
   frontRegionIds: MesoRegionId[],
 ): UnitId[] {
-  const distances = buildControlledDistances(
-    frontRegionIds,
+  const distances = getControlledDistanceField(
+    world,
     nationId,
-    getMesoById(world),
-    getNeighborsById(world),
-    getOwnerByMesoId(world),
-    world.occupation.mesoById,
-  );
+    frontRegionIds,
+  ).distanceByRegionId;
   const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
   return getUnassignedLandUnitIds(world, nationId).filter((unitId) => {
     const unit = unitById.get(unitId);
@@ -781,14 +784,13 @@ function selectFallbackRegions(
   const neighborsById = getNeighborsById(world);
   const ownerByMesoId = getOwnerByMesoId(world);
   const warAdjacency = buildWarAdjacency(world.wars);
-  const enemyUnitsByRegion = indexEnemyUnitsByRegion(world, nationId, warAdjacency);
-  const reachable = collectReachableControlledRegions(
-    retreatingUnits.map((unit) => unit.regionId),
-    nationId,
-    mesoById,
-    neighborsById,
-    ownerByMesoId,
-    world.occupation.mesoById,
+  const enemyUnitsByRegion = getEnemyStrengthByRegion(world, nationId);
+  const reachable = new Set(
+    getControlledDistanceField(
+      world,
+      nationId,
+      retreatingUnits.map((unit) => unit.regionId),
+    ).distanceByRegionId.keys(),
   );
   if (reachable.size === 0) {
     return [];
@@ -799,14 +801,12 @@ function selectFallbackRegions(
     nationId,
     enemyNationId,
   );
-  const depthByRegion = buildControlledDistances(
-    frontSources,
+  const depthByRegion = getControlledDistanceField(
+    world,
     nationId,
-    mesoById,
-    neighborsById,
-    ownerByMesoId,
-    world.occupation.mesoById,
-  );
+    frontSources,
+  ).distanceByRegionId;
+  const controlledRegionIds = getControlledRegions(world, nationId);
   const nation = world.nations.find((candidate) => candidate.id === nationId);
   const candidates: FallbackCandidate[] = [];
   for (const regionId of reachable) {
@@ -819,14 +819,7 @@ function selectFallbackRegions(
     let adjacentEnemyStrength = 0;
     let controlledNeighborCount = 0;
     for (const neighborId of neighborsById.get(regionId) ?? []) {
-      if (
-        isEffectivelyControlledBy(
-          neighborId,
-          nationId,
-          ownerByMesoId,
-          world.occupation.mesoById,
-        )
-      ) {
+      if (controlledRegionIds.has(neighborId)) {
         controlledNeighborCount += 1;
       } else {
         const controller = effectiveController(
@@ -928,14 +921,8 @@ function assignFallbackTargets(
   for (const fallbackId of fallbackRegionIds) {
     distancesByFallback.set(
       fallbackId,
-      buildControlledDistances(
-        [fallbackId],
-        nationId,
-        mesoById,
-        neighborsById,
-        ownerByMesoId,
-        world.occupation.mesoById,
-      ),
+      getControlledDistanceField(world, nationId, [fallbackId])
+        .distanceByRegionId,
     );
   }
   const targets = new Map<UnitId, MesoRegionId>();
@@ -1209,121 +1196,14 @@ function collectFallbackFrontSources(
     .flatMap((front) => getFrontSide(front, nationId)?.borderRegionIds ?? []);
 }
 
-function collectReachableControlledRegions(
-  sourceIds: MesoRegionId[],
-  nationId: NationId,
-  mesoById: Map<MesoRegionId, MesoRegion>,
-  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
-  ownerByMesoId: Map<MesoRegionId, NationId>,
-  occupationByMesoId: Map<MesoRegionId, NationId>,
-): Set<MesoRegionId> {
-  return new Set(
-    buildControlledDistances(
-      sourceIds,
-      nationId,
-      mesoById,
-      neighborsById,
-      ownerByMesoId,
-      occupationByMesoId,
-    ).keys(),
-  );
-}
-
-function buildControlledDistances(
-  sourceIds: MesoRegionId[],
-  nationId: NationId,
-  mesoById: Map<MesoRegionId, MesoRegion>,
-  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
-  ownerByMesoId: Map<MesoRegionId, NationId>,
-  occupationByMesoId: Map<MesoRegionId, NationId>,
-): Map<MesoRegionId, number> {
-  const distanceByRegion = new Map<MesoRegionId, number>();
-  const queue: MesoRegionId[] = [];
-  for (const sourceId of sourceIds) {
-    const source = mesoById.get(sourceId);
-    if (
-      !source ||
-      source.type === "sea" ||
-      !isEffectivelyControlledBy(sourceId, nationId, ownerByMesoId, occupationByMesoId)
-    ) {
-      continue;
-    }
-    if (!distanceByRegion.has(sourceId)) {
-      distanceByRegion.set(sourceId, 0);
-      queue.push(sourceId);
-    }
-  }
-  for (let head = 0; head < queue.length; head += 1) {
-    const current = queue[head];
-    const distance = distanceByRegion.get(current) ?? 0;
-    for (const neighborId of neighborsById.get(current) ?? []) {
-      const neighbor = mesoById.get(neighborId);
-      if (
-        !neighbor ||
-        neighbor.type === "sea" ||
-        distanceByRegion.has(neighborId) ||
-        !isEffectivelyControlledBy(
-          neighborId,
-          nationId,
-          ownerByMesoId,
-          occupationByMesoId,
-        )
-      ) {
-        continue;
-      }
-      distanceByRegion.set(neighborId, distance + 1);
-      queue.push(neighborId);
-    }
-  }
-  return distanceByRegion;
-}
-
-function indexEnemyUnitsByRegion(
-  world: WorldState,
-  nationId: NationId,
-  warAdjacency: WarAdjacency,
-): Map<MesoRegionId, number> {
-  const result = new Map<MesoRegionId, number>();
-  for (const unit of world.units) {
-    if (
-      unit.domain !== "land" ||
-      unit.nationId === nationId ||
-      !isAtWar(nationId, unit.nationId, warAdjacency)
-    ) {
-      continue;
-    }
-    result.set(
-      unit.regionId,
-      (result.get(unit.regionId) ?? 0) + finiteUnitStrength(unit),
-    );
-  }
-  return result;
-}
-
 function isValidFallbackRegion(
   world: WorldState,
   regionId: MesoRegionId,
   nationId: NationId,
   warAdjacency: WarAdjacency,
 ): boolean {
-  const meso = getMesoById(world).get(regionId);
-  if (!meso || meso.type === "sea") return false;
-  if (
-    !isEffectivelyControlledBy(
-      regionId,
-      nationId,
-      getOwnerByMesoId(world),
-      world.occupation.mesoById,
-    )
-  ) {
-    return false;
-  }
-  return !world.units.some(
-    (unit) =>
-      unit.domain === "land" &&
-      unit.regionId === regionId &&
-      isAtWar(nationId, unit.nationId, warAdjacency),
-  );
+  void warAdjacency;
+  return isSafeControlledRegion(world, nationId, regionId);
 }
 
 function effectiveController(
@@ -1332,15 +1212,6 @@ function effectiveController(
   occupationByMesoId: Map<MesoRegionId, NationId>,
 ): NationId | undefined {
   return occupationByMesoId.get(regionId) ?? ownerByMesoId.get(regionId);
-}
-
-function isEffectivelyControlledBy(
-  regionId: MesoRegionId,
-  nationId: NationId,
-  ownerByMesoId: Map<MesoRegionId, NationId>,
-  occupationByMesoId: Map<MesoRegionId, NationId>,
-): boolean {
-  return effectiveController(regionId, ownerByMesoId, occupationByMesoId) === nationId;
 }
 
 function frontFallbackDistance(

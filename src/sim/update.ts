@@ -22,6 +22,10 @@ import { updateCapitalDefense } from "./capital-defense";
 import { updateStrategicReserves } from "./strategic-reserves";
 import { updateReorganization } from "./reorganization";
 import {
+  beginAiGeographyEvaluation,
+  prepareFrontDistanceFields,
+} from "./ai-geography";
+import {
   FAST_TICK_MS,
   SLOW_TICK_MS,
   getSpeedMultiplier,
@@ -126,7 +130,9 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   world.time.slowTick += 1;
   updateProduction(world);
   updateWarDeclarations(world);
+  beginAiGeographyEvaluation(world);
   updateLandFronts(world);
+  prepareFrontDistanceFields(world);
   updateCapitalDefense(world);
   updateNationFrontPlans(world);
   updateRetreatPlans(world);

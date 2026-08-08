@@ -1,6 +1,13 @@
 import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
+import {
+  getControlledDistanceField,
+  getControlledRegions,
+  getEnemyRegionIds,
+  getFrontDistanceField,
+  isSafeControlledRegion,
+} from "./ai-geography";
 import { getCapitalDefenseAssessment } from "./capital-defense";
 import {
   getFrontSide,
@@ -509,6 +516,7 @@ function reconcileReserveMembership(
 
   if (strength < reserve.desiredReserveStrength) {
     const memberIds = new Set(reserve.unitIds);
+    const scoreByUnitId = new Map<UnitId, number>();
     const candidates = landUnits
       .filter(
         (unit) =>
@@ -518,7 +526,9 @@ function reconcileReserveMembership(
           !world.reorganization.planIdByUnitId.has(unit.id) &&
           isReserveFormationCandidate(world, unit),
       )
-      .sort((a, b) => compareReserveCandidates(world, a, b));
+      .sort((a, b) =>
+        compareReserveCandidates(world, a, b, scoreByUnitId),
+      );
     for (const unit of candidates) {
       if (strength >= reserve.desiredReserveStrength) break;
       reserve.unitIds.push(unit.id);
@@ -576,18 +586,31 @@ function compareReserveCandidates(
   world: WorldState,
   a: UnitState,
   b: UnitState,
+  scoreByUnitId: Map<UnitId, number>,
 ): number {
-  const scoreA = reserveCandidateScore(world, a);
-  const scoreB = reserveCandidateScore(world, b);
+  const scoreA = getOrCalculateReserveCandidateScore(world, a, scoreByUnitId);
+  const scoreB = getOrCalculateReserveCandidateScore(world, b, scoreByUnitId);
   return scoreB - scoreA || compareIds(a.id, b.id);
+}
+
+function getOrCalculateReserveCandidateScore(
+  world: WorldState,
+  unit: UnitState,
+  scoreByUnitId: Map<UnitId, number>,
+): number {
+  const cached = scoreByUnitId.get(unit.id);
+  if (cached !== undefined) return cached;
+  const score = reserveCandidateScore(world, unit);
+  scoreByUnitId.set(unit.id, score);
+  return score;
 }
 
 function reserveCandidateScore(world: WorldState, unit: UnitState): number {
   const frontId = world.frontAllocations.frontIdByUnitId.get(unit.id);
   const distance = frontId
-    ? (world.frontAllocations.distanceFieldsByFrontNation
-        .get(`${frontId}::${unit.nationId}`)
-        ?.get(unit.regionId) ?? 0)
+    ? (getFrontDistanceField(world, frontId, unit.nationId)?.distanceByRegionId.get(
+        unit.regionId,
+      ) ?? 0)
     : 12;
   const unassignedBonus = frontId ? 0 : 100;
   return (
@@ -1044,22 +1067,22 @@ function selectStagingRegions(
   const nation = world.nations.find((candidate) => candidate.id === nationId);
   if (!nation) return [];
   const mesoById = getMesoById(world);
-  const neighborsById = getNeighborsById(world);
-  const ownerByMesoId = getOwnerByMesoId(world);
   const anchor = isControlledLand(world, nationId, nation.capitalMesoId)
     ? nation.capitalMesoId
     : landUnits.find((unit) => isControlledLand(world, nationId, unit.regionId))
         ?.regionId;
   if (!anchor) return [];
-  const reachable = buildControlledDistances(
-    world,
-    nationId,
-    anchor,
-    neighborsById,
-    ownerByMesoId,
-  );
+  const reachable = getControlledDistanceField(world, nationId, [anchor])
+    .distanceByRegionId;
+  const enemyRegionIds = getEnemyRegionIds(world, nationId);
+  const fronts =
+    world.landFronts.physicalFrontsByNationId.get(nationId) ?? [];
+  const frontDistanceMaps = fronts.flatMap((front) => {
+    const field = getFrontDistanceField(world, front.id, nationId);
+    return field ? [field.distanceByRegionId] : [];
+  });
   const directFrontIds = new Set<MesoRegionId>();
-  for (const front of world.landFronts.physicalFrontsByNationId.get(nationId) ?? []) {
+  for (const front of fronts) {
     const side = getFrontSide(front, nationId);
     for (const regionId of side?.borderRegionIds ?? []) directFrontIds.add(regionId);
   }
@@ -1067,20 +1090,14 @@ function selectStagingRegions(
     .filter(
       (regionId) =>
         !directFrontIds.has(regionId) &&
-        isSafeStagingRegion(world, nationId, regionId),
+        !enemyRegionIds.has(regionId),
     )
     .map((regionId) => {
       const meso = mesoById.get(regionId);
       const capitalBonus = regionId === nation.capitalMesoId ? 10_000 : 0;
       const cityBonus = meso?.building === "city" ? 500 : 0;
-      const frontDistances = (
-        world.landFronts.physicalFrontsByNationId.get(nationId) ?? []
-      )
-        .map((front) =>
-          world.frontAllocations.distanceFieldsByFrontNation
-            .get(`${front.id}::${nationId}`)
-            ?.get(regionId),
-        )
+      const frontDistances = frontDistanceMaps
+        .map((distanceByRegionId) => distanceByRegionId.get(regionId))
         .filter((distance): distance is number => distance !== undefined);
       const averageFrontDistance =
         frontDistances.length > 0
@@ -1103,13 +1120,7 @@ function isSafeStagingRegion(
   nationId: NationId,
   regionId: MesoRegionId,
 ): boolean {
-  if (!isControlledLand(world, nationId, regionId)) return false;
-  const warAdjacency = buildWarAdjacency(world.wars);
-  return !world.units.some(
-    (unit) =>
-      unit.regionId === regionId &&
-      isAtWar(nationId, unit.nationId, warAdjacency),
-  );
+  return isSafeControlledRegion(world, nationId, regionId);
 }
 
 function isControlledLand(
@@ -1117,41 +1128,7 @@ function isControlledLand(
   nationId: NationId,
   regionId: MesoRegionId,
 ): boolean {
-  const meso = getMesoById(world).get(regionId);
-  const owner = getOwnerByMesoId(world).get(regionId);
-  const controller = world.occupation.mesoById.get(regionId) ?? owner;
-  return !!meso && meso.type !== "sea" && controller === nationId;
-}
-
-function buildControlledDistances(
-  world: WorldState,
-  nationId: NationId,
-  startId: MesoRegionId,
-  neighborsById: ReturnType<typeof getNeighborsById>,
-  ownerByMesoId: ReturnType<typeof getOwnerByMesoId>,
-): Map<MesoRegionId, number> {
-  const distances = new Map<MesoRegionId, number>([[startId, 0]]);
-  const queue: MesoRegionId[] = [startId];
-  for (let head = 0; head < queue.length; head += 1) {
-    const current = queue[head];
-    const distance = distances.get(current) ?? 0;
-    for (const neighborId of neighborsById.get(current) ?? []) {
-      const meso = getMesoById(world).get(neighborId);
-      const owner = ownerByMesoId.get(neighborId);
-      const controller = world.occupation.mesoById.get(neighborId) ?? owner;
-      if (
-        !meso ||
-        meso.type === "sea" ||
-        controller !== nationId ||
-        distances.has(neighborId)
-      ) {
-        continue;
-      }
-      distances.set(neighborId, distance + 1);
-      queue.push(neighborId);
-    }
-  }
-  return distances;
+  return getControlledRegions(world, nationId).has(regionId);
 }
 
 function reserveUnitsAreStaged(

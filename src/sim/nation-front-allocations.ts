@@ -1,6 +1,7 @@
 import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
+import { getFrontDistanceField } from "./ai-geography";
 import {
   getCapitalDefenseAssessment,
   recordCapitalDefenseReallocation,
@@ -16,9 +17,7 @@ import type { FrontPosture, NationFrontPlan } from "./nation-front-plans";
 import { isNationActive } from "./nation-active";
 import type { UnitId, UnitState } from "./unit";
 import { getUnitCombatStrength } from "./unit-strength";
-import { buildWarAdjacency, isAtWar } from "./war-state";
 import type { WorldState } from "./world-state";
-import { getMesoById, getNeighborsById, getOwnerByMesoId } from "./world-cache";
 
 export interface NationFrontAllocation {
   nationId: NationId;
@@ -50,8 +49,6 @@ export interface NationFrontAllocationState {
   lastUnitSwitchCount: number;
   lastFrontTransferCount: number;
   lastUnassignedUnitCount: number;
-  distanceFieldPhysicalFrontVersion: number;
-  distanceFieldsByFrontNation: Map<string, Map<MesoRegionId, number>>;
   frontGeometryById: Map<FrontId, FrontGeometrySnapshot>;
 }
 
@@ -93,8 +90,6 @@ export function createNationFrontAllocationState(): NationFrontAllocationState {
     lastUnitSwitchCount: 0,
     lastFrontTransferCount: 0,
     lastUnassignedUnitCount: 0,
-    distanceFieldPhysicalFrontVersion: -1,
-    distanceFieldsByFrontNation: new Map(),
     frontGeometryById: new Map(),
   };
 }
@@ -119,11 +114,6 @@ export function updateNationFrontAllocations(world: WorldState): void {
   }
 
   const startedAt = world.instrumentation ? performance.now() : 0;
-  if (state.distanceFieldPhysicalFrontVersion !== world.landFronts.version) {
-    state.distanceFieldsByFrontNation.clear();
-    state.distanceFieldPhysicalFrontVersion = world.landFronts.version;
-  }
-
   const currentFrontIdByPreviousFrontId = matchPreviousFrontsToCurrent(
     state.frontGeometryById,
     world,
@@ -522,63 +512,12 @@ function createAllocationContexts(
       plan,
       front,
       friendlySide,
-      distanceByRegionId: getOrBuildFrontDistanceField(
-        world,
-        front.id,
-        nationId,
-        friendlySide.influenceRegionIds,
-      ),
+      distanceByRegionId:
+        getFrontDistanceField(world, front.id, nationId)?.distanceByRegionId ??
+        new Map(),
     });
   }
   return contexts;
-}
-
-function getOrBuildFrontDistanceField(
-  world: WorldState,
-  frontId: FrontId,
-  nationId: NationId,
-  sourceRegionIds: MesoRegionId[],
-): Map<MesoRegionId, number> {
-  const key = createAllocationKey(frontId, nationId);
-  const cached = world.frontAllocations.distanceFieldsByFrontNation.get(key);
-  if (cached) {
-    return cached;
-  }
-  const neighborsById = getNeighborsById(world);
-  const mesoById = getMesoById(world);
-  const ownerByMesoId = getOwnerByMesoId(world);
-  const warAdjacency = buildWarAdjacency(world.wars);
-  const distances = new Map<MesoRegionId, number>();
-  const queue: MesoRegionId[] = [];
-  for (const sourceId of sourceRegionIds) {
-    const source = mesoById.get(sourceId);
-    if (!source || source.type === "sea" || distances.has(sourceId)) {
-      continue;
-    }
-    distances.set(sourceId, 0);
-    queue.push(sourceId);
-  }
-  for (let head = 0; head < queue.length; head += 1) {
-    const current = queue[head];
-    const distance = distances.get(current) ?? 0;
-    for (const neighborId of neighborsById.get(current) ?? []) {
-      const neighbor = mesoById.get(neighborId);
-      const owner = ownerByMesoId.get(neighborId);
-      if (
-        !neighbor ||
-        neighbor.type === "sea" ||
-        !owner ||
-        (owner !== nationId && !isAtWar(nationId, owner, warAdjacency)) ||
-        distances.has(neighborId)
-      ) {
-        continue;
-      }
-      distances.set(neighborId, distance + 1);
-      queue.push(neighborId);
-    }
-  }
-  world.frontAllocations.distanceFieldsByFrontNation.set(key, distances);
-  return distances;
 }
 
 function assignBestUnit(

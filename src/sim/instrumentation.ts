@@ -20,6 +20,10 @@ export type SimulationMetricName =
   | "reorganization.reinforcement"
   | "reorganization.resourceUpdates"
   | "reorganization.targetAssignment"
+  | "aiGeography.controlledTopology"
+  | "aiGeography.controlledDistance"
+  | "aiGeography.frontDistance"
+  | "aiGeography.dynamicSafety"
   | "updateOccupation"
   | "updateCapitals"
   | "surrender";
@@ -131,7 +135,19 @@ export type SimulationCounterName =
   | "reorganization.waitingForManpower"
   | "reorganization.waitingForEquipment"
   | "reorganization.targetAssignments"
-  | "reorganization.unitTargetSwitches";
+  | "reorganization.unitTargetSwitches"
+  | "aiGeography.topology.requests"
+  | "aiGeography.topology.hits"
+  | "aiGeography.topology.rebuilds"
+  | "aiGeography.controlledDistance.requests"
+  | "aiGeography.controlledDistance.hits"
+  | "aiGeography.controlledDistance.rebuilds"
+  | "aiGeography.frontDistance.requests"
+  | "aiGeography.frontDistance.hits"
+  | "aiGeography.frontDistance.rebuilds"
+  | "aiGeography.safety.requests"
+  | "aiGeography.safety.hits"
+  | "aiGeography.safety.rebuilds";
 
 /**
  * Optional benchmark observer. Production worlds do not install one, so hot paths
