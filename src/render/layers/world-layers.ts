@@ -1,6 +1,7 @@
 import { Container } from "pixi.js";
 
 export const WORLD_LAYER_ORDER = [
+  "FrontDebug",
   "UnitEffect",
   "Unit",
   "CityCapitalResourceIcons",

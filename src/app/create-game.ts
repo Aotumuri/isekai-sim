@@ -10,6 +10,7 @@ import { createRenderer } from "../render/renderer";
 import { attachTimeHud } from "../render/time-hud";
 import { attachViewControls } from "../render/view/controls";
 import { attachNationInfoBar } from "../render/nation-info-bar";
+import { attachFrontDebugOverlay } from "../render/front-debug-overlay";
 import { createWorld } from "../sim/create-world";
 import { createSimClock, getSpeedMultiplier } from "../sim/time";
 import { updateSimulation } from "../sim/update";
@@ -57,6 +58,7 @@ export function createGame(root: HTMLElement): void {
   const clock = createSimClock();
   attachTimeControls(clock);
   const timeHud = attachTimeHud(renderer);
+  const frontDebugOverlay = attachFrontDebugOverlay(renderer, world);
   let lastOccupationVersion = world.occupation.version;
   let lastTerritoryVersion = world.territoryVersion;
   let lastBuildingVersion = world.buildingVersion;
@@ -102,6 +104,7 @@ export function createGame(root: HTMLElement): void {
     }
     timeHud.update(world.time, clock);
     nationInfoBar.update();
+    frontDebugOverlay.update();
     drawUnits(
       renderer.worldLayers.layers.Unit,
       renderer.app.renderer,

@@ -467,7 +467,7 @@ function applyCapitalPriority(
   );
 }
 
-function getStrengthRatio(friendlyStrength: number, enemyStrength: number): number {
+export function getStrengthRatio(friendlyStrength: number, enemyStrength: number): number {
   const ratio = friendlyStrength / Math.max(1, enemyStrength);
   return Number.isFinite(ratio) ? Math.max(0, ratio) : 0;
 }

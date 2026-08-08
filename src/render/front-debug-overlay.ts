@@ -1,0 +1,573 @@
+import { Container, Graphics, Text, TextStyle } from "pixi.js";
+import type { FrontBorderEdge, PhysicalFront } from "../sim/land-fronts";
+import { getFrontPlan, getStrengthRatio } from "../sim/nation-front-plans";
+import { getOffensiveOperationForFront } from "../sim/offensive-operations";
+import { getRetreatPlanForFront } from "../sim/retreat-plans";
+import type { UnitId } from "../sim/unit";
+import { getUnitCombatStrength } from "../sim/unit-strength";
+import type { WorldState } from "../sim/world-state";
+import type { MesoRegionId } from "../worldgen/meso-region";
+import type { MicroRegion } from "../worldgen/micro-region";
+import type { NationId } from "../worldgen/nation";
+import type { Vec2 } from "../utils/vector";
+import { clearLayer } from "./clear-layer";
+import { findSharedSegments, type Segment } from "./meso-border-geometry";
+import { getMicroRegionByIdMap } from "./region-index";
+import type { Renderer } from "./renderer";
+
+/** Change this one value to change the development overlay's initial state. */
+export const DEFAULT_FRONT_DEBUG_OVERLAY = true;
+export const FRONT_DEBUG_OVERLAY_SHORTCUT = "F8";
+
+const FRONT_COLORS = [
+  0x00e5ff, 0xffd740, 0xff5c8a, 0x69f0ae, 0xb388ff, 0xff8a65,
+  0x40c4ff, 0xeeff41, 0xf06292, 0x7cfc00, 0x82b1ff, 0xffab40,
+];
+const FONT_FAMILY = "Fira Sans, Noto Sans, Helvetica Neue, Helvetica, Arial, sans-serif";
+const LABEL_STYLE = new TextStyle({
+  fontFamily: FONT_FAMILY,
+  fontSize: 10,
+  lineHeight: 12,
+  fill: 0xf4f7fb,
+});
+const MARKER_STYLE = new TextStyle({
+  fontFamily: FONT_FAMILY,
+  fontSize: 9,
+  fontWeight: "bold",
+  fill: 0xffffff,
+  stroke: 0x000000,
+  strokeThickness: 3,
+});
+
+interface OverlayVersions {
+  fronts: number;
+  frontMetrics: number;
+  plans: number;
+  operations: number;
+  retreats: number;
+  reserveDeployments: string;
+}
+
+interface LabelRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface FrontDebugOverlay {
+  update: () => void;
+  toggle: () => void;
+  setEnabled: (enabled: boolean) => void;
+  isEnabled: () => boolean;
+}
+
+export function attachFrontDebugOverlay(
+  renderer: Renderer,
+  world: WorldState,
+): FrontDebugOverlay {
+  const layer = renderer.worldLayers.layers.FrontDebug;
+  const borderSegments = indexMesoBorderSegments(world.microRegions);
+  let enabled = DEFAULT_FRONT_DEBUG_OVERLAY;
+  let selectedFrontId: PhysicalFront["id"] | null = null;
+  let pointerDownPosition: Vec2 | null = null;
+  let pointerMoved = false;
+  let versions: OverlayVersions | null = null;
+
+  const draw = (): void => {
+    clearLayer(layer);
+    if (!enabled) {
+      return;
+    }
+
+    world.landFronts.physicalFronts.forEach((front, index) => {
+      drawFront(layer, world, front, index, borderSegments);
+    });
+
+    const selectedIndex = world.landFronts.physicalFronts.findIndex(
+      (front) => front.id === selectedFrontId,
+    );
+    const selectedFront = world.landFronts.physicalFronts[selectedIndex];
+    if (!selectedFront) {
+      selectedFrontId = null;
+      return;
+    }
+
+    const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+    const anchor = getFrontAnchor(selectedFront, world);
+    const color = FRONT_COLORS[selectedIndex % FRONT_COLORS.length];
+    const label = createFrontLabel(world, selectedFront, color, unitById);
+    placeLabel(label, anchor, selectedIndex, [], world.width, world.height);
+    layer.addChild(label);
+  };
+
+  const update = (): void => {
+    if (!enabled) {
+      return;
+    }
+    const next = readVersions(world);
+    if (versions && versionsEqual(versions, next)) {
+      return;
+    }
+    versions = next;
+    draw();
+  };
+
+  const setEnabled = (next: boolean): void => {
+    if (enabled === next) {
+      return;
+    }
+    enabled = next;
+    layer.visible = enabled;
+    if (enabled) {
+      versions = null;
+      update();
+    } else {
+      selectedFrontId = null;
+      clearLayer(layer);
+    }
+  };
+
+  const toggle = (): void => setEnabled(!enabled);
+
+  window.addEventListener("keydown", (event) => {
+    if (event.code !== FRONT_DEBUG_OVERLAY_SHORTCUT || event.repeat || isEditableTarget(event.target)) {
+      return;
+    }
+    toggle();
+    event.preventDefault();
+  });
+
+  renderer.app.stage.on("pointerdown", (event) => {
+    pointerDownPosition = { x: event.global.x, y: event.global.y };
+    pointerMoved = false;
+  });
+  renderer.app.stage.on("pointermove", (event) => {
+    if (!pointerDownPosition) return;
+    const dx = event.global.x - pointerDownPosition.x;
+    const dy = event.global.y - pointerDownPosition.y;
+    if (dx * dx + dy * dy > 16) {
+      pointerMoved = true;
+    }
+  });
+  renderer.app.stage.on("pointerupoutside", () => {
+    pointerDownPosition = null;
+    pointerMoved = false;
+  });
+  renderer.app.stage.on("pointertap", (event) => {
+    pointerDownPosition = null;
+    if (pointerMoved) {
+      pointerMoved = false;
+      return;
+    }
+    if (!enabled) {
+      return;
+    }
+    const worldPoint = renderer.worldContainer.toLocal(event.global);
+    const clickedFrontId = getFrontIdFromTarget(event.target) ?? findFrontAtPoint(
+      world,
+      worldPoint,
+      borderSegments,
+      10 / renderer.worldContainer.scale.x,
+    );
+    const nextSelection = clickedFrontId && world.landFronts.physicalFrontsById.has(clickedFrontId)
+      ? clickedFrontId
+      : null;
+    if (selectedFrontId === nextSelection) {
+      return;
+    }
+    selectedFrontId = nextSelection;
+    versions = null;
+    update();
+  });
+
+  layer.visible = enabled;
+  update();
+  return { update, toggle, setEnabled, isEnabled: () => enabled };
+}
+
+function drawFront(
+  layer: Container,
+  world: WorldState,
+  front: PhysicalFront,
+  index: number,
+  borderSegments: ReadonlyMap<string, readonly Segment[]>,
+): void {
+  const color = FRONT_COLORS[index % FRONT_COLORS.length];
+  const geometry = new Graphics();
+  geometry.name = `FrontDebugGeometry:${front.id}`;
+  geometry.eventMode = "static";
+  geometry.cursor = "pointer";
+  geometry.lineStyle({ width: 16, color: 0xffffff, alpha: 0.001, cap: "round", join: "round" });
+  drawBorderEdges(geometry, front.borderEdges, borderSegments, world);
+  geometry.lineStyle({ width: 6, color: 0x05070a, alpha: 0.8, cap: "round", join: "round" });
+  drawBorderEdges(geometry, front.borderEdges, borderSegments, world);
+  geometry.lineStyle({ width: 3.5, color, alpha: 0.95, cap: "round", join: "round" });
+  drawBorderEdges(geometry, front.borderEdges, borderSegments, world);
+  layer.addChild(geometry);
+  drawFrontMarkers(layer, world, front, color);
+}
+
+function drawBorderEdges(
+  graphics: Graphics,
+  edges: readonly FrontBorderEdge[],
+  segmentIndex: ReadonlyMap<string, readonly Segment[]>,
+  world: WorldState,
+): void {
+  for (const edge of edges) {
+    const segments = segmentIndex.get(mesoPairKey(edge.regionAId, edge.regionBId));
+    if (segments && segments.length > 0) {
+      for (const segment of segments) {
+        graphics.moveTo(segment.a.x, segment.a.y);
+        graphics.lineTo(segment.b.x, segment.b.y);
+      }
+      continue;
+    }
+    const a = world.cache.mesoById.get(edge.regionAId)?.center;
+    const b = world.cache.mesoById.get(edge.regionBId)?.center;
+    if (a && b) {
+      graphics.moveTo(a.x, a.y);
+      graphics.lineTo(b.x, b.y);
+    }
+  }
+}
+
+function createFrontLabel(
+  world: WorldState,
+  front: PhysicalFront,
+  color: number,
+  unitById: ReadonlyMap<UnitId, WorldState["units"][number]>,
+): Container {
+  const container = new Container();
+  container.name = `FrontDebugLabel:${front.id}`;
+  container.eventMode = "static";
+  const text = new Text(formatFrontLabel(world, front, unitById), LABEL_STYLE);
+  text.resolution = 2;
+  const bounds = text.getLocalBounds();
+  const padding = 5;
+  const background = new Graphics();
+  background.beginFill(0x081018, 0.88);
+  background.lineStyle(1.5, color, 0.95);
+  background.drawRoundedRect(0, 0, bounds.width + padding * 2, bounds.height + padding * 2, 4);
+  background.endFill();
+  text.position.set(padding, padding);
+  container.addChild(background, text);
+  return container;
+}
+
+export function formatFrontLabel(
+  world: WorldState,
+  front: PhysicalFront,
+  unitById: ReadonlyMap<UnitId, WorldState["units"][number]> = new Map(
+    world.units.map((unit) => [unit.id, unit]),
+  ),
+): string {
+  const lines = [
+    `FRONT ${front.id}`,
+    `extent ${front.borderLength} edges | ${front.sideA.borderRegionIds.length}+${front.sideB.borderRegionIds.length} regions`,
+    ...formatNationSide(world, front, front.nationAId),
+    ...formatNationSide(world, front, front.nationBId),
+  ];
+
+  for (const nationId of [front.nationAId, front.nationBId]) {
+    const operation = getOffensiveOperationForFront(world, front.id, nationId);
+    if (operation) {
+      const targets = [operation.primaryTargetRegionId, ...operation.supportingTargetRegionIds];
+      lines.push(
+        `OP ${nationId} ${operation.phase.toUpperCase()} ${operation.id}`,
+        `  targets ${targets.join(", ")}`,
+      );
+    }
+    const retreat = getRetreatPlanForFront(world, front.id, nationId);
+    if (retreat) {
+      lines.push(
+        `RET ${nationId} ${retreat.phase.toUpperCase()} ${retreat.id}`,
+        `  fallback ${retreat.fallbackRegionIds.join(", ")} | remaining ${retreat.retreatingUnitIds.length}`,
+      );
+    }
+  }
+
+  for (const reserve of world.strategicReserves.reserves) {
+    const deployment = reserve.deployment;
+    if (!deployment || deployment.status === "returning" || deployment.targetFrontId !== front.id) {
+      continue;
+    }
+    const strength = deployment.unitIds.reduce((sum, unitId) => {
+      const unit = unitById.get(unitId);
+      return sum + (unit ? getUnitCombatStrength(unit) : 0);
+    }, 0);
+    lines.push(
+      `RES ${reserve.nationId} ${formatStrength(strength)} | ${deployment.unitIds.length} units`,
+    );
+  }
+
+  return lines.join("\n");
+}
+
+function formatNationSide(
+  world: WorldState,
+  front: PhysicalFront,
+  nationId: NationId,
+): string[] {
+  const side = front.nationAId === nationId ? front.sideA : front.sideB;
+  const enemy = front.nationAId === nationId ? front.sideB : front.sideA;
+  const plan = getFrontPlan(world, front.id, nationId);
+  return [
+    `${nationId}  ${(plan?.posture ?? "-").toUpperCase()}`,
+    `  ${formatStrength(side.strength)} / ${formatStrength(plan?.desiredStrength ?? 0)} | ratio ${formatRatio(getStrengthRatio(side.strength, enemy.strength))} | priority ${formatPriority(plan?.priority)}`,
+  ];
+}
+
+function drawFrontMarkers(
+  layer: Container,
+  world: WorldState,
+  front: PhysicalFront,
+  color: number,
+): void {
+  for (const nationId of [front.nationAId, front.nationBId]) {
+    const operation = getOffensiveOperationForFront(world, front.id, nationId);
+    if (operation) {
+      drawMarker(layer, world, operation.stagingRegionId, "S", color, "circle");
+      drawMarker(layer, world, operation.primaryTargetRegionId, "P", color, "diamond");
+      for (const targetId of operation.supportingTargetRegionIds) {
+        drawMarker(layer, world, targetId, "+", color, "diamond");
+      }
+    }
+    const retreat = getRetreatPlanForFront(world, front.id, nationId);
+    if (retreat) {
+      for (const fallbackId of retreat.fallbackRegionIds) {
+        drawMarker(layer, world, fallbackId, "R", color, "circle");
+      }
+    }
+  }
+}
+
+function drawMarker(
+  layer: Container,
+  world: WorldState,
+  regionId: MesoRegionId,
+  label: string,
+  color: number,
+  shape: "circle" | "diamond",
+): void {
+  const center = world.cache.mesoById.get(regionId)?.center;
+  if (!center) return;
+  const marker = new Container();
+  marker.name = `FrontDebugMarker:${label}:${regionId}`;
+  marker.position.set(center.x, center.y);
+  const graphics = new Graphics();
+  graphics.beginFill(color, 0.9);
+  graphics.lineStyle(1.5, 0x05070a, 1);
+  if (shape === "circle") {
+    graphics.drawCircle(0, 0, 8);
+  } else {
+    graphics.drawPolygon([0, -9, 9, 0, 0, 9, -9, 0]);
+  }
+  graphics.endFill();
+  const text = new Text(label, MARKER_STYLE);
+  text.anchor.set(0.5);
+  marker.addChild(graphics, text);
+  layer.addChild(marker);
+}
+
+function indexMesoBorderSegments(microRegions: readonly MicroRegion[]): Map<string, Segment[]> {
+  const result = new Map<string, Segment[]>();
+  const microById = getMicroRegionByIdMap([...microRegions]);
+  for (const region of microRegions) {
+    if (!region.mesoRegionId) continue;
+    for (const neighborId of region.neighbors) {
+      if (region.id >= neighborId) continue;
+      const neighbor = microById.get(neighborId);
+      if (!neighbor?.mesoRegionId || neighbor.mesoRegionId === region.mesoRegionId) continue;
+      const segments = findSharedSegments(region, neighbor);
+      if (segments.length === 0) continue;
+      const key = mesoPairKey(region.mesoRegionId, neighbor.mesoRegionId);
+      const existing = result.get(key);
+      if (existing) existing.push(...segments);
+      else result.set(key, segments);
+    }
+  }
+  return result;
+}
+
+function getFrontAnchor(front: PhysicalFront, world: WorldState): { x: number; y: number } {
+  let x = 0;
+  let y = 0;
+  let count = 0;
+  for (const edge of front.borderEdges) {
+    const a = world.cache.mesoById.get(edge.regionAId)?.center;
+    const b = world.cache.mesoById.get(edge.regionBId)?.center;
+    if (!a || !b) continue;
+    x += (a.x + b.x) / 2;
+    y += (a.y + b.y) / 2;
+    count += 1;
+  }
+  return count > 0 ? { x: x / count, y: y / count } : { x: 0, y: 0 };
+}
+
+function readVersions(world: WorldState): OverlayVersions {
+  return {
+    fronts: world.landFronts.version,
+    frontMetrics: world.landFronts.metricsVersion,
+    plans: world.frontPlans.version,
+    operations: world.offensiveOperations.version,
+    retreats: world.retreatPlans.version,
+    reserveDeployments: world.strategicReserves.reserves
+      .map((reserve) => {
+        const deployment = reserve.deployment;
+        return deployment
+          ? `${reserve.nationId}:${deployment.targetFrontId ?? "-"}:${deployment.status}:${deployment.unitIds.join(",")}`
+          : "";
+      })
+      .join("|"),
+  };
+}
+
+function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
+  return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
+    a.plans === b.plans && a.operations === b.operations &&
+    a.retreats === b.retreats && a.reserveDeployments === b.reserveDeployments;
+}
+
+function mesoPairKey(a: MesoRegionId, b: MesoRegionId): string {
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+function labelOffset(index: number): number {
+  return ((index % 5) - 2) * 10;
+}
+
+function placeLabel(
+  label: Container,
+  anchor: { x: number; y: number },
+  index: number,
+  occupied: LabelRect[],
+  worldWidth: number,
+  worldHeight: number,
+): void {
+  const bounds = label.getLocalBounds();
+  const width = bounds.width;
+  const height = bounds.height;
+  const gap = 8;
+  const drift = labelOffset(index);
+  const candidates = [
+    { x: anchor.x + gap + drift, y: anchor.y + gap },
+    { x: anchor.x + gap + drift, y: anchor.y - height - gap },
+    { x: anchor.x - width - gap + drift, y: anchor.y + gap },
+    { x: anchor.x - width - gap + drift, y: anchor.y - height - gap },
+    { x: anchor.x + gap + drift, y: anchor.y + height + gap * 2 },
+    { x: anchor.x - width - gap + drift, y: anchor.y + height + gap * 2 },
+  ];
+  let selected = candidates[0];
+  for (const candidate of candidates) {
+    const rect = clampLabelRect(candidate.x, candidate.y, width, height, worldWidth, worldHeight);
+    selected = rect;
+    if (!occupied.some((other) => rectsOverlap(rect, other, gap))) {
+      break;
+    }
+  }
+  const rect = clampLabelRect(selected.x, selected.y, width, height, worldWidth, worldHeight);
+  label.position.set(rect.x, rect.y);
+  occupied.push(rect);
+}
+
+function clampLabelRect(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  worldWidth: number,
+  worldHeight: number,
+): LabelRect {
+  return {
+    x: Math.max(4, Math.min(x, worldWidth - width - 4)),
+    y: Math.max(4, Math.min(y, worldHeight - height - 4)),
+    width,
+    height,
+  };
+}
+
+function rectsOverlap(a: LabelRect, b: LabelRect, gap: number): boolean {
+  return a.x < b.x + b.width + gap && a.x + a.width + gap > b.x &&
+    a.y < b.y + b.height + gap && a.y + a.height + gap > b.y;
+}
+
+function formatStrength(value: number): string {
+  return Math.round(value).toLocaleString("en-US");
+}
+
+function formatRatio(value: number): string {
+  return value >= 10 ? value.toFixed(0) : value.toFixed(2).replace(/0$/, "").replace(/\.0$/, "");
+}
+
+function formatPriority(value: number | undefined): string {
+  return value === undefined ? "-" : Math.round(value).toString();
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement ||
+    (target instanceof HTMLElement && target.isContentEditable);
+}
+
+function getFrontIdFromTarget(target: unknown): PhysicalFront["id"] | null {
+  let current = target as { name?: string | null; parent?: unknown } | null;
+  while (current) {
+    const name = current.name ?? "";
+    for (const prefix of ["FrontDebugGeometry:", "FrontDebugLabel:"]) {
+      if (name.startsWith(prefix)) {
+        return name.slice(prefix.length) as PhysicalFront["id"];
+      }
+    }
+    current = current.parent as typeof current;
+  }
+  return null;
+}
+
+function findFrontAtPoint(
+  world: WorldState,
+  point: Vec2,
+  segmentIndex: ReadonlyMap<string, readonly Segment[]>,
+  tolerance: number,
+): PhysicalFront["id"] | null {
+  let closestFrontId: PhysicalFront["id"] | null = null;
+  let closestDistanceSquared = tolerance * tolerance;
+  for (const front of world.landFronts.physicalFronts) {
+    for (const edge of front.borderEdges) {
+      const segments = segmentIndex.get(mesoPairKey(edge.regionAId, edge.regionBId));
+      if (segments && segments.length > 0) {
+        for (const segment of segments) {
+          const distanceSquared = pointToSegmentDistanceSquared(point, segment);
+          if (distanceSquared <= closestDistanceSquared) {
+            closestDistanceSquared = distanceSquared;
+            closestFrontId = front.id;
+          }
+        }
+        continue;
+      }
+      const a = world.cache.mesoById.get(edge.regionAId)?.center;
+      const b = world.cache.mesoById.get(edge.regionBId)?.center;
+      if (!a || !b) continue;
+      const distanceSquared = pointToSegmentDistanceSquared(point, { a, b });
+      if (distanceSquared <= closestDistanceSquared) {
+        closestDistanceSquared = distanceSquared;
+        closestFrontId = front.id;
+      }
+    }
+  }
+  return closestFrontId;
+}
+
+function pointToSegmentDistanceSquared(point: Vec2, segment: Segment): number {
+  const dx = segment.b.x - segment.a.x;
+  const dy = segment.b.y - segment.a.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared === 0) {
+    return (point.x - segment.a.x) ** 2 + (point.y - segment.a.y) ** 2;
+  }
+  const t = Math.max(0, Math.min(1,
+    ((point.x - segment.a.x) * dx + (point.y - segment.a.y) * dy) / lengthSquared,
+  ));
+  const nearestX = segment.a.x + t * dx;
+  const nearestY = segment.a.y + t * dy;
+  return (point.x - nearestX) ** 2 + (point.y - nearestY) ** 2;
+}
