@@ -8,6 +8,11 @@ import { createNationId, type NationId } from "../../src/worldgen/nation";
 import { SeededRng } from "../../src/utils/seeded-rng";
 import { createUnitForType } from "../../src/sim/create-units";
 import {
+  createCapitalDefenseState,
+  getCapitalDefenseAssessment,
+  updateCapitalDefense,
+} from "../../src/sim/capital-defense";
+import {
   createLandFrontState,
   getFrontSide,
   getPhysicalFrontsForNation,
@@ -30,6 +35,7 @@ import {
 import { repositionUnits } from "../../src/sim/nation/reposition-units";
 import {
   createOffensiveOperationState,
+  cancelOffensiveOperationsForCapitalEmergency,
   formatOffensiveOperationSummary,
   getOffensiveOperationForFront,
   getOffensiveOperationForUnit,
@@ -1421,6 +1427,400 @@ test("RetreatPlan creation and fallback assignment are fixed-seed deterministic"
   );
 });
 
+test("a capital-threatened Front suppresses non-catastrophic retreat", () => {
+  const world = createCapitalDefenseWorld(20, 200);
+  const plan = planFor(world, NATION_A);
+
+  assert.equal(getCapitalDefenseAssessment(world, NATION_A)?.threatLevel, "critical");
+  assert.equal(plan.posture, "reinforce");
+});
+
+test("a capital emergency raises the threatened Front priority", () => {
+  const world = createCapitalDefenseWorld(20, 200);
+  assert(planFor(world, NATION_A).priority >= 95);
+});
+
+test("a capital emergency raises desired strength to the defense minimum", () => {
+  const world = createCapitalDefenseWorld(20, 200);
+  const front = getPhysicalFrontsForNation(world, NATION_A)[0];
+  const enemy = front ? getFrontSide(front, NATION_B) : undefined;
+  const plan = planFor(world, NATION_A);
+
+  assert(enemy);
+  assert(
+    plan.desiredStrength >=
+      enemy.strength *
+        WORLD_BALANCE.war.landFront.capitalDefense.enemyStrengthMultiplier,
+  );
+});
+
+test("capital defense zone contains only valid friendly land regions", () => {
+  const world = createCapitalDefenseWorld(20, 200);
+  world.occupation.mesoById.set(id("a-zone"), NATION_B);
+  world.occupation.version += 1;
+  updateFrontSystem(world);
+  const assessment = getCapitalDefenseAssessment(world, NATION_A);
+  const mesoById = new Map(world.mesoRegions.map((region) => [region.id, region]));
+  const ownerByMesoId = new Map(
+    world.macroRegions.flatMap((macro) =>
+      macro.mesoRegionIds.map((regionId) => [regionId, macro.nationId] as const),
+    ),
+  );
+
+  assert(assessment);
+  assert(!assessment.defenseRegionIds.includes(id("a-zone")));
+  for (const regionId of assessment.defenseRegionIds) {
+    assert.notEqual(mesoById.get(regionId)?.type, "sea");
+    assert.equal(
+      world.occupation.mesoById.get(regionId) ?? ownerByMesoId.get(regionId),
+      NATION_A,
+    );
+  }
+});
+
+test("catastrophic capital retreat falls back into the capital defense zone", () => {
+  const world = createCapitalDefenseWorld(4, 200);
+  updateRetreatPlans(world);
+  const retreat = onlyRetreat(world);
+  const assessment = getCapitalDefenseAssessment(world, NATION_A);
+
+  assert(assessment);
+  assert(retreat.capitalDefenseFallback);
+  assert(retreat.fallbackRegionIds.includes(id("a-cap")));
+  assert(
+    retreat.fallbackRegionIds.every((regionId) =>
+      assessment.defenseRegionIds.includes(regionId),
+    ),
+  );
+});
+
+test("an enemy on the capital forces fallback to a safe defense-zone neighbor", () => {
+  const world = createCapitalDefenseWorld(4, 200);
+  setUnitStrength(addLandUnit(world, NATION_B, "a-cap", "Infantry"), 50);
+  updateFrontSystem(world);
+  updateNationFrontAllocations(world);
+  updateRetreatPlans(world);
+  const retreat = onlyRetreat(world);
+  const assessment = getCapitalDefenseAssessment(world, NATION_A);
+
+  assert(assessment);
+  assert(!retreat.fallbackRegionIds.includes(id("a-cap")));
+  assert(
+    retreat.fallbackRegionIds.some((regionId) =>
+      assessment.defenseRegionIds.includes(regionId),
+    ),
+  );
+});
+
+test("capital retreat keeps a larger rearguard share", () => {
+  const world = createCapitalDefenseWorld(4, 200);
+  updateRetreatPlans(world);
+  const retreat = onlyRetreat(world);
+  const share =
+    retreat.initialRearguardStrength /
+    (retreat.initialRearguardStrength + retreat.initialRetreatingStrength);
+
+  assert(
+    share >=
+      WORLD_BALANCE.war.landFront.capitalDefense
+        .criticalMinimumRearguardStrengthFraction,
+    `expected capital rearguard share >= minimum; received ${share}`,
+  );
+  assert(
+    share <=
+      WORLD_BALANCE.war.landFront.capitalDefense
+        .criticalMaximumRearguardStrengthFraction +
+        0.01,
+    `expected capital rearguard share <= maximum; received ${share}`,
+  );
+});
+
+test("critical capital allocation can drain a low-priority distant Front", () => {
+  const world = createCapitalReallocationWorld();
+  const farFront = getPhysicalFrontsForNation(world, NATION_A).find((front) =>
+    getFrontSide(front, NATION_C),
+  );
+
+  assert(farFront);
+  assert.equal(
+    getNationFrontAllocations(world, NATION_A).find(
+      (allocation) => allocation.frontId === farFront.id,
+    )?.unitIds.length,
+    0,
+  );
+  assert(world.capitalDefense.reallocatedUnitCount > 0);
+});
+
+test("normal minimum Front coverage returns after capital emergency ends", () => {
+  const world = createCapitalReallocationWorld();
+  const capital = world.mesoRegions.find((region) => region.id === id("a-cap"));
+  assert(capital);
+  capital.building = null;
+  world.buildingVersion += 1;
+  updateCapitalDefense(world);
+  updateNationFrontPlans(world);
+  updateNationFrontAllocations(world);
+  const farFront = getPhysicalFrontsForNation(world, NATION_A).find((front) =>
+    getFrontSide(front, NATION_C),
+  );
+
+  assert(farFront);
+  assert(
+    (getNationFrontAllocations(world, NATION_A).find(
+      (allocation) => allocation.frontId === farFront.id,
+    )?.unitIds.length ?? 0) >= 1,
+  );
+});
+
+test("an existing RetreatPlan retargets once when capital emergency begins", () => {
+  const world = createCapitalRetargetWorld();
+  const retreat = onlyRetreat(world);
+  const previousFallback = [...retreat.fallbackRegionIds];
+  const capital = world.mesoRegions.find((region) => region.id === id("a-front"));
+  const nation = world.nations.find((candidate) => candidate.id === NATION_A);
+  assert(capital && nation);
+  capital.building = "capital";
+  nation.capitalMesoId = capital.id;
+  world.buildingVersion += 1;
+  updateFrontSystem(world);
+  updateRetreatPlans(world);
+  const updated = onlyRetreat(world);
+  const timelineLength = world.retreatPlans.timeline.length;
+
+  assert(updated.capitalDefenseFallback);
+  assert.notDeepEqual(updated.fallbackRegionIds, previousFallback);
+  assert(updated.fallbackRegionIds.includes(id("a-front")));
+  updateRetreatPlans(world);
+  assert.equal(world.retreatPlans.timeline.length, timelineLength);
+});
+
+test("critical capital emergency cancels an offensive operation", () => {
+  const world = createOperationWorld();
+  updateOffensiveOperations(world);
+  const capital = world.mesoRegions.find((region) => region.id === id("a"));
+  const nation = world.nations.find((candidate) => candidate.id === NATION_A);
+  assert(capital && nation);
+  capital.building = "capital";
+  nation.capitalMesoId = capital.id;
+  world.buildingVersion += 1;
+  updateCapitalDefense(world);
+
+  assert.equal(cancelOffensiveOperationsForCapitalEmergency(world), 1);
+  const operation = onlyOperation(world, NATION_A);
+  assert.equal(operation.phase, "recovering");
+  assert.equal(operation.completionReason, "capital-emergency");
+});
+
+test("a minor capital threat does not cancel an offensive operation", () => {
+  const world = createMinorCapitalThreatOperationWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+
+  assert.equal(getCapitalDefenseAssessment(world, NATION_A)?.threatLevel, "threatened");
+  assert.equal(cancelOffensiveOperationsForCapitalEmergency(world), 0);
+  assert.notEqual(operation.phase, "recovering");
+});
+
+test("capital retreat units never overlap offensive operation membership", () => {
+  const world = createCapitalDefenseWorld(4, 200);
+  updateRetreatPlans(world);
+  updateOffensiveOperations(world);
+  for (const unitId of [
+    ...onlyRetreat(world).rearguardUnitIds,
+    ...onlyRetreat(world).retreatingUnitIds,
+  ]) {
+    assert.equal(getOffensiveOperationForUnit(world, unitId), undefined);
+  }
+});
+
+test("capital fallback and unit targets always reference valid regions", () => {
+  const world = createCapitalDefenseWorld(4, 200);
+  updateRetreatPlans(world);
+  const retreat = onlyRetreat(world);
+  const validIds = new Set(world.mesoRegions.map((region) => region.id));
+
+  assert(retreat.fallbackRegionIds.every((regionId) => validIds.has(regionId)));
+  assert(
+    [...retreat.unitTargetRegionIds.values()].every((regionId) =>
+      validIds.has(regionId),
+    ),
+  );
+});
+
+test("naval units never enter capital defense allocation or retreat", () => {
+  const world = createCapitalDefenseWorld(4, 200);
+  const naval = createUnitForType(
+    createUnitId(world.unitIdCounter),
+    NATION_A,
+    id("a-cap"),
+    "CombatShip",
+  );
+  world.unitIdCounter += 1;
+  world.units.push(naval);
+  updateFrontSystem(world);
+  updateNationFrontAllocations(world);
+  updateRetreatPlans(world);
+
+  assert(
+    !getCapitalDefenseAssessment(world, NATION_A)?.friendlyUnitIds.includes(
+      naval.id,
+    ),
+  );
+  assert.equal(getRetreatPlanForUnit(world, naval.id), undefined);
+  assert.equal(getAllocatedFrontId(world, naval.id), undefined);
+});
+
+test("capital defense decisions are fixed-seed deterministic", () => {
+  const worldA = createCapitalDefenseWorld(4, 200);
+  const worldB = createCapitalDefenseWorld(4, 200);
+  updateRetreatPlans(worldA);
+  updateRetreatPlans(worldB);
+
+  assert.deepEqual(
+    {
+      assessment: getCapitalDefenseAssessment(worldA, NATION_A),
+      plan: planFor(worldA, NATION_A),
+      allocation: getNationFrontAllocations(worldA, NATION_A),
+      retreat: onlyRetreat(worldA),
+    },
+    {
+      assessment: getCapitalDefenseAssessment(worldB, NATION_A),
+      plan: planFor(worldB, NATION_A),
+      allocation: getNationFrontAllocations(worldB, NATION_A),
+      retreat: onlyRetreat(worldB),
+    },
+  );
+});
+
+function createCapitalDefenseWorld(
+  friendlyFrontStrength: number,
+  enemyFrontStrength: number,
+): WorldState {
+  const world = createFrontWorld(
+    [
+      { id: "a-cap", owner: NATION_A, building: "capital" },
+      { id: "a-zone", owner: NATION_A },
+      { id: "a-rear", owner: NATION_A },
+      { id: "a-far", owner: NATION_A },
+      { id: "b-front", owner: NATION_B },
+    ],
+    [
+      ["b-front", "a-cap"],
+      ["a-cap", "a-zone"],
+      ["a-zone", "a-rear"],
+      ["a-rear", "a-far"],
+    ],
+  );
+  startWar(world, NATION_A, NATION_B);
+  for (let index = 0; index < 4; index += 1) {
+    setUnitStrength(
+      addLandUnit(world, NATION_A, "a-cap", "Infantry"),
+      friendlyFrontStrength / 4,
+    );
+    setUnitStrength(
+      addLandUnit(world, NATION_A, "a-far", "Infantry"),
+      friendlyFrontStrength / 4,
+    );
+    setUnitStrength(
+      addLandUnit(world, NATION_B, "b-front", "Infantry"),
+      enemyFrontStrength / 4,
+    );
+  }
+  updateAllocationSystem(world);
+  return world;
+}
+
+function createCapitalReallocationWorld(): WorldState {
+  const world = createFrontWorld(
+    [
+      { id: "a-cap", owner: NATION_A },
+      { id: "a-mid-1", owner: NATION_A },
+      { id: "a-mid-2", owner: NATION_A },
+      { id: "a-far", owner: NATION_A },
+      { id: "b-front", owner: NATION_B },
+      { id: "c-front", owner: NATION_C },
+    ],
+    [
+      ["b-front", "a-cap"],
+      ["a-cap", "a-mid-1"],
+      ["a-mid-1", "a-mid-2"],
+      ["a-mid-2", "a-far"],
+      ["a-far", "c-front"],
+    ],
+  );
+  startWar(world, NATION_A, NATION_B);
+  startWar(world, NATION_A, NATION_C);
+  for (let index = 0; index < 2; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_A, "a-cap", "Infantry"), 10);
+  }
+  for (let index = 0; index < 4; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_A, "a-far", "Infantry"), 10);
+  }
+  setUnitStrength(addLandUnit(world, NATION_B, "b-front", "Infantry"), 200);
+  setUnitStrength(addLandUnit(world, NATION_C, "c-front", "Infantry"), 1);
+  updateAllocationSystem(world);
+
+  const capital = world.mesoRegions.find((region) => region.id === id("a-cap"));
+  const nation = world.nations.find((candidate) => candidate.id === NATION_A);
+  assert(capital && nation);
+  capital.building = "capital";
+  nation.capitalMesoId = capital.id;
+  world.buildingVersion += 1;
+  updateCapitalDefense(world);
+  updateNationFrontPlans(world);
+  updateNationFrontAllocations(world);
+  return world;
+}
+
+function createCapitalRetargetWorld(): WorldState {
+  const world = createFrontWorld(
+    [
+      { id: "a-city", owner: NATION_A, building: "city" },
+      { id: "a-safe", owner: NATION_A },
+      { id: "a-front", owner: NATION_A },
+      { id: "b-front", owner: NATION_B },
+    ],
+    [
+      ["a-city", "a-safe"],
+      ["a-safe", "a-front"],
+      ["a-front", "b-front"],
+    ],
+  );
+  startWar(world, NATION_A, NATION_B);
+  for (let index = 0; index < 8; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_A, "a-front", "Infantry"), 5);
+    setUnitStrength(addLandUnit(world, NATION_B, "b-front", "Infantry"), 100);
+  }
+  updateAllocationSystem(world);
+  updateRetreatPlans(world);
+  return world;
+}
+
+function createMinorCapitalThreatOperationWorld(): WorldState {
+  const world = createFrontWorld(
+    [
+      { id: "a-cap", owner: NATION_A, building: "capital" },
+      { id: "a-zone", owner: NATION_A },
+      { id: "a-front", owner: NATION_A },
+      { id: "b-front", owner: NATION_B },
+    ],
+    [
+      ["a-cap", "a-zone"],
+      ["a-zone", "a-front"],
+      ["a-front", "b-front"],
+    ],
+  );
+  startWar(world, NATION_A, NATION_B);
+  for (let index = 0; index < 6; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_A, "a-front", "Infantry"), 100);
+  }
+  for (let index = 0; index < 2; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_B, "b-front", "Infantry"), 50);
+  }
+  updateAllocationSystem(world);
+  return world;
+}
+
 function createRetreatCandidateWorld(): WorldState {
   const world = createFrontWorld(
     [
@@ -1652,6 +2052,7 @@ function createStrengthPlanWorld(
 
 function updateFrontSystem(world: WorldState): void {
   updateLandFronts(world);
+  updateCapitalDefense(world);
   updateNationFrontPlans(world);
 }
 
@@ -1787,6 +2188,7 @@ function createFrontWorld(
     frontAllocations: createNationFrontAllocationState(),
     offensiveOperations: createOffensiveOperationState(),
     retreatPlans: createRetreatPlanState(),
+    capitalDefense: createCapitalDefenseState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

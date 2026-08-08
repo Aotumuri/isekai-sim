@@ -72,6 +72,29 @@ export function assertWorldInvariants(world: WorldState): void {
     assert(mesoIds.has(mesoId), `occupation references missing ${mesoId}`);
     assert(nationIds.has(occupier), `occupation references missing ${occupier}`);
   }
+  for (const assessment of world.capitalDefense.assessments) {
+    assert(nationIds.has(assessment.nationId), "capital defense nation is missing");
+    assert(
+      mesoIds.has(assessment.capitalRegionId),
+      `${assessment.nationId} capital defense target is missing`,
+    );
+    for (const regionId of assessment.defenseRegionIds) {
+      assert(mesoIds.has(regionId), `${assessment.nationId} defense region is missing`);
+    }
+    for (const value of [
+      assessment.friendlyStrength,
+      assessment.enemyStrength,
+      assessment.frontEnemyStrength,
+      assessment.nationalLandStrength,
+      assessment.minimumDefenseStrength,
+      assessment.evaluatedAtTick,
+    ]) {
+      assert(
+        Number.isFinite(value),
+        `${assessment.nationId} capital defense numeric state must be finite`,
+      );
+    }
+  }
   const operationIds = new Set(
     world.offensiveOperations.operations.map((operation) => operation.id),
   );
@@ -216,6 +239,18 @@ export function semanticWorldSignature(world: WorldState): unknown {
       arrived: retreat.arrivedUnitCount,
       outcome: retreat.outcome,
       reason: retreat.completionReason,
+    })),
+    capitalDefense: world.capitalDefense.assessments.map((assessment) => ({
+      nation: assessment.nationId,
+      capital: assessment.capitalRegionId,
+      regions: [...assessment.defenseRegionIds],
+      fronts: [...assessment.threatenedFrontIds],
+      primary: assessment.primaryFrontId,
+      level: assessment.threatLevel,
+      friendly: assessment.friendlyStrength,
+      enemy: assessment.enemyStrength,
+      minimum: assessment.minimumDefenseStrength,
+      started: assessment.emergencyStartedAtTick,
     })),
   };
 }

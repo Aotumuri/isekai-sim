@@ -159,6 +159,23 @@ export const WORLD_BALANCE = {
         surplusDistanceWeight: 0.75,
         surplusLoadPenalty: 20,
       },
+      capitalDefense: {
+        // Two meso regions gives a threatened capital one defensive line in
+        // addition to the capital itself without treating the whole nation as
+        // a capital front.
+        radius: 2,
+        criticalEnemyRadius: 1,
+        threatenedRetreatBelowRatio: 0.12,
+        criticalRetreatBelowRatio: 0.05,
+        priorityBonus: 30,
+        criticalPriorityFloor: 95,
+        enemyStrengthMultiplier: 1.2,
+        minimumNationalStrengthRatio: 0.25,
+        criticalRearguardStrengthFraction: 0.55,
+        criticalMinimumRearguardStrengthFraction: 0.45,
+        criticalMaximumRearguardStrengthFraction: 0.65,
+        timelineLimit: 512,
+      },
       offensiveOperation: {
         maxActivePerNation: 1,
         minimumFrontUnits: 3,

@@ -7,6 +7,7 @@ import { setupCivilWar } from "./civil-war";
 import { setupLateGame } from "./late-game";
 import { setupManyUnits } from "./many-units";
 import { setupRetreatHeavy } from "./retreat-heavy";
+import { setupCapitalThreat } from "./capital-threat";
 import type { ScenarioOptions, ScenarioSetup } from "./types";
 
 const scenarioSetups: Record<BenchmarkScenarioName, ScenarioSetup> = {
@@ -16,6 +17,7 @@ const scenarioSetups: Record<BenchmarkScenarioName, ScenarioSetup> = {
   "civil-war": setupCivilWar,
   "late-game": setupLateGame,
   "retreat-heavy": setupRetreatHeavy,
+  "capital-threat": setupCapitalThreat,
 };
 
 export function createScenarioWorld(

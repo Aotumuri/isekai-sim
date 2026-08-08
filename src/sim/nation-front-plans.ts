@@ -1,6 +1,10 @@
 import { WORLD_BALANCE } from "../data/balance";
 import type { NationId } from "../worldgen/nation";
 import {
+  getCapitalDefenseAssessment,
+  type CapitalThreatLevel,
+} from "./capital-defense";
+import {
   getFrontSide,
   getOpposingFrontSide,
   type FrontId,
@@ -43,6 +47,7 @@ export interface NationFrontPlanState {
   version: number;
   physicalFrontVersion: number;
   physicalFrontMetricsVersion: number;
+  capitalDefenseVersion: number;
 }
 
 export function createNationFrontPlanState(): NationFrontPlanState {
@@ -53,6 +58,7 @@ export function createNationFrontPlanState(): NationFrontPlanState {
     version: 0,
     physicalFrontVersion: -1,
     physicalFrontMetricsVersion: -1,
+    capitalDefenseVersion: -1,
   };
 }
 
@@ -60,7 +66,8 @@ export function updateNationFrontPlans(world: WorldState): void {
   const state = world.frontPlans;
   if (
     state.physicalFrontVersion === world.landFronts.version &&
-    state.physicalFrontMetricsVersion === world.landFronts.metricsVersion
+    state.physicalFrontMetricsVersion === world.landFronts.metricsVersion &&
+    state.capitalDefenseVersion === world.capitalDefense.version
   ) {
     return;
   }
@@ -71,12 +78,14 @@ export function updateNationFrontPlans(world: WorldState): void {
   for (const front of world.landFronts.physicalFronts) {
     plans.push(
       evaluateNationFrontPlan(
+        world,
         front,
         front.nationAId,
         previousPlans.get(createPlanKey(front.id, front.nationAId)),
         world.time.fastTick,
       ),
       evaluateNationFrontPlan(
+        world,
         front,
         front.nationBId,
         previousPlans.get(createPlanKey(front.id, front.nationBId)),
@@ -94,6 +103,7 @@ export function updateNationFrontPlans(world: WorldState): void {
   state.version += 1;
   state.physicalFrontVersion = world.landFronts.version;
   state.physicalFrontMetricsVersion = world.landFronts.metricsVersion;
+  state.capitalDefenseVersion = world.capitalDefense.version;
 
   if (world.instrumentation) {
     world.instrumentation.recordDuration(
@@ -159,6 +169,7 @@ export function formatNationFrontPlanSummary(world: WorldState): string {
 }
 
 function evaluateNationFrontPlan(
+  world: WorldState,
   front: PhysicalFront,
   nationId: NationId,
   previousPlan: NationFrontPlan | undefined,
@@ -171,26 +182,55 @@ function evaluateNationFrontPlan(
   }
 
   const ratio = getStrengthRatio(friendly.strength, enemy.strength);
-  const basePosture = selectBasePosture(friendly, enemy, ratio);
+  const capitalDefense = getCapitalDefenseAssessment(world, nationId);
+  const isCapitalDefenseFront =
+    !!capitalDefense &&
+    capitalDefense.threatLevel !== "none" &&
+    capitalDefense.threatenedFrontIds.includes(front.id);
+  const capitalThreatLevel = isCapitalDefenseFront
+    ? capitalDefense?.threatLevel ?? "none"
+    : "none";
+  const basePosture = selectBasePosture(
+    friendly,
+    enemy,
+    ratio,
+    capitalThreatLevel,
+  );
   const posture = stabilizePosture(
     basePosture,
     previousPlan?.posture,
     friendly,
     enemy,
     ratio,
+    isCapitalDefenseFront,
   );
   const reasonFlags = collectReasonFlags(
     friendly,
     enemy,
     ratio,
     posture !== basePosture,
+    isCapitalDefenseFront,
+  );
+  const priority = calculatePriority(
+    friendly,
+    enemy,
+    ratio,
+    posture,
+    reasonFlags,
   );
   return {
     frontId: front.id,
     nationId,
     posture,
-    priority: calculatePriority(friendly, enemy, ratio, posture, reasonFlags),
-    desiredStrength: calculateDesiredStrength(friendly, enemy, posture),
+    priority: applyCapitalPriority(priority, capitalThreatLevel),
+    desiredStrength: calculateDesiredStrength(
+      friendly,
+      enemy,
+      posture,
+      capitalDefense,
+      front.id,
+      isCapitalDefenseFront,
+    ),
     reasonFlags,
     evaluatedAtTick: currentTick,
   };
@@ -200,8 +240,10 @@ function selectBasePosture(
   friendly: PhysicalFrontSide,
   enemy: PhysicalFrontSide,
   ratio: number,
+  capitalThreatLevel: CapitalThreatLevel,
 ): FrontPosture {
   const settings = WORLD_BALANCE.war.landFront.plan;
+  const capitalSettings = WORLD_BALANCE.war.landFront.capitalDefense;
   if (enemy.strength <= 0) {
     return friendly.strength > 0 ? "attack" : "hold";
   }
@@ -221,6 +263,18 @@ function selectBasePosture(
     return "reinforce";
   }
   if (
+    capitalThreatLevel === "critical" &&
+    ratio > capitalSettings.criticalRetreatBelowRatio
+  ) {
+    return "reinforce";
+  }
+  if (
+    capitalThreatLevel === "threatened" &&
+    ratio >= capitalSettings.threatenedRetreatBelowRatio
+  ) {
+    return "reinforce";
+  }
+  if (
     ratio >= settings.capitalRetreatFloorRatio &&
     (friendly.hasNearbyCapital || friendly.nearbyCityCount > 0)
   ) {
@@ -235,6 +289,7 @@ function stabilizePosture(
   friendly: PhysicalFrontSide,
   enemy: PhysicalFrontSide,
   ratio: number,
+  isCapitalDefenseFront: boolean,
 ): FrontPosture {
   if (!previous || previous === candidate || enemy.strength <= 0) {
     return candidate;
@@ -249,6 +304,7 @@ function stabilizePosture(
   if (
     previous === "retreat" &&
     candidate === "reinforce" &&
+    !isCapitalDefenseFront &&
     !friendly.hasNearbyCapital &&
     friendly.nearbyCityCount === 0
   ) {
@@ -262,6 +318,7 @@ function collectReasonFlags(
   enemy: PhysicalFrontSide,
   ratio: number,
   postureMaintained: boolean,
+  isCapitalDefenseFront: boolean,
 ): FrontPlanReason[] {
   const reasons: FrontPlanReason[] = [];
   if (enemy.strength <= 0 && friendly.strength > 0) {
@@ -273,7 +330,7 @@ function collectReasonFlags(
   } else {
     reasons.push("forces-balanced");
   }
-  if (friendly.hasNearbyCapital && enemy.strength > 0) {
+  if ((friendly.hasNearbyCapital || isCapitalDefenseFront) && enemy.strength > 0) {
     reasons.push("capital-threatened");
   }
   if (friendly.nearbyCityCount > 0 && enemy.strength > 0) {
@@ -348,6 +405,9 @@ function calculateDesiredStrength(
   friendly: PhysicalFrontSide,
   enemy: PhysicalFrontSide,
   posture: FrontPosture,
+  capitalDefense: ReturnType<typeof getCapitalDefenseAssessment>,
+  frontId: FrontId,
+  isCapitalDefenseFront: boolean,
 ): number {
   const multipliers = WORLD_BALANCE.war.landFront.plan.desiredStrengthMultiplier;
   let multiplier: number = multipliers[posture];
@@ -370,9 +430,41 @@ function calculateDesiredStrength(
   if (enemy.strength <= 0 && posture === "attack") {
     desiredStrength = friendly.strength * 0.6;
   }
+  if (isCapitalDefenseFront && capitalDefense) {
+    const capitalSettings = WORLD_BALANCE.war.landFront.capitalDefense;
+    desiredStrength = Math.max(
+      desiredStrength,
+      enemy.strength * capitalSettings.enemyStrengthMultiplier,
+    );
+    if (capitalDefense.primaryFrontId === frontId) {
+      desiredStrength = Math.max(
+        desiredStrength,
+        capitalDefense.minimumDefenseStrength,
+      );
+    }
+  }
   return Number.isFinite(desiredStrength)
     ? roundTo(Math.max(0, desiredStrength), 2)
     : 0;
+}
+
+function applyCapitalPriority(
+  priority: number,
+  threatLevel: CapitalThreatLevel,
+): number {
+  if (threatLevel === "none") return priority;
+  const settings = WORLD_BALANCE.war.landFront.capitalDefense;
+  const raised = priority + settings.priorityBonus;
+  return roundTo(
+    clamp(
+      threatLevel === "critical"
+        ? Math.max(raised, settings.criticalPriorityFloor)
+        : raised,
+      0,
+      100,
+    ),
+    2,
+  );
 }
 
 function getStrengthRatio(friendlyStrength: number, enemyStrength: number): number {

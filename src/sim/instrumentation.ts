@@ -13,6 +13,7 @@ export type SimulationMetricName =
   | "offensiveOperation.targetAssignment"
   | "retreat.evaluation"
   | "retreat.targetAssignment"
+  | "capitalDefense.evaluation"
   | "updateOccupation"
   | "updateCapitals"
   | "surrender";
@@ -76,7 +77,15 @@ export type SimulationCounterName =
   | "retreat.regroupedToFront"
   | "retreat.returnedToDefense"
   | "retreat.targetAssignments"
-  | "retreat.unitTargetSwitches";
+  | "retreat.unitTargetSwitches"
+  | "capitalDefense.emergencies"
+  | "capitalDefense.criticalEmergencies"
+  | "capitalDefense.emergencyDurationTicks"
+  | "capitalDefense.reallocatedUnits"
+  | "capitalDefense.fallbackSelections"
+  | "capitalDefense.operationCancellations"
+  | "capitalDefense.capitalFalls"
+  | "capitalDefense.unguardedTicks";
 
 /**
  * Optional benchmark observer. Production worlds do not install one, so hot paths

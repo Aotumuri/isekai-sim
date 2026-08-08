@@ -2,6 +2,10 @@ import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import {
+  getCapitalDefenseAssessment,
+  recordCapitalDefenseReallocation,
+} from "./capital-defense";
+import {
   getFrontSide,
   getOpposingFrontSide,
   type FrontId,
@@ -164,6 +168,14 @@ export function updateNationFrontAllocations(world: WorldState): void {
     previousForChangeCounting,
     nextFrontIdByUnitId,
   );
+  recordCapitalDefenseReallocation(
+    world,
+    countCapitalDefenseReallocations(
+      world,
+      previousForChangeCounting,
+      nextFrontIdByUnitId,
+    ),
+  );
   const membershipChanged = !areAssignmentMapsEqual(
     previousForChangeCounting,
     nextFrontIdByUnitId,
@@ -301,13 +313,22 @@ function allocateNationUnits(
   }
   const pool = [...units].sort(compareUnits);
   const settings = WORLD_BALANCE.war.landFront.allocation;
+  const capitalDefense = getCapitalDefenseAssessment(world, nationId);
+  const criticalCapitalFrontIds =
+    capitalDefense?.threatLevel === "critical" &&
+    capitalDefense.threatenedFrontIds.length > 0
+      ? new Set(capitalDefense.threatenedFrontIds)
+      : null;
 
   // Coverage pass prevents low-priority fronts from being completely starved.
   for (const context of contexts) {
-    const minimumUnits =
-      context.plan.posture === "retreat"
-        ? settings.retreatMinimumUnits
-        : settings.minimumUnitsPerFront;
+    const minimumUnits = criticalCapitalFrontIds?.has(context.front.id)
+      ? settings.minimumUnitsPerFront
+      : criticalCapitalFrontIds
+        ? 0
+        : context.plan.posture === "retreat"
+          ? settings.retreatMinimumUnits
+          : settings.minimumUnitsPerFront;
     const mutable = mutableByFrontId.get(context.front.id);
     if (!mutable) {
       continue;
@@ -403,6 +424,32 @@ function allocateNationUnits(
     allocations,
     unassignedUnitIds: pool.map((unit) => unit.id).sort(compareIds),
   };
+}
+
+function countCapitalDefenseReallocations(
+  world: WorldState,
+  previousFrontIdByUnitId: Map<UnitId, FrontId>,
+  nextFrontIdByUnitId: Map<UnitId, FrontId>,
+): number {
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+  let count = 0;
+  for (const [unitId, nextFrontId] of nextFrontIdByUnitId) {
+    const previousFrontId = previousFrontIdByUnitId.get(unitId);
+    if (!previousFrontId || previousFrontId === nextFrontId) continue;
+    const unit = unitById.get(unitId);
+    if (!unit || unit.domain !== "land") continue;
+    const assessment = getCapitalDefenseAssessment(world, unit.nationId);
+    if (
+      !assessment ||
+      assessment.threatLevel === "none" ||
+      !assessment.threatenedFrontIds.includes(nextFrontId) ||
+      assessment.threatenedFrontIds.includes(previousFrontId)
+    ) {
+      continue;
+    }
+    count += 1;
+  }
+  return count;
 }
 
 function createAllocationContexts(

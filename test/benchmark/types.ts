@@ -5,6 +5,7 @@ export const BENCHMARK_SCENARIOS = [
   "civil-war",
   "late-game",
   "retreat-heavy",
+  "capital-threat",
 ] as const;
 
 export type BenchmarkScenarioName = (typeof BENCHMARK_SCENARIOS)[number];
@@ -67,6 +68,20 @@ export interface WorldSummary {
   retreatRegroupedToFront: number;
   retreatReturnedToDefense: number;
   retreatUnitTargetSwitches: number;
+  activeCapitalEmergencies: number;
+  criticalCapitalEmergencies: number;
+  capitalEmergencyCount: number;
+  capitalEmergencyDurationTicks: number;
+  capitalDefenseUnits: number;
+  capitalFrontDesiredStrength: number;
+  capitalFriendlyStrength: number;
+  capitalEnemyStrength: number;
+  capitalNearestFrontDistance: number;
+  capitalReallocatedUnits: number;
+  capitalFallbackSelections: number;
+  capitalOperationCancellations: number;
+  capitalFalls: number;
+  capitalUnguardedTicks: number;
   microRegions: number;
   mesoRegions: number;
   macroRegions: number;

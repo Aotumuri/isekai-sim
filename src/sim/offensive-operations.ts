@@ -2,6 +2,10 @@ import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import {
+  getCapitalDefenseAssessment,
+  recordCapitalOperationCancellations,
+} from "./capital-defense";
+import {
   getFrontSide,
   getOpposingFrontSide,
   type FrontId,
@@ -48,6 +52,7 @@ export type OffensiveOperationCompletionReason =
   | "front-disappeared"
   | "war-ended"
   | "posture-changed"
+  | "capital-emergency"
   | "allocation-lost";
 
 export type OffensiveOperationEventType =
@@ -183,6 +188,11 @@ export function updateOffensiveOperations(world: WorldState): void {
     ([nationA], [nationB]) => compareIds(nationA, nationB),
   );
   for (const [nationId, plans] of plansByNation) {
+    if (
+      getCapitalDefenseAssessment(world, nationId)?.threatLevel === "critical"
+    ) {
+      continue;
+    }
     const current = state.operationsByNationId.get(nationId) ?? [];
     if (current.length >= settings.maxActivePerNation) {
       continue;
@@ -296,6 +306,31 @@ export function cancelOffensiveOperationForRetreat(
   }
   state.version += 1;
   return true;
+}
+
+/** Releases distant offensive commitments during a critical capital emergency. */
+export function cancelOffensiveOperationsForCapitalEmergency(
+  world: WorldState,
+): number {
+  const state = world.offensiveOperations;
+  const previousMembership = state.operationIdByUnitId;
+  const operations = state.operations.filter(
+    (operation) =>
+      operation.phase !== "recovering" &&
+      getCapitalDefenseAssessment(world, operation.nationId)?.threatLevel ===
+        "critical",
+  );
+  for (const operation of operations) {
+    finishOperation(world, operation, "cancelled", "capital-emergency");
+  }
+  if (operations.length === 0) return 0;
+  rebuildOperationIndexes(state);
+  if (!areAssignmentMapsEqual(previousMembership, state.operationIdByUnitId)) {
+    state.membershipVersion += 1;
+  }
+  state.version += 1;
+  recordCapitalOperationCancellations(world, operations.length);
+  return operations.length;
 }
 
 export function formatOffensiveOperationSummary(world: WorldState): string {

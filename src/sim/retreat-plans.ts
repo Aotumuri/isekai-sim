@@ -2,6 +2,10 @@ import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import {
+  getCapitalDefenseAssessment,
+  recordCapitalFallbackSelection,
+} from "./capital-defense";
+import {
   getFrontSide,
   getOpposingFrontSide,
   type FrontId,
@@ -61,6 +65,8 @@ export interface RetreatPlan {
   initialRearguardUnitIds: UnitId[];
   initialRetreatingUnitIds: UnitId[];
   fallbackRegionIds: MesoRegionId[];
+  capitalDefenseFallback: boolean;
+  capitalEmergencyRetargetKey: string | null;
   unitTargetRegionIds: Map<UnitId, MesoRegionId>;
   createdAtTick: number;
   startedAtTick: number;
@@ -324,6 +330,52 @@ function advanceRetreatPlan(
   const remappedFront = remapRetreatFront(world, retreat);
   changed = changed || remappedFront;
 
+  const capitalAssessment = getCapitalDefenseAssessment(world, retreat.nationId);
+  const capitalEmergencyRetargetKey =
+    capitalAssessment && capitalAssessment.threatLevel !== "none"
+      ? `${capitalAssessment.emergencyStartedAtTick ?? now}:${capitalAssessment.threatLevel}`
+      : null;
+  if (
+    capitalEmergencyRetargetKey &&
+    capitalEmergencyRetargetKey !== retreat.capitalEmergencyRetargetKey
+  ) {
+    const retreatingUnits = retreat.retreatingUnitIds
+      .map((unitId) => unitById.get(unitId))
+      .filter((unit): unit is UnitState => !!unit);
+    const replacements = selectFallbackRegions(
+      world,
+      retreat.nationId,
+      retreat.enemyNationId,
+      retreat.frontId,
+      retreatingUnits,
+    );
+    retreat.capitalEmergencyRetargetKey = capitalEmergencyRetargetKey;
+    if (
+      replacements.length > 0 &&
+      isCapitalDefenseFallback(world, retreat.nationId, replacements)
+    ) {
+      const previousFallback = retreat.fallbackRegionIds.join(",");
+      retreat.fallbackRegionIds = replacements;
+      retreat.capitalDefenseFallback = true;
+      retreat.unitTargetRegionIds = assignFallbackTargets(
+        world,
+        retreat.nationId,
+        retreatingUnits,
+        replacements,
+      );
+      if (!retreat.reasonFlags.includes("capital-fallback")) {
+        retreat.reasonFlags.push("capital-fallback");
+      }
+      recordEvent(
+        world,
+        retreat,
+        "fallback-remapped",
+        `${previousFallback}->${replacements.join(",")}:capital-emergency`,
+      );
+      changed = true;
+    }
+  }
+
   const validFallback = retreat.fallbackRegionIds.filter((regionId) =>
     isValidFallbackRegion(world, regionId, retreat.nationId, warAdjacency),
   );
@@ -454,11 +506,18 @@ function createRetreatPlan(
   }
 
   const engagedUnitIds = collectEngagedUnitIds(world, plan.nationId);
+  const capitalAssessment = getCapitalDefenseAssessment(world, plan.nationId);
+  const isCapitalDefenseRetreat =
+    !!capitalAssessment &&
+    capitalAssessment.threatLevel !== "none" &&
+    (capitalAssessment.threatLevel === "critical" ||
+      capitalAssessment.threatenedFrontIds.includes(plan.frontId));
   const { rearguardUnits, retreatingUnits } = splitRetreatForce(
     allocatedUnits,
     engagedUnitIds,
     plan.desiredStrength,
     friendlySide.influenceRegionIds,
+    isCapitalDefenseRetreat,
   );
   if (rearguardUnits.length === 0 || retreatingUnits.length === 0) {
     return null;
@@ -473,6 +532,11 @@ function createRetreatPlan(
   if (fallbackRegionIds.length === 0) {
     return null;
   }
+  const capitalDefenseFallback = isCapitalDefenseFallback(
+    world,
+    plan.nationId,
+    fallbackRegionIds,
+  );
 
   const operationCancelled = cancelOffensiveOperationForRetreat(
     world,
@@ -511,6 +575,11 @@ function createRetreatPlan(
     initialRearguardUnitIds: rearguardUnits.map((unit) => unit.id).sort(compareIds),
     initialRetreatingUnitIds: retreatingUnits.map((unit) => unit.id).sort(compareIds),
     fallbackRegionIds,
+    capitalDefenseFallback,
+    capitalEmergencyRetargetKey:
+      capitalAssessment && capitalAssessment.threatLevel !== "none"
+        ? `${capitalAssessment.emergencyStartedAtTick ?? now}:${capitalAssessment.threatLevel}`
+        : null,
     unitTargetRegionIds: assignFallbackTargets(
       world,
       plan.nationId,
@@ -626,15 +695,28 @@ function splitRetreatForce(
   engagedUnitIds: Set<UnitId>,
   desiredStrength: number,
   frontRegionIds: MesoRegionId[],
+  capitalDefense: boolean,
 ): { rearguardUnits: UnitState[]; retreatingUnits: UnitState[] } {
   const settings = WORLD_BALANCE.war.landFront.retreat;
+  const capitalSettings = WORLD_BALANCE.war.landFront.capitalDefense;
   const totalStrength = sumUnitStrength(units);
+  const targetFraction = capitalDefense
+    ? capitalSettings.criticalRearguardStrengthFraction
+    : settings.rearguardStrengthFraction;
+  const minimumFraction = capitalDefense
+    ? capitalSettings.criticalMinimumRearguardStrengthFraction
+    : settings.minimumRearguardStrengthFraction;
+  const maximumFraction = capitalDefense
+    ? capitalSettings.criticalMaximumRearguardStrengthFraction
+    : settings.maximumRearguardStrengthFraction;
   const targetStrength = clamp(
-    desiredStrength > 0
-      ? desiredStrength
-      : totalStrength * settings.rearguardStrengthFraction,
-    totalStrength * settings.minimumRearguardStrengthFraction,
-    totalStrength * settings.maximumRearguardStrengthFraction,
+    capitalDefense
+      ? Math.max(desiredStrength, totalStrength * targetFraction)
+      : desiredStrength > 0
+        ? desiredStrength
+        : totalStrength * targetFraction,
+    totalStrength * minimumFraction,
+    totalStrength * maximumFraction,
   );
   const frontRegions = new Set(frontRegionIds);
   const ordered = [...units].sort((a, b) => {
@@ -668,7 +750,7 @@ function splitRetreatForce(
       !mustRemain &&
       rearguardUnits.length > 0 &&
       rearguardStrength >=
-        totalStrength * settings.minimumRearguardStrengthFraction &&
+        totalStrength * minimumFraction &&
       rearguardStrength + unitStrength > targetStrength &&
       targetStrength - rearguardStrength <=
         rearguardStrength + unitStrength - targetStrength
@@ -779,7 +861,27 @@ function selectFallbackRegions(
   const ranked = (deepCandidates.length > 0 ? deepCandidates : candidates).sort(
     (a, b) => b.score - a.score || b.depth - a.depth || compareIds(a.id, b.id),
   );
-  const anchor = ranked[0];
+  const capitalAssessment = getCapitalDefenseAssessment(world, nationId);
+  const useCapitalDefense =
+    !!capitalAssessment &&
+    capitalAssessment.threatLevel !== "none" &&
+    (capitalAssessment.threatLevel === "critical" ||
+      capitalAssessment.threatenedFrontIds.includes(frontId));
+  const capitalDefenseIds = new Set(capitalAssessment?.defenseRegionIds ?? []);
+  const capitalRanked = useCapitalDefense
+    ? ranked
+        .filter((candidate) => capitalDefenseIds.has(candidate.id))
+        .sort((a, b) => {
+          const aIsCapital = Number(a.id === capitalAssessment?.capitalRegionId);
+          const bIsCapital = Number(b.id === capitalAssessment?.capitalRegionId);
+          return bIsCapital - aIsCapital || b.score - a.score || compareIds(a.id, b.id);
+        })
+    : [];
+  const selectedRanking = capitalRanked.length > 0 ? capitalRanked : ranked;
+  if (capitalRanked.length > 0) {
+    recordCapitalFallbackSelection(world);
+  }
+  const anchor = selectedRanking[0];
   if (!anchor) {
     return [];
   }
@@ -787,7 +889,7 @@ function selectFallbackRegions(
     WORLD_BALANCE.war.landFront.retreat.fallbackClusterSize,
     Math.max(1, Math.ceil(retreatingUnits.length / 4)),
   );
-  const clustered = ranked.filter(
+  const clustered = selectedRanking.filter(
     (candidate) =>
       candidate.id === anchor.id ||
       graphDistanceWithin(anchor.id, candidate.id, neighborsById, 2),
@@ -796,6 +898,17 @@ function selectFallbackRegions(
     .slice(0, clusterLimit)
     .map((candidate) => candidate.id)
     .sort(compareIds);
+}
+
+function isCapitalDefenseFallback(
+  world: WorldState,
+  nationId: NationId,
+  fallbackRegionIds: MesoRegionId[],
+): boolean {
+  const assessment = getCapitalDefenseAssessment(world, nationId);
+  if (!assessment || assessment.threatLevel === "none") return false;
+  const defenseRegionIds = new Set(assessment.defenseRegionIds);
+  return fallbackRegionIds.some((regionId) => defenseRegionIds.has(regionId));
 }
 
 function assignFallbackTargets(

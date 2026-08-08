@@ -4,6 +4,28 @@ import type { WorldSummary } from "../benchmark/types";
 
 export function summarizeWorld(world: WorldState): WorldSummary {
   const activeNations = world.nations.filter(isNationActive).length;
+  const activeCapitalAssessments = world.capitalDefense.assessments.filter(
+    (assessment) => assessment.threatLevel !== "none",
+  );
+  const capitalDefenseUnitIds = new Set(
+    activeCapitalAssessments.flatMap((assessment) => assessment.friendlyUnitIds),
+  );
+  const capitalFrontIdsByNation = new Map(
+    activeCapitalAssessments.map((assessment) => [
+      assessment.nationId,
+      new Set(assessment.threatenedFrontIds),
+    ]),
+  );
+  const capitalFrontDesiredStrength = world.frontPlans.plans.reduce(
+    (total, plan) =>
+      capitalFrontIdsByNation.get(plan.nationId)?.has(plan.frontId)
+        ? total + plan.desiredStrength
+        : total,
+    0,
+  );
+  const capitalFrontDistances = activeCapitalAssessments
+    .map((assessment) => assessment.nearestFrontDistance)
+    .filter((distance): distance is number => distance !== null);
   const resolvedOperations =
     world.offensiveOperations.completedCount +
     world.offensiveOperations.failedCount;
@@ -65,6 +87,32 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     retreatRegroupedToFront: world.retreatPlans.regroupedToDefensiveFrontCount,
     retreatReturnedToDefense: world.retreatPlans.returnedToHoldOrReinforceCount,
     retreatUnitTargetSwitches: world.retreatPlans.unitTargetSwitchCount,
+    activeCapitalEmergencies: activeCapitalAssessments.length,
+    criticalCapitalEmergencies: activeCapitalAssessments.filter(
+      (assessment) => assessment.threatLevel === "critical",
+    ).length,
+    capitalEmergencyCount: world.capitalDefense.emergencyCount,
+    capitalEmergencyDurationTicks: world.capitalDefense.emergencyDurationTicks,
+    capitalDefenseUnits: capitalDefenseUnitIds.size,
+    capitalFrontDesiredStrength,
+    capitalFriendlyStrength: activeCapitalAssessments.reduce(
+      (total, assessment) => total + assessment.friendlyStrength,
+      0,
+    ),
+    capitalEnemyStrength: activeCapitalAssessments.reduce(
+      (total, assessment) => total + assessment.enemyStrength,
+      0,
+    ),
+    capitalNearestFrontDistance:
+      capitalFrontDistances.length > 0
+        ? Math.min(...capitalFrontDistances)
+        : -1,
+    capitalReallocatedUnits: world.capitalDefense.reallocatedUnitCount,
+    capitalFallbackSelections: world.capitalDefense.fallbackSelectionCount,
+    capitalOperationCancellations:
+      world.capitalDefense.operationCancellationCount,
+    capitalFalls: world.capitalDefense.capitalFallCount,
+    capitalUnguardedTicks: world.capitalDefense.unguardedTickCount,
     microRegions: world.microRegions.length,
     mesoRegions: world.mesoRegions.length,
     macroRegions: world.macroRegions.length,
