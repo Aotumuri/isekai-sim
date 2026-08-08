@@ -21,7 +21,11 @@ import { getUnitCombatStrength } from "./unit-strength";
 import { buildWarAdjacency, isAtWar } from "./war-state";
 import type { WorldState } from "./world-state";
 import { getMesoById, getNeighborsById, getOwnerByMesoId } from "./world-cache";
-import { getFrontlineCoverage } from "./frontline-coverage";
+import {
+  getFrontlineCoverage,
+  type FrontlineCoverageLevel,
+  type FrontlineDefensivePosition,
+} from "./frontline-coverage";
 
 export type OperationId = string & { __brand: "OperationId" };
 
@@ -37,6 +41,10 @@ export type OffensiveOperationOutcome =
 
 export type OffensiveOperationReason =
   | "front-superiority"
+  | "enemy-frontline-gap"
+  | "enemy-frontline-weak"
+  | "local-strength-superiority"
+  | "recent-breakthrough"
   | "enemy-capital-opportunity"
   | "enemy-city-opportunity"
   | "high-front-priority"
@@ -87,6 +95,9 @@ export interface OffensiveOperation {
   initialFriendlyStrength: number;
   initialEnemyStrength: number;
   initialStrengthRatio: number;
+  targetCoverageState: FrontlineCoverageLevel | null;
+  targetLocalDefenderStrength: number;
+  targetTacticalScore: number;
   reasonFlags: OffensiveOperationReason[];
   outcome: OffensiveOperationOutcome | null;
   completionReason: OffensiveOperationCompletionReason | null;
@@ -132,6 +143,17 @@ interface OperationTargetSelection {
   supportingTargetRegionIds: MesoRegionId[];
   stagingRegionId: MesoRegionId;
   nearbyEnemyStrength: number;
+  targetCoverageState: FrontlineCoverageLevel | null;
+  targetLocalDefenderStrength: number;
+  tacticalScore: number;
+  tacticalReasons: OffensiveOperationReason[];
+}
+
+interface TargetTacticalAssessment {
+  coverageState: FrontlineCoverageLevel | null;
+  localDefenderStrength: number;
+  score: number;
+  reasons: OffensiveOperationReason[];
 }
 
 interface OperationAdvanceResult {
@@ -346,6 +368,9 @@ export function formatOffensiveOperationSummary(world: WorldState): string {
       `  staging: ${operation.stagingRegionId}`,
       `  units: ${operation.assignedUnitIds.length}`,
       `  strength: ${operation.assignedStrength.toFixed(1)}`,
+      `  target coverage: ${operation.targetCoverageState ?? "none"}`,
+      `  local defense: ${operation.targetLocalDefenderStrength.toFixed(1)}`,
+      `  tactical score: ${operation.targetTacticalScore.toFixed(1)}`,
       `  started: ${operation.startedAtTick}`,
       `  outcome: ${operation.outcome ?? "active"}`,
       `  completion: ${operation.completionReason ?? "none"}`,
@@ -586,7 +611,7 @@ function createOperation(
   if (allocationUnits.length < settings.minimumFrontUnits || surplusUnits.length < 2) {
     return null;
   }
-  const targets = selectOperationTargets(world, front, plan, allocationUnits);
+  const targets = selectOperationTargets(world, front, plan, surplusUnits);
   if (!targets) {
     return null;
   }
@@ -626,6 +651,9 @@ function createOperation(
     initialFriendlyStrength: finiteNumber(friendly.strength),
     initialEnemyStrength: finiteNumber(enemy.strength),
     initialStrengthRatio,
+    targetCoverageState: targets.targetCoverageState,
+    targetLocalDefenderStrength: targets.targetLocalDefenderStrength,
+    targetTacticalScore: targets.tacticalScore,
     reasonFlags: collectOperationReasons(
       world,
       plan,
@@ -664,6 +692,10 @@ function selectOperationTargets(
     neighborsById,
   );
   const enemyBorderSet = new Set(enemy.borderRegionIds);
+  const enemyCoverage = getFrontlineCoverage(world, front.id, enemy.nationId);
+  const enemyPositionByRegionId = new Map(
+    enemyCoverage?.positions.map((position) => [position.friendlyRegionId, position]) ?? [],
+  );
   const candidates = enemy.influenceRegionIds
     .filter((regionId) => {
       const meso = mesoById.get(regionId);
@@ -674,23 +706,37 @@ function selectOperationTargets(
         isRegionControlledBy(world, regionId, enemy.nationId)
       );
     })
-    .map((regionId) => ({
-      regionId,
-      score: scoreOperationTarget(
+    .map((regionId) => {
+      const tactical = assessTargetTactics(
         world,
         regionId,
-        plan,
+        front,
         allocationUnits,
-        enemy.nationId,
-        enemyBorderSet,
-        distanceFromFriendlyBorder.get(regionId) ?? 0,
-      ),
-      nearbyEnemyStrength: getNearbyEnemyStrength(
-        world,
+        enemyPositionByRegionId.get(regionId),
+        enemyCoverage?.breakthroughCount ?? 0,
+        frontScope,
+        neighborsById,
+      );
+      return {
         regionId,
-        enemy.nationId,
-      ),
-    }))
+        score:
+          scoreOperationTarget(
+            world,
+            regionId,
+            plan,
+            allocationUnits,
+            enemy.nationId,
+            enemyBorderSet,
+            distanceFromFriendlyBorder.get(regionId) ?? 0,
+          ) + tactical.score,
+        nearbyEnemyStrength: getNearbyEnemyStrength(
+          world,
+          regionId,
+          enemy.nationId,
+        ),
+        tactical,
+      };
+    })
     .sort((a, b) => b.score - a.score || compareIds(a.regionId, b.regionId));
   const primary = candidates[0];
   if (!primary) {
@@ -708,23 +754,97 @@ function selectOperationTargets(
   const settings = WORLD_BALANCE.war.landFront.offensiveOperation;
   const supportingTargetRegionIds = candidates
     .slice(1)
-    .filter(
-      (candidate) =>
-        getBoundedGraphDistance(
+    .map((candidate) => ({
+      candidate,
+      distance: getBoundedGraphDistance(
           primary.regionId,
           candidate.regionId,
           settings.supportingTargetRadius,
           frontScope,
           neighborsById,
-        ) !== null,
+      ),
+    }))
+    .filter(
+      (item): item is typeof item & { distance: number } =>
+        item.distance !== null,
+    )
+    .sort(
+      (a, b) =>
+        a.distance - b.distance ||
+        b.candidate.score - a.candidate.score ||
+        compareIds(a.candidate.regionId, b.candidate.regionId),
     )
     .slice(0, settings.supportingTargetCount)
-    .map((candidate) => candidate.regionId);
+    .map(({ candidate }) => candidate.regionId);
   return {
     primaryTargetRegionId: primary.regionId,
     supportingTargetRegionIds,
     stagingRegionId,
     nearbyEnemyStrength: primary.nearbyEnemyStrength,
+    targetCoverageState: primary.tactical.coverageState,
+    targetLocalDefenderStrength: primary.tactical.localDefenderStrength,
+    tacticalScore: primary.tactical.score,
+    tacticalReasons: primary.tactical.reasons,
+  };
+}
+
+function assessTargetTactics(
+  world: WorldState,
+  regionId: MesoRegionId,
+  front: OperationalSector,
+  availableUnits: UnitState[],
+  position: FrontlineDefensivePosition | undefined,
+  recentBreakthroughCount: number,
+  frontScope: ReadonlySet<MesoRegionId>,
+  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
+): TargetTacticalAssessment {
+  if (!position) {
+    return { coverageState: null, localDefenderStrength: 0, score: 0, reasons: [] };
+  }
+  const settings = WORLD_BALANCE.war.landFront.offensiveOperation.targetScore;
+  const localAttackerStrength = availableUnits.reduce((sum, unit) => {
+    const distance = getBoundedGraphDistance(
+      unit.regionId,
+      regionId,
+      settings.localAttackerRadius,
+      frontScope,
+      neighborsById,
+    );
+    return sum + (distance === null ? 0 : finiteUnitStrength(unit));
+  }, 0);
+  const requiredStrength = Math.max(1, position.requiredStrength);
+  const hasMeaningfulStrength = localAttackerStrength >= requiredStrength * 0.45;
+  const localRatio = localAttackerStrength / Math.max(1, position.defenderStrength);
+  let score = 0;
+  const reasons: OffensiveOperationReason[] = [];
+  if (position.state === "gap" && hasMeaningfulStrength) {
+    score += settings.frontlineGap;
+    reasons.push("enemy-frontline-gap");
+  } else if (position.state === "weak" && hasMeaningfulStrength && localRatio >= 1) {
+    score += settings.frontlineWeak;
+    reasons.push("enemy-frontline-weak");
+  }
+  if (hasMeaningfulStrength && localRatio >= 1.5) {
+    score += settings.localStrengthSuperiority * Math.min(1.5, Math.log2(localRatio) / 2);
+    reasons.push("local-strength-superiority");
+  } else if (position.defenderStrength > 0 && localRatio < 0.8) {
+    score -= settings.localStrengthDisadvantage * (1 - localRatio);
+  }
+  if (recentBreakthroughCount > 0 && position.state !== "covered") {
+    score += settings.recentBreakthrough;
+    reasons.push("recent-breakthrough");
+  }
+  const reserveDeploying = world.strategicReserves.reserves.some((reserve) =>
+    reserve.nationId === position.nationId &&
+    reserve.deployment?.targetFrontId === front.id &&
+    reserve.deployment.status !== "returning",
+  );
+  if (reserveDeploying) score -= settings.enemyReserveRisk;
+  return {
+    coverageState: position.state,
+    localDefenderStrength: finiteNumber(position.defenderStrength),
+    score: finiteNumber(score),
+    reasons,
   };
 }
 
@@ -1084,6 +1204,7 @@ function collectOperationReasons(
   const settings = WORLD_BALANCE.war.landFront.offensiveOperation;
   const target = targets.primaryTargetRegionId;
   const targetBuilding = getMesoById(world).get(target)?.building;
+  reasons.push(...targets.tacticalReasons);
   if (strengthRatio > 1.4) {
     reasons.push("front-superiority");
   }

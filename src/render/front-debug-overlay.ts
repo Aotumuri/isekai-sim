@@ -365,7 +365,7 @@ export function formatSectorLabel(
       );
     }
   }
-  appendOperationalDetails(lines, world, sector, unitById);
+  appendOperationalDetails(lines, world, sector, unitById, selected);
   return lines.join("\n");
 }
 
@@ -374,10 +374,20 @@ function appendOperationalDetails(
   world: WorldState,
   front: OperationalSector,
   unitById: ReadonlyMap<UnitId, WorldState["units"][number]>,
+  selected = false,
 ): void {
   for (const nationId of [front.nationAId, front.nationBId]) {
     const operation = getOffensiveOperationForFront(world, front.id, nationId);
-    if (operation) lines.push(`OP ${nationId} ${operation.phase.toUpperCase()} ${operation.id}`);
+    if (operation) {
+      lines.push(`OP ${nationId} ${operation.phase.toUpperCase()} ${operation.id}`);
+      if (selected) {
+        lines.push(
+          `  primary ${operation.primaryTargetRegionId} | coverage ${operation.targetCoverageState ?? "none"}`,
+          `  local defense ${formatStrength(operation.targetLocalDefenderStrength)} | tactical ${operation.targetTacticalScore.toFixed(1)}`,
+          `  reasons ${operation.reasonFlags.join(", ")}`,
+        );
+      }
+    }
     const retreat = getRetreatPlanForFront(world, front.id, nationId);
     if (retreat) lines.push(`RET ${nationId} ${retreat.phase.toUpperCase()} ${retreat.id}`);
   }
@@ -424,7 +434,12 @@ function drawFrontMarkers(
     const operation = getOffensiveOperationForFront(world, front.id, nationId);
     if (operation) {
       drawMarker(layer, world, operation.stagingRegionId, "S", color, "circle");
-      drawMarker(layer, world, operation.primaryTargetRegionId, "P", color, "diamond");
+      const primaryLabel = operation.targetCoverageState === "gap"
+        ? "G"
+        : operation.targetCoverageState === "weak"
+          ? "W"
+          : "P";
+      drawMarker(layer, world, operation.primaryTargetRegionId, primaryLabel, color, "diamond");
       for (const targetId of operation.supportingTargetRegionIds) {
         drawMarker(layer, world, targetId, "+", color, "diamond");
       }

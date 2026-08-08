@@ -221,6 +221,59 @@ test("offensive operations use only strength surplus to minimum frontline covera
   assert(operation.assignedStrength <= coverage.offensiveSurplusStrength);
 });
 
+test("an offensive operation targets a reachable gap in the enemy coverage", () => {
+  const world = createGapExploitationWorld();
+  const plan = planFor(world, NATION_A);
+  updateFrontlineCoverage(world);
+  const enemyCoverage = getFrontlineCoverage(world, plan.frontId, NATION_B);
+  assert(enemyCoverage);
+  const gapRegionIds = enemyCoverage.positions
+    .filter((position) => position.state === "gap")
+    .map((position) => position.friendlyRegionId);
+  assert(gapRegionIds.length > 0);
+
+  updateOffensiveOperations(world);
+
+  const operation = onlyOperation(world, NATION_A);
+  assert(gapRegionIds.includes(operation.primaryTargetRegionId));
+  assert.equal(operation.targetCoverageState, "gap");
+  assert(operation.targetTacticalScore > 0);
+  assert(operation.reasonFlags.includes("enemy-frontline-gap"));
+  assert(operation.reasonFlags.includes("local-strength-superiority"));
+});
+
+test("a weak target with local strength superiority beats an overmatched weak target", () => {
+  const world = createGapExploitationWorld();
+  const plan = planFor(world, NATION_A);
+  updateFrontlineCoverage(world);
+  const enemyCoverage = getFrontlineCoverage(world, plan.frontId, NATION_B);
+  assert(enemyCoverage);
+  for (const position of enemyCoverage.positions) {
+    position.state = "covered";
+    position.defenderStrength = 500;
+  }
+  const overmatched = enemyCoverage.positions.find(
+    (position) => position.friendlyRegionId === id("b1"),
+  );
+  const exploitable = enemyCoverage.positions.find(
+    (position) => position.friendlyRegionId === id("b3"),
+  );
+  assert(overmatched && exploitable);
+  overmatched.state = "weak";
+  overmatched.defenderStrength = 10_000;
+  exploitable.state = "weak";
+  exploitable.defenderStrength = 50;
+
+  updateOffensiveOperations(world);
+
+  const operation = onlyOperation(world, NATION_A);
+  assert.equal(operation.primaryTargetRegionId, id("b3"));
+  assert.equal(operation.targetCoverageState, "weak");
+  assert.equal(operation.targetLocalDefenderStrength, 50);
+  assert(operation.reasonFlags.includes("enemy-frontline-weak"));
+  assert(operation.reasonFlags.includes("local-strength-superiority"));
+});
+
 test("coverage detects loss of meaningful strength and war end cleans ownership", () => {
   const world = createOperationWorld();
   const plan = planFor(world, NATION_A);
@@ -1256,6 +1309,8 @@ test("offensive operation numeric state never contains NaN or Infinity", () => {
       operation.initialFriendlyStrength,
       operation.initialEnemyStrength,
       operation.initialStrengthRatio,
+      operation.targetLocalDefenderStrength,
+      operation.targetTacticalScore,
       operation.startedAtTick,
       operation.phaseStartedAtTick,
       operation.minimumCommitUntilTick,
@@ -2568,6 +2623,33 @@ function createOperationClusterWorld(): WorldState {
   for (let index = 0; index < 2; index += 1) {
     setUnitStrength(addLandUnit(world, NATION_B, "b0", "Infantry"), 50);
   }
+  updateAllocationSystem(world);
+  return world;
+}
+
+function createGapExploitationWorld(): WorldState {
+  const specs: RegionSpec[] = [];
+  const edges: Edge[] = [];
+  for (let index = 0; index < 5; index += 1) {
+    specs.push(
+      { id: `a${index}`, owner: NATION_A },
+      { id: `b${index}`, owner: NATION_B },
+    );
+    edges.push([`a${index}`, `b${index}`]);
+    if (index > 0) {
+      edges.push(
+        [`a${index - 1}`, `a${index}`],
+        [`b${index - 1}`, `b${index}`],
+      );
+    }
+  }
+  const world = createFrontWorld(specs, edges);
+  startWar(world, NATION_A, NATION_B);
+  for (let index = 0; index < 10; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_A, "a2", "Infantry"), 100);
+  }
+  setUnitStrength(addLandUnit(world, NATION_B, "b0", "Infantry"), 100);
+  setUnitStrength(addLandUnit(world, NATION_B, "b4", "Infantry"), 100);
   updateAllocationSystem(world);
   return world;
 }
