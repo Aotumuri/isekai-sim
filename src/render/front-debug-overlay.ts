@@ -331,11 +331,6 @@ export function formatFrontLabel(
         );
       }
     }
-    const collapse = world.collapseAdvances.advanceByNationId.get(nationId);
-    if (collapse?.sourceSectorId === front.id) {
-      const strength = collapse.unitIds.reduce((sum, id) => sum + (unitById.get(id) ? getUnitCombatStrength(unitById.get(id)!) : 0), 0);
-      lines.push(`COLLAPSE ADVANCE ${collapse.enemyNationId}`, `  phase ${collapse.phase.toUpperCase()} | units ${collapse.unitIds.length} | strength ${formatStrength(strength)}`, `  target ${collapse.currentTargetRegionId} | depth ${collapse.targetRegionIds.length}/${WORLD_BALANCE.war.landFront.collapseAdvance.maximumDepth}`, `  reason ${collapse.reasonFlags.join(", ")}`);
-    }
     const retreat = getRetreatPlanForFront(world, front.id, nationId);
     if (retreat) {
       lines.push(
@@ -443,7 +438,18 @@ function appendOperationalDetails(
       }
     }
     const collapse = world.collapseAdvances.advanceByNationId.get(nationId);
-    if (collapse?.sourceSectorId === front.id) drawMarker(layer, world, collapse.currentTargetRegionId, "C", color, "diamond");
+    if (collapse?.sourceSectorId === front.id) {
+      const strength = collapse.unitIds.reduce((sum, id) => {
+        const unit = unitById.get(id);
+        return sum + (unit ? getUnitCombatStrength(unit) : 0);
+      }, 0);
+      lines.push(
+        `COLLAPSE ADVANCE ${collapse.enemyNationId}`,
+        `  phase ${collapse.phase.toUpperCase()} | units ${collapse.unitIds.length} | strength ${formatStrength(strength)}`,
+        `  target ${collapse.currentTargetRegionId} | depth ${collapse.targetRegionIds.length}/${WORLD_BALANCE.war.landFront.collapseAdvance.maximumDepth}`,
+        `  reason ${collapse.reasonFlags.join(", ")}`,
+      );
+    }
     const retreat = getRetreatPlanForFront(world, front.id, nationId);
     if (retreat) lines.push(`RET ${nationId} ${retreat.phase.toUpperCase()} ${retreat.id}`);
   }
@@ -514,6 +520,17 @@ function drawFrontMarkers(
           performance.now() - startedAt,
         );
       }
+    }
+    const collapse = world.collapseAdvances.advanceByNationId.get(nationId);
+    if (collapse?.sourceSectorId === front.id) {
+      drawMarker(
+        layer,
+        world,
+        collapse.currentTargetRegionId,
+        "C",
+        color,
+        "diamond",
+      );
     }
     const retreat = getRetreatPlanForFront(world, front.id, nationId);
     if (retreat) {
