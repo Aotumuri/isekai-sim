@@ -12,6 +12,7 @@ import { getFrontAllocation } from "./nation-front-allocations";
 import { getSectorPlan } from "./nation-front-plans";
 import type { WorldState } from "./world-state";
 import { getOwnerByMesoId } from "./world-cache";
+import { getMesoById } from "./world-cache";
 
 export type StalemateReason =
   | "no-territory-progress"
@@ -21,6 +22,7 @@ export type StalemateReason =
   | "continuous-coverage"
   | "artificial-inactivity";
 export type ArtificialInactivityBlocker = "posture" | "allocation" | "target-validity" | null;
+export type TargetValidityFailureReason = "no-enemy-influence-target" | "no-valid-frontline-position" | "target-outside-current-sector" | "target-already-occupied" | "ownership-mismatch" | "unreachable-target" | "geometry-invalidated" | "depth-radius-restriction" | "no-candidate-after-filtering" | "other";
 
 export interface StalemateAssessment {
   nationId: NationId;
@@ -51,6 +53,8 @@ export interface StalematePressureState {
   selectionChanges: number;
   artificialInactivitySamples: number;
   artificialInactivityByBlocker: Record<Exclude<ArtificialInactivityBlocker, null>, number>;
+  targetValidityFailureCounts: Record<TargetValidityFailureReason, number>;
+  targetValidityOtherCounts: { recoveryCooldown: number; validCandidatePending: number; unknown: number };
   pressureSampleTotal: number;
   pressureSampleCount: number;
   maxPressure: number;
@@ -68,6 +72,8 @@ export function createStalematePressureState(): StalematePressureState {
     version: 0, allocationVersion: 0, detections: 0, selections: 0, selectionChanges: 0,
     artificialInactivitySamples: 0,
     artificialInactivityByBlocker: { posture: 0, allocation: 0, "target-validity": 0 },
+    targetValidityFailureCounts: { "no-enemy-influence-target": 0, "no-valid-frontline-position": 0, "target-outside-current-sector": 0, "target-already-occupied": 0, "ownership-mismatch": 0, "unreachable-target": 0, "geometry-invalidated": 0, "depth-radius-restriction": 0, "no-candidate-after-filtering": 0, other: 0 },
+    targetValidityOtherCounts: { recoveryCooldown: 0, validCandidatePending: 0, unknown: 0 },
     pressureSampleTotal: 0, pressureSampleCount: 0,
     maxPressure: 0, staticTickSampleTotal: 0, staticTickSampleCount: 0, maxStaticTicks: 0,
     majorOffensivesLaunched: 0, majorOffensiveSuccesses: 0,
@@ -139,7 +145,8 @@ export function updateStalematePressure(world: WorldState): void {
       const theirs = getFrontlineCoverage(world, sector.id, enemyNationId);
       return !!ours && !!theirs && ours.gapSegments === 0 && theirs.gapSegments === 0;
     });
-    const noOperation = !(world.offensiveOperations.operationsByNationId.get(nationId)?.some((op) => op.enemyNationId === enemyNationId && op.phase !== "recovering"));
+    const noOperation = !(world.offensiveOperations.operationsByNationId.get(nationId)?.some((op) => op.enemyNationId === enemyNationId && op.phase !== "recovering")) &&
+      world.collapseAdvances.advanceByNationId.get(nationId)?.enemyNationId !== enemyNationId;
     const surplus = sectors.reduce((sum, sector) => sum + (getFrontAllocation(world, sector.id, nationId)?.surplus ?? 0), 0);
     const enemyLineStrength = sectors.reduce((sum, sector) => sum + (getFrontlineCoverage(world, sector.id, enemyNationId)?.defenderStrength ?? 0), 0);
     const hasAllocatedForce = sectors.some((sector) => (getFrontAllocation(world, sector.id, nationId)?.unitIds.length ?? 0) > 0);
@@ -196,6 +203,11 @@ export function updateStalematePressure(world: WorldState): void {
     if (artificial) {
       state.artificialInactivitySamples += 1;
       if (artificialBlocker) state.artificialInactivityByBlocker[artificialBlocker] += 1;
+      if (artificialBlocker === "target-validity") {
+        const diagnostic = classifyTargetValidityFailure(world, sectors, nationId, enemyNationId);
+        state.targetValidityFailureCounts[diagnostic.reason] += 1;
+        if (diagnostic.other) state.targetValidityOtherCounts[diagnostic.other] += 1;
+      }
     }
     state.pressureSampleTotal += pressure; state.pressureSampleCount += 1;
     state.maxPressure = Math.max(state.maxPressure, pressure);
@@ -216,6 +228,41 @@ export function updateStalematePressure(world: WorldState): void {
     .sort().join("|");
   if (previousFocus !== nextFocus) state.allocationVersion += 1;
   world.instrumentation?.recordDuration("stalemate.evaluation", performance.now() - startedAt);
+}
+
+function classifyTargetValidityFailure(world: WorldState, sectors: OperationalSector[], nationId: NationId, enemyNationId: NationId): { reason: TargetValidityFailureReason; other?: keyof StalematePressureState["targetValidityOtherCounts"] } {
+  if (world.offensiveOperations.operationsByNationId.get(nationId)?.some((operation) => operation.enemyNationId === enemyNationId && operation.phase === "recovering")) return { reason: "other", other: "recoveryCooldown" };
+  const attackSectors = sectors.filter((sector) => getSectorPlan(world, sector.id, nationId)?.posture === "attack");
+  if (attackSectors.length === 0) return { reason: "other", other: "unknown" };
+  const mesoById = getMesoById(world);
+  let sawEnemyInfluence = false;
+  let sawEnemyControlled = false;
+  let sawLand = false;
+  let sawCoveragePosition = false;
+  let sawInsufficientForce = false;
+  for (const sector of attackSectors) {
+    const friendly = getFrontSide(sector, nationId);
+    const enemy = getOpposingFrontSide(sector, nationId);
+    if (!friendly || !enemy) return { reason: "geometry-invalidated" };
+    const allocation = getFrontAllocation(world, sector.id, nationId);
+    if (!allocation || allocation.unitIds.length < WORLD_BALANCE.war.landFront.offensiveOperation.minimumFrontUnits) sawInsufficientForce = true;
+    if (enemy.influenceRegionIds.length > 0) sawEnemyInfluence = true;
+    const coverage = getFrontlineCoverage(world, sector.id, enemyNationId);
+    if ((coverage?.positions.length ?? 0) > 0) sawCoveragePosition = true;
+    for (const id of enemy.influenceRegionIds) {
+      const meso = mesoById.get(id);
+      if (meso?.type !== "sea") sawLand = true;
+      if ((world.occupation.mesoById.get(id) ?? getOwnerByMesoId(world).get(id)) === enemyNationId) sawEnemyControlled = true;
+    }
+  }
+  if (sawInsufficientForce) return { reason: "no-candidate-after-filtering" };
+  if (!sawEnemyInfluence || !sawLand) return { reason: "no-enemy-influence-target" };
+  if (!sawEnemyControlled) {
+    const occupiedByUs = attackSectors.some((sector) => getOpposingFrontSide(sector, nationId)?.influenceRegionIds.some((id) => world.occupation.mesoById.get(id) === nationId));
+    return { reason: occupiedByUs ? "target-already-occupied" : "ownership-mismatch" };
+  }
+  if (!sawCoveragePosition) return { reason: "no-valid-frontline-position" };
+  return { reason: "other", other: "validCandidatePending" };
 }
 
 export function recordMajorOffensiveOutcome(world: WorldState, nationId: NationId, enemyId: NationId, success: boolean): void {

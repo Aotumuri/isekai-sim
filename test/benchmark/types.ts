@@ -11,6 +11,7 @@ export const BENCHMARK_SCENARIOS = [
   "long-frontline",
   "gap-exploitation",
   "stalemate-breaker",
+  "collapse-advance",
 ] as const;
 
 export type BenchmarkScenarioName = (typeof BENCHMARK_SCENARIOS)[number];
@@ -83,6 +84,31 @@ export interface WorldSummary {
   artificialInactivityPostureBlocks: number;
   artificialInactivityAllocationBlocks: number;
   artificialInactivityTargetBlocks: number;
+  targetFailureNoEnemyInfluence: number;
+  targetFailureNoFrontlinePosition: number;
+  targetFailureOutsideSector: number;
+  targetFailureAlreadyOccupied: number;
+  targetFailureOwnershipMismatch: number;
+  targetFailureUnreachable: number;
+  targetFailureGeometryChanged: number;
+  targetFailureDepthRadius: number;
+  targetFailureNoCandidate: number;
+  targetFailureOther: number;
+  targetFailureOtherRecoveryCooldown: number;
+  targetFailureOtherValidCandidatePending: number;
+  targetFailureOtherUnknown: number;
+  collapseOpportunities: number;
+  collapseAdvancesCreated: number;
+  collapseUnitsCommitted: number;
+  collapseStrengthCommitted: number;
+  collapseTargetsOccupied: number;
+  collapseCitiesOccupied: number;
+  collapseCapitalsOccupied: number;
+  collapseAverageDepth: number;
+  collapseAverageDuration: number;
+  collapseFrontReformationStops: number;
+  collapseArtificialInactivityResolved: number;
+  collapseArtificialInactivityRemaining: number;
   majorOffensivesLaunched: number;
   majorOffensiveSuccesses: number;
   majorOffensiveFailures: number;

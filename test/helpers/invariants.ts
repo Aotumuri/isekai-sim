@@ -132,6 +132,22 @@ export function assertWorldInvariants(world: WorldState): void {
       assert(operation.assignedUnitIds.includes(unitId), `${operation.id} hold unit is unassigned`);
     }
   }
+  const collapseUnits = new Set<string>();
+  for (const advance of world.collapseAdvances.advances) {
+    assert(nationIds.has(advance.nationId), "collapse nation is missing");
+    assert(nationIds.has(advance.enemyNationId), "collapse enemy is missing");
+    assert(mesoIds.has(advance.currentTargetRegionId), "collapse target is missing");
+    for (const targetId of advance.targetRegionIds) assert(mesoIds.has(targetId), "collapse axis target is missing");
+    for (const unitId of advance.unitIds) {
+      assert(unitIds.has(unitId), "collapse unit is missing");
+      assert(!collapseUnits.has(unitId), "unit belongs to multiple collapse advances");
+      assert(!world.offensiveOperations.operationIdByUnitId.has(unitId), "unit belongs to Operation and Collapse Advance");
+      assert(!world.strategicReserves.reserveNationByUnitId.has(unitId), "Reserve unit belongs to Collapse Advance");
+      assert(!world.reorganization.planIdByUnitId.has(unitId), "reorganizing unit belongs to Collapse Advance");
+      collapseUnits.add(unitId);
+    }
+    for (const value of [advance.startedAtTick, advance.phaseStartedAtTick, advance.occupiedTargetCount]) assert(Number.isFinite(value), "collapse numeric state must be finite");
+  }
   const retreatIds = new Set(world.retreatPlans.plans.map((retreat) => retreat.id));
   assert.equal(
     retreatIds.size,
@@ -386,6 +402,7 @@ export function semanticWorldSignature(world: WorldState): unknown {
       outcome: operation.outcome,
       reason: operation.completionReason,
     })),
+    collapseAdvances: world.collapseAdvances.advances.map((advance) => ({ nation: advance.nationId, enemy: advance.enemyNationId, phase: advance.phase, units: [...advance.unitIds], targets: [...advance.targetRegionIds], current: advance.currentTargetRegionId })),
     retreatPlans: world.retreatPlans.plans.map((retreat) => ({
       id: retreat.id,
       nation: retreat.nationId,

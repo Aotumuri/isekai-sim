@@ -18,6 +18,7 @@ import {
 } from "../../src/sim/nation-runtime";
 import { createOccupationState } from "../../src/sim/occupation";
 import { createOffensiveOperationState } from "../../src/sim/offensive-operations";
+import { createCollapseAdvanceState } from "../../src/sim/collapse-advance";
 import {
   createReorganizationState,
   getReorganizationPlanForUnit,
@@ -406,6 +407,7 @@ function createReorganizationWorld(): { world: WorldState; unit: UnitState } {
     strategicReserves: createStrategicReserveState(false),
     reorganization: createReorganizationState(),
     stalematePressure: createStalematePressureState(),
+    collapseAdvances: createCollapseAdvanceState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

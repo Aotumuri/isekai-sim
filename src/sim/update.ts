@@ -23,6 +23,7 @@ import { updateStrategicReserves } from "./strategic-reserves";
 import { updateReorganization } from "./reorganization";
 import { updateFrontlineCoverage } from "./frontline-coverage";
 import { updateStalematePressure } from "./stalemate-pressure";
+import { updateCollapseAdvances } from "./collapse-advance";
 import {
   beginAiGeographyEvaluation,
   prepareFrontDistanceFields,
@@ -149,4 +150,5 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateNationFrontAllocations(world);
   updateFrontlineCoverage(world);
   updateOffensiveOperations(world);
+  updateCollapseAdvances(world);
 }

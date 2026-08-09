@@ -37,6 +37,7 @@ import {
   type ReorganizationPlan,
 } from "../reorganization";
 import { getFrontlineAssignment, getFrontlineTargetForUnit, getOrderedFrontlineRegionIds } from "../frontline-coverage";
+import type { CollapseAdvance } from "../collapse-advance";
 
 const LAND_TARGET_REASSIGN_INTERVAL_TICKS = 10;
 const MAX_SHARED_PATH_FIELDS = 256;
@@ -62,6 +63,7 @@ interface LandAiRuntime {
   retreatPlanVersion: number;
   strategicReserveVersion: number;
   reorganizationVersion: number;
+  collapseAdvanceVersion: number;
   warAdjacency: WarAdjacency;
   movementGroups: LandMovementGroup[];
   unitsExpectedToHaveTarget: Set<UnitState["id"]>;
@@ -137,6 +139,8 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     runtime.strategicReserveVersion !== world.strategicReserves.version;
   const reorganizationChanged =
     runtime.reorganizationVersion !== world.reorganization.version;
+  const collapseAdvanceChanged =
+    runtime.collapseAdvanceVersion !== world.collapseAdvances.version;
   const periodicReassignmentDue =
     world.time.fastTick - runtime.lastAssignmentFastTick >=
     LAND_TARGET_REASSIGN_INTERVAL_TICKS;
@@ -153,6 +157,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     retreatPlanChanged ||
     strategicReserveChanged ||
     reorganizationChanged ||
+    collapseAdvanceChanged ||
     periodicReassignmentDue;
   const mesoById = getMesoById(world);
   const neighborsById = getNeighborsById(world);
@@ -260,6 +265,7 @@ function getLandAiRuntime(world: WorldState): LandAiRuntime {
     retreatPlanVersion: -1,
     strategicReserveVersion: -1,
     reorganizationVersion: -1,
+    collapseAdvanceVersion: -1,
     warAdjacency: new Map(),
     movementGroups: [],
     unitsExpectedToHaveTarget: new Set(),
@@ -297,6 +303,7 @@ function updateAssignmentRuntimeSources(
   runtime.retreatPlanVersion = world.retreatPlans.version;
   runtime.strategicReserveVersion = world.strategicReserves.version;
   runtime.reorganizationVersion = world.reorganization.version;
+  runtime.collapseAdvanceVersion = world.collapseAdvances.version;
   runtime.forceReassignment = false;
 }
 
@@ -449,11 +456,14 @@ function rebuildLandAssignments(
         ...retreat.retreatingUnitIds,
       ]),
     );
+    const collapseAdvance = world.collapseAdvances.advanceByNationId.get(nationId);
+    const collapseUnitIds = new Set(collapseAdvance?.unitIds ?? []);
     const normalNationUnits = units.filter(
       (unit) =>
         !retreatUnitIds.has(unit.id) &&
         !reserveUnitIds.has(unit.id) &&
         !reorganizationUnitIds.has(unit.id),
+        // Collapse units are assigned as one concentrated movement group below.
     );
     for (const plan of reorganizationPlans) {
       const unit = unitById.get(plan.unitId);
@@ -583,7 +593,7 @@ function rebuildLandAssignments(
         operation && operation.phase !== "recovering" ? operation : undefined;
       const operationUnitIds = new Set(activeOperation?.assignedUnitIds ?? []);
       const normalFrontUnits = allocatedUnits.filter(
-        (unit) => !operationUnitIds.has(unit.id),
+        (unit) => !operationUnitIds.has(unit.id) && !collapseUnitIds.has(unit.id),
       );
       const coverageUnits = normalFrontUnits.filter((unit) =>
         getFrontlineAssignment(world, unit.id)?.sectorId === allocation.frontId,
@@ -646,6 +656,13 @@ function rebuildLandAssignments(
           ),
         );
       }
+    }
+
+    if (collapseAdvance) {
+      const collapseUnits = collapseAdvance.unitIds
+        .map((unitId) => unitById.get(unitId))
+        .filter((unit): unit is UnitState => !!unit && unit.nationId === nationId && !retreatUnitIds.has(unit.id) && !reserveUnitIds.has(unit.id) && !reorganizationUnitIds.has(unit.id));
+      if (collapseUnits.length > 0) movementGroups.push(buildCollapseAdvanceMovementGroup(world, collapseAdvance, collapseUnits, nation, instrumentation));
     }
 
     const unassignedUnits = getUnassignedLandUnitIds(world, nationId)
@@ -926,6 +943,33 @@ function buildOperationMovementGroup(
     );
   }
   return { nationId: operation.nationId, units: orderedUnits };
+}
+
+function buildCollapseAdvanceMovementGroup(
+  world: WorldState,
+  advance: CollapseAdvance,
+  units: UnitState[],
+  nation: WorldState["nations"][number] | undefined,
+  instrumentation?: SimulationInstrumentation,
+): LandMovementGroup {
+  const startedAt = instrumentation ? performance.now() : 0;
+  let assignments = 0;
+  let switches = 0;
+  const ordered = [...units].sort(compareUnitIds);
+  for (const unit of ordered) {
+    if (unit.moveTargetId === advance.currentTargetRegionId) continue;
+    if (unit.moveTargetId) switches += 1;
+    unit.moveTargetId = advance.currentTargetRegionId;
+    unit.moveFromId = null;
+    unit.moveToId = null;
+    unit.moveProgressMs = 0;
+    assignments += 1;
+  }
+  nation?.unitRoles.occupationUnitIds.push(...ordered.map((unit) => unit.id));
+  instrumentation?.incrementCounter("collapseAdvance.targetAssignments", assignments);
+  instrumentation?.incrementCounter("collapseAdvance.unitTargetSwitches", switches);
+  if (instrumentation) instrumentation.recordDuration("collapseAdvance.targetAssignment", performance.now() - startedAt);
+  return { nationId: advance.nationId, units: ordered };
 }
 
 function buildRetreatRearguardMovementGroup(

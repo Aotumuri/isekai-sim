@@ -733,7 +733,10 @@ function createOperation(
       (position) => position.defenderUnitIds,
     ) ?? [],
   );
-  const surplusUnits = allocationUnits.filter((unit) => !defensiveIds.has(unit.id));
+  const surplusUnits = allocationUnits.filter((unit) =>
+    !defensiveIds.has(unit.id) &&
+    !world.collapseAdvances.advanceNationByUnitId.has(unit.id)
+  );
   if (allocationUnits.length < settings.minimumFrontUnits || surplusUnits.length < 2) {
     return null;
   }

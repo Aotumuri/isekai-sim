@@ -348,6 +348,7 @@ export function assignUnitToStrategicReserve(
     world.reorganization.planIdByUnitId.has(unitId) ||
     world.retreatPlans.retreatIdByUnitId.has(unitId) ||
     world.offensiveOperations.operationIdByUnitId.has(unitId) ||
+    world.collapseAdvances.advanceNationByUnitId.has(unitId) ||
     world.frontAllocations.frontIdByUnitId.has(unitId)
   ) {
     return false;
@@ -523,6 +524,7 @@ function reconcileReserveMembership(
           !memberIds.has(unit.id) &&
           !world.retreatPlans.retreatIdByUnitId.has(unit.id) &&
           !world.offensiveOperations.operationIdByUnitId.has(unit.id) &&
+          !world.collapseAdvances.advanceNationByUnitId.has(unit.id) &&
           !world.reorganization.planIdByUnitId.has(unit.id) &&
           isReserveFormationCandidate(world, unit),
       )

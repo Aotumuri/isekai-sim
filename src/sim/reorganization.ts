@@ -826,6 +826,7 @@ function canStartReorganization(world: WorldState, unit: UnitState): boolean {
   if (!isValidPlanUnit(unit, unit.nationId)) return false;
   if (world.retreatPlans.retreatIdByUnitId.has(unit.id)) return false;
   if (world.offensiveOperations.operationIdByUnitId.has(unit.id)) return false;
+  if (world.collapseAdvances.advanceNationByUnitId.has(unit.id)) return false;
   if (isUnitInActiveBattle(world, unit)) return false;
   const reserve = getNationReserveState(world, unit.nationId);
   if (reserve?.unitIds.includes(unit.id)) {

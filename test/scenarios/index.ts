@@ -13,6 +13,7 @@ import { setupReorganizationHeavy } from "./reorganization-heavy";
 import { setupLongFrontline } from "./long-frontline";
 import { setupGapExploitation } from "./gap-exploitation";
 import { setupStalemateBreaker } from "./stalemate-breaker";
+import { setupCollapseAdvance } from "./collapse-advance";
 import type { ScenarioOptions, ScenarioSetup } from "./types";
 
 const scenarioSetups: Record<BenchmarkScenarioName, ScenarioSetup> = {
@@ -28,6 +29,7 @@ const scenarioSetups: Record<BenchmarkScenarioName, ScenarioSetup> = {
   "long-frontline": setupLongFrontline,
   "gap-exploitation": setupGapExploitation,
   "stalemate-breaker": setupStalemateBreaker,
+  "collapse-advance": setupCollapseAdvance,
 };
 
 export function createScenarioWorld(

@@ -1,4 +1,5 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
+import { WORLD_BALANCE } from "../data/balance";
 import type {
   FrontBorderEdge,
   OperationalSector,
@@ -52,6 +53,7 @@ interface OverlayVersions {
   frontMetrics: number;
   plans: number;
   operations: number;
+  collapseAdvances: number;
   retreats: number;
   coverage: number;
   stalemate: number;
@@ -329,6 +331,11 @@ export function formatFrontLabel(
         );
       }
     }
+    const collapse = world.collapseAdvances.advanceByNationId.get(nationId);
+    if (collapse?.sourceSectorId === front.id) {
+      const strength = collapse.unitIds.reduce((sum, id) => sum + (unitById.get(id) ? getUnitCombatStrength(unitById.get(id)!) : 0), 0);
+      lines.push(`COLLAPSE ADVANCE ${collapse.enemyNationId}`, `  phase ${collapse.phase.toUpperCase()} | units ${collapse.unitIds.length} | strength ${formatStrength(strength)}`, `  target ${collapse.currentTargetRegionId} | depth ${collapse.targetRegionIds.length}/${WORLD_BALANCE.war.landFront.collapseAdvance.maximumDepth}`, `  reason ${collapse.reasonFlags.join(", ")}`);
+    }
     const retreat = getRetreatPlanForFront(world, front.id, nationId);
     if (retreat) {
       lines.push(
@@ -435,6 +442,8 @@ function appendOperationalDetails(
         }
       }
     }
+    const collapse = world.collapseAdvances.advanceByNationId.get(nationId);
+    if (collapse?.sourceSectorId === front.id) drawMarker(layer, world, collapse.currentTargetRegionId, "C", color, "diamond");
     const retreat = getRetreatPlanForFront(world, front.id, nationId);
     if (retreat) lines.push(`RET ${nationId} ${retreat.phase.toUpperCase()} ${retreat.id}`);
   }
@@ -584,6 +593,7 @@ function readVersions(world: WorldState): OverlayVersions {
     frontMetrics: world.landFronts.metricsVersion,
     plans: world.frontPlans.version,
     operations: world.offensiveOperations.version,
+    collapseAdvances: world.collapseAdvances.version,
     retreats: world.retreatPlans.version,
     coverage: world.frontlineCoverage.version,
     stalemate: world.stalematePressure.version,
@@ -600,7 +610,7 @@ function readVersions(world: WorldState): OverlayVersions {
 
 function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
   return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
-    a.plans === b.plans && a.operations === b.operations &&
+    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances &&
     a.retreats === b.retreats && a.coverage === b.coverage && a.stalemate === b.stalemate &&
     a.reserveDeployments === b.reserveDeployments;
 }

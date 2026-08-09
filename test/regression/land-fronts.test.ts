@@ -44,6 +44,7 @@ import {
   updateOffensiveOperations,
   type OffensiveOperation,
 } from "../../src/sim/offensive-operations";
+import { createCollapseAdvanceState, updateCollapseAdvances } from "../../src/sim/collapse-advance";
 import {
   createRetreatPlanState,
   formatRetreatPlanSummary,
@@ -85,6 +86,7 @@ import {
   updateStalematePressure,
 } from "../../src/sim/stalemate-pressure";
 import { BenchmarkMetrics } from "../benchmark/metrics";
+import { beginAiGeographyEvaluation } from "../../src/sim/ai-geography";
 import { createTestScenario } from "../helpers/test-scenario";
 
 const NATION_A = createNationId(0);
@@ -1084,6 +1086,57 @@ test("a nation respects the active offensive operation limit", () => {
     getOffensiveOperations(world, NATION_A).length,
     WORLD_BALANCE.war.landFront.offensiveOperation.maxActivePerNation,
   );
+});
+
+test("open reachable enemy territory starts a concentrated Collapse Advance", () => {
+  const world = createCollapseAdvanceWorld();
+  updateCollapseAdvances(world);
+  const advance = world.collapseAdvances.advanceByNationId.get(NATION_A);
+  assert(advance);
+  assert.equal(advance.enemyNationId, NATION_B);
+  assert(advance.unitIds.length >= 1 && advance.unitIds.length <= WORLD_BALANCE.war.landFront.collapseAdvance.maximumUnits);
+  assert.equal(new Set(advance.unitIds).size, advance.unitIds.length);
+  assert.equal(world.mesoRegions.find((region) => region.id === advance.currentTargetRegionId)?.type === "sea", false);
+  assert.equal(world.occupation.mesoById.get(advance.currentTargetRegionId) ?? NATION_B, NATION_B);
+  assert.equal(advance.currentTargetRegionId, id("b1"), "nearby capital is preferred along the open axis");
+});
+
+test("a valid normal Operation suppresses Collapse Advance and prevents duplicate units", () => {
+  const world = createCollapseAdvanceWorld();
+  updateOffensiveOperations(world);
+  assert(getOffensiveOperations(world, NATION_A).length > 0);
+  updateCollapseAdvances(world);
+  assert.equal(world.collapseAdvances.advanceByNationId.has(NATION_A), false);
+  for (const id of world.collapseAdvances.advanceNationByUnitId.keys()) assert.equal(world.offensiveOperations.operationIdByUnitId.has(id), false);
+});
+
+test("Collapse Advance excludes Frontline Coverage, Reserve, and Reorganization units", () => {
+  const world = createCollapseAdvanceWorld();
+  const allocation = getNationFrontAllocations(world, NATION_A)[0];
+  assert(allocation && allocation.unitIds.length >= 3);
+  const [reserveId, reorganizingId] = allocation.unitIds;
+  world.strategicReserves.reserveNationByUnitId.set(reserveId, NATION_A);
+  world.reorganization.planIdByUnitId.set(reorganizingId, "reorg-test" as never);
+  updateFrontlineCoverage(world);
+  const defenders = new Set(getFrontlineCoverage(world, allocation.frontId, NATION_A)?.positions.flatMap((position) => position.defenderUnitIds) ?? []);
+  updateCollapseAdvances(world);
+  const advance = world.collapseAdvances.advanceByNationId.get(NATION_A);
+  assert(advance);
+  assert(!advance.unitIds.includes(reserveId));
+  assert(!advance.unitIds.includes(reorganizingId));
+  assert(advance.unitIds.every((id) => !defenders.has(id)));
+});
+
+test("a reformed meaningful enemy Front stops Collapse Advance", () => {
+  const world = createCollapseAdvanceWorld();
+  updateCollapseAdvances(world);
+  assert(world.collapseAdvances.advanceByNationId.has(NATION_A));
+  setUnitStrength(addLandUnit(world, NATION_B, "b0", "Infantry"), WORLD_BALANCE.war.landFront.collapseAdvance.reformedDefenseStrength * 2);
+  beginAiGeographyEvaluation(world);
+  updateFrontlineCoverage(world);
+  updateCollapseAdvances(world);
+  assert.equal(world.collapseAdvances.advanceByNationId.has(NATION_A), false);
+  assert.equal(world.collapseAdvances.history.at(-1)?.stopReason, "front-reformed");
 });
 
 test("a land unit never belongs to multiple offensive operations", () => {
@@ -2801,6 +2854,26 @@ function createOperationWorld(): WorldState {
   return world;
 }
 
+function createCollapseAdvanceWorld(): WorldState {
+  const world = createFrontWorld(
+    [
+      { id: "a", owner: NATION_A },
+      { id: "b0", owner: NATION_B },
+      { id: "b1", owner: NATION_B, building: "capital" },
+      { id: "b2", owner: NATION_B, building: "city" },
+      { id: "b3", owner: NATION_B },
+    ],
+    [["a", "b0"], ["b0", "b1"], ["b0", "b2"], ["b1", "b3"], ["b2", "b3"]],
+  );
+  startWar(world, NATION_A, NATION_B);
+  for (let index = 0; index < 10; index += 1) setUnitStrength(addLandUnit(world, NATION_A, "a", "Infantry"), 300);
+  updateAllocationSystem(world);
+  const sector = world.landFronts.operationalSectors[0];
+  assert(sector);
+  world.stalematePressure.assessments = [{ nationId: NATION_A, enemyNationId: NATION_B, pressure: 0, staticTicks: 1, reasonFlags: ["artificial-inactivity"], artificialInactivity: true, artificialInactivityBlocker: "target-validity", schwerpunktSectorId: null, selectedAtTick: null, cooldownUntilTick: 0, lastOccupationVersion: 0, lastBreakthroughCount: 0, lastOperationSuccessCount: 0, lastOperationFailureCount: 0, releasedSecondaryStrength: 0 }];
+  return world;
+}
+
 function createOperationClusterWorld(): WorldState {
   const world = createFrontWorld(
     [
@@ -3206,6 +3279,7 @@ function createFrontWorld(
     strategicReserves: createStrategicReserveState(),
     reorganization: createReorganizationState(),
     stalematePressure: createStalematePressureState(),
+    collapseAdvances: createCollapseAdvanceState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

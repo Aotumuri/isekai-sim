@@ -29,6 +29,7 @@ import { createStrategicReserveState } from "./strategic-reserves";
 import { createReorganizationState } from "./reorganization";
 import { createFrontlineCoverageState } from "./frontline-coverage";
 import { createStalematePressureState } from "./stalemate-pressure";
+import { createCollapseAdvanceState } from "./collapse-advance";
 import { nextScheduledTickRange } from "./schedule";
 import { addTestWar } from "./test-war";
 import { createSimTime } from "./time";
@@ -101,6 +102,7 @@ export function createWorld(config: WorldConfig): WorldState {
   const strategicReserves = createStrategicReserveState();
   const reorganization = createReorganizationState();
   const stalematePressure = createStalematePressureState();
+  const collapseAdvances = createCollapseAdvanceState();
   const mapVersion = 0;
   const territoryVersion = 0;
   const buildingVersion = 0;
@@ -127,6 +129,7 @@ export function createWorld(config: WorldConfig): WorldState {
     strategicReserves,
     reorganization,
     stalematePressure,
+    collapseAdvances,
     mapVersion,
     territoryVersion,
     buildingVersion,
