@@ -18,6 +18,7 @@ import type { NationId } from "../worldgen/nation";
 import { getFrontlineCoverage } from "../sim/frontline-coverage";
 import { getFrontAllocation } from "../sim/nation-front-allocations";
 import { getStalemateAssessment } from "../sim/stalemate-pressure";
+import { getStrategicProgressAssessment } from "../sim/strategic-progress";
 import type { Vec2 } from "../utils/vector";
 import { clearLayer } from "./clear-layer";
 import { findSharedSegments, type Segment } from "./meso-border-geometry";
@@ -401,6 +402,7 @@ function appendOperationalDetails(
       const enemyId = nationId === front.nationAId ? front.nationBId : front.nationAId;
       const stalled = getStalemateAssessment(world, nationId, enemyId);
       if (stalled) {
+        const progress = getStrategicProgressAssessment(world, nationId, enemyId);
         const coverage = getFrontlineCoverage(world, front.id, nationId);
         const allocation = getFrontAllocation(world, front.id, nationId);
         const focused = stalled.schwerpunktSectorId === front.id;
@@ -443,6 +445,10 @@ function appendOperationalDetails(
           `  next evaluation tick ${stalled.nextEvaluationTick}`,
           `STALEMATE ${stalled.staticTicks} slow ticks | pressure ${stalled.pressure.toFixed(0)}${focused ? " | SCHWERPUNKT" : ""}`,
           `  reasons ${stalled.reasonFlags.join(", ") || "none"}`,
+          `STRATEGIC PROGRESS ${progress?.score.toFixed(0) ?? "0"} | reset ${progress?.resetsPressure ? "YES" : "NO"}`,
+          `  reasons ${progress?.reasonFlags.join(", ") || "none"} | last ${progress?.lastProgressReasons.join(", ") || "none"} @${progress?.lastProgressTick ?? "-"}`,
+          `  displacement ${progress?.frontlineDisplacement ?? 0} | net gain ${progress?.netTerritorialGain ?? 0} | breakthrough persistence ${progress?.breakthroughPersistence ?? 0}`,
+          `  capital approach ${progress?.capitalApproach ?? 0} | pressure reset ${progress?.resetsPressure ? "YES" : "NO"}`,
           `  inactivity blocker ${stalled.artificialInactivityBlocker ?? "none"}`,
           `  sector ${stalled.schwerpunktSectorId ?? "none"} | defense ${formatStrength(coverage?.minimumRequiredStrength ?? 0)} | allocated ${formatStrength(allocation?.allocatedStrength ?? 0)}`,
           `  surplus ${formatStrength(coverage?.offensiveSurplusStrength ?? 0)} | committed ${formatStrength(operation?.assignedStrength ?? 0)} | released ${formatStrength(stalled.releasedSecondaryStrength)}`,

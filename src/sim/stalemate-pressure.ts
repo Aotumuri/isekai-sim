@@ -12,12 +12,12 @@ import { getFrontAllocation } from "./nation-front-allocations";
 import { getSectorPlan } from "./nation-front-plans";
 import { FAST_TICK_MS, SLOW_TICK_MS } from "./time";
 import type { WorldState } from "./world-state";
-import { getOwnerByMesoId } from "./world-cache";
-import { getMesoById } from "./world-cache";
 import { getUnitCombatStrength } from "./unit-strength";
+import { getStrategicProgressAssessment } from "./strategic-progress";
+import { getMesoById, getOwnerByMesoId } from "./world-cache";
 
 export type StalemateReason =
-  | "no-territory-progress"
+  | "no-strategic-progress"
   | "no-breakthrough-progress"
   | "repeated-operation-cancel"
   | "balanced-strength"
@@ -59,8 +59,6 @@ export interface StalemateAssessment {
   schwerpunktSectorId: FrontId | null;
   selectedAtTick: number | null;
   cooldownUntilTick: number;
-  lastOccupationVersion: number;
-  lastBreakthroughCount: number;
   lastOperationSuccessCount: number;
   lastOperationFailureCount: number;
   releasedSecondaryStrength: number;
@@ -157,7 +155,6 @@ export function updateStalematePressure(world: WorldState): void {
   const settings = WORLD_BALANCE.war.landFront.stalemate;
   const previous = state.byNationEnemy;
   const operationProgress = indexOperationProgress(world);
-  const occupationSignatures = indexOccupationSignatures(world);
   const sectorsByPair = new Map<string, OperationalSector[]>();
   for (const sector of world.landFronts.operationalSectors) {
     for (const [nationId, enemyId] of [[sector.nationAId, sector.nationBId], [sector.nationBId, sector.nationAId]] as const) {
@@ -177,16 +174,15 @@ export function updateStalematePressure(world: WorldState): void {
     const ratio = friendlyStrength / Math.max(1, enemyStrength);
     const bothCapable = friendlyStrength >= settings.minimumMeaningfulStrength && enemyStrength >= settings.minimumMeaningfulStrength;
     const balanced = ratio >= settings.balancedMinimumRatio && ratio <= settings.balancedMaximumRatio;
-    const breakthrough = world.frontlineCoverage.breakthroughEvents;
     const progress = operationProgress.get(pairKey) ?? { success: 0, failure: 0 };
     const success = progress.success;
     const failure = progress.failure;
-    const occupationSignature = occupationSignatures.get(normalizedKey(nationId, enemyNationId)) ?? 0;
-    const territoryProgress = !!before && before.lastOccupationVersion !== occupationSignature;
-    // Coverage "breakthroughEvents" includes newly exposed friendly gaps during
-    // deliberate concentration. Only a successful Operation is strategic
-    // breakthrough progress; otherwise concentration would reset itself.
-    const breakthroughProgress = !!before && before.lastOperationSuccessCount !== success;
+    const strategicProgress = getStrategicProgressAssessment(
+      world,
+      nationId,
+      enemyNationId,
+    );
+    const meaningfulProgress = strategicProgress?.resetsPressure ?? false;
     const critical = getCapitalDefenseAssessment(world, nationId)?.threatLevel === "critical";
     const retreating = sectors.some((sector) => getSectorPlan(world, sector.id, nationId)?.posture === "retreat");
     const continuous = sectors.every((sector) => {
@@ -204,7 +200,7 @@ export function updateStalematePressure(world: WorldState): void {
       (enemyStrength < settings.minimumMeaningfulStrength * 0.25 || enemyLineStrength <= 0 || surplus > enemyStrength * 0.75);
     let pressure = before?.pressure ?? 0;
     let staticTicks = before?.staticTicks ?? 0;
-    if (territoryProgress || breakthroughProgress) {
+    if (meaningfulProgress) {
       pressure = Math.max(0, pressure - settings.pressureDecayOnProgress);
       staticTicks = 0;
     } else if (bothCapable && balanced && !critical && !retreating) {
@@ -215,8 +211,8 @@ export function updateStalematePressure(world: WorldState): void {
       staticTicks = 0;
     }
     const reasons: StalemateReason[] = [];
-    if (!territoryProgress) reasons.push("no-territory-progress");
-    if (!breakthroughProgress) reasons.push("no-breakthrough-progress");
+    if (!meaningfulProgress) reasons.push("no-strategic-progress");
+    if (before?.lastOperationSuccessCount === success) reasons.push("no-breakthrough-progress");
     if (balanced) reasons.push("balanced-strength");
     if (continuous) reasons.push("continuous-coverage");
     if (before && failure > before.lastOperationFailureCount) reasons.push("repeated-operation-cancel");
@@ -272,8 +268,7 @@ export function updateStalematePressure(world: WorldState): void {
       targetValidityFailureReason: targetDiagnostic?.reason ?? null,
       targetValidityOtherReason: targetDiagnostic?.other ?? null,
       schwerpunktSectorId, selectedAtTick,
-      cooldownUntilTick, lastOccupationVersion: occupationSignature,
-      lastBreakthroughCount: breakthrough, lastOperationSuccessCount: success,
+      cooldownUntilTick, lastOperationSuccessCount: success,
       lastOperationFailureCount: failure, releasedSecondaryStrength: before?.releasedSecondaryStrength ?? 0,
     };
     if (schwerpunktSectorId) {
@@ -512,7 +507,6 @@ function sumSides(sectors: OperationalSector[], nationId: NationId, friendly: bo
 }
 function compareAssessment(a: StalemateAssessment, b: StalemateAssessment): number { return a.nationId.localeCompare(b.nationId) || b.pressure - a.pressure || a.enemyNationId.localeCompare(b.enemyNationId); }
 function key(a: NationId, b: NationId): string { return `${a}|${b}`; }
-function normalizedKey(a: NationId, b: NationId): string { return a < b ? `${a}|${b}` : `${b}|${a}`; }
 
 function indexOperationProgress(world: WorldState): Map<string, { success: number; failure: number }> {
   const result = new Map<string, { success: number; failure: number }>();
@@ -521,21 +515,6 @@ function indexOperationProgress(world: WorldState): Map<string, { success: numbe
     const item = result.get(key(operation.nationId, operation.enemyNationId)) ?? { success: 0, failure: 0 };
     if (operation.outcome === "success") item.success += 1; else item.failure += 1;
     result.set(key(operation.nationId, operation.enemyNationId), item);
-  }
-  return result;
-}
-
-function indexOccupationSignatures(world: WorldState): Map<string, number> {
-  const result = new Map<string, number>();
-  const owners = getOwnerByMesoId(world);
-  for (const [regionId, occupierId] of world.occupation.mesoById) {
-    const ownerId = owners.get(regionId);
-    if (!ownerId || ownerId === occupierId) continue;
-    const pair = normalizedKey(ownerId, occupierId);
-    let hash = result.get(pair) ?? 0;
-    for (let index = 0; index < regionId.length; index += 1) hash = (hash * 31 + regionId.charCodeAt(index)) | 0;
-    for (let index = 0; index < occupierId.length; index += 1) hash = (hash * 31 + occupierId.charCodeAt(index)) | 0;
-    result.set(pair, hash);
   }
   return result;
 }

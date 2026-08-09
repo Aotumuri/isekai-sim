@@ -40,6 +40,7 @@ export function summarizeWorld(world: WorldState): WorldSummary {
   const gapRuns = coverage.filter((item) => item.maxGapLength > 0);
   const exploitation = world.offensiveOperations;
   const stalemate = world.stalematePressure;
+  const strategicProgress = world.strategicProgress;
   const majorOperations = [...world.offensiveOperations.operations, ...world.offensiveOperations.history]
     .filter((operation) => operation.isMajorOffensive);
   const exploitationOtherStops = Object.entries(exploitation.exploitationStopCounts)
@@ -92,6 +93,26 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     stalemateAveragePressure: stalemate.pressureSampleCount > 0
       ? stalemate.pressureSampleTotal / stalemate.pressureSampleCount : 0,
     stalemateMaximumPressure: stalemate.maxPressure,
+    strategicProgressEvents: strategicProgress.progressEventCount,
+    strategicProgressPressureResets: strategicProgress.pressureResetCount,
+    strategicProgressAverageScore: strategicProgress.scoreSampleCount > 0
+      ? strategicProgress.scoreSampleTotal / strategicProgress.scoreSampleCount : 0,
+    strategicProgressNetGainEvents:
+      strategicProgress.reasonCounts["net-territorial-gain"],
+    strategicProgressDisplacementEvents:
+      strategicProgress.reasonCounts["sustained-frontline-displacement"],
+    strategicProgressBreakthroughEvents:
+      strategicProgress.reasonCounts["persistent-breakthrough"],
+    strategicProgressCapitalApproachEvents:
+      strategicProgress.reasonCounts["capital-approach"],
+    strategicProgressFrontCollapseEvents:
+      strategicProgress.reasonCounts["operational-front-collapse"],
+    strategicProgressOperationEvents:
+      strategicProgress.reasonCounts["successful-operation"],
+    strategicProgressImportantCaptureEvents:
+      strategicProgress.reasonCounts["important-capture"],
+    strategicProgressExploitationEvents:
+      strategicProgress.reasonCounts["successful-exploitation"],
     schwerpunktSelections: stalemate.selections,
     schwerpunktChanges: stalemate.selectionChanges,
     activeSchwerpunkts: stalemate.assessments.filter((item) => item.schwerpunktSectorId).length,

@@ -77,6 +77,17 @@ export interface WorldSummary {
   stalemateMaximumDuration: number;
   stalemateAveragePressure: number;
   stalemateMaximumPressure: number;
+  strategicProgressEvents: number;
+  strategicProgressPressureResets: number;
+  strategicProgressAverageScore: number;
+  strategicProgressNetGainEvents: number;
+  strategicProgressDisplacementEvents: number;
+  strategicProgressBreakthroughEvents: number;
+  strategicProgressCapitalApproachEvents: number;
+  strategicProgressFrontCollapseEvents: number;
+  strategicProgressOperationEvents: number;
+  strategicProgressImportantCaptureEvents: number;
+  strategicProgressExploitationEvents: number;
   schwerpunktSelections: number;
   schwerpunktChanges: number;
   activeSchwerpunkts: number;

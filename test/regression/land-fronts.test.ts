@@ -73,6 +73,11 @@ import {
   updateStrategicReserves,
 } from "../../src/sim/strategic-reserves";
 import { createReorganizationState } from "../../src/sim/reorganization";
+import {
+  createStrategicProgressState,
+  getStrategicProgressAssessment,
+  updateStrategicProgress,
+} from "../../src/sim/strategic-progress";
 import { updateBattles } from "../../src/sim/battles";
 import {
   createFrontlineCoverageState,
@@ -141,45 +146,78 @@ test("a static balanced war accumulates pressure and selects one Schwerpunkt", (
   assert(assessment);
   assert(assessment.pressure >= WORLD_BALANCE.war.landFront.stalemate.selectionThreshold);
   assert(assessment.reasonFlags.includes("balanced-strength"));
-  assert(assessment.reasonFlags.includes("no-territory-progress"));
+  assert(assessment.reasonFlags.includes("no-strategic-progress"));
   assert(assessment.schwerpunktSectorId);
   assert.equal(getNationSchwerpunkt(world, NATION_A)?.schwerpunktSectorId, assessment.schwerpunktSectorId);
   assert.equal([...world.stalematePressure.schwerpunktByNationId.keys()].filter((id) => id === NATION_A).length, 1);
 });
 
-test("territory or breakthrough progress reduces stalemate pressure", () => {
+test("a single occupation change does not reset strategic pressure", () => {
   const world = createBalancedStalemateWorld();
+  updateStrategicProgress(world);
   for (let tick = 0; tick < 12; tick += 1) updateStalematePressure(world);
   const before = getStalemateAssessment(world, NATION_A, NATION_B)?.pressure ?? 0;
   world.occupation.mesoById.set(id("b-front"), NATION_A);
   world.occupation.version += 1;
+  updateStrategicProgress(world);
+  assert.equal(
+    getStrategicProgressAssessment(world, NATION_A, NATION_B)?.resetsPressure,
+    false,
+  );
   updateStalematePressure(world);
-  const afterTerritory = getStalemateAssessment(world, NATION_A, NATION_B)?.pressure ?? 0;
-  assert(afterTerritory < before);
-  for (let tick = 0; tick < 8; tick += 1) updateStalematePressure(world);
-  const beforeBreakthrough = getStalemateAssessment(world, NATION_A, NATION_B)?.pressure ?? 0;
-  const tracked = getStalemateAssessment(world, NATION_A, NATION_B);
-  assert(tracked);
-  tracked.lastOperationSuccessCount = -1;
-  updateStalematePressure(world);
-  assert((getStalemateAssessment(world, NATION_A, NATION_B)?.pressure ?? 0) < beforeBreakthrough);
+  assert((getStalemateAssessment(world, NATION_A, NATION_B)?.pressure ?? 0) > before);
 });
 
-test("Schwerpunkt survives a small occupation change and pressure dip", () => {
+test("frontline oscillation does not produce Strategic Progress", () => {
   const world = createBalancedStalemateWorld();
-  for (let tick = 0; tick < 20; tick += 1) {
-    world.time.fastTick += 10;
-    updateStalematePressure(world);
+  updateStrategicProgress(world);
+  for (let cycle = 0; cycle < 4; cycle += 1) {
+    world.occupation.mesoById.set(id("b-front"), NATION_A);
+    world.occupation.version += 1;
+    updateStrategicProgress(world);
+    world.occupation.mesoById.delete(id("b-front"));
+    world.occupation.version += 1;
+    updateStrategicProgress(world);
   }
-  const selected = getStalemateAssessment(world, NATION_A, NATION_B)?.schwerpunktSectorId;
-  assert(selected);
+  assert.equal(world.strategicProgress.progressEventCount, 0);
+  assert.equal(
+    getStrategicProgressAssessment(world, NATION_A, NATION_B)?.lastProgressTick,
+    null,
+  );
+});
+
+test("a sustained multi-region advance resets strategic pressure after accumulated evidence", () => {
+  const world = createBalancedStalemateWorld();
+  updateStrategicProgress(world);
+  for (let tick = 0; tick < 12; tick += 1) updateStalematePressure(world);
+  const before = getStalemateAssessment(world, NATION_A, NATION_B)?.pressure ?? 0;
+  world.occupation.mesoById.set(id("b-front"), NATION_A);
   world.occupation.mesoById.set(id("b-rear"), NATION_A);
   world.occupation.version += 1;
+  for (let evaluation = 0; evaluation < 3; evaluation += 1) {
+    world.time.fastTick += 10;
+    updateStrategicProgress(world);
+  }
+  const progress = getStrategicProgressAssessment(world, NATION_A, NATION_B);
+  assert(progress?.resetsPressure);
+  assert(progress.reasonFlags.includes("net-territorial-gain"));
   updateStalematePressure(world);
-  const after = getStalemateAssessment(world, NATION_A, NATION_B);
-  assert(after);
-  assert(after.pressure < WORLD_BALANCE.war.landFront.stalemate.selectionThreshold);
-  assert.equal(after.schwerpunktSectorId, selected);
+  assert((getStalemateAssessment(world, NATION_A, NATION_B)?.pressure ?? 0) < before);
+});
+
+test("capturing an important city is immediately meaningful Strategic Progress", () => {
+  const world = createBalancedStalemateWorld();
+  const city = world.mesoRegions.find((region) => region.id === id("b-front"));
+  assert(city);
+  city.building = "city";
+  world.buildingVersion += 1;
+  updateStrategicProgress(world);
+  world.occupation.mesoById.set(city.id, NATION_A);
+  world.occupation.version += 1;
+  updateStrategicProgress(world);
+  const progress = getStrategicProgressAssessment(world, NATION_A, NATION_B);
+  assert(progress?.resetsPressure);
+  assert(progress.reasonFlags.includes("important-capture"));
 });
 
 test("one nation may retain exactly one Schwerpunkt per enemy", () => {
@@ -2982,7 +3020,7 @@ function createCollapseAdvanceWorld(): WorldState {
   updateAllocationSystem(world);
   const sector = world.landFronts.operationalSectors[0];
   assert(sector);
-  world.stalematePressure.assessments = [{ nationId: NATION_A, enemyNationId: NATION_B, pressure: 0, staticTicks: 1, reasonFlags: ["artificial-inactivity"], artificialInactivity: true, artificialInactivityBlocker: "target-validity", collapseAdvanceCandidate: true, inactivityCategory: "artificial-inactivity", inactivityReason: "no-valid-target", nextEvaluationTick: world.time.fastTick + 1, targetValidityFailureReason: "no-valid-frontline-position", targetValidityOtherReason: null, schwerpunktSectorId: null, selectedAtTick: null, cooldownUntilTick: 0, lastOccupationVersion: 0, lastBreakthroughCount: 0, lastOperationSuccessCount: 0, lastOperationFailureCount: 0, releasedSecondaryStrength: 0 }];
+  world.stalematePressure.assessments = [{ nationId: NATION_A, enemyNationId: NATION_B, pressure: 0, staticTicks: 1, reasonFlags: ["artificial-inactivity"], artificialInactivity: true, artificialInactivityBlocker: "target-validity", collapseAdvanceCandidate: true, inactivityCategory: "artificial-inactivity", inactivityReason: "no-valid-target", nextEvaluationTick: world.time.fastTick + 1, targetValidityFailureReason: "no-valid-frontline-position", targetValidityOtherReason: null, schwerpunktSectorId: null, selectedAtTick: null, cooldownUntilTick: 0, lastOperationSuccessCount: 0, lastOperationFailureCount: 0, releasedSecondaryStrength: 0 }];
   return world;
 }
 
@@ -3390,6 +3428,7 @@ function createFrontWorld(
     capitalDefense: createCapitalDefenseState(),
     strategicReserves: createStrategicReserveState(),
     reorganization: createReorganizationState(),
+    strategicProgress: createStrategicProgressState(),
     stalematePressure: createStalematePressureState(),
     collapseAdvances: createCollapseAdvanceState(),
     mapVersion: 0,
