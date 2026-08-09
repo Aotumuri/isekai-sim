@@ -7,7 +7,10 @@ import type {
   SectorId,
 } from "../sim/land-fronts";
 import { getFrontPlan, getStrengthRatio } from "../sim/nation-front-plans";
-import { getOffensiveOperationForFront } from "../sim/offensive-operations";
+import {
+  getOffensiveOperationForFront,
+  getOperationCandidateForFront,
+} from "../sim/offensive-operations";
 import { getRetreatPlanForFront } from "../sim/retreat-plans";
 import type { UnitId } from "../sim/unit";
 import { getUnitCombatStrength } from "../sim/unit-strength";
@@ -398,6 +401,7 @@ function appendOperationalDetails(
 ): void {
   for (const nationId of [front.nationAId, front.nationBId]) {
     const operation = getOffensiveOperationForFront(world, front.id, nationId);
+    const candidate = getOperationCandidateForFront(world, front.id, nationId);
     if (selected) {
       const enemyId = nationId === front.nationAId ? front.nationBId : front.nationAId;
       const stalled = getStalemateAssessment(world, nationId, enemyId);
@@ -463,8 +467,10 @@ function appendOperationalDetails(
           `  local defense ${formatStrength(operation.targetLocalDefenderStrength)} | tactical ${operation.targetTacticalScore.toFixed(1)}`,
           `  APPROACHES ${operation.actualActiveApproachCount}/${operation.plannedApproachRegionIds.length} | readiness ${(operation.readinessCompletion * 100).toFixed(0)}% ${operation.synchronizationWaitTicks}t`,
           ...operation.approachGroups.map((group, index) =>
-            `    A${index + 1} ${group.regionId} assigned ${formatStrength(group.currentAssignedStrength)}/${formatStrength(group.requiredStrength)} ready ${formatStrength(group.readyStrength)} (${(group.completion * 100).toFixed(0)}%)`
+            `    A${index + 1} ${group.regionId} assigned ${formatStrength(group.currentAssignedStrength)}/${formatStrength(group.requiredStrength)} ready ${formatStrength(group.readyStrength)} (${(group.completion * 100).toFixed(0)}%) feasible ${formatStrength(group.feasibleStrength)} remaining ${formatStrength(group.remainingFeasibleStrength)} slack ${group.minimumArrivalSlack ?? "-"}t`
           ),
+          `  MANIFEST ${operation.committedManifest.length} | committed ${formatStrength(operation.assignedStrength)} | feasible ${operation.preparationFeasible ? "YES" : "NO"}`,
+          `  PREPARATION LEASE ${operation.preparationLeaseEndedAtTick === null ? "ACTIVE" : `ENDED @${operation.preparationLeaseEndedAtTick}`} | overrides ${operation.leaseOverrideReasons.join(", ") || "none"}`,
           `  reasons ${operation.reasonFlags.join(", ")}`,
         );
         const battle = world.battles.find((candidate) =>
@@ -494,6 +500,24 @@ function appendOperationalDetails(
           );
         }
       }
+    }
+    if (selected && candidate) {
+      const committedStrength = candidate.manifest.reduce(
+        (sum, assignment) => sum + assignment.strength,
+        0,
+      );
+      const minimumArrivalSlack = candidate.manifest.length > 0
+        ? Math.min(...candidate.manifest.map((assignment) => assignment.arrivalSlack))
+        : null;
+      lines.push(
+        `CANDIDATE ${nationId} ${candidate.feasible ? "FEASIBLE" : "REJECTED"}`,
+        `  target ${candidate.primaryTargetRegionId} | manifest ${candidate.manifest.length} | strength ${formatStrength(committedStrength)}`,
+        `  arrival slack min ${minimumArrivalSlack ?? "-"}t | evaluated @${candidate.evaluatedAtTick} (${candidate.evaluationCount}x)`,
+        `  reasons ${candidate.rejectionReasons.join(", ") || "none"}`,
+        ...candidate.plannedApproachRegionIds.map((regionId, index) =>
+          `    A${index + 1} ${regionId} on-time ${formatStrength(candidate.onTimeStrengthByApproach.get(regionId) ?? 0)} / required ${formatStrength(candidate.requiredStrengthByApproach.get(regionId) ?? 0)}`
+        ),
+      );
     }
     const collapse = world.collapseAdvances.advanceByNationId.get(nationId);
     if (collapse?.sourceSectorId === front.id) {

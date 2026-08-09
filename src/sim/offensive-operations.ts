@@ -24,6 +24,7 @@ import type { UnitId, UnitState } from "./unit";
 import { getUnitCombatStrength } from "./unit-strength";
 import { buildWarAdjacency, isAtWar } from "./war-state";
 import type { WorldState } from "./world-state";
+import { FAST_TICK_MS } from "./time";
 import { getMesoById, getNeighborsById, getOwnerByMesoId } from "./world-cache";
 import {
   getFrontlineCoverage,
@@ -94,10 +95,65 @@ export type OffensiveOperationEventType =
   | "exploitation-started"
   | "exploitation-stopped"
   | "front-remapped"
+  | "lease-override"
   | "success"
   | "failure"
   | "cancelled"
   | "recovery-complete";
+
+export type OperationCandidateRejectionReason =
+  | "insufficient-on-time-strength"
+  | "insufficient-units";
+
+export type PreparationLeaseOverrideReason =
+  | "front-invalid"
+  | "capital-emergency"
+  | "mandatory-retreat"
+  | "operation-cancelled";
+
+export interface OperationManifestAssignment {
+  unitId: UnitId;
+  approachRegionId: MesoRegionId;
+  controlledDistance: number;
+  estimatedTravelTicks: number;
+  estimatedArrivalTick: number;
+  arrivalSlack: number;
+  requiredContribution: number;
+  strength: number;
+  isReplacement: boolean;
+  arrivedAtTick: number | null;
+}
+
+export interface OperationCandidate {
+  key: string;
+  nationId: NationId;
+  enemyNationId: NationId;
+  frontId: FrontId;
+  isMajorOffensive: boolean;
+  isSchwerpunktOperation: boolean;
+  primaryTargetRegionId: MesoRegionId;
+  supportingTargetRegionIds: MesoRegionId[];
+  stagingRegionId: MesoRegionId;
+  plannedApproachRegionIds: MesoRegionId[];
+  requiredStrengthByApproach: Map<MesoRegionId, number>;
+  onTimeStrengthByApproach: Map<MesoRegionId, number>;
+  manifest: OperationManifestAssignment[];
+  requiredCompletion: number;
+  feasible: boolean;
+  rejectionReasons: OperationCandidateRejectionReason[];
+  createdAtTick: number;
+  evaluatedAtTick: number;
+  evaluationCount: number;
+  offensiveSurplusAvailable: number;
+  initialFriendlyStrength: number;
+  initialEnemyStrength: number;
+  initialStrengthRatio: number;
+  targetCoverageState: FrontlineCoverageLevel | null;
+  targetLocalDefenderStrength: number;
+  targetTacticalScore: number;
+  reasonFlags: OffensiveOperationReason[];
+  fellBackToSingleApproach: boolean;
+}
 
 export interface OffensiveOperation {
   id: OperationId;
@@ -122,6 +178,13 @@ export interface OffensiveOperation {
   approachRegionByUnitId: Map<UnitId, MesoRegionId>;
   plannedStrengthByApproach: Map<MesoRegionId, number>;
   approachGroups: OperationApproachGroup[];
+  committedManifest: OperationManifestAssignment[];
+  preparationFeasible: boolean;
+  infeasibleAtTick: number | null;
+  preparationLeaseStartedAtTick: number;
+  preparationLeaseEndedAtTick: number | null;
+  leaseOverrideReasons: PreparationLeaseOverrideReason[];
+  allocationReclaimedUnitIds: UnitId[];
   readinessCompletion: number;
   replacementRecruitCount: number;
   recruitmentDistanceTotal: number;
@@ -162,9 +225,13 @@ export interface OffensiveOperation {
 export interface OperationApproachGroup {
   regionId: MesoRegionId;
   requiredStrength: number;
+  committedStrengthTarget: number;
   assignedUnitIds: UnitId[];
   currentAssignedStrength: number;
   readyStrength: number;
+  feasibleStrength: number;
+  remainingFeasibleStrength: number;
+  minimumArrivalSlack: number | null;
   completion: number;
   replacementRecruitCount: number;
   recruitmentDistanceTotal: number;
@@ -188,6 +255,7 @@ export interface OffensiveOperationState {
   operationsByNationId: Map<NationId, OffensiveOperation[]>;
   operationsByFrontNation: Map<string, OffensiveOperation>;
   operationIdByUnitId: Map<UnitId, OperationId>;
+  candidatesByFrontNation: Map<string, OperationCandidate>;
   history: OffensiveOperation[];
   timeline: OffensiveOperationEvent[];
   version: number;
@@ -225,6 +293,24 @@ export interface OffensiveOperationState {
   recruitmentDistanceTotal: number;
   recruitmentCount: number;
   replacementRecruitCount: number;
+  candidatesCreatedCount: number;
+  candidatesAcceptedCount: number;
+  candidatesRejectedCount: number;
+  candidateRejectionCounts: Record<OperationCandidateRejectionReason, number>;
+  impossibleAtCreationCount: number;
+  impossibleDuringPreparationCount: number;
+  leaseOverrideCount: number;
+  leaseOverrideCounts: Record<PreparationLeaseOverrideReason, number>;
+  replacementArrivalCount: number;
+  replacementImpossibleCount: number;
+  arrivalSlackTotal: number;
+  arrivalSlackCount: number;
+  minimumArrivalSlack: number | null;
+  preparationLeaseLifetimeTotal: number;
+  preparationLeaseLifetimeCount: number;
+  preparationTimeoutMissingStrength: number;
+  preparationTimeoutTravellingStrength: number;
+  allocationReclaimCount: number;
   exploitationCandidateEvaluatedCounts: Record<FrontlineCoverageLevel, number>;
   exploitationSelectedCounts: Record<FrontlineCoverageLevel, number>;
   exploitationRejectionCounts: {
@@ -281,6 +367,7 @@ export function createOffensiveOperationState(): OffensiveOperationState {
     operationsByNationId: new Map(),
     operationsByFrontNation: new Map(),
     operationIdByUnitId: new Map(),
+    candidatesByFrontNation: new Map(),
     history: [],
     timeline: [],
     version: 0,
@@ -318,6 +405,32 @@ export function createOffensiveOperationState(): OffensiveOperationState {
     recruitmentDistanceTotal: 0,
     recruitmentCount: 0,
     replacementRecruitCount: 0,
+    candidatesCreatedCount: 0,
+    candidatesAcceptedCount: 0,
+    candidatesRejectedCount: 0,
+    candidateRejectionCounts: {
+      "insufficient-on-time-strength": 0,
+      "insufficient-units": 0,
+    },
+    impossibleAtCreationCount: 0,
+    impossibleDuringPreparationCount: 0,
+    leaseOverrideCount: 0,
+    leaseOverrideCounts: {
+      "front-invalid": 0,
+      "capital-emergency": 0,
+      "mandatory-retreat": 0,
+      "operation-cancelled": 0,
+    },
+    replacementArrivalCount: 0,
+    replacementImpossibleCount: 0,
+    arrivalSlackTotal: 0,
+    arrivalSlackCount: 0,
+    minimumArrivalSlack: null,
+    preparationLeaseLifetimeTotal: 0,
+    preparationLeaseLifetimeCount: 0,
+    preparationTimeoutMissingStrength: 0,
+    preparationTimeoutTravellingStrength: 0,
+    allocationReclaimCount: 0,
     exploitationCandidateEvaluatedCounts: { gap: 0, weak: 0, covered: 0 },
     exploitationSelectedCounts: { gap: 0, weak: 0, covered: 0 },
     exploitationRejectionCounts: {
@@ -351,6 +464,14 @@ export function updateOffensiveOperations(world: WorldState): void {
   const plansByNation = [...world.frontPlans.plansByNationId.entries()].sort(
     ([nationA], [nationB]) => compareIds(nationA, nationB),
   );
+  const eligibleCandidateKeys = new Set<string>();
+  for (const [nationId, plans] of plansByNation) {
+    for (const plan of plans) {
+      if (isOperationPlanEligible(world, nationId, plan)) {
+        eligibleCandidateKeys.add(createFrontNationKey(plan.frontId, nationId));
+      }
+    }
+  }
   for (const [nationId, plans] of plansByNation) {
     if (
       getCapitalDefenseAssessment(world, nationId)?.threatLevel === "critical"
@@ -362,12 +483,7 @@ export function updateOffensiveOperations(world: WorldState): void {
       continue;
     }
     const candidates = plans
-      .filter((plan) => plan.posture === "attack" || (
-        isSchwerpunktSector(world, nationId, plan.frontId) &&
-        (world.stalematePressure.assessments.find((assessment) =>
-          assessment.nationId === nationId && assessment.schwerpunktSectorId === plan.frontId
-        )?.pressure ?? 0) >= WORLD_BALANCE.war.landFront.stalemate.majorOffensiveThreshold
-      ))
+      .filter((plan) => isOperationPlanEligible(world, nationId, plan))
       .sort((a, b) =>
         Number(isSchwerpunktSector(world, nationId, b.frontId)) -
           Number(isSchwerpunktSector(world, nationId, a.frontId)) ||
@@ -390,10 +506,39 @@ export function updateOffensiveOperations(world: WorldState): void {
       ) {
         continue;
       }
-      const operation = createOperation(world, plan);
-      if (!operation) {
+      const candidateKey = createFrontNationKey(plan.frontId, nationId);
+      const previousCandidate = state.candidatesByFrontNation.get(candidateKey);
+      const candidate = buildOperationCandidate(world, plan, previousCandidate);
+      if (!candidate) {
+        state.candidatesByFrontNation.delete(candidateKey);
         continue;
       }
+      state.candidatesByFrontNation.set(candidateKey, candidate);
+      if (!previousCandidate) {
+        state.candidatesCreatedCount += 1;
+        world.instrumentation?.incrementCounter("offensiveOperation.candidatesCreated");
+      }
+      if (!candidate.feasible) {
+        if (!previousCandidate) {
+          state.candidatesRejectedCount += 1;
+          world.instrumentation?.incrementCounter("offensiveOperation.candidatesRejected");
+          for (const reason of candidate.rejectionReasons) {
+            state.candidateRejectionCounts[reason] += 1;
+            world.instrumentation?.incrementCounter(
+              `offensiveOperation.candidateRejected.${reason}`,
+            );
+          }
+          state.impossibleAtCreationCount += 1;
+          world.instrumentation?.incrementCounter(
+            "offensiveOperation.impossibleAtCreation",
+          );
+        }
+        continue;
+      }
+      const operation = createOperationFromCandidate(world, candidate);
+      state.candidatesByFrontNation.delete(candidateKey);
+      state.candidatesAcceptedCount += 1;
+      world.instrumentation?.incrementCounter("offensiveOperation.candidatesAccepted");
       state.operations.push(operation);
       state.createdCount += 1;
       if (operation.isMajorOffensive) {
@@ -408,6 +553,12 @@ export function updateOffensiveOperations(world: WorldState): void {
       recordEvent(world, operation, "created", "attack-front-selected");
       changed = true;
       rebuildOperationIndexes(state);
+    }
+  }
+
+  for (const key of [...state.candidatesByFrontNation.keys()]) {
+    if (!eligibleCandidateKeys.has(key)) {
+      state.candidatesByFrontNation.delete(key);
     }
   }
 
@@ -451,6 +602,16 @@ export function getOffensiveOperationForFront(
   );
 }
 
+export function getOperationCandidateForFront(
+  world: WorldState,
+  frontId: FrontId,
+  nationId: NationId,
+): OperationCandidate | undefined {
+  return world.offensiveOperations.candidatesByFrontNation.get(
+    createFrontNationKey(frontId, nationId),
+  );
+}
+
 export function getOffensiveOperationForUnit(
   world: WorldState,
   unitId: UnitId,
@@ -475,6 +636,9 @@ export function cancelOffensiveOperationForRetreat(
     return false;
   }
   const previousMembership = state.operationIdByUnitId;
+  if (operation.phase === "preparing") {
+    recordPreparationLeaseOverride(world, operation, "mandatory-retreat");
+  }
   if (operation.phase === "exploiting") {
     stopExploitation(world, operation, "retreat-started");
   } else {
@@ -501,6 +665,9 @@ export function cancelOffensiveOperationsForCapitalEmergency(
         "critical",
   );
   for (const operation of operations) {
+    if (operation.phase === "preparing") {
+      recordPreparationLeaseOverride(world, operation, "capital-emergency");
+    }
     if (operation.phase === "exploiting") {
       stopExploitation(world, operation, "capital-emergency");
     } else {
@@ -533,8 +700,11 @@ export function formatOffensiveOperationSummary(world: WorldState): string {
       `  approaches: ${operation.actualActiveApproachCount}/${operation.plannedApproachRegionIds.length} ${operation.plannedApproachRegionIds.join(", ")}`,
       `  readiness: ${(operation.readinessCompletion * 100).toFixed(1)}% (${operation.synchronizationWaitTicks} ticks)`,
       ...operation.approachGroups.map((group, index) =>
-        `    A${index + 1}: assigned ${group.currentAssignedStrength.toFixed(1)} / required ${group.requiredStrength.toFixed(1)}, ready ${group.readyStrength.toFixed(1)}, completion ${(group.completion * 100).toFixed(1)}%`
+        `    A${index + 1}: assigned ${group.currentAssignedStrength.toFixed(1)} / required ${group.requiredStrength.toFixed(1)}, ready ${group.readyStrength.toFixed(1)}, feasible ${group.feasibleStrength.toFixed(1)}, remaining ${group.remainingFeasibleStrength.toFixed(1)}, slack ${group.minimumArrivalSlack ?? "-"}, completion ${(group.completion * 100).toFixed(1)}%`
       ),
+      `  manifest: ${operation.committedManifest.length}`,
+      `  preparation lease: ${operation.preparationLeaseEndedAtTick === null ? "active" : `ended@${operation.preparationLeaseEndedAtTick}`}`,
+      `  lease overrides: ${operation.leaseOverrideReasons.join(", ") || "none"}`,
       `  units: ${operation.assignedUnitIds.length}`,
       `  strength: ${operation.assignedStrength.toFixed(1)}`,
       `  target coverage: ${operation.targetCoverageState ?? "none"}`,
@@ -682,6 +852,21 @@ function advanceOperation(
     : pruneExploitationForce(world, operation);
 
   if (operation.phase === "preparing") {
+    if (!operation.preparationFeasible) {
+      if (operation.infeasibleAtTick === null) {
+        operation.infeasibleAtTick = now;
+        world.offensiveOperations.impossibleDuringPreparationCount += 1;
+        world.offensiveOperations.replacementImpossibleCount += 1;
+        world.instrumentation?.incrementCounter(
+          "offensiveOperation.impossibleDuringPreparation",
+        );
+        world.instrumentation?.incrementCounter(
+          "offensiveOperation.replacementImpossible",
+        );
+      }
+      finishOperation(world, operation, "failure", "strength-collapsed");
+      return { keep: true, changed: true };
+    }
     const preparationTicks = now - operation.phaseStartedAtTick;
     const approachReadiness = getApproachReadiness(world, operation);
     operationChanged = operationChanged ||
@@ -712,6 +897,7 @@ function advanceOperation(
     }
     if (preparationTicks >= settings.preparationTimeoutTicks) {
       world.offensiveOperations.preparationTimeoutCount += 1;
+      recordPreparationTimeout(world, operation);
       finishOperation(world, operation, "failure", "strength-collapsed");
       return { keep: true, changed: true };
     }
@@ -789,10 +975,11 @@ function findContinuationFront(
     })[0];
 }
 
-function createOperation(
+function buildOperationCandidate(
   world: WorldState,
   plan: NationFrontPlan,
-): OffensiveOperation | null {
+  previous: OperationCandidate | undefined,
+): OperationCandidate | null {
   const settings = WORLD_BALANCE.war.landFront.offensiveOperation;
   const isSchwerpunktOperation = isSchwerpunktSector(world, plan.nationId, plan.frontId);
   const focusPressure = world.stalematePressure.assessments.find((assessment) =>
@@ -825,7 +1012,8 @@ function createOperation(
   );
   const surplusUnits = allocationUnits.filter((unit) =>
     !defensiveIds.has(unit.id) &&
-    !world.collapseAdvances.advanceNationByUnitId.has(unit.id)
+    !world.collapseAdvances.advanceNationByUnitId.has(unit.id) &&
+    !world.offensiveOperations.operationIdByUnitId.has(unit.id)
   );
   if (allocationUnits.length < settings.minimumFrontUnits || surplusUnits.length < 2) {
     return null;
@@ -847,47 +1035,174 @@ function createOperation(
     requiredOperationStrength,
   );
   const initialStrengthRatio = getStrengthRatio(friendly.strength, enemy.strength);
-  const operation: OffensiveOperation = {
-    id: createOperationId(world.offensiveOperations.nextOperationNumber),
+  const requiredCompletion = isMajorOffensive
+    ? WORLD_BALANCE.war.landFront.stalemate.majorStagedFraction
+    : settings.stagedFraction;
+  const deadlineTick = world.time.fastTick + settings.preparationTimeoutTicks;
+  const deployedReserve = world.strategicReserves.reservesByNationId.get(plan.nationId);
+  const reserveUnits = deployedReserve?.deployment?.targetFrontId === front.id &&
+    deployedReserve.deployment.status !== "returning"
+    ? deployedReserve.deployment.unitIds
+      .map((unitId) => unitById.get(unitId))
+      .filter(isOperationalLandUnit)
+      .filter((unit) =>
+        !world.retreatPlans.retreatIdByUnitId.has(unit.id) &&
+        !world.reorganization.planIdByUnitId.has(unit.id) &&
+        !world.offensiveOperations.operationIdByUnitId.has(unit.id)
+      )
+    : [];
+  const preflightUnits = [...new Map(
+    [...surplusUnits, ...reserveUnits].map((unit) => [unit.id, unit]),
+  ).values()];
+  const manifestResult = buildPreflightManifest(
+    world,
+    plan.nationId,
+    front.id,
+    approachPlan.regionIds,
+    approachPlan.strengthByRegion,
+    preflightUnits,
+    requiredCompletion,
+    deadlineTick,
+    new Set(),
+    false,
+  );
+  const rejectionReasons: OperationCandidateRejectionReason[] = [];
+  if (manifestResult.manifest.length < 2) {
+    rejectionReasons.push("insufficient-units");
+  }
+  if (!manifestResult.feasible) {
+    rejectionReasons.push("insufficient-on-time-strength");
+  }
+  const createdAtTick = previous?.createdAtTick ?? world.time.fastTick;
+  return {
+    key: createFrontNationKey(front.id, plan.nationId),
     nationId: plan.nationId,
     enemyNationId: enemy.nationId,
     frontId: front.id,
-    phase: "preparing",
     isMajorOffensive,
     isSchwerpunktOperation,
-    offensiveSurplusAvailable: sumUnitStrength(surplusUnits),
-    localStrengthRatioAtAttack: 0,
     primaryTargetRegionId: targets.primaryTargetRegionId,
-    supportingTargetRegionIds: targets.supportingTargetRegionIds,
+    supportingTargetRegionIds: [...targets.supportingTargetRegionIds],
     stagingRegionId: targets.stagingRegionId,
-    assignedUnitIds: [],
-    assignedStrength: 0,
-    initialAssignedUnitIds: [],
-    initialAssignedUnitCount: 0,
-    initialAssignedStrength: 0,
+    plannedApproachRegionIds: [...approachPlan.regionIds],
+    requiredStrengthByApproach: new Map(approachPlan.strengthByRegion),
+    onTimeStrengthByApproach: manifestResult.onTimeStrengthByApproach,
+    manifest: manifestResult.manifest,
+    requiredCompletion,
+    feasible: rejectionReasons.length === 0,
+    rejectionReasons,
+    createdAtTick,
+    evaluatedAtTick: world.time.fastTick,
+    evaluationCount: (previous?.evaluationCount ?? 0) + 1,
+    offensiveSurplusAvailable: sumUnitStrength(surplusUnits),
+    initialFriendlyStrength: finiteNumber(friendly.strength),
+    initialEnemyStrength: finiteNumber(enemy.strength),
+    initialStrengthRatio,
+    targetCoverageState: targets.targetCoverageState,
+    targetLocalDefenderStrength: targets.targetLocalDefenderStrength,
+    targetTacticalScore: targets.tacticalScore,
+    reasonFlags: collectOperationReasons(
+      world,
+      plan,
+      front,
+      targets,
+      initialStrengthRatio,
+    ),
+    fellBackToSingleApproach: approachPlan.fellBackToSingle,
+  };
+}
+
+function createOperationFromCandidate(
+  world: WorldState,
+  candidate: OperationCandidate,
+): OffensiveOperation {
+  const settings = WORLD_BALANCE.war.landFront.offensiveOperation;
+  for (const assignment of candidate.manifest) {
+    if (isStrategicReserveUnit(world, assignment.unitId)) {
+      releaseStrategicReserveUnit(world, assignment.unitId);
+    }
+  }
+  const assignedUnitIds = candidate.manifest
+    .map((assignment) => assignment.unitId)
+    .sort(compareIds);
+  const assignedStrength = candidate.manifest.reduce(
+    (sum, assignment) => sum + assignment.strength,
+    0,
+  );
+  const approachRegionByUnitId = new Map(
+    candidate.manifest.map((assignment) => [
+      assignment.unitId,
+      assignment.approachRegionId,
+    ]),
+  );
+  const operation: OffensiveOperation = {
+    id: createOperationId(world.offensiveOperations.nextOperationNumber),
+    nationId: candidate.nationId,
+    enemyNationId: candidate.enemyNationId,
+    frontId: candidate.frontId,
+    phase: "preparing",
+    isMajorOffensive: candidate.isMajorOffensive,
+    isSchwerpunktOperation: candidate.isSchwerpunktOperation,
+    offensiveSurplusAvailable: candidate.offensiveSurplusAvailable,
+    localStrengthRatioAtAttack: 0,
+    primaryTargetRegionId: candidate.primaryTargetRegionId,
+    supportingTargetRegionIds: [...candidate.supportingTargetRegionIds],
+    stagingRegionId: candidate.stagingRegionId,
+    assignedUnitIds,
+    assignedStrength,
+    initialAssignedUnitIds: [...assignedUnitIds],
+    initialAssignedUnitCount: assignedUnitIds.length,
+    initialAssignedStrength: assignedStrength,
     unitTargetRegionIds: new Map(),
-    plannedApproachRegionIds: approachPlan.regionIds,
-    approachRegionByUnitId: approachPlan.regionByUnitId,
-    plannedStrengthByApproach: approachPlan.strengthByRegion,
-    approachGroups: approachPlan.regionIds.map((regionId) => ({
+    plannedApproachRegionIds: [...candidate.plannedApproachRegionIds],
+    approachRegionByUnitId,
+    plannedStrengthByApproach: new Map(candidate.requiredStrengthByApproach),
+    approachGroups: candidate.plannedApproachRegionIds.map((regionId) => ({
       regionId,
-      requiredStrength: approachPlan.strengthByRegion.get(regionId) ?? 0,
-      assignedUnitIds: [],
-      currentAssignedStrength: 0,
+      requiredStrength: candidate.requiredStrengthByApproach.get(regionId) ?? 0,
+      assignedUnitIds: candidate.manifest
+        .filter((assignment) => assignment.approachRegionId === regionId)
+        .map((assignment) => assignment.unitId)
+        .sort(compareIds),
+      currentAssignedStrength:
+        candidate.onTimeStrengthByApproach.get(regionId) ?? 0,
+      committedStrengthTarget:
+        candidate.onTimeStrengthByApproach.get(regionId) ?? 0,
       readyStrength: 0,
+      feasibleStrength: candidate.onTimeStrengthByApproach.get(regionId) ?? 0,
+      remainingFeasibleStrength: candidate.onTimeStrengthByApproach.get(regionId) ?? 0,
+      minimumArrivalSlack: minimumSlack(
+        candidate.manifest.filter(
+          (assignment) => assignment.approachRegionId === regionId,
+        ),
+      ),
       completion: 0,
       replacementRecruitCount: 0,
-      recruitmentDistanceTotal: 0,
-      recruitmentCount: 0,
+      recruitmentDistanceTotal: candidate.manifest
+        .filter((assignment) => assignment.approachRegionId === regionId)
+        .reduce((sum, assignment) => sum + assignment.controlledDistance, 0),
+      recruitmentCount: candidate.manifest.filter(
+        (assignment) => assignment.approachRegionId === regionId,
+      ).length,
     })),
+    committedManifest: candidate.manifest.map((assignment) => ({ ...assignment })),
+    preparationFeasible: true,
+    infeasibleAtTick: null,
+    preparationLeaseStartedAtTick: world.time.fastTick,
+    preparationLeaseEndedAtTick: null,
+    leaseOverrideReasons: [],
+    allocationReclaimedUnitIds: [],
     readinessCompletion: 0,
     replacementRecruitCount: 0,
-    recruitmentDistanceTotal: 0,
-    recruitmentCount: 0,
+    recruitmentDistanceTotal: candidate.manifest.reduce(
+      (sum, assignment) => sum + assignment.controlledDistance,
+      0,
+    ),
+    recruitmentCount: candidate.manifest.length,
     actualActiveApproachCount: 0,
     synchronizationReady: false,
     synchronizationWaitTicks: 0,
-    fellBackToSingleApproach: approachPlan.fellBackToSingle,
+    fellBackToSingleApproach: candidate.fellBackToSingleApproach,
     startedAtTick: world.time.fastTick,
     phaseStartedAtTick: world.time.fastTick,
     minimumCommitUntilTick:
@@ -896,12 +1211,12 @@ function createOperation(
       world.time.fastTick +
       settings.preparationTimeoutTicks +
       settings.attackTimeoutTicks,
-    initialFriendlyStrength: finiteNumber(friendly.strength),
-    initialEnemyStrength: finiteNumber(enemy.strength),
-    initialStrengthRatio,
-    targetCoverageState: targets.targetCoverageState,
-    targetLocalDefenderStrength: targets.targetLocalDefenderStrength,
-    targetTacticalScore: targets.tacticalScore,
+    initialFriendlyStrength: candidate.initialFriendlyStrength,
+    initialEnemyStrength: candidate.initialEnemyStrength,
+    initialStrengthRatio: candidate.initialStrengthRatio,
+    targetCoverageState: candidate.targetCoverageState,
+    targetLocalDefenderStrength: candidate.targetLocalDefenderStrength,
+    targetTacticalScore: candidate.targetTacticalScore,
     attackSuccessReason: null,
     exploitationTargetRegionId: null,
     exploitationTargetCoverageState: null,
@@ -915,34 +1230,26 @@ function createOperation(
     exploitationFrontVersion: world.landFronts.version,
     exploitationStopReason: null,
     capturedRegionIds: [],
-    reasonFlags: collectOperationReasons(
-      world,
-      plan,
-      front,
-      targets,
-      initialStrengthRatio,
-    ),
+    reasonFlags: [...candidate.reasonFlags],
     outcome: null,
     completionReason: null,
     completedAtTick: null,
   };
-  recruitApproachGroups(world, operation, allocation, new Set());
-  if (operation.assignedUnitIds.length < 2) {
-    return null;
-  }
-  operation.initialAssignedUnitIds = [...operation.assignedUnitIds];
-  operation.initialAssignedUnitCount = operation.assignedUnitIds.length;
-  operation.initialAssignedStrength = operation.assignedStrength;
   world.offensiveOperations.nextOperationNumber += 1;
-  world.offensiveOperations.plannedApproachCountTotal += approachPlan.regionIds.length;
+  world.offensiveOperations.plannedApproachCountTotal += candidate.plannedApproachRegionIds.length;
+  world.offensiveOperations.recruitmentDistanceTotal += operation.recruitmentDistanceTotal;
+  world.offensiveOperations.recruitmentCount += operation.recruitmentCount;
+  for (const assignment of candidate.manifest) {
+    recordArrivalSlack(world, assignment.arrivalSlack);
+  }
   world.instrumentation?.incrementCounter(
     "offensiveOperation.plannedApproaches",
-    approachPlan.regionIds.length,
+    candidate.plannedApproachRegionIds.length,
   );
-  if (approachPlan.regionIds.length >= 2) {
+  if (candidate.plannedApproachRegionIds.length >= 2) {
     world.offensiveOperations.coordinatedCreatedCount += 1;
     world.instrumentation?.incrementCounter("offensiveOperation.coordinatedCreated");
-  } else if (approachPlan.fellBackToSingle) {
+  } else if (candidate.fellBackToSingleApproach) {
     world.offensiveOperations.singleApproachFallbackCount += 1;
     world.instrumentation?.incrementCounter("offensiveOperation.singleApproachFallbacks");
   }
@@ -1238,6 +1545,151 @@ function scoreOperationUnit(
   return distance + (1 - clamp(unit.org, 0, 1)) * 80 - Math.log1p(finiteUnitStrength(unit)) * 4;
 }
 
+interface ManifestBuildResult {
+  manifest: OperationManifestAssignment[];
+  onTimeStrengthByApproach: Map<MesoRegionId, number>;
+  feasible: boolean;
+}
+
+function buildPreflightManifest(
+  world: WorldState,
+  nationId: NationId,
+  _frontId: FrontId,
+  approachRegionIds: readonly MesoRegionId[],
+  requiredStrengthByApproach: ReadonlyMap<MesoRegionId, number>,
+  availableUnits: readonly UnitState[],
+  requiredCompletion: number,
+  deadlineTick: number,
+  existingOperationUnitIds: ReadonlySet<UnitId>,
+  isReplacement: boolean,
+): ManifestBuildResult {
+  const distanceByApproach = new Map(
+    approachRegionIds.map((regionId) => [
+      regionId,
+      getControlledDistanceField(world, nationId, [regionId]).distanceByRegionId,
+    ]),
+  );
+  const candidatesById = new Map(
+    availableUnits
+      .filter(isOperationalLandUnit)
+      .map((unit) => [unit.id, unit]),
+  );
+  const claimed = new Set<UnitId>();
+  const manifest: OperationManifestAssignment[] = [];
+  const onTimeStrengthByApproach = new Map(
+    approachRegionIds.map((regionId) => [regionId, 0]),
+  );
+
+  while (true) {
+    const group = [...approachRegionIds]
+      .filter((regionId) => {
+        const required = requiredStrengthByApproach.get(regionId) ?? 0;
+        return (onTimeStrengthByApproach.get(regionId) ?? 0) < required;
+      })
+      .sort((a, b) => {
+        const requiredA = requiredStrengthByApproach.get(a) ?? 0;
+        const requiredB = requiredStrengthByApproach.get(b) ?? 0;
+        const completionA = requiredA > 0
+          ? (onTimeStrengthByApproach.get(a) ?? 0) / requiredA
+          : 1;
+        const completionB = requiredB > 0
+          ? (onTimeStrengthByApproach.get(b) ?? 0) / requiredB
+          : 1;
+        return completionA - completionB || compareIds(a, b);
+      })[0];
+    if (!group) break;
+    const distanceField = distanceByApproach.get(group);
+    if (!distanceField) break;
+    const choice = [...candidatesById.values()]
+      .filter((unit) => !claimed.has(unit.id))
+      .map((unit) => ({
+        unit,
+        assignment: estimateManifestAssignment(
+          world,
+          unit,
+          group,
+          distanceField.get(unit.regionId),
+          deadlineTick,
+          Math.max(
+            0,
+            (requiredStrengthByApproach.get(group) ?? 0) -
+              (onTimeStrengthByApproach.get(group) ?? 0),
+          ),
+          existingOperationUnitIds.has(unit.id),
+          isReplacement,
+        ),
+      }))
+      .filter((item): item is typeof item & { assignment: OperationManifestAssignment } =>
+        !!item.assignment && item.assignment.arrivalSlack >= 0
+      )
+      .sort((a, b) =>
+        a.assignment.controlledDistance - b.assignment.controlledDistance ||
+        Number(b.unit.moveTargetId === group || b.unit.moveToId === group) -
+          Number(a.unit.moveTargetId === group || a.unit.moveToId === group) ||
+        Number(existingOperationUnitIds.has(b.unit.id)) -
+          Number(existingOperationUnitIds.has(a.unit.id)) ||
+        compareIds(a.unit.id, b.unit.id)
+      )[0]?.assignment;
+    if (!choice) break;
+    manifest.push(choice);
+    claimed.add(choice.unitId);
+    onTimeStrengthByApproach.set(
+      group,
+      (onTimeStrengthByApproach.get(group) ?? 0) + choice.strength,
+    );
+  }
+
+  manifest.sort((a, b) =>
+    compareIds(a.approachRegionId, b.approachRegionId) ||
+    compareIds(a.unitId, b.unitId)
+  );
+  const feasible = approachRegionIds.every((regionId) =>
+    (onTimeStrengthByApproach.get(regionId) ?? 0) >=
+      (requiredStrengthByApproach.get(regionId) ?? 0) * requiredCompletion
+  );
+  return { manifest, onTimeStrengthByApproach, feasible };
+}
+
+function estimateManifestAssignment(
+  world: WorldState,
+  unit: UnitState,
+  approachRegionId: MesoRegionId,
+  controlledDistance: number | undefined,
+  deadlineTick: number,
+  requiredContribution: number,
+  _existingOperationMember: boolean,
+  isReplacement: boolean,
+): OperationManifestAssignment | null {
+  if (controlledDistance === undefined) return null;
+  const stagingRadius = WORLD_BALANCE.war.landFront.offensiveOperation.stagingRadius;
+  const requiredEdges = Math.max(0, controlledDistance - stagingRadius);
+  const movingTowardApproach =
+    unit.moveTargetId === approachRegionId || unit.moveToId === approachRegionId;
+  const moveTicksPerRegion = Math.max(1, Math.round(unit.moveTicksPerRegion));
+  const creditedProgressTicks = movingTowardApproach
+    ? Math.min(moveTicksPerRegion, unit.moveProgressMs / FAST_TICK_MS)
+    : 0;
+  const dispatchLatency = requiredEdges > 0 && !movingTowardApproach ? 1 : 0;
+  const estimatedTravelTicks = Math.ceil(Math.max(
+    0,
+    dispatchLatency + requiredEdges * moveTicksPerRegion - creditedProgressTicks,
+  ));
+  const estimatedArrivalTick = world.time.fastTick + estimatedTravelTicks;
+  const strength = finiteUnitStrength(unit);
+  return {
+    unitId: unit.id,
+    approachRegionId,
+    controlledDistance,
+    estimatedTravelTicks,
+    estimatedArrivalTick,
+    arrivalSlack: deadlineTick - estimatedArrivalTick,
+    requiredContribution: Math.min(strength, requiredContribution),
+    strength,
+    isReplacement,
+    arrivedAtTick: null,
+  };
+}
+
 function recruitApproachGroups(
   world: WorldState,
   operation: OffensiveOperation,
@@ -1280,19 +1732,55 @@ function recruitApproachGroups(
     candidatesById.set(unit.id, unit);
   }
 
+  const deadlineTick = operation.phaseStartedAtTick +
+    WORLD_BALANCE.war.landFront.offensiveOperation.preparationTimeoutTicks;
   const claimed = new Set<UnitId>();
+  const assignmentByUnitId = new Map(
+    operation.committedManifest.map((assignment) => [assignment.unitId, assignment]),
+  );
   for (const group of operation.approachGroups) {
     group.assignedUnitIds = group.assignedUnitIds.filter((unitId) => {
       const unit = unitById.get(unitId);
       if (!unit || isUnavailable(unit)) return false;
       const allocatedFront = world.frontAllocations.frontIdByUnitId.get(unitId);
-      if (allocatedFront !== undefined && allocatedFront !== operation.frontId) return false;
+      if (
+        allocatedFront !== undefined &&
+        allocatedFront !== operation.frontId &&
+        !operation.allocationReclaimedUnitIds.includes(unitId)
+      ) {
+        operation.allocationReclaimedUnitIds.push(unitId);
+        operation.allocationReclaimedUnitIds.sort(compareIds);
+        world.offensiveOperations.allocationReclaimCount += 1;
+      }
+      const distance = getControlledDistanceField(
+        world,
+        operation.nationId,
+        [group.regionId],
+      ).distanceByRegionId.get(unit.regionId);
+      const estimate = estimateManifestAssignment(
+        world,
+        unit,
+        group.regionId,
+        distance,
+        deadlineTick,
+        group.requiredStrength,
+        true,
+        assignmentByUnitId.get(unitId)?.isReplacement ?? false,
+      );
+      if (!estimate || estimate.arrivalSlack < 0) return false;
+      const previous = assignmentByUnitId.get(unitId);
+      assignmentByUnitId.set(unitId, {
+        ...estimate,
+        isReplacement: previous?.isReplacement ?? false,
+        arrivedAtTick: previous?.arrivedAtTick ?? null,
+      });
       claimed.add(unitId);
       return true;
     });
     group.currentAssignedStrength = sumUnitStrength(
       group.assignedUnitIds.map((unitId) => unitById.get(unitId)).filter(isOperationalLandUnit),
     );
+    group.feasibleStrength = group.currentAssignedStrength;
   }
 
   const distanceByApproach = new Map(operation.approachGroups.map((group) => [
@@ -1302,12 +1790,12 @@ function recruitApproachGroups(
   while (true) {
     const group = [...operation.approachGroups]
       .filter((item) =>
-        item.currentAssignedStrength < item.requiredStrength ||
+        item.feasibleStrength < item.committedStrengthTarget ||
         (operation.approachGroups.length === 1 && claimed.size < 2)
       )
       .sort((a, b) =>
-        (a.requiredStrength > 0 ? a.currentAssignedStrength / a.requiredStrength : 1) -
-          (b.requiredStrength > 0 ? b.currentAssignedStrength / b.requiredStrength : 1) ||
+        (a.requiredStrength > 0 ? a.feasibleStrength / a.requiredStrength : 1) -
+          (b.requiredStrength > 0 ? b.feasibleStrength / b.requiredStrength : 1) ||
         compareIds(a.regionId, b.regionId)
       )[0];
     if (!group) break;
@@ -1316,35 +1804,48 @@ function recruitApproachGroups(
       .filter((unit) => !claimed.has(unit.id))
       .map((unit) => ({
         unit,
-        distance: distanceField.get(unit.regionId),
+        assignment: estimateManifestAssignment(
+          world,
+          unit,
+          group.regionId,
+          distanceField.get(unit.regionId),
+          deadlineTick,
+          Math.max(0, group.committedStrengthTarget - group.feasibleStrength),
+          existingIds.has(unit.id),
+          true,
+        ),
         movingToAxis: unit.moveTargetId === group.regionId || unit.moveToId === group.regionId,
         alreadyOperation: existingIds.has(unit.id),
         reserve: isStrategicReserveUnit(world, unit.id),
       }))
-      .filter((candidate): candidate is typeof candidate & { distance: number } => candidate.distance !== undefined)
+      .filter((candidate): candidate is typeof candidate & { assignment: OperationManifestAssignment } =>
+        !!candidate.assignment && candidate.assignment.arrivalSlack >= 0
+      )
       .sort((a, b) =>
-        a.distance - b.distance ||
+        a.assignment.controlledDistance - b.assignment.controlledDistance ||
         Number(b.movingToAxis) - Number(a.movingToAxis) ||
         Number(b.alreadyOperation) - Number(a.alreadyOperation) ||
-        Number(b.reserve) - Number(a.reserve) ||
         compareIds(a.unit.id, b.unit.id)
       )[0];
     if (!item) break;
     if (item.reserve) releaseStrategicReserveUnit(world, item.unit.id);
     group.assignedUnitIds.push(item.unit.id);
     group.assignedUnitIds.sort(compareIds);
-    group.currentAssignedStrength += finiteUnitStrength(item.unit);
-    group.recruitmentDistanceTotal += item.distance;
+    group.currentAssignedStrength += item.assignment.strength;
+    group.feasibleStrength += item.assignment.strength;
+    group.recruitmentDistanceTotal += item.assignment.controlledDistance;
     group.recruitmentCount += 1;
-    operation.recruitmentDistanceTotal += item.distance;
+    operation.recruitmentDistanceTotal += item.assignment.controlledDistance;
     operation.recruitmentCount += 1;
-    world.offensiveOperations.recruitmentDistanceTotal += item.distance;
+    world.offensiveOperations.recruitmentDistanceTotal += item.assignment.controlledDistance;
     world.offensiveOperations.recruitmentCount += 1;
     if (operation.initialAssignedUnitCount > 0 && !previouslyAssignedIds.has(item.unit.id)) {
       group.replacementRecruitCount += 1;
       operation.replacementRecruitCount += 1;
       world.offensiveOperations.replacementRecruitCount += 1;
+      recordArrivalSlack(world, item.assignment.arrivalSlack);
     }
+    assignmentByUnitId.set(item.unit.id, item.assignment);
     claimed.add(item.unit.id);
   }
 
@@ -1364,6 +1865,41 @@ function recruitApproachGroups(
   for (const group of operation.approachGroups) {
     for (const unitId of group.assignedUnitIds) operation.approachRegionByUnitId.set(unitId, group.regionId);
   }
+  operation.committedManifest = nextIds
+    .map((unitId) => assignmentByUnitId.get(unitId))
+    .filter((assignment): assignment is OperationManifestAssignment => !!assignment)
+    .sort((a, b) =>
+      compareIds(a.approachRegionId, b.approachRegionId) ||
+      compareIds(a.unitId, b.unitId)
+    );
+  const requiredCompletion = operation.isMajorOffensive
+    ? WORLD_BALANCE.war.landFront.stalemate.majorStagedFraction
+    : WORLD_BALANCE.war.landFront.offensiveOperation.stagedFraction;
+  operation.preparationFeasible = operation.approachGroups.every((group) => {
+    const distanceField = distanceByApproach.get(group.regionId)!;
+    let remaining = group.feasibleStrength;
+    for (const unit of candidatesById.values()) {
+      if (claimed.has(unit.id)) continue;
+      const estimate = estimateManifestAssignment(
+        world,
+        unit,
+        group.regionId,
+        distanceField.get(unit.regionId),
+        deadlineTick,
+        group.requiredStrength,
+        false,
+        true,
+      );
+      if (estimate && estimate.arrivalSlack >= 0) remaining += estimate.strength;
+    }
+    group.remainingFeasibleStrength = remaining;
+    group.minimumArrivalSlack = minimumSlack(
+      operation.committedManifest.filter(
+        (assignment) => assignment.approachRegionId === group.regionId,
+      ),
+    );
+    return group.feasibleStrength >= group.requiredStrength * requiredCompletion;
+  });
   for (const unitId of [...operation.unitTargetRegionIds.keys()]) {
     if (!nextIds.includes(unitId)) {
       operation.unitTargetRegionIds.delete(unitId);
@@ -1387,6 +1923,7 @@ function transitionToAttacking(
   operation: OffensiveOperation,
 ): void {
   const now = world.time.fastTick;
+  endPreparationLease(world, operation);
   const preparingTicks = Math.max(0, now - operation.phaseStartedAtTick);
   world.offensiveOperations.preparingDurationTicks += preparingTicks;
   world.offensiveOperations.preparationSucceededCount += 1;
@@ -1974,6 +2511,13 @@ function finishOperation(
   completionReason: OffensiveOperationCompletionReason,
 ): void {
   const now = world.time.fastTick;
+  if (operation.phase === "preparing") {
+    const automaticOverride = preparationLeaseOverrideForCompletion(completionReason);
+    if (automaticOverride) {
+      recordPreparationLeaseOverride(world, operation, automaticOverride);
+    }
+    endPreparationLease(world, operation);
+  }
   const duration = Math.max(0, now - operation.phaseStartedAtTick);
   if (operation.phase === "preparing") {
     world.offensiveOperations.preparingDurationTicks += duration;
@@ -2021,6 +2565,54 @@ function finishOperation(
     world.instrumentation?.incrementCounter("offensiveOperation.cancelled");
     recordEvent(world, operation, "cancelled", completionReason);
   }
+}
+
+function preparationLeaseOverrideForCompletion(
+  reason: OffensiveOperationCompletionReason,
+): PreparationLeaseOverrideReason | null {
+  if (reason === "capital-emergency") return "capital-emergency";
+  if (
+    reason === "front-disappeared" ||
+    reason === "target-invalid" ||
+    reason === "target-unreachable" ||
+    reason === "allocation-lost" ||
+    reason === "war-ended"
+  ) return "front-invalid";
+  if (reason === "posture-changed") return "operation-cancelled";
+  return null;
+}
+
+function recordPreparationLeaseOverride(
+  world: WorldState,
+  operation: OffensiveOperation,
+  reason: PreparationLeaseOverrideReason,
+): void {
+  if (operation.leaseOverrideReasons.includes(reason)) return;
+  operation.leaseOverrideReasons.push(reason);
+  world.offensiveOperations.leaseOverrideCount += 1;
+  world.offensiveOperations.leaseOverrideCounts[reason] += 1;
+  world.instrumentation?.incrementCounter(
+    `offensiveOperation.leaseOverride.${reason}`,
+  );
+  recordEvent(world, operation, "lease-override", reason);
+}
+
+function endPreparationLease(
+  world: WorldState,
+  operation: OffensiveOperation,
+): void {
+  if (operation.preparationLeaseEndedAtTick !== null) return;
+  operation.preparationLeaseEndedAtTick = world.time.fastTick;
+  const lifetime = Math.max(
+    0,
+    world.time.fastTick - operation.preparationLeaseStartedAtTick,
+  );
+  world.offensiveOperations.preparationLeaseLifetimeTotal += lifetime;
+  world.offensiveOperations.preparationLeaseLifetimeCount += 1;
+  world.instrumentation?.incrementCounter(
+    "offensiveOperation.preparationLeaseLifetimeTicks",
+    lifetime,
+  );
 }
 
 function assignStableOperationTargets(operation: OffensiveOperation): void {
@@ -2126,6 +2718,18 @@ export function getApproachReadiness(
       approach,
       (stagedStrengthByApproach.get(approach) ?? 0) + finiteUnitStrength(unit),
     );
+    const assignment = operation.committedManifest?.find(
+      (item) => item.unitId === unitId,
+    );
+    if (assignment && assignment.arrivedAtTick === null) {
+      assignment.arrivedAtTick = world.time.fastTick;
+      if (assignment.isReplacement) {
+        world.offensiveOperations.replacementArrivalCount += 1;
+        world.instrumentation?.incrementCounter(
+          "offensiveOperation.replacementArrivals",
+        );
+      }
+    }
   }
   const requiredCompletion = operation.isMajorOffensive
     ? WORLD_BALANCE.war.landFront.stalemate.majorStagedFraction
@@ -2363,6 +2967,11 @@ function cloneOperation(operation: OffensiveOperation): OffensiveOperation {
       ...group,
       assignedUnitIds: [...group.assignedUnitIds],
     })),
+    committedManifest: operation.committedManifest.map((assignment) => ({
+      ...assignment,
+    })),
+    leaseOverrideReasons: [...operation.leaseOverrideReasons],
+    allocationReclaimedUnitIds: [...operation.allocationReclaimedUnitIds],
     reasonFlags: [...operation.reasonFlags],
   };
 }
@@ -2575,6 +3184,53 @@ function finiteNumber(value: number): number {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
+function minimumSlack(
+  assignments: readonly OperationManifestAssignment[],
+): number | null {
+  if (assignments.length === 0) return null;
+  return assignments.reduce(
+    (minimum, assignment) => Math.min(minimum, assignment.arrivalSlack),
+    Number.POSITIVE_INFINITY,
+  );
+}
+
+function recordArrivalSlack(world: WorldState, slack: number): void {
+  const state = world.offensiveOperations;
+  state.arrivalSlackTotal += slack;
+  state.arrivalSlackCount += 1;
+  state.minimumArrivalSlack = state.minimumArrivalSlack === null
+    ? slack
+    : Math.min(state.minimumArrivalSlack, slack);
+  world.instrumentation?.incrementCounter(
+    "offensiveOperation.arrivalSlackTicks",
+    slack,
+  );
+}
+
+function recordPreparationTimeout(
+  world: WorldState,
+  operation: OffensiveOperation,
+): void {
+  const requiredCompletion = operation.isMajorOffensive
+    ? WORLD_BALANCE.war.landFront.stalemate.majorStagedFraction
+    : WORLD_BALANCE.war.landFront.offensiveOperation.stagedFraction;
+  const unitIds = new Set(world.units.map((unit) => unit.id));
+  for (const group of operation.approachGroups) {
+    const requiredReady = group.requiredStrength * requiredCompletion;
+    const missing = Math.max(0, requiredReady - group.readyStrength);
+    world.offensiveOperations.preparationTimeoutMissingStrength += missing;
+    const travelling = operation.committedManifest
+      .filter((assignment) =>
+        assignment.approachRegionId === group.regionId &&
+        assignment.arrivedAtTick === null &&
+        unitIds.has(assignment.unitId)
+      )
+      .reduce((sum, assignment) => sum + assignment.strength, 0);
+    world.offensiveOperations.preparationTimeoutTravellingStrength +=
+      Math.min(missing, travelling);
+  }
+}
+
 function createOperationId(index: number): OperationId {
   return `operation-${index}` as OperationId;
 }
@@ -2588,6 +3244,21 @@ function compareOperationCandidatePlans(
   b: NationFrontPlan,
 ): number {
   return b.priority - a.priority || compareIds(a.frontId, b.frontId);
+}
+
+function isOperationPlanEligible(
+  world: WorldState,
+  nationId: NationId,
+  plan: NationFrontPlan,
+): boolean {
+  if (plan.posture === "attack") return true;
+  if (!isSchwerpunktSector(world, nationId, plan.frontId)) return false;
+  const pressure = world.stalematePressure.assessments.find((assessment) =>
+    assessment.nationId === nationId &&
+    assessment.schwerpunktSectorId === plan.frontId
+  )?.pressure ?? 0;
+  return pressure >=
+    WORLD_BALANCE.war.landFront.stalemate.majorOffensiveThreshold;
 }
 
 function compareOperations(

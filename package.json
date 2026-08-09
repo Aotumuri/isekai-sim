@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "npm run test:typecheck && node --import tsx --test test/regression/*.test.ts",
+    "typecheck": "tsc -p tsconfig.test.json",
     "test:typecheck": "tsc -p tsconfig.test.json",
     "test:sim": "node --import tsx --test test/regression/simulation.test.ts",
     "benchmark": "node --import tsx test/benchmark/run-benchmark.ts",

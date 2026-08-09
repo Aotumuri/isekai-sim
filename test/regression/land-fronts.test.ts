@@ -41,6 +41,7 @@ import {
   getOffensiveOperationForFront,
   getOffensiveOperationForUnit,
   getOffensiveOperations,
+  getOperationCandidateForFront,
   updateOffensiveOperations,
   type OffensiveOperation,
 } from "../../src/sim/offensive-operations";
@@ -1347,6 +1348,71 @@ test("preparing operation units stage instead of immediately attacking", () => {
   }
 });
 
+test("preflight commits one deterministic on-time manifest and starts its lease", () => {
+  const world = createOperationWorld();
+
+  updateOffensiveOperations(world);
+
+  const operation = onlyOperation(world, NATION_A);
+  assert.equal(world.offensiveOperations.candidatesCreatedCount, 1);
+  assert.equal(world.offensiveOperations.candidatesAcceptedCount, 1);
+  assert.equal(operation.preparationLeaseEndedAtTick, null);
+  assert.equal(operation.preparationFeasible, true);
+  assert.deepEqual(
+    operation.committedManifest.map((assignment) => assignment.unitId).sort(),
+    [...operation.assignedUnitIds].sort(),
+  );
+  assert(operation.committedManifest.every((assignment) => assignment.arrivalSlack >= 0));
+  assert(operation.approachGroups.every((group) =>
+    group.feasibleStrength >= group.requiredStrength *
+      WORLD_BALANCE.war.landFront.offensiveOperation.stagedFraction
+  ));
+});
+
+test("preflight retains an impossible candidate without creating an operation", () => {
+  const world = createFrontWorld(
+    [
+      { id: "rear2", owner: NATION_A },
+      { id: "rear1", owner: NATION_A },
+      { id: "a", owner: NATION_A },
+      { id: "b", owner: NATION_B },
+    ],
+    [["rear2", "rear1"], ["rear1", "a"], ["a", "b"]],
+  );
+  startWar(world, NATION_A, NATION_B);
+  for (let index = 0; index < 6; index += 1) {
+    const unit = addLandUnit(world, NATION_A, "a", "Infantry");
+    setUnitStrength(unit, 100);
+  }
+  for (let index = 0; index < 2; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_B, "b", "Infantry"), 50);
+  }
+  updateAllocationSystem(world);
+  const plan = planFor(world, NATION_A);
+  plan.posture = "attack";
+  for (const unit of world.units) {
+    if (unit.nationId !== NATION_A) continue;
+    unit.regionId = id("rear2");
+    unit.moveTicksPerRegion = 200;
+  }
+
+  updateOffensiveOperations(world);
+
+  const candidate = getOperationCandidateForFront(world, plan.frontId, NATION_A);
+  assert(candidate);
+  assert.equal(candidate.feasible, false);
+  assert(candidate.rejectionReasons.includes("insufficient-on-time-strength"));
+  assert.equal(getOffensiveOperations(world, NATION_A).length, 0);
+  assert.equal(world.offensiveOperations.impossibleAtCreationCount, 1);
+
+  world.time.fastTick += 10;
+  updateOffensiveOperations(world);
+  const reevaluated = getOperationCandidateForFront(world, plan.frontId, NATION_A);
+  assert(reevaluated);
+  assert.equal(reevaluated.createdAtTick, candidate.createdAtTick);
+  assert.equal(reevaluated.evaluationCount, 2);
+});
+
 test("staged operation force transitions from preparing to attacking", () => {
   const world = createOperationWorld();
   updateOffensiveOperations(world);
@@ -1365,6 +1431,8 @@ test("staged operation force transitions from preparing to attacking", () => {
         event.type === "phase-transition",
     ),
   );
+  assert.notEqual(operation.preparationLeaseEndedAtTick, null);
+  assert.equal(world.offensiveOperations.preparationLeaseLifetimeCount, 1);
 });
 
 test("a preparing Approach replaces lost strength instead of preserving unit identity", () => {

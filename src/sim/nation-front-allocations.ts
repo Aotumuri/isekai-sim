@@ -45,6 +45,7 @@ export interface NationFrontAllocationState {
   sourceRetreatMembershipVersion: number;
   sourceReserveMembershipVersion: number;
   sourceReorganizationMembershipVersion: number;
+  sourceOperationMembershipVersion: number;
   unitsReference: UnitState[] | null;
   unitIdCounter: number;
   landUnitCount: number;
@@ -66,6 +67,7 @@ interface FrontAllocationInputSnapshot {
   territoryVersion: number;
   occupationVersion: number;
   stalemateVersion: number;
+  operationMembershipVersion: number;
   activeNationIds: NationId[];
   plans: Array<Pick<NationFrontPlan, "frontId" | "nationId" | "posture" | "priority" | "desiredStrength">>;
   units: Array<{
@@ -106,6 +108,7 @@ export function createNationFrontAllocationState(): NationFrontAllocationState {
     sourceRetreatMembershipVersion: -1,
     sourceReserveMembershipVersion: -1,
     sourceReorganizationMembershipVersion: -1,
+    sourceOperationMembershipVersion: -1,
     unitsReference: null,
     unitIdCounter: -1,
     landUnitCount: -1,
@@ -222,6 +225,8 @@ export function updateNationFrontAllocations(world: WorldState): void {
     world.strategicReserves.membershipVersion;
   state.sourceReorganizationMembershipVersion =
     world.reorganization.membershipVersion;
+  state.sourceOperationMembershipVersion =
+    world.offensiveOperations.membershipVersion;
   state.unitsReference = world.units;
   state.unitIdCounter = world.unitIdCounter;
   state.landUnitCount = landUnits.length;
@@ -297,6 +302,7 @@ function captureAllocationInput(
     territoryVersion: world.territoryVersion,
     occupationVersion: world.occupation.version,
     stalemateVersion: world.stalematePressure.allocationVersion,
+    operationMembershipVersion: world.offensiveOperations.membershipVersion,
     activeNationIds: world.nations.filter(isNationActive).map((nation) => nation.id),
     plans: world.frontPlans.plans.map((plan) => ({
       frontId: plan.frontId,
@@ -329,6 +335,7 @@ function allocationInputMatches(
     snapshot.territoryVersion !== world.territoryVersion ||
     snapshot.occupationVersion !== world.occupation.version ||
     snapshot.stalemateVersion !== world.stalematePressure.allocationVersion ||
+    snapshot.operationMembershipVersion !== world.offensiveOperations.membershipVersion ||
     snapshot.plans.length !== world.frontPlans.plans.length ||
     snapshot.units.length !== landUnits.length
   ) return false;
@@ -449,6 +456,21 @@ function allocateNationUnits(
     unitStrengthById.set(unit.id, finiteUnitStrength(unit));
   }
   const pool = [...units].sort(compareUnits);
+  const leasedFrontIdByUnitId = getPreparationLeaseFronts(world, nationId);
+  for (let index = pool.length - 1; index >= 0; index -= 1) {
+    const unit = pool[index];
+    const leasedFrontId = leasedFrontIdByUnitId.get(unit.id);
+    const mutable = leasedFrontId
+      ? mutableByFrontId.get(leasedFrontId)
+      : undefined;
+    if (!mutable) continue;
+    mutable.units.push(unit);
+    mutable.allocatedStrength += unitStrengthById.get(unit.id) ?? 0;
+    pool.splice(index, 1);
+  }
+  for (const mutable of mutableByFrontId.values()) {
+    mutable.units.sort(compareUnits);
+  }
   const settings = WORLD_BALANCE.war.landFront.allocation;
   const capitalDefense = getCapitalDefenseAssessment(world, nationId);
   const criticalCapitalFrontIds =
@@ -561,6 +583,27 @@ function allocateNationUnits(
     allocations,
     unassignedUnitIds: pool.map((unit) => unit.id).sort(compareIds),
   };
+}
+
+function getPreparationLeaseFronts(
+  world: WorldState,
+  nationId: NationId,
+): Map<UnitId, FrontId> {
+  const result = new Map<UnitId, FrontId>();
+  for (const operation of world.offensiveOperations.operations) {
+    if (
+      operation.nationId !== nationId ||
+      operation.phase !== "preparing" ||
+      operation.preparationLeaseEndedAtTick !== null ||
+      !world.landFronts.operationalSectorsById.has(operation.frontId)
+    ) {
+      continue;
+    }
+    for (const unitId of operation.assignedUnitIds) {
+      if (!result.has(unitId)) result.set(unitId, operation.frontId);
+    }
+  }
+  return result;
 }
 
 function countCapitalDefenseReallocations(

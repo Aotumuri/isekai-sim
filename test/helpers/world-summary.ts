@@ -206,6 +206,53 @@ export function summarizeWorld(world: WorldState): WorldSummary {
         Math.max(1, world.offensiveOperations.operations.filter((operation) => operation.synchronizationReady).length + world.offensiveOperations.history.filter((operation) => operation.synchronizationReady).length)
       : 0,
     operationSingleApproachFallbacks: world.offensiveOperations.singleApproachFallbackCount,
+    operationCandidatesCreated: exploitation.candidatesCreatedCount,
+    operationCandidatesAccepted: exploitation.candidatesAcceptedCount,
+    operationCandidatesRejected: exploitation.candidatesRejectedCount,
+    operationCandidateRejectedOnTime:
+      exploitation.candidateRejectionCounts["insufficient-on-time-strength"],
+    operationCandidateRejectedUnits:
+      exploitation.candidateRejectionCounts["insufficient-units"],
+    operationImpossibleAtCreation: exploitation.impossibleAtCreationCount,
+    operationImpossibleDuringPreparation:
+      exploitation.impossibleDuringPreparationCount,
+    operationLeaseOverrides: exploitation.leaseOverrideCount,
+    operationAllocationReclaims: exploitation.allocationReclaimCount,
+    operationReplacementArrivals: exploitation.replacementArrivalCount,
+    operationReplacementImpossible: exploitation.replacementImpossibleCount,
+    operationAverageArrivalSlack: exploitation.arrivalSlackCount > 0
+      ? exploitation.arrivalSlackTotal / exploitation.arrivalSlackCount
+      : 0,
+    operationMinimumArrivalSlack: exploitation.minimumArrivalSlack ?? 0,
+    operationAverageLeaseLifetime: exploitation.preparationLeaseLifetimeCount > 0
+      ? exploitation.preparationLeaseLifetimeTotal /
+        exploitation.preparationLeaseLifetimeCount
+      : 0,
+    operationPreparationSuccessRatePercent:
+      exploitation.preparationSucceededCount + exploitation.preparationTimeoutCount +
+        exploitation.impossibleDuringPreparationCount > 0
+        ? exploitation.preparationSucceededCount /
+          (exploitation.preparationSucceededCount + exploitation.preparationTimeoutCount +
+            exploitation.impossibleDuringPreparationCount) * 100
+        : 0,
+    operationPreparationTimeoutRatePercent:
+      exploitation.preparationSucceededCount + exploitation.preparationTimeoutCount +
+        exploitation.impossibleDuringPreparationCount > 0
+        ? exploitation.preparationTimeoutCount /
+          (exploitation.preparationSucceededCount + exploitation.preparationTimeoutCount +
+            exploitation.impossibleDuringPreparationCount) * 100
+        : 0,
+    operationAveragePreparationDuration:
+      exploitation.preparationSucceededCount + exploitation.preparationTimeoutCount +
+        exploitation.impossibleDuringPreparationCount > 0
+        ? exploitation.preparingDurationTicks /
+          (exploitation.preparationSucceededCount + exploitation.preparationTimeoutCount +
+            exploitation.impossibleDuringPreparationCount)
+        : 0,
+    operationTimeoutMissingStrength:
+      exploitation.preparationTimeoutMissingStrength,
+    operationTimeoutTravellingStrength:
+      exploitation.preparationTimeoutTravellingStrength,
     exploitationStarts: exploitation.exploitationStartedCount,
     exploitationSuccesses: exploitation.exploitationSuccessCount,
     exploitationSuccessRatePercent: exploitation.exploitationStartedCount > 0
