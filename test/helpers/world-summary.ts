@@ -94,7 +94,17 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     stalemateMaximumPressure: stalemate.maxPressure,
     schwerpunktSelections: stalemate.selections,
     schwerpunktChanges: stalemate.selectionChanges,
-    activeSchwerpunkts: stalemate.schwerpunktByNationId.size,
+    activeSchwerpunkts: stalemate.assessments.filter((item) => item.schwerpunktSectorId).length,
+    schwerpunktAverageConcentrationPercent: stalemate.activeFocusSamples > 0
+      ? stalemate.concentrationRatioTotal / stalemate.activeFocusSamples * 100 : 0,
+    schwerpunktAverageOffensiveStrength: stalemate.activeFocusSamples > 0
+      ? stalemate.allocatedOffensiveStrengthTotal / stalemate.activeFocusSamples : 0,
+    schwerpunktAverageReserveContribution: stalemate.activeFocusSamples > 0
+      ? stalemate.reserveContributionTotal / stalemate.activeFocusSamples : 0,
+    schwerpunktReserveDeployments:
+      world.strategicReserves.deploymentCountByReason["schwerpunkt-concentration"],
+    reorganizationReturnsToSchwerpunkt:
+      world.reorganization.returnedToSchwerpunktCount,
     artificialInactivitySamples: stalemate.artificialInactivitySamples,
     healthyWaitingSamples: stalemate.inactivitySamplesByCategory["healthy-waiting"],
     expectedWaitingSamples: stalemate.inactivitySamplesByCategory["expected-waiting"],

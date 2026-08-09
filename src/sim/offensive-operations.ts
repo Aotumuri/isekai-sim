@@ -27,7 +27,6 @@ import {
   type FrontlineDefensivePosition,
 } from "./frontline-coverage";
 import {
-  getNationSchwerpunkt,
   isSchwerpunktSector,
   recordMajorOffensiveOutcome,
 } from "./stalemate-pressure";
@@ -103,6 +102,7 @@ export interface OffensiveOperation {
   frontId: FrontId;
   phase: OffensiveOperationPhase;
   isMajorOffensive: boolean;
+  isSchwerpunktOperation: boolean;
   offensiveSurplusAvailable: number;
   localStrengthRatioAtAttack: number;
   primaryTargetRegionId: MesoRegionId;
@@ -326,13 +326,18 @@ export function updateOffensiveOperations(world: WorldState): void {
     if (current.length >= settings.maxActivePerNation) {
       continue;
     }
-    const focus = getNationSchwerpunkt(world, nationId);
     const candidates = plans
       .filter((plan) => plan.posture === "attack" || (
-        focus?.schwerpunktSectorId === plan.frontId &&
-        focus.pressure >= WORLD_BALANCE.war.landFront.stalemate.majorOffensiveThreshold
+        isSchwerpunktSector(world, nationId, plan.frontId) &&
+        (world.stalematePressure.assessments.find((assessment) =>
+          assessment.nationId === nationId && assessment.schwerpunktSectorId === plan.frontId
+        )?.pressure ?? 0) >= WORLD_BALANCE.war.landFront.stalemate.majorOffensiveThreshold
       ))
-      .sort(compareOperationCandidatePlans);
+      .sort((a, b) =>
+        Number(isSchwerpunktSector(world, nationId, b.frontId)) -
+          Number(isSchwerpunktSector(world, nationId, a.frontId)) ||
+        compareOperationCandidatePlans(a, b)
+      );
     for (const plan of candidates) {
       if (
         (state.operationsByNationId.get(nationId)?.length ?? 0) >=
@@ -743,8 +748,12 @@ function createOperation(
   plan: NationFrontPlan,
 ): OffensiveOperation | null {
   const settings = WORLD_BALANCE.war.landFront.offensiveOperation;
-  const isMajorOffensive = isSchwerpunktSector(world, plan.nationId, plan.frontId) &&
-    (getNationSchwerpunkt(world, plan.nationId)?.pressure ?? 0) >= WORLD_BALANCE.war.landFront.stalemate.majorOffensiveThreshold;
+  const isSchwerpunktOperation = isSchwerpunktSector(world, plan.nationId, plan.frontId);
+  const focusPressure = world.stalematePressure.assessments.find((assessment) =>
+    assessment.nationId === plan.nationId && assessment.schwerpunktSectorId === plan.frontId
+  )?.pressure ?? 0;
+  const isMajorOffensive = isSchwerpunktOperation &&
+    focusPressure >= WORLD_BALANCE.war.landFront.stalemate.majorOffensiveThreshold;
   const front = world.landFronts.operationalSectorsById.get(plan.frontId);
   const allocation = getFrontAllocation(world, plan.frontId, plan.nationId);
   if (
@@ -783,7 +792,7 @@ function createOperation(
     surplusUnits,
     targets.stagingRegionId,
     world,
-    isMajorOffensive ? WORLD_BALANCE.war.landFront.stalemate.majorOperationForceFraction : settings.forceFraction,
+    isSchwerpunktOperation ? WORLD_BALANCE.war.landFront.stalemate.majorOperationForceFraction : settings.forceFraction,
   );
   if (assignedUnits.length < 2) {
     return null;
@@ -794,7 +803,7 @@ function createOperation(
     plan.nationId,
     targets,
     assignedUnits,
-    isMajorOffensive,
+    isSchwerpunktOperation,
   );
   const initialStrengthRatio = getStrengthRatio(friendly.strength, enemy.strength);
   const operation: OffensiveOperation = {
@@ -804,6 +813,7 @@ function createOperation(
     frontId: front.id,
     phase: "preparing",
     isMajorOffensive,
+    isSchwerpunktOperation,
     offensiveSurplusAvailable: sumUnitStrength(surplusUnits),
     localStrengthRatioAtAttack: 0,
     primaryTargetRegionId: targets.primaryTargetRegionId,
@@ -1613,6 +1623,7 @@ function selectExploitationTarget(
     if (!isRegionControlledBy(world, regionId, operation.enemyNationId)) continue;
     const sector = findExploitationSectorForRegion(world, operation, regionId, front.id);
     if (!sector) continue;
+    if (operation.isSchwerpunktOperation && sector.id !== front.id) continue;
     const position = findExploitationCoveragePosition(
       world,
       sector.id,
@@ -1904,8 +1915,14 @@ function finishOperation(
   operation.outcome = outcome;
   operation.completionReason = completionReason;
   operation.completedAtTick = now;
-  if (operation.isMajorOffensive) {
-    recordMajorOffensiveOutcome(world, operation.nationId, operation.enemyNationId, outcome === "success");
+  if (operation.isSchwerpunktOperation) {
+    recordMajorOffensiveOutcome(
+      world,
+      operation.nationId,
+      operation.enemyNationId,
+      outcome === "success",
+      operation.isMajorOffensive,
+    );
   }
   world.offensiveOperations.phaseTransitionCount += 1;
   world.instrumentation?.incrementCounter("offensiveOperation.phaseTransitions");

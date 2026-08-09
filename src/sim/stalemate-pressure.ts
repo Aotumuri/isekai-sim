@@ -14,6 +14,7 @@ import { FAST_TICK_MS, SLOW_TICK_MS } from "./time";
 import type { WorldState } from "./world-state";
 import { getOwnerByMesoId } from "./world-cache";
 import { getMesoById } from "./world-cache";
+import { getUnitCombatStrength } from "./unit-strength";
 
 export type StalemateReason =
   | "no-territory-progress"
@@ -90,6 +91,10 @@ export interface StalematePressureState {
   majorOffensivesLaunched: number;
   majorOffensiveSuccesses: number;
   majorOffensiveFailures: number;
+  activeFocusSamples: number;
+  concentrationRatioTotal: number;
+  allocatedOffensiveStrengthTotal: number;
+  reserveContributionTotal: number;
 }
 
 export function createStalematePressureState(): StalematePressureState {
@@ -107,6 +112,8 @@ export function createStalematePressureState(): StalematePressureState {
     maxPressure: 0, staticTickSampleTotal: 0, staticTickSampleCount: 0, maxStaticTicks: 0,
     majorOffensivesLaunched: 0, majorOffensiveSuccesses: 0,
     majorOffensiveFailures: 0,
+    activeFocusSamples: 0, concentrationRatioTotal: 0,
+    allocatedOffensiveStrengthTotal: 0, reserveContributionTotal: 0,
   };
 }
 
@@ -122,17 +129,30 @@ export function getNationSchwerpunkt(
   return world.stalematePressure.schwerpunktByNationId.get(nationId);
 }
 
+export function getSchwerpunktForEnemy(
+  world: WorldState,
+  nationId: NationId,
+  enemyNationId: NationId,
+): StalemateAssessment | undefined {
+  const assessment = getStalemateAssessment(world, nationId, enemyNationId);
+  return assessment?.schwerpunktSectorId ? assessment : undefined;
+}
+
 export function isSchwerpunktSector(
   world: WorldState, nationId: NationId, sectorId: FrontId,
 ): boolean {
-  return getNationSchwerpunkt(world, nationId)?.schwerpunktSectorId === sectorId;
+  return world.stalematePressure.assessments.some(
+    (assessment) => assessment.nationId === nationId &&
+      assessment.schwerpunktSectorId === sectorId,
+  );
 }
 
 export function updateStalematePressure(world: WorldState): void {
   const state = world.stalematePressure;
   const startedAt = world.instrumentation ? performance.now() : 0;
-  const previousFocus = [...state.schwerpunktByNationId.entries()]
-    .map(([nationId, item]) => `${nationId}:${item.schwerpunktSectorId ?? ""}`)
+  const previousFocus = state.assessments
+    .filter((item) => item.schwerpunktSectorId)
+    .map((item) => `${item.nationId}:${item.enemyNationId}:${item.schwerpunktSectorId}`)
     .sort().join("|");
   const settings = WORLD_BALANCE.war.landFront.stalemate;
   const previous = state.byNationEnemy;
@@ -216,9 +236,28 @@ export function updateStalematePressure(world: WorldState): void {
     let schwerpunktSectorId = before?.schwerpunktSectorId ?? null;
     let selectedAtTick = before?.selectedAtTick ?? null;
     const cooldownUntilTick = before?.cooldownUntilTick ?? 0;
-    if (critical || retreating || pressure < settings.selectionThreshold || world.time.fastTick < cooldownUntilTick) {
+    const selectedStillExists = !!schwerpunktSectorId && sectors.some((sector) => sector.id === schwerpunktSectorId);
+    if (critical || retreating) {
       schwerpunktSectorId = null; selectedAtTick = null;
-    } else if (!schwerpunktSectorId || !sectors.some((sector) => sector.id === schwerpunktSectorId)) {
+    } else if (selectedStillExists) {
+      const bestSectorId = selectSector(world, sectors, nationId);
+      const selectedSector = sectors.find((sector) => sector.id === schwerpunktSectorId)!;
+      const bestSector = sectors.find((sector) => sector.id === bestSectorId)!;
+      const selectionAge = world.time.fastTick - (selectedAtTick ?? world.time.fastTick);
+      if (
+        bestSectorId !== schwerpunktSectorId &&
+        selectionAge >= settings.minimumSelectionTicks &&
+        scoreSector(world, bestSector, nationId) >=
+          scoreSector(world, selectedSector, nationId) + settings.reselectionScoreMargin
+      ) {
+        schwerpunktSectorId = bestSectorId;
+        selectedAtTick = world.time.fastTick;
+        state.selectionChanges += 1;
+      }
+    } else if (
+      pressure >= settings.selectionThreshold &&
+      world.time.fastTick >= cooldownUntilTick
+    ) {
       schwerpunktSectorId = selectSector(world, sectors, nationId);
       selectedAtTick = world.time.fastTick;
       state.selections += 1;
@@ -267,16 +306,54 @@ export function updateStalematePressure(world: WorldState): void {
   const schwerpunktByNationId = new Map<NationId, StalemateAssessment>();
   for (const item of next.sort(compareAssessment)) {
     if (item.schwerpunktSectorId && !schwerpunktByNationId.has(item.nationId)) schwerpunktByNationId.set(item.nationId, item);
-    else if (item.schwerpunktSectorId) { item.schwerpunktSectorId = null; item.selectedAtTick = null; }
   }
   state.assessments = next; state.byNationEnemy = nextByKey;
   state.schwerpunktByNationId = schwerpunktByNationId; state.version += 1;
   if (state.inactivityTimeline.length > 512) state.inactivityTimeline.splice(0, state.inactivityTimeline.length - 512);
-  const nextFocus = [...schwerpunktByNationId.entries()]
-    .map(([nationId, item]) => `${nationId}:${item.schwerpunktSectorId ?? ""}`)
+  sampleSchwerpunktConcentration(world, next);
+  const nextFocus = next
+    .filter((item) => item.schwerpunktSectorId)
+    .map((item) => `${item.nationId}:${item.enemyNationId}:${item.schwerpunktSectorId}`)
     .sort().join("|");
   if (previousFocus !== nextFocus) state.allocationVersion += 1;
   world.instrumentation?.recordDuration("stalemate.evaluation", performance.now() - startedAt);
+}
+
+function sampleSchwerpunktConcentration(
+  world: WorldState,
+  assessments: readonly StalemateAssessment[],
+): void {
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+  for (const assessment of assessments) {
+    const sectorId = assessment.schwerpunktSectorId;
+    if (!sectorId) continue;
+    const allocation = getFrontAllocation(world, sectorId, assessment.nationId);
+    const coverage = getFrontlineCoverage(world, sectorId, assessment.nationId);
+    const pairStrength = world.frontAllocations.allocations
+      .filter((candidate) => {
+        if (candidate.nationId !== assessment.nationId) return false;
+        const sector = world.landFronts.operationalSectorsById.get(candidate.frontId);
+        return !!sector && getOpposingFrontSide(sector, assessment.nationId)?.nationId === assessment.enemyNationId;
+      })
+      .reduce((sum, candidate) => sum + candidate.allocatedStrength, 0);
+    const reserve = world.strategicReserves.reservesByNationId.get(assessment.nationId);
+    const reserveContribution = reserve?.deployment?.targetFrontId === sectorId &&
+      reserve.deployment.status !== "returning"
+      ? reserve.deployment.unitIds.reduce((sum, unitId) =>
+        sum + (unitById.get(unitId) ? getUnitCombatStrength(unitById.get(unitId)!) : 0), 0)
+      : 0;
+    const allocated = allocation?.allocatedStrength ?? 0;
+    const offensive = Math.max(0, allocated - (coverage?.minimumRequiredStrength ?? 0));
+    const concentration = (allocated + reserveContribution) / Math.max(1, pairStrength + reserveContribution);
+    world.stalematePressure.activeFocusSamples += 1;
+    world.stalematePressure.concentrationRatioTotal += concentration;
+    world.stalematePressure.allocatedOffensiveStrengthTotal += offensive;
+    world.stalematePressure.reserveContributionTotal += reserveContribution;
+    world.instrumentation?.incrementCounter("stalemate.focusSamples");
+    world.instrumentation?.incrementCounter("stalemate.concentrationRatio", concentration);
+    world.instrumentation?.incrementCounter("stalemate.allocatedOffensiveStrength", offensive);
+    world.instrumentation?.incrementCounter("stalemate.reserveContribution", reserveContribution);
+  }
 }
 
 /** Re-labels a same-tick Collapse Advance detection without affecting its trigger. */
@@ -401,15 +478,23 @@ function classifyTargetValidityFailure(world: WorldState, sectors: OperationalSe
   return { reason: "other", other: "validCandidatePending" };
 }
 
-export function recordMajorOffensiveOutcome(world: WorldState, nationId: NationId, enemyId: NationId, success: boolean): void {
+export function recordMajorOffensiveOutcome(
+  world: WorldState,
+  nationId: NationId,
+  enemyId: NationId,
+  success: boolean,
+  countAsMajor = true,
+): void {
   const assessment = getStalemateAssessment(world, nationId, enemyId);
   if (!assessment) return;
   const settings = WORLD_BALANCE.war.landFront.stalemate;
   assessment.pressure = Math.max(0, assessment.pressure - settings.pressureDecayOnFailure);
   assessment.cooldownUntilTick = world.time.fastTick + settings.failedOffensiveCooldownTicks;
   assessment.schwerpunktSectorId = null; assessment.selectedAtTick = null;
-  if (success) world.stalematePressure.majorOffensiveSuccesses += 1;
-  else world.stalematePressure.majorOffensiveFailures += 1;
+  if (countAsMajor) {
+    if (success) world.stalematePressure.majorOffensiveSuccesses += 1;
+    else world.stalematePressure.majorOffensiveFailures += 1;
+  }
 }
 
 function selectSector(world: WorldState, sectors: OperationalSector[], nationId: NationId): FrontId {

@@ -20,6 +20,7 @@ import { getUnitCombatStrength } from "./unit-strength";
 import { buildWarAdjacency, isAtWar } from "./war-state";
 import type { WorldState } from "./world-state";
 import { getMesoById, getNeighborsById, getOwnerByMesoId } from "./world-cache";
+import { getNationSchwerpunkt, isSchwerpunktSector } from "./stalemate-pressure";
 
 export type ReserveStatus = "forming" | "ready" | "deploying" | "returning";
 
@@ -36,6 +37,7 @@ export type ReserveDeploymentReason =
   | "front-severe-deficit"
   | "retreat-fallback-threat"
   | "front-collapse"
+  | "schwerpunkt-concentration"
   | "reserve-reforming";
 
 export type ReserveEventType =
@@ -138,6 +140,7 @@ export function createStrategicReserveState(enabled = true): StrategicReserveSta
       "front-severe-deficit": 0,
       "retreat-fallback-threat": 0,
       "front-collapse": 0,
+      "schwerpunkt-concentration": 0,
       "reserve-reforming": 0,
     },
     deployedUnitCount: 0,
@@ -727,7 +730,31 @@ function findDeploymentTrigger(
       capitalEmergencyStartedAtTick: null,
     };
   }
-  return collapseTrigger;
+  if (collapseTrigger) return collapseTrigger;
+
+  const focus = getNationSchwerpunkt(world, reserve.nationId);
+  const focusSector = focus?.schwerpunktSectorId
+    ? world.landFronts.operationalSectorsById.get(focus.schwerpunktSectorId)
+    : undefined;
+  const focusSide = focusSector ? getFrontSide(focusSector, reserve.nationId) : undefined;
+  if (focus && focusSector && focusSide && focusSide.borderRegionIds.length > 0) {
+    const allocation = world.frontAllocations.allocationsByFrontNation.get(
+      `${focusSector.id}::${reserve.nationId}`,
+    );
+    return {
+      targetType: "front-reinforcement",
+      targetFrontId: focusSector.id,
+      targetRegionIds: [...focusSide.borderRegionIds].sort(compareIds),
+      targetStrength: Math.max(
+        allocation?.deficit ?? 0,
+        reserve.totalStrength * WORLD_BALANCE.war.landFront.strategicReserve.schwerpunktDeploymentRatio,
+      ),
+      initialDeficit: allocation?.deficit ?? 0,
+      reason: "schwerpunkt-concentration",
+      capitalEmergencyStartedAtTick: null,
+    };
+  }
+  return null;
 }
 
 function selectCapitalDeploymentAnchor(
@@ -951,6 +978,10 @@ function deploymentShouldReturn(
     );
   }
   if (deployment.targetType === "front-reinforcement") {
+    if (deployment.reasonFlags.includes("schwerpunkt-concentration")) {
+      return !deployment.targetFrontId ||
+        !isSchwerpunktSector(world, reserve.nationId, deployment.targetFrontId);
+    }
     const allocation = deployment.targetFrontId
       ? world.frontAllocations.allocationsByFrontNation.get(
           `${deployment.targetFrontId}::${reserve.nationId}`,

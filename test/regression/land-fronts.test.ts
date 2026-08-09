@@ -82,6 +82,7 @@ import {
 import {
   createStalematePressureState,
   getNationSchwerpunkt,
+  getSchwerpunktForEnemy,
   getStalemateAssessment,
   updateStalematePressure,
 } from "../../src/sim/stalemate-pressure";
@@ -162,6 +163,57 @@ test("territory or breakthrough progress reduces stalemate pressure", () => {
   tracked.lastOperationSuccessCount = -1;
   updateStalematePressure(world);
   assert((getStalemateAssessment(world, NATION_A, NATION_B)?.pressure ?? 0) < beforeBreakthrough);
+});
+
+test("Schwerpunkt survives a small occupation change and pressure dip", () => {
+  const world = createBalancedStalemateWorld();
+  for (let tick = 0; tick < 20; tick += 1) {
+    world.time.fastTick += 10;
+    updateStalematePressure(world);
+  }
+  const selected = getStalemateAssessment(world, NATION_A, NATION_B)?.schwerpunktSectorId;
+  assert(selected);
+  world.occupation.mesoById.set(id("b-rear"), NATION_A);
+  world.occupation.version += 1;
+  updateStalematePressure(world);
+  const after = getStalemateAssessment(world, NATION_A, NATION_B);
+  assert(after);
+  assert(after.pressure < WORLD_BALANCE.war.landFront.stalemate.selectionThreshold);
+  assert.equal(after.schwerpunktSectorId, selected);
+});
+
+test("one nation may retain exactly one Schwerpunkt per enemy", () => {
+  const world = createFrontWorld(
+    [
+      { id: "a-b", owner: NATION_A }, { id: "b-a", owner: NATION_B },
+      { id: "a-c", owner: NATION_A }, { id: "c-a", owner: NATION_C },
+    ],
+    [["a-b", "b-a"], ["a-c", "c-a"]],
+  );
+  startWar(world, NATION_A, NATION_B);
+  startWar(world, NATION_A, NATION_C);
+  for (const [nationId, regionId] of [
+    [NATION_A, "a-b"], [NATION_B, "b-a"],
+    [NATION_A, "a-c"], [NATION_C, "c-a"],
+  ] as const) {
+    for (let index = 0; index < 4; index += 1) {
+      setUnitStrength(addLandUnit(world, nationId, regionId, "Infantry"), 1_000);
+    }
+  }
+  updateAllocationSystem(world);
+  updateFrontlineCoverage(world);
+  for (let tick = 0; tick < 20; tick += 1) {
+    world.time.fastTick += 10;
+    updateStalematePressure(world);
+  }
+  assert(getSchwerpunktForEnemy(world, NATION_A, NATION_B)?.schwerpunktSectorId);
+  assert(getSchwerpunktForEnemy(world, NATION_A, NATION_C)?.schwerpunktSectorId);
+  assert.equal(
+    world.stalematePressure.assessments.filter((assessment) =>
+      assessment.nationId === NATION_A && assessment.schwerpunktSectorId
+    ).length,
+    2,
+  );
 });
 
 test("Schwerpunkt concentration preserves defense and exposes a larger offensive surplus", () => {
@@ -2270,6 +2322,21 @@ test("a normal nation deliberately forms a Strategic Reserve", () => {
   assert(reserve.totalStrength > 0);
   assert(reserve.desiredReserveStrength > 0);
   assert.match(formatStrategicReserveSummary(world), /Strategic Reserve/);
+});
+
+test("an idle Strategic Reserve concentrates on the selected Schwerpunkt", () => {
+  const world = createFormedReserveWorld();
+  for (let tick = 0; tick < 20; tick += 1) {
+    world.time.fastTick += 10;
+    updateStalematePressure(world);
+  }
+  const focus = getNationSchwerpunkt(world, NATION_A);
+  assert(focus?.schwerpunktSectorId);
+  updateStrategicReserves(world);
+  const deployment = getNationReserveState(world, NATION_A)?.deployment;
+  assert(deployment);
+  assert.equal(deployment.targetFrontId, focus.schwerpunktSectorId);
+  assert(deployment.reasonFlags.includes("schwerpunkt-concentration"));
 });
 
 test("Reserve membership never overlaps Front Allocation", () => {

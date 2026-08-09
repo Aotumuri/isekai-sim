@@ -18,7 +18,8 @@ import { isNationActive } from "./nation-active";
 import type { UnitId, UnitState } from "./unit";
 import { getUnitCombatStrength } from "./unit-strength";
 import type { WorldState } from "./world-state";
-import { getNationSchwerpunkt } from "./stalemate-pressure";
+import { getSchwerpunktForEnemy } from "./stalemate-pressure";
+import { getFrontlineCoverage } from "./frontline-coverage";
 
 export interface NationFrontAllocation {
   nationId: NationId;
@@ -83,6 +84,7 @@ interface FrontAllocationContext {
   front: OperationalSector;
   friendlySide: PhysicalFrontSide;
   distanceByRegionId: Map<MesoRegionId, number>;
+  isSchwerpunkt: boolean;
 }
 
 interface MutableAllocation {
@@ -593,7 +595,6 @@ function createAllocationContexts(
   plans: NationFrontPlan[],
 ): FrontAllocationContext[] {
   const contexts: FrontAllocationContext[] = [];
-  const focus = getNationSchwerpunkt(world, nationId);
   const concentration = WORLD_BALANCE.war.landFront.stalemate;
   for (const plan of plans) {
     const front = world.landFronts.operationalSectorsById.get(plan.frontId);
@@ -605,13 +606,17 @@ function createAllocationContexts(
     if (!friendlySide || !enemySide) {
       continue;
     }
+    const focus = getSchwerpunktForEnemy(world, nationId, enemySide.nationId);
     const isFocus = focus?.schwerpunktSectorId === front.id;
-    const isSameEnemy = focus?.enemyNationId === enemySide.nationId;
+    const isSameEnemy = !!focus;
+    const defensiveFloor = getFrontlineCoverage(world, front.id, nationId)?.minimumRequiredStrength ?? 0;
     const effectivePlan = !focus ? plan : {
       ...plan,
-      desiredStrength: plan.desiredStrength * (isFocus
-        ? concentration.schwerpunktDesiredStrengthMultiplier
-        : isSameEnemy ? concentration.secondaryDesiredStrengthRatio : 1),
+      desiredStrength: isFocus
+        ? plan.desiredStrength
+        : isSameEnemy
+          ? Math.max(defensiveFloor, plan.desiredStrength * concentration.secondaryDesiredStrengthRatio)
+          : plan.desiredStrength,
       priority: Math.min(100, plan.priority + (isFocus ? concentration.schwerpunktPriorityBonus : 0)),
     };
     contexts.push({
@@ -621,6 +626,7 @@ function createAllocationContexts(
       distanceByRegionId:
         getFrontDistanceField(world, front.id, nationId)?.distanceByRegionId ??
         new Map(),
+      isSchwerpunkt: isFocus,
     });
   }
   return contexts;
@@ -684,7 +690,11 @@ function selectSurplusFront(
   const previousFrontId = previousFrontIdByUnitId.get(unit.id);
   let best: FrontAllocationContext | undefined;
   let bestScore = Number.NEGATIVE_INFINITY;
-  for (const context of contexts) {
+  const reachableFocus = contexts.filter((context) =>
+    context.isSchwerpunkt && context.distanceByRegionId.has(unit.regionId)
+  );
+  const considered = reachableFocus.length > 0 ? reachableFocus : contexts;
+  for (const context of considered) {
     const mutable = mutableByFrontId.get(context.front.id);
     const distance = context.distanceByRegionId.get(unit.regionId);
     if (distance === undefined) {

@@ -80,6 +80,11 @@ export interface WorldSummary {
   schwerpunktSelections: number;
   schwerpunktChanges: number;
   activeSchwerpunkts: number;
+  schwerpunktAverageConcentrationPercent: number;
+  schwerpunktAverageOffensiveStrength: number;
+  schwerpunktAverageReserveContribution: number;
+  schwerpunktReserveDeployments: number;
+  reorganizationReturnsToSchwerpunkt: number;
   artificialInactivitySamples: number;
   healthyWaitingSamples: number;
   expectedWaitingSamples: number;

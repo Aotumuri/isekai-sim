@@ -21,6 +21,8 @@ import { getUnitCombatStrength } from "./unit-strength";
 import { buildWarAdjacency, isAtWar } from "./war-state";
 import type { WorldState } from "./world-state";
 import { getMesoById, getOwnerByMesoId } from "./world-cache";
+import { getNationSchwerpunkt } from "./stalemate-pressure";
+import type { FrontId } from "./land-fronts";
 
 export type ReorganizationPlanId = string & {
   __brand: "ReorganizationPlanId";
@@ -98,6 +100,7 @@ interface ReturnObservation {
   releasedAtTick: number;
   fromRetreat: boolean;
   fromReserve: boolean;
+  intendedSchwerpunktSectorId: FrontId | null;
 }
 
 export interface ReorganizationState {
@@ -126,6 +129,7 @@ export interface ReorganizationState {
   totalDurationTicks: number;
   returnedToFrontCount: number;
   returnedToReserveCount: number;
+  returnedToSchwerpunktCount: number;
   retreatSurvivorsReturnedCount: number;
   reserveSurvivorsReturnedCount: number;
   emergencyEarlyDeploymentCount: number;
@@ -192,6 +196,7 @@ export function createReorganizationState(enabled = true): ReorganizationState {
     totalDurationTicks: 0,
     returnedToFrontCount: 0,
     returnedToReserveCount: 0,
+    returnedToSchwerpunktCount: 0,
     retreatSurvivorsReturnedCount: 0,
     reserveSurvivorsReturnedCount: 0,
     emergencyEarlyDeploymentCount: 0,
@@ -1094,6 +1099,9 @@ function selectReturnDestination(
   if (getCapitalDefenseAssessment(world, plan.nationId)?.threatLevel === "critical") {
     return "front";
   }
+  if (getNationSchwerpunkt(world, plan.nationId)?.schwerpunktSectorId) {
+    return "front";
+  }
   const reserveSettings = WORLD_BALANCE.war.landFront.strategicReserve;
   const severeDeficit = world.frontAllocations.allocations.some(
     (allocation) =>
@@ -1140,6 +1148,8 @@ function handleCompletedReturn(
     releasedAtTick: world.time.fastTick,
     fromRetreat: plan.reasonFlags.includes("retreat-survivor"),
     fromReserve: plan.reasonFlags.includes("strategic-reserve"),
+    intendedSchwerpunktSectorId:
+      getNationSchwerpunkt(world, plan.nationId)?.schwerpunktSectorId ?? null,
   });
 }
 
@@ -1149,8 +1159,13 @@ function observeFrontReturns(world: WorldState): void {
   const unitIds = new Set(world.units.map((unit) => unit.id));
   for (const observation of world.reorganization.awaitingFrontReturn) {
     if (!unitIds.has(observation.unitId)) continue;
-    if (world.frontAllocations.frontIdByUnitId.has(observation.unitId)) {
+    const returnedFrontId = world.frontAllocations.frontIdByUnitId.get(observation.unitId);
+    if (returnedFrontId) {
       world.reorganization.returnedToFrontCount += 1;
+      if (returnedFrontId === observation.intendedSchwerpunktSectorId) {
+        world.reorganization.returnedToSchwerpunktCount += 1;
+        world.instrumentation?.incrementCounter("reorganization.returnedToSchwerpunkt");
+      }
       if (observation.fromRetreat) {
         world.reorganization.retreatSurvivorsReturnedCount += 1;
       }

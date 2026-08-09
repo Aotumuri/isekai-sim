@@ -404,6 +404,40 @@ function appendOperationalDetails(
         const coverage = getFrontlineCoverage(world, front.id, nationId);
         const allocation = getFrontAllocation(world, front.id, nationId);
         const focused = stalled.schwerpunktSectorId === front.id;
+        const pairAllocated = world.frontAllocations.allocations
+          .filter((item) => {
+            if (item.nationId !== nationId) return false;
+            const itemSector = world.landFronts.operationalSectorsById.get(item.frontId);
+            return !!itemSector &&
+              (itemSector.nationAId === enemyId || itemSector.nationBId === enemyId);
+          })
+          .reduce((sum, item) => sum + item.allocatedStrength, 0);
+        const reserve = world.strategicReserves.reservesByNationId.get(nationId);
+        const reserveContribution = focused && reserve?.deployment?.targetFrontId === front.id &&
+          reserve.deployment.status !== "returning"
+          ? reserve.deployment.unitIds.reduce((sum, unitId) => {
+            const unit = unitById.get(unitId);
+            return sum + (unit ? getUnitCombatStrength(unit) : 0);
+          }, 0)
+          : 0;
+        const offensiveStrength = Math.max(
+          0,
+          (allocation?.allocatedStrength ?? 0) - (coverage?.minimumRequiredStrength ?? 0),
+        );
+        const concentration = focused
+          ? ((allocation?.allocatedStrength ?? 0) + reserveContribution) /
+            Math.max(1, pairAllocated + reserveContribution)
+          : 0;
+        const preparationProgress = operation?.phase === "preparing"
+          ? Math.min(1, Math.max(
+            (world.time.fastTick - operation.phaseStartedAtTick) /
+              (operation.isMajorOffensive
+                ? WORLD_BALANCE.war.landFront.stalemate.majorMinimumPreparationTicks
+                : WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks),
+            operation.actualActiveApproachCount /
+              Math.max(1, operation.plannedApproachRegionIds.length),
+          ))
+          : operation ? 1 : 0;
         lines.push(
           `AI STATUS ${formatInactivityStatus(stalled.inactivityCategory)} | ${formatInactivityStatus(stalled.inactivityReason)}`,
           `  next evaluation tick ${stalled.nextEvaluationTick}`,
@@ -414,6 +448,11 @@ function appendOperationalDetails(
           `  surplus ${formatStrength(coverage?.offensiveSurplusStrength ?? 0)} | committed ${formatStrength(operation?.assignedStrength ?? 0)} | released ${formatStrength(stalled.releasedSecondaryStrength)}`,
           `  local ${formatRatio(operation?.localStrengthRatioAtAttack || getStrengthRatio(operation?.assignedStrength ?? 0, operation?.targetLocalDefenderStrength ?? 0))} | status ${(operation?.phase ?? (focused ? "concentrating" : "normal")).toUpperCase()}`,
           `  operation ${formatStrength(operation?.assignedStrength ?? 0)} / available ${formatStrength(operation?.offensiveSurplusAvailable ?? coverage?.offensiveSurplusStrength ?? 0)}`,
+          ...(focused ? [
+            `SCHWERPUNKT ${front.id} | pressure ${stalled.pressure.toFixed(0)} | concentration ${(concentration * 100).toFixed(0)}%`,
+            `  offensive ${formatStrength(offensiveStrength)} | reserve ${formatStrength(reserveContribution)} | preparation ${(preparationProgress * 100).toFixed(0)}%`,
+            `  phase ${(operation?.phase ?? "concentrating").toUpperCase()} | selected @${stalled.selectedAtTick ?? "-"}`,
+          ] : []),
         );
       }
     }
