@@ -23,6 +23,7 @@ import type { FrontlineCoverageState } from "./frontline-coverage";
 import type { StalematePressureState } from "./stalemate-pressure";
 import type { CollapseAdvanceState } from "./collapse-advance";
 import type { StrategicProgressState } from "./strategic-progress";
+import type { BattlefieldTopologyState } from "./battlefield-topology";
 
 export interface WorldState {
   width: number;
@@ -45,6 +46,7 @@ export interface WorldState {
   strategicReserves: StrategicReserveState;
   reorganization: ReorganizationState;
   strategicProgress: StrategicProgressState;
+  battlefieldTopology: BattlefieldTopologyState;
   stalematePressure: StalematePressureState;
   collapseAdvances: CollapseAdvanceState;
   mapVersion: number;

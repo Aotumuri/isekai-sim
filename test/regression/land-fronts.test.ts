@@ -95,6 +95,11 @@ import {
 import { BenchmarkMetrics } from "../benchmark/metrics";
 import { beginAiGeographyEvaluation } from "../../src/sim/ai-geography";
 import { createTestScenario } from "../helpers/test-scenario";
+import {
+  createBattlefieldTopologyState,
+  getBattlefieldTopologyAssessment,
+  updateBattlefieldTopology,
+} from "../../src/sim/battlefield-topology";
 
 const NATION_A = createNationId(0);
 const NATION_B = createNationId(1);
@@ -1220,12 +1225,124 @@ test("a nation respects the active offensive operation limit", () => {
   );
 });
 
+test("Battlefield Topology reuses enemy effective-control components", () => {
+  const world = createCollapseAdvanceWorld();
+  updateBattlefieldTopology(world);
+  const assessment = getBattlefieldTopologyAssessment(world, NATION_A, NATION_B);
+  assert(assessment);
+  assert.equal(assessment.enemyComponents.length, 1);
+  assert.deepEqual(assessment.enemyComponents[0].regionIds, ids("b0", "b1", "b2", "b3"));
+});
+
+test("Battlefield Topology respects occupation effective control", () => {
+  const world = createCollapseAdvanceWorld();
+  world.occupation.mesoById.set(id("b2"), NATION_A);
+  world.occupation.version += 1;
+  updateLandFronts(world);
+  updateFrontlineCoverage(world);
+  updateBattlefieldTopology(world);
+  const enemyRegions = getBattlefieldTopologyAssessment(world, NATION_A, NATION_B)?.enemyComponents.flatMap((item) => item.regionIds) ?? [];
+  assert(!enemyRegions.includes(id("b2")));
+});
+
+test("Battlefield Topology detects articulation and excludes non-articulation regions", () => {
+  const world = createFrontWorld(
+    [{ id: "a", owner: NATION_A }, { id: "b0", owner: NATION_B }, { id: "b1", owner: NATION_B }, { id: "b2", owner: NATION_B, building: "capital" }],
+    [["a", "b0"], ["b0", "b1"], ["b1", "b2"]],
+  );
+  startWar(world, NATION_A, NATION_B); updateLandFronts(world); updateBattlefieldTopology(world);
+  const regions = getBattlefieldTopologyAssessment(world, NATION_A, NATION_B)?.articulationRegions.map((item) => item.regionId) ?? [];
+  assert(regions.includes(id("b1")));
+  assert(!regions.includes(id("b0")));
+  assert(!regions.includes(id("b2")));
+});
+
+test("Battlefield Topology classifies zero, one, and multiple rear exits", () => {
+  const zero = createFrontWorld(
+    [{ id: "a0", owner: NATION_A }, { id: "a1", owner: NATION_A }, { id: "rear", owner: NATION_B, building: "capital" }, { id: "pocket", owner: NATION_B }],
+    [["rear", "a0"], ["a0", "a1"], ["a1", "pocket"]],
+  );
+  startWar(zero, NATION_A, NATION_B); updateLandFronts(zero); updateBattlefieldTopology(zero);
+  assert(getBattlefieldTopologyAssessment(zero, NATION_A, NATION_B)?.enemyComponents.some((item) => item.exitCount === 0));
+
+  const one = createFrontWorld(
+    [{ id: "a", owner: NATION_A }, { id: "rear", owner: NATION_B, building: "capital" }, { id: "front", owner: NATION_B }, { id: "gate", owner: NATION_B }],
+    [["a", "front"], ["front", "gate"], ["gate", "rear"]],
+  );
+  startWar(one, NATION_A, NATION_B); updateLandFronts(one); updateBattlefieldTopology(one);
+  assert(getBattlefieldTopologyAssessment(one, NATION_A, NATION_B)?.escapeCorridors.some((item) => item.regionId === id("gate")));
+
+  const multiple = createFrontWorld(
+    [{ id: "a", owner: NATION_A }, { id: "rear", owner: NATION_B, building: "capital" }, { id: "front", owner: NATION_B }, { id: "left", owner: NATION_B }, { id: "right", owner: NATION_B }],
+    [["a", "front"], ["front", "left"], ["front", "right"], ["left", "rear"], ["right", "rear"]],
+  );
+  startWar(multiple, NATION_A, NATION_B); updateLandFronts(multiple); updateBattlefieldTopology(multiple);
+  assert.equal(getBattlefieldTopologyAssessment(multiple, NATION_A, NATION_B)?.escapeCorridors.length, 0);
+});
+
+test("fragmented weak front creates a topology Collapse Opportunity", () => {
+  const world = createCollapseAdvanceWorld();
+  updateBattlefieldTopology(world);
+  const opportunity = getBattlefieldTopologyAssessment(world, NATION_A, NATION_B)?.collapseOpportunities[0];
+  assert(opportunity, JSON.stringify(getBattlefieldTopologyAssessment(world, NATION_A, NATION_B)));
+  assert(opportunity.reasonFlags.includes("low-defender-strength"));
+  assert(opportunity.reasonFlags.includes("enemy-front-fragmented"));
+});
+
+test("coherent defended front creates no topology Collapse Opportunity", () => {
+  const world = createCollapseAdvanceWorld();
+  for (let index = 0; index < 8; index += 1) setUnitStrength(addLandUnit(world, NATION_B, "b0", "Infantry"), 300);
+  updateAllocationSystem(world);
+  updateBattlefieldTopology(world);
+  const assessment = getBattlefieldTopologyAssessment(world, NATION_A, NATION_B);
+  assert.equal(assessment?.collapseOpportunities.length, 0, JSON.stringify(assessment));
+});
+
+test("local topology collapse does not require total enemy defense collapse", () => {
+  const world = createAllocatedTwoFrontWorld();
+  const sectors = world.landFronts.operationalSectors;
+  assert(sectors.length >= 2);
+  for (let index = 0; index < 6; index += 1) setUnitStrength(addLandUnit(world, NATION_B, "b2", "Infantry"), 100);
+  updateAllocationSystem(world);
+  for (const unit of world.units.filter((unit) => unit.nationId === NATION_B && unit.regionId === id("b1"))) setUnitStrength(unit, 1);
+  beginAiGeographyEvaluation(world); updateFrontlineCoverage(world); updateBattlefieldTopology(world);
+  const assessment = getBattlefieldTopologyAssessment(world, NATION_A, NATION_B);
+  assert(assessment?.collapseOpportunities.length);
+  assert(assessment.enemyComponents.reduce((sum, item) => sum + item.enemyStrength, 0) > WORLD_BALANCE.war.landFront.collapseAdvance.collapsedDefenseStrength);
+});
+
+test("Battlefield Topology cache, IDs, numbers, and decisions are deterministic", () => {
+  const first = createCollapseAdvanceWorld(); const second = createCollapseAdvanceWorld();
+  updateBattlefieldTopology(first); updateBattlefieldTopology(first); updateBattlefieldTopology(second);
+  assert.equal(first.battlefieldTopology.rebuildCount, 1);
+  assert.equal(first.battlefieldTopology.cacheHitCount, 1);
+  const snapshot = (world: WorldState) => getBattlefieldTopologyAssessment(world, NATION_A, NATION_B)?.enemyComponents.map((item) => ({ id: item.id, regions: item.regionIds, strength: item.enemyStrength, exits: item.exitCount }));
+  assert.deepEqual(snapshot(first), snapshot(second));
+  for (const assessment of first.battlefieldTopology.assessments) {
+    for (const component of assessment.enemyComponents) {
+      assert(component.regionIds.every((regionId) => first.mesoRegions.some((region) => region.id === regionId)));
+      assert(Number.isFinite(component.enemyStrength));
+    }
+    for (const articulation of assessment.articulationRegions) {
+      assert(first.mesoRegions.some((region) => region.id === articulation.regionId));
+      assert(Number.isFinite(articulation.enemyStrengthAffected));
+    }
+    for (const opportunity of assessment.collapseOpportunities) {
+      assert(first.mesoRegions.some((region) => region.id === opportunity.targetRegionId));
+      assert(Number.isFinite(opportunity.score));
+      assert(Number.isFinite(opportunity.enemyStrength));
+      assert(Number.isFinite(opportunity.defenderStrength));
+    }
+  }
+});
+
 test("open reachable enemy territory starts a concentrated Collapse Advance", () => {
   const world = createCollapseAdvanceWorld();
   updateCollapseAdvances(world);
   const advance = world.collapseAdvances.advanceByNationId.get(NATION_A);
   assert(advance);
   assert.equal(advance.enemyNationId, NATION_B);
+  assert(Number.isFinite(advance.topologyScore));
   assert(advance.unitIds.length >= 1 && advance.unitIds.length <= WORLD_BALANCE.war.landFront.collapseAdvance.maximumUnits);
   assert.equal(new Set(advance.unitIds).size, advance.unitIds.length);
   assert.equal(world.mesoRegions.find((region) => region.id === advance.currentTargetRegionId)?.type === "sea", false);
@@ -1273,6 +1390,72 @@ test("a reformed meaningful enemy Front stops Collapse Advance", () => {
   updateCollapseAdvances(world);
   assert.equal(world.collapseAdvances.advanceByNationId.has(NATION_A), false);
   assert.equal(world.collapseAdvances.history.at(-1)?.stopReason, "front-reformed");
+});
+
+test("Collapse Advance follows the same topology component after its first capture", () => {
+  const world = createCollapseAdvanceWorld();
+  updateCollapseAdvances(world);
+  const advance = world.collapseAdvances.advanceByNationId.get(NATION_A);
+  assert(advance);
+  const firstTarget = advance.currentTargetRegionId;
+  world.occupation.mesoById.set(firstTarget, NATION_A);
+  world.occupation.version += 1;
+  updateLandFronts(world);
+  updateFrontlineCoverage(world);
+  updateBattlefieldTopology(world);
+  updateCollapseAdvances(world);
+  const continued = world.collapseAdvances.advanceByNationId.get(NATION_A);
+  assert(continued);
+  assert.notEqual(continued.currentTargetRegionId, firstTarget);
+  assert.equal(continued.targetRegionIds.length, 2);
+  assert.equal(continued.occupiedTargetCount, 1);
+});
+
+test("capital emergency overrides an active Collapse Advance", () => {
+  const world = createCollapseAdvanceWorld();
+  updateCollapseAdvances(world);
+  world.capitalDefense.assessmentsByNationId.set(NATION_A, { threatLevel: "critical" } as never);
+  updateCollapseAdvances(world);
+  assert.equal(world.collapseAdvances.history.at(-1)?.stopReason, "capital-emergency");
+});
+
+test("retreat overrides an active Collapse Advance", () => {
+  const world = createCollapseAdvanceWorld();
+  updateCollapseAdvances(world);
+  world.retreatPlans.plansByNationId.set(NATION_A, [{} as never]);
+  updateCollapseAdvances(world);
+  assert.equal(world.collapseAdvances.history.at(-1)?.stopReason, "retreat-started");
+});
+
+test("war end cleans up an active Collapse Advance", () => {
+  const world = createCollapseAdvanceWorld();
+  updateCollapseAdvances(world);
+  world.wars = [];
+  updateCollapseAdvances(world);
+  assert.equal(world.collapseAdvances.advanceByNationId.has(NATION_A), false);
+  assert.equal(world.collapseAdvances.history.at(-1)?.stopReason, "war-ended");
+});
+
+test("inactive nation cleanup stops an active Collapse Advance", () => {
+  const world = createCollapseAdvanceWorld();
+  updateCollapseAdvances(world);
+  const nation = world.nations.find((item) => item.id === NATION_A);
+  assert(nation);
+  nation.macroRegionIds = [];
+  updateCollapseAdvances(world);
+  assert.equal(world.collapseAdvances.advanceByNationId.has(NATION_A), false);
+  assert.equal(world.collapseAdvances.history.at(-1)?.stopReason, "nation-inactive");
+});
+
+test("naval strength and units are excluded from topology Collapse Advance", () => {
+  const world = createCollapseAdvanceWorld();
+  const naval = addUnit(world, NATION_B, "b0", "CombatShip");
+  updateBattlefieldTopology(world);
+  const component = getBattlefieldTopologyAssessment(world, NATION_A, NATION_B)?.enemyComponents[0];
+  assert(component);
+  assert.equal(component.enemyStrength, 0);
+  updateCollapseAdvances(world);
+  assert(!world.collapseAdvances.advanceNationByUnitId.has(naval.id));
 });
 
 test("a land unit never belongs to multiple offensive operations", () => {
@@ -3530,6 +3713,7 @@ function createFrontWorld(
     strategicProgress: createStrategicProgressState(),
     stalematePressure: createStalematePressureState(),
     collapseAdvances: createCollapseAdvanceState(),
+    battlefieldTopology: createBattlefieldTopologyState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

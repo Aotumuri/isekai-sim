@@ -129,6 +129,16 @@ export interface WorldSummary {
   collapseFrontReformationStops: number;
   collapseArtificialInactivityResolved: number;
   collapseArtificialInactivityRemaining: number;
+  battlefieldTopologyRebuilds: number;
+  battlefieldTopologyCacheHits: number;
+  battlefieldEnemyComponents: number;
+  battlefieldArticulationPoints: number;
+  battlefieldZeroExitComponents: number;
+  battlefieldOneExitComponents: number;
+  battlefieldCollapseOpportunities: number;
+  battlefieldCollapseOpportunitiesIgnored: number;
+  battlefieldComponentFragmentations: number;
+  battlefieldWarsEndingAfterCollapse: number;
   majorOffensivesLaunched: number;
   majorOffensiveSuccesses: number;
   majorOffensiveFailures: number;

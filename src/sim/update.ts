@@ -25,6 +25,7 @@ import { updateFrontlineCoverage } from "./frontline-coverage";
 import { updateStalematePressure } from "./stalemate-pressure";
 import { updateStrategicProgress } from "./strategic-progress";
 import { updateCollapseAdvances } from "./collapse-advance";
+import { updateBattlefieldTopology } from "./battlefield-topology";
 import {
   beginAiGeographyEvaluation,
   prepareFrontDistanceFields,
@@ -151,6 +152,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateStalematePressure(world);
   updateNationFrontAllocations(world);
   updateFrontlineCoverage(world);
+  updateBattlefieldTopology(world);
   updateOffensiveOperations(world);
   updateCollapseAdvances(world);
 }

@@ -13,7 +13,7 @@ export const setupCollapseAdvance: ScenarioSetup = (world) => {
     if (unit.nationId === war.defenderId) { unit.manpower = 1; unit.org = 0.1; return true; }
     if (unit.nationId !== war.aggressorId) return true;
     retainedAttackers += 1;
-    return retainedAttackers <= 2;
+    return retainedAttackers <= 12;
   });
   for (const unit of world.units) if (unit.domain === "land" && unit.nationId === war.aggressorId) unit.manpower *= 2;
   for (const nation of world.nations) {

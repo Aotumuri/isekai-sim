@@ -22,6 +22,7 @@ import { getFrontlineCoverage } from "../sim/frontline-coverage";
 import { getFrontAllocation } from "../sim/nation-front-allocations";
 import { getStalemateAssessment } from "../sim/stalemate-pressure";
 import { getStrategicProgressAssessment } from "../sim/strategic-progress";
+import { getBattlefieldTopologyAssessment } from "../sim/battlefield-topology";
 import type { Vec2 } from "../utils/vector";
 import { clearLayer } from "./clear-layer";
 import { findSharedSegments, type Segment } from "./meso-border-geometry";
@@ -58,6 +59,7 @@ interface OverlayVersions {
   plans: number;
   operations: number;
   collapseAdvances: number;
+  battlefieldTopology: number;
   retreats: number;
   coverage: number;
   stalemate: number;
@@ -404,6 +406,27 @@ function appendOperationalDetails(
     const candidate = getOperationCandidateForFront(world, front.id, nationId);
     if (selected) {
       const enemyId = nationId === front.nationAId ? front.nationBId : front.nationAId;
+      const topology = getBattlefieldTopologyAssessment(world, nationId, enemyId);
+      const collapseOpportunity = topology?.collapseOpportunities.find((item) => item.sectorId === front.id);
+      const enemyInfluence = nationId === front.nationAId ? front.sideB.influenceRegionIds : front.sideA.influenceRegionIds;
+      const component = collapseOpportunity
+        ? topology?.enemyComponents.find((item) => item.id === collapseOpportunity.componentId)
+        : topology?.enemyComponents.find((item) => item.regionIds.some((id) => enemyInfluence.includes(id)));
+      const corridor = component ? topology?.escapeCorridors.find((item) => item.componentId === component.id) : undefined;
+      const articulation = corridor ? topology?.articulationRegions.find((item) => item.regionId === corridor.regionId) : undefined;
+      if (component) {
+        lines.push(
+          `TOPOLOGY ${nationId} -> ${enemyId}`,
+          `  component ${component.id} | regions ${component.regionCount} | strength ${formatStrength(component.enemyStrength)}`,
+          `  front contacts ${component.frontlineContactCount} | rear exits ${collapseOpportunity?.exitCount ?? component.exitCount}`,
+          `COLLAPSE ${collapseOpportunity ? collapseOpportunity.score.toFixed(0) : "none"} | ${collapseOpportunity?.reasonFlags[0] ?? "coherent-front"}`,
+          `  reasons ${collapseOpportunity?.reasonFlags.join(", ") || "none"}`,
+          ...(articulation ? [
+            `  articulation ${articulation.regionId} | affected ${articulation.affectedRegionCount} regions`,
+            `  affected strength ${formatStrength(articulation.enemyStrengthAffected)} | cities ${articulation.citiesAffected}`,
+          ] : []),
+        );
+      }
       const stalled = getStalemateAssessment(world, nationId, enemyId);
       if (stalled) {
         const progress = getStrategicProgressAssessment(world, nationId, enemyId);
@@ -529,7 +552,8 @@ function appendOperationalDetails(
         `COLLAPSE ADVANCE ${collapse.enemyNationId}`,
         `  phase ${collapse.phase.toUpperCase()} | units ${collapse.unitIds.length} | strength ${formatStrength(strength)}`,
         `  target ${collapse.currentTargetRegionId} | depth ${collapse.targetRegionIds.length}/${WORLD_BALANCE.war.landFront.collapseAdvance.maximumDepth}`,
-        `  reason ${collapse.reasonFlags.join(", ")}`,
+        `  component ${collapse.topologyComponentId} | topology ${collapse.topologyScore.toFixed(0)}`,
+        `  reason ${collapse.topologyReasonFlags.join(", ")}`,
       );
     }
     const retreat = getRetreatPlanForFront(world, front.id, nationId);
@@ -700,6 +724,7 @@ function readVersions(world: WorldState): OverlayVersions {
     plans: world.frontPlans.version,
     operations: world.offensiveOperations.version,
     collapseAdvances: world.collapseAdvances.version,
+    battlefieldTopology: world.battlefieldTopology.version,
     retreats: world.retreatPlans.version,
     coverage: world.frontlineCoverage.version,
     stalemate: world.stalematePressure.version,
@@ -719,7 +744,7 @@ function readVersions(world: WorldState): OverlayVersions {
 
 function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
   return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
-    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances &&
+    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology &&
     a.retreats === b.retreats && a.coverage === b.coverage && a.stalemate === b.stalemate &&
     a.reserveDeployments === b.reserveDeployments && a.battles === b.battles;
 }

@@ -31,6 +31,7 @@ import { createFrontlineCoverageState } from "./frontline-coverage";
 import { createStalematePressureState } from "./stalemate-pressure";
 import { createStrategicProgressState } from "./strategic-progress";
 import { createCollapseAdvanceState } from "./collapse-advance";
+import { createBattlefieldTopologyState } from "./battlefield-topology";
 import { nextScheduledTickRange } from "./schedule";
 import { addTestWar } from "./test-war";
 import { createSimTime } from "./time";
@@ -105,6 +106,7 @@ export function createWorld(config: WorldConfig): WorldState {
   const strategicProgress = createStrategicProgressState();
   const stalematePressure = createStalematePressureState();
   const collapseAdvances = createCollapseAdvanceState();
+  const battlefieldTopology = createBattlefieldTopologyState();
   const mapVersion = 0;
   const territoryVersion = 0;
   const buildingVersion = 0;
@@ -133,6 +135,7 @@ export function createWorld(config: WorldConfig): WorldState {
     strategicProgress,
     stalematePressure,
     collapseAdvances,
+    battlefieldTopology,
     mapVersion,
     territoryVersion,
     buildingVersion,
