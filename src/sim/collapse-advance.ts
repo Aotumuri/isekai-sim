@@ -11,6 +11,7 @@ import { getOffensiveOperations } from "./offensive-operations";
 import type { UnitId, UnitState } from "./unit";
 import { getUnitCombatStrength } from "./unit-strength";
 import type { WorldState } from "./world-state";
+import { recordCollapseOpportunityDiagnostic } from "./stalemate-pressure";
 import { getMesoById, getNeighborsById, getOwnerByMesoId } from "./world-cache";
 
 export type CollapseAdvancePhase = "forming" | "advancing" | "completed" | "cancelled";
@@ -94,11 +95,15 @@ export function updateCollapseAdvances(world: WorldState): void {
   state.advances = retained;
   rebuildIndexes(state);
 
-  const assessments = [...world.stalematePressure.assessments].filter((item) => item.artificialInactivity && item.artificialInactivityBlocker === "target-validity").sort((a, b) => compareIds(a.nationId, b.nationId) || compareIds(a.enemyNationId, b.enemyNationId));
+  // Collapse Advance historically consumed the old "artificial inactivity"
+  // diagnostic as a behavior trigger. Keep that trigger explicit so diagnostic
+  // normalization cannot alter AI decisions.
+  const assessments = [...world.stalematePressure.assessments].filter((item) => item.collapseAdvanceCandidate).sort((a, b) => compareIds(a.nationId, b.nationId) || compareIds(a.enemyNationId, b.enemyNationId));
   for (const assessment of assessments) {
     if (stoppedNationIds.has(assessment.nationId) || state.advanceByNationId.has(assessment.nationId) || getOffensiveOperations(world, assessment.nationId).some((op) => op.phase !== "recovering")) continue;
     const opportunity = assessOpportunity(world, assessment.nationId, assessment.enemyNationId);
     if (!opportunity) { state.artificialInactivityRemaining += 1; world.instrumentation?.incrementCounter("collapseAdvance.artificialInactivityRemaining"); continue; }
+    recordCollapseOpportunityDiagnostic(world, assessment.nationId, assessment.enemyNationId);
     state.opportunitiesDetected += 1;
     world.instrumentation?.incrementCounter("collapseAdvance.opportunities");
     const units = selectUnits(opportunity.units);

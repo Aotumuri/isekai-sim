@@ -81,6 +81,10 @@ export interface WorldSummary {
   schwerpunktChanges: number;
   activeSchwerpunkts: number;
   artificialInactivitySamples: number;
+  healthyWaitingSamples: number;
+  expectedWaitingSamples: number;
+  naturalStalemateSamples: number;
+  unknownInactivitySamples: number;
   artificialInactivityPostureBlocks: number;
   artificialInactivityAllocationBlocks: number;
   artificialInactivityTargetBlocks: number;

@@ -1066,6 +1066,47 @@ test("only an attack front creates an offensive operation", () => {
   assert.equal(operation.frontId, planFor(world, NATION_A).frontId);
 });
 
+test("inactivity diagnostics separate scheduled work and Operation lifecycle waiting", () => {
+  const world = createOperationWorld();
+  updateFrontlineCoverage(world);
+  const sector = world.landFronts.operationalSectors[0];
+  assert(sector);
+  const friendly = getFrontSide(sector, NATION_A);
+  const enemy = getFrontSide(sector, NATION_B);
+  assert(friendly && enemy);
+  friendly.strength = WORLD_BALANCE.war.landFront.stalemate.minimumMeaningfulStrength * 2;
+  enemy.strength = 1;
+
+  updateStalematePressure(world);
+  const scheduled = getStalemateAssessment(world, NATION_A, NATION_B);
+  assert(scheduled);
+  assert.equal(scheduled.inactivityCategory, "expected-waiting");
+  assert.equal(scheduled.inactivityReason, "scheduled-operation");
+  assert.equal(scheduled.artificialInactivity, false);
+
+  updateOffensiveOperations(world);
+  updateStalematePressure(world);
+  const preparing = getStalemateAssessment(world, NATION_A, NATION_B);
+  assert(preparing);
+  assert.equal(preparing.inactivityCategory, "healthy-waiting");
+  assert.equal(preparing.inactivityReason, "preparing");
+
+  const operation = getOffensiveOperations(world, NATION_A)[0];
+  assert(operation);
+  operation.phase = "recovering";
+  operation.expiresAtTick = world.time.fastTick + 60;
+  updateStalematePressure(world);
+  const recovering = getStalemateAssessment(world, NATION_A, NATION_B);
+  assert(recovering);
+  assert.equal(recovering.inactivityCategory, "healthy-waiting");
+  assert.equal(recovering.inactivityReason, "recovering");
+  assert.equal(recovering.nextEvaluationTick, operation.expiresAtTick);
+  assert.deepEqual(
+    world.stalematePressure.inactivityTimeline.filter((event) => event.nationId === NATION_A).slice(-3).map((event) => event.reason),
+    ["scheduled-operation", "preparing", "recovering"],
+  );
+});
+
 test("hold, reinforce, and retreat fronts do not start operations", () => {
   for (const posture of ["hold", "reinforce", "retreat"] as const) {
     const world = createOperationWorld();
@@ -1099,6 +1140,10 @@ test("open reachable enemy territory starts a concentrated Collapse Advance", ()
   assert.equal(world.mesoRegions.find((region) => region.id === advance.currentTargetRegionId)?.type === "sea", false);
   assert.equal(world.occupation.mesoById.get(advance.currentTargetRegionId) ?? NATION_B, NATION_B);
   assert.equal(advance.currentTargetRegionId, id("b1"), "nearby capital is preferred along the open axis");
+  const diagnostic = world.stalematePressure.assessments[0];
+  assert.equal(diagnostic.inactivityCategory, "healthy-waiting");
+  assert.equal(diagnostic.inactivityReason, "collapse-opportunity");
+  assert.equal(diagnostic.artificialInactivity, false);
 });
 
 test("a valid normal Operation suppresses Collapse Advance and prevents duplicate units", () => {
@@ -2870,7 +2915,7 @@ function createCollapseAdvanceWorld(): WorldState {
   updateAllocationSystem(world);
   const sector = world.landFronts.operationalSectors[0];
   assert(sector);
-  world.stalematePressure.assessments = [{ nationId: NATION_A, enemyNationId: NATION_B, pressure: 0, staticTicks: 1, reasonFlags: ["artificial-inactivity"], artificialInactivity: true, artificialInactivityBlocker: "target-validity", schwerpunktSectorId: null, selectedAtTick: null, cooldownUntilTick: 0, lastOccupationVersion: 0, lastBreakthroughCount: 0, lastOperationSuccessCount: 0, lastOperationFailureCount: 0, releasedSecondaryStrength: 0 }];
+  world.stalematePressure.assessments = [{ nationId: NATION_A, enemyNationId: NATION_B, pressure: 0, staticTicks: 1, reasonFlags: ["artificial-inactivity"], artificialInactivity: true, artificialInactivityBlocker: "target-validity", collapseAdvanceCandidate: true, inactivityCategory: "artificial-inactivity", inactivityReason: "no-valid-target", nextEvaluationTick: world.time.fastTick + 1, targetValidityFailureReason: "no-valid-frontline-position", targetValidityOtherReason: null, schwerpunktSectorId: null, selectedAtTick: null, cooldownUntilTick: 0, lastOccupationVersion: 0, lastBreakthroughCount: 0, lastOperationSuccessCount: 0, lastOperationFailureCount: 0, releasedSecondaryStrength: 0 }];
   return world;
 }
 

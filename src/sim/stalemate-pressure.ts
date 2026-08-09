@@ -10,6 +10,7 @@ import {
 } from "./land-fronts";
 import { getFrontAllocation } from "./nation-front-allocations";
 import { getSectorPlan } from "./nation-front-plans";
+import { FAST_TICK_MS, SLOW_TICK_MS } from "./time";
 import type { WorldState } from "./world-state";
 import { getOwnerByMesoId } from "./world-cache";
 import { getMesoById } from "./world-cache";
@@ -23,6 +24,21 @@ export type StalemateReason =
   | "artificial-inactivity";
 export type ArtificialInactivityBlocker = "posture" | "allocation" | "target-validity" | null;
 export type TargetValidityFailureReason = "no-enemy-influence-target" | "no-valid-frontline-position" | "target-outside-current-sector" | "target-already-occupied" | "ownership-mismatch" | "unreachable-target" | "geometry-invalidated" | "depth-radius-restriction" | "no-candidate-after-filtering" | "other";
+export type InactivityCategory = "healthy-waiting" | "expected-waiting" | "natural-stalemate" | "artificial-inactivity" | "unknown";
+export type InactivityReason =
+  | "capital-emergency" | "retreat" | "preparing" | "attacking" | "exploiting" | "recovering"
+  | "reorganization" | "reserve-deployment" | "collapse-advance" | "collapse-opportunity"
+  | "natural-stalemate" | "operation-cooldown" | "operation-limit" | "no-offensive-surplus"
+  | "temporary-posture" | "scheduled-operation" | "allocation-deadlock" | "no-valid-target"
+  | "stale-geometry" | "inconsistent-ownership" | "unreachable" | "planner-failure" | "unknown";
+
+export interface InactivityTransition {
+  tick: number;
+  nationId: NationId;
+  enemyNationId: NationId;
+  category: InactivityCategory;
+  reason: InactivityReason;
+}
 
 export interface StalemateAssessment {
   nationId: NationId;
@@ -32,6 +48,13 @@ export interface StalemateAssessment {
   reasonFlags: StalemateReason[];
   artificialInactivity: boolean;
   artificialInactivityBlocker: ArtificialInactivityBlocker;
+  /** Behavior-preserving internal trigger; intentionally independent of diagnostics. */
+  collapseAdvanceCandidate: boolean;
+  inactivityCategory: InactivityCategory;
+  inactivityReason: InactivityReason;
+  nextEvaluationTick: number;
+  targetValidityFailureReason: TargetValidityFailureReason | null;
+  targetValidityOtherReason: keyof StalematePressureState["targetValidityOtherCounts"] | null;
   schwerpunktSectorId: FrontId | null;
   selectedAtTick: number | null;
   cooldownUntilTick: number;
@@ -55,6 +78,9 @@ export interface StalematePressureState {
   artificialInactivityByBlocker: Record<Exclude<ArtificialInactivityBlocker, null>, number>;
   targetValidityFailureCounts: Record<TargetValidityFailureReason, number>;
   targetValidityOtherCounts: { recoveryCooldown: number; validCandidatePending: number; unknown: number };
+  inactivitySamplesByCategory: Record<InactivityCategory, number>;
+  inactivitySamplesByReason: Record<InactivityReason, number>;
+  inactivityTimeline: InactivityTransition[];
   pressureSampleTotal: number;
   pressureSampleCount: number;
   maxPressure: number;
@@ -74,6 +100,9 @@ export function createStalematePressureState(): StalematePressureState {
     artificialInactivityByBlocker: { posture: 0, allocation: 0, "target-validity": 0 },
     targetValidityFailureCounts: { "no-enemy-influence-target": 0, "no-valid-frontline-position": 0, "target-outside-current-sector": 0, "target-already-occupied": 0, "ownership-mismatch": 0, "unreachable-target": 0, "geometry-invalidated": 0, "depth-radius-restriction": 0, "no-candidate-after-filtering": 0, other: 0 },
     targetValidityOtherCounts: { recoveryCooldown: 0, validCandidatePending: 0, unknown: 0 },
+    inactivitySamplesByCategory: { "healthy-waiting": 0, "expected-waiting": 0, "natural-stalemate": 0, "artificial-inactivity": 0, unknown: 0 },
+    inactivitySamplesByReason: createInactivityReasonCounts(),
+    inactivityTimeline: [],
     pressureSampleTotal: 0, pressureSampleCount: 0,
     maxPressure: 0, staticTickSampleTotal: 0, staticTickSampleCount: 0, maxStaticTicks: 0,
     majorOffensivesLaunched: 0, majorOffensiveSuccesses: 0,
@@ -145,17 +174,14 @@ export function updateStalematePressure(world: WorldState): void {
       const theirs = getFrontlineCoverage(world, sector.id, enemyNationId);
       return !!ours && !!theirs && ours.gapSegments === 0 && theirs.gapSegments === 0;
     });
-    const noOperation = !(world.offensiveOperations.operationsByNationId.get(nationId)?.some((op) => op.enemyNationId === enemyNationId && op.phase !== "recovering")) &&
+    const pairOperations = world.offensiveOperations.operationsByNationId.get(nationId)?.filter((op) => op.enemyNationId === enemyNationId) ?? [];
+    const noOperation = !pairOperations.some((op) => op.phase !== "recovering") &&
       world.collapseAdvances.advanceByNationId.get(nationId)?.enemyNationId !== enemyNationId;
     const surplus = sectors.reduce((sum, sector) => sum + (getFrontAllocation(world, sector.id, nationId)?.surplus ?? 0), 0);
     const enemyLineStrength = sectors.reduce((sum, sector) => sum + (getFrontlineCoverage(world, sector.id, enemyNationId)?.defenderStrength ?? 0), 0);
     const hasAllocatedForce = sectors.some((sector) => (getFrontAllocation(world, sector.id, nationId)?.unitIds.length ?? 0) > 0);
-    const artificial = noOperation && hasAllocatedForce && friendlyStrength >= settings.minimumMeaningfulStrength &&
+    const attackOpportunity = noOperation && hasAllocatedForce && friendlyStrength >= settings.minimumMeaningfulStrength &&
       (enemyStrength < settings.minimumMeaningfulStrength * 0.25 || enemyLineStrength <= 0 || surplus > enemyStrength * 0.75);
-    const artificialBlocker: ArtificialInactivityBlocker = !artificial ? null
-      : sectors.every((sector) => !getFrontAllocation(world, sector.id, nationId)) ? "allocation"
-        : sectors.every((sector) => getSectorPlan(world, sector.id, nationId)?.posture !== "attack") ? "posture"
-          : "target-validity";
     let pressure = before?.pressure ?? 0;
     let staticTicks = before?.staticTicks ?? 0;
     if (territoryProgress || breakthroughProgress) {
@@ -174,6 +200,18 @@ export function updateStalematePressure(world: WorldState): void {
     if (balanced) reasons.push("balanced-strength");
     if (continuous) reasons.push("continuous-coverage");
     if (before && failure > before.lastOperationFailureCount) reasons.push("repeated-operation-cancel");
+    const targetDiagnostic = attackOpportunity
+      ? classifyTargetValidityFailure(world, sectors, nationId, enemyNationId)
+      : null;
+    const inactivity = classifyInactivity({
+      world, sectors, nationId, enemyNationId, pairOperations, critical, retreating,
+      bothCapable, balanced, continuous, staticTicks, progressCount: success + failure,
+      attackOpportunity, hasAllocatedForce, surplus, targetDiagnostic,
+      cooldownUntilTick: before?.cooldownUntilTick ?? 0,
+    });
+    const artificial = inactivity.category === "artificial-inactivity";
+    const artificialBlocker: ArtificialInactivityBlocker = !artificial ? null
+      : inactivity.reason === "allocation-deadlock" ? "allocation" : "target-validity";
     if (artificial) reasons.push("artificial-inactivity");
     let schwerpunktSectorId = before?.schwerpunktSectorId ?? null;
     let selectedAtTick = before?.selectedAtTick ?? null;
@@ -189,6 +227,11 @@ export function updateStalematePressure(world: WorldState): void {
     const assessment: StalemateAssessment = {
       nationId, enemyNationId, pressure, staticTicks, reasonFlags: reasons,
       artificialInactivity: artificial, artificialInactivityBlocker: artificialBlocker,
+      collapseAdvanceCandidate: attackOpportunity && sectors.some((sector) => getSectorPlan(world, sector.id, nationId)?.posture === "attack"),
+      inactivityCategory: inactivity.category, inactivityReason: inactivity.reason,
+      nextEvaluationTick: inactivity.nextEvaluationTick,
+      targetValidityFailureReason: targetDiagnostic?.reason ?? null,
+      targetValidityOtherReason: targetDiagnostic?.other ?? null,
       schwerpunktSectorId, selectedAtTick,
       cooldownUntilTick, lastOccupationVersion: occupationSignature,
       lastBreakthroughCount: breakthrough, lastOperationSuccessCount: success,
@@ -200,11 +243,16 @@ export function updateStalematePressure(world: WorldState): void {
         .reduce((sum, sector) => sum + (getSectorPlan(world, sector.id, nationId)?.desiredStrength ?? 0) * (1 - settings.secondaryDesiredStrengthRatio), 0);
     }
     if (pressure >= settings.selectionThreshold && (before?.pressure ?? 0) < settings.selectionThreshold) state.detections += 1;
+    state.inactivitySamplesByCategory[inactivity.category] += 1;
+    state.inactivitySamplesByReason[inactivity.reason] += 1;
+    if (!before || before.inactivityCategory !== inactivity.category || before.inactivityReason !== inactivity.reason) {
+      state.inactivityTimeline.push({ tick: world.time.fastTick, nationId, enemyNationId, category: inactivity.category, reason: inactivity.reason });
+    }
     if (artificial) {
       state.artificialInactivitySamples += 1;
       if (artificialBlocker) state.artificialInactivityByBlocker[artificialBlocker] += 1;
       if (artificialBlocker === "target-validity") {
-        const diagnostic = classifyTargetValidityFailure(world, sectors, nationId, enemyNationId);
+        const diagnostic = targetDiagnostic ?? { reason: "other" as const, other: "unknown" as const };
         state.targetValidityFailureCounts[diagnostic.reason] += 1;
         if (diagnostic.other) state.targetValidityOtherCounts[diagnostic.other] += 1;
       }
@@ -223,11 +271,99 @@ export function updateStalematePressure(world: WorldState): void {
   }
   state.assessments = next; state.byNationEnemy = nextByKey;
   state.schwerpunktByNationId = schwerpunktByNationId; state.version += 1;
+  if (state.inactivityTimeline.length > 512) state.inactivityTimeline.splice(0, state.inactivityTimeline.length - 512);
   const nextFocus = [...schwerpunktByNationId.entries()]
     .map(([nationId, item]) => `${nationId}:${item.schwerpunktSectorId ?? ""}`)
     .sort().join("|");
   if (previousFocus !== nextFocus) state.allocationVersion += 1;
   world.instrumentation?.recordDuration("stalemate.evaluation", performance.now() - startedAt);
+}
+
+/** Re-labels a same-tick Collapse Advance detection without affecting its trigger. */
+export function recordCollapseOpportunityDiagnostic(world: WorldState, nationId: NationId, enemyNationId: NationId): void {
+  const state = world.stalematePressure;
+  const assessment = getStalemateAssessment(world, nationId, enemyNationId) ??
+    state.assessments.find((item) => item.nationId === nationId && item.enemyNationId === enemyNationId);
+  if (!assessment || assessment.inactivityCategory !== "artificial-inactivity") return;
+  state.inactivitySamplesByCategory["artificial-inactivity"] = Math.max(0, state.inactivitySamplesByCategory["artificial-inactivity"] - 1);
+  state.inactivitySamplesByCategory["healthy-waiting"] += 1;
+  state.inactivitySamplesByReason[assessment.inactivityReason] = Math.max(0, state.inactivitySamplesByReason[assessment.inactivityReason] - 1);
+  state.inactivitySamplesByReason["collapse-opportunity"] += 1;
+  state.artificialInactivitySamples = Math.max(0, state.artificialInactivitySamples - 1);
+  if (assessment.artificialInactivityBlocker) state.artificialInactivityByBlocker[assessment.artificialInactivityBlocker] = Math.max(0, state.artificialInactivityByBlocker[assessment.artificialInactivityBlocker] - 1);
+  if (assessment.artificialInactivityBlocker === "target-validity" && assessment.targetValidityFailureReason) {
+    state.targetValidityFailureCounts[assessment.targetValidityFailureReason] = Math.max(0, state.targetValidityFailureCounts[assessment.targetValidityFailureReason] - 1);
+    if (assessment.targetValidityOtherReason) state.targetValidityOtherCounts[assessment.targetValidityOtherReason] = Math.max(0, state.targetValidityOtherCounts[assessment.targetValidityOtherReason] - 1);
+  }
+  assessment.inactivityCategory = "healthy-waiting";
+  assessment.inactivityReason = "collapse-opportunity";
+  assessment.artificialInactivity = false;
+  assessment.artificialInactivityBlocker = null;
+  assessment.reasonFlags = assessment.reasonFlags.filter((reason) => reason !== "artificial-inactivity");
+  state.inactivityTimeline.push({ tick: world.time.fastTick, nationId, enemyNationId, category: "healthy-waiting", reason: "collapse-opportunity" });
+  if (state.inactivityTimeline.length > 512) state.inactivityTimeline.splice(0, state.inactivityTimeline.length - 512);
+}
+
+interface InactivityClassificationInput {
+  world: WorldState;
+  sectors: OperationalSector[];
+  nationId: NationId;
+  enemyNationId: NationId;
+  pairOperations: WorldState["offensiveOperations"]["operations"];
+  critical: boolean;
+  retreating: boolean;
+  bothCapable: boolean;
+  balanced: boolean;
+  continuous: boolean;
+  staticTicks: number;
+  progressCount: number;
+  attackOpportunity: boolean;
+  hasAllocatedForce: boolean;
+  surplus: number;
+  targetDiagnostic: ReturnType<typeof classifyTargetValidityFailure> | null;
+  cooldownUntilTick: number;
+}
+
+function classifyInactivity(input: InactivityClassificationInput): { category: InactivityCategory; reason: InactivityReason; nextEvaluationTick: number } {
+  const { world, nationId, enemyNationId } = input;
+  const remainingSlowMs = SLOW_TICK_MS - (world.time.elapsedMs % SLOW_TICK_MS);
+  const nextSlowTick = world.time.fastTick + Math.max(1, Math.ceil(remainingSlowMs / FAST_TICK_MS));
+  const result = (category: InactivityCategory, reason: InactivityReason, nextEvaluationTick = nextSlowTick) => ({ category, reason, nextEvaluationTick });
+  if (input.critical) return result("healthy-waiting", "capital-emergency");
+  if (input.retreating || world.retreatPlans.plansByNationId.get(nationId)?.some((plan) => input.sectors.some((sector) => sector.id === plan.frontId))) return result("healthy-waiting", "retreat");
+  const operation = input.pairOperations.sort((a, b) => a.id.localeCompare(b.id))[0];
+  if (operation) {
+    if (operation.phase === "recovering") return result("healthy-waiting", "recovering", operation.expiresAtTick);
+    return result("healthy-waiting", operation.phase);
+  }
+  if (input.bothCapable && input.balanced && input.continuous && input.staticTicks > 0 && input.progressCount > 0) return result("natural-stalemate", "natural-stalemate");
+  if (world.time.fastTick < input.cooldownUntilTick) return result("expected-waiting", "operation-cooldown", input.cooldownUntilTick);
+  const collapse = world.collapseAdvances.advanceByNationId.get(nationId);
+  if (collapse?.enemyNationId === enemyNationId) return result("healthy-waiting", "collapse-advance");
+  const otherOperations = world.offensiveOperations.operationsByNationId.get(nationId) ?? [];
+  if (otherOperations.length >= WORLD_BALANCE.war.landFront.offensiveOperation.maxActivePerNation) return result("expected-waiting", "operation-limit");
+  if ((world.reorganization.plansByNationId.get(nationId)?.length ?? 0) > 0) return result("healthy-waiting", "reorganization");
+  if (world.strategicReserves.reservesByNationId.get(nationId)?.deployment) return result("healthy-waiting", "reserve-deployment");
+  const diagnostic = input.targetDiagnostic;
+  if (diagnostic?.other === "validCandidatePending") return result("expected-waiting", "scheduled-operation");
+  if (!input.hasAllocatedForce || input.surplus <= 0) return result("expected-waiting", "no-offensive-surplus");
+  if (!input.attackOpportunity) return result("expected-waiting", "temporary-posture");
+  if (diagnostic?.reason === "no-candidate-after-filtering") return result("artificial-inactivity", "allocation-deadlock");
+  if (diagnostic?.reason === "geometry-invalidated") return result("artificial-inactivity", "stale-geometry");
+  if (diagnostic?.reason === "ownership-mismatch" || diagnostic?.reason === "target-already-occupied") return result("artificial-inactivity", "inconsistent-ownership");
+  if (diagnostic?.reason === "unreachable-target") return result("artificial-inactivity", "unreachable");
+  if (diagnostic && diagnostic.reason !== "other") return result("artificial-inactivity", "no-valid-target");
+  return result("unknown", "unknown");
+}
+
+function createInactivityReasonCounts(): Record<InactivityReason, number> {
+  return Object.fromEntries([
+    "capital-emergency", "retreat", "preparing", "attacking", "exploiting", "recovering",
+    "reorganization", "reserve-deployment", "collapse-advance", "collapse-opportunity",
+    "natural-stalemate", "operation-cooldown", "operation-limit", "no-offensive-surplus",
+    "temporary-posture", "scheduled-operation", "allocation-deadlock", "no-valid-target",
+    "stale-geometry", "inconsistent-ownership", "unreachable", "planner-failure", "unknown",
+  ].map((reason) => [reason, 0])) as Record<InactivityReason, number>;
 }
 
 function classifyTargetValidityFailure(world: WorldState, sectors: OperationalSector[], nationId: NationId, enemyNationId: NationId): { reason: TargetValidityFailureReason; other?: keyof StalematePressureState["targetValidityOtherCounts"] } {

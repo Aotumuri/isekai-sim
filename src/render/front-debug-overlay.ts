@@ -404,6 +404,8 @@ function appendOperationalDetails(
         const allocation = getFrontAllocation(world, front.id, nationId);
         const focused = stalled.schwerpunktSectorId === front.id;
         lines.push(
+          `AI STATUS ${formatInactivityStatus(stalled.inactivityCategory)} | ${formatInactivityStatus(stalled.inactivityReason)}`,
+          `  next evaluation tick ${stalled.nextEvaluationTick}`,
           `STALEMATE ${stalled.staticTicks} slow ticks | pressure ${stalled.pressure.toFixed(0)}${focused ? " | SCHWERPUNKT" : ""}`,
           `  reasons ${stalled.reasonFlags.join(", ") || "none"}`,
           `  inactivity blocker ${stalled.artificialInactivityBlocker ?? "none"}`,
@@ -462,6 +464,10 @@ function appendOperationalDetails(
     }, 0);
     lines.push(`RES ${reserve.nationId} ${formatStrength(strength)} | ${deployment.unitIds.length} units`);
   }
+}
+
+function formatInactivityStatus(value: string): string {
+  return value.replaceAll("-", " ").toUpperCase();
 }
 
 function formatNationSide(
