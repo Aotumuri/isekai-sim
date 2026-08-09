@@ -31,6 +31,7 @@ import {
   isSchwerpunktSector,
   recordMajorOffensiveOutcome,
 } from "./stalemate-pressure";
+import { canReachControlled, getControlledDistanceField } from "./ai-geography";
 
 export type OperationId = string & { __brand: "OperationId" };
 
@@ -113,6 +114,13 @@ export interface OffensiveOperation {
   initialAssignedUnitCount: number;
   initialAssignedStrength: number;
   unitTargetRegionIds: Map<UnitId, MesoRegionId>;
+  plannedApproachRegionIds: MesoRegionId[];
+  approachRegionByUnitId: Map<UnitId, MesoRegionId>;
+  plannedStrengthByApproach: Map<MesoRegionId, number>;
+  actualActiveApproachCount: number;
+  synchronizationReady: boolean;
+  synchronizationWaitTicks: number;
+  fellBackToSingleApproach: boolean;
   startedAtTick: number;
   phaseStartedAtTick: number;
   minimumCommitUntilTick: number;
@@ -184,6 +192,11 @@ export interface OffensiveOperationState {
   exploitationForceStrengthTotal: number;
   exploitationStopCounts: Record<ExploitationStopReason, number>;
   successfulCapturedRegionCount: number;
+  coordinatedCreatedCount: number;
+  plannedApproachCountTotal: number;
+  achievedApproachCountTotal: number;
+  synchronizationWaitTicks: number;
+  singleApproachFallbackCount: number;
   exploitationCandidateEvaluatedCounts: Record<FrontlineCoverageLevel, number>;
   exploitationSelectedCounts: Record<FrontlineCoverageLevel, number>;
   exploitationRejectionCounts: {
@@ -193,7 +206,7 @@ export interface OffensiveOperationState {
   };
 }
 
-interface OperationTargetSelection {
+export interface OperationTargetSelection {
   primaryTargetRegionId: MesoRegionId;
   supportingTargetRegionIds: MesoRegionId[];
   stagingRegionId: MesoRegionId;
@@ -202,6 +215,13 @@ interface OperationTargetSelection {
   targetLocalDefenderStrength: number;
   tacticalScore: number;
   tacticalReasons: OffensiveOperationReason[];
+}
+
+export interface OperationApproachPlan {
+  regionIds: MesoRegionId[];
+  regionByUnitId: Map<UnitId, MesoRegionId>;
+  strengthByRegion: Map<MesoRegionId, number>;
+  fellBackToSingle: boolean;
 }
 
 interface TargetTacticalAssessment {
@@ -258,6 +278,11 @@ export function createOffensiveOperationState(): OffensiveOperationState {
     exploitationForceStrengthTotal: 0,
     exploitationStopCounts: createExploitationStopCounts(),
     successfulCapturedRegionCount: 0,
+    coordinatedCreatedCount: 0,
+    plannedApproachCountTotal: 0,
+    achievedApproachCountTotal: 0,
+    synchronizationWaitTicks: 0,
+    singleApproachFallbackCount: 0,
     exploitationCandidateEvaluatedCounts: { gap: 0, weak: 0, covered: 0 },
     exploitationSelectedCounts: { gap: 0, weak: 0, covered: 0 },
     exploitationRejectionCounts: {
@@ -465,6 +490,8 @@ export function formatOffensiveOperationSummary(world: WorldState): string {
       `  primary: ${operation.primaryTargetRegionId}`,
       `  supporting: ${operation.supportingTargetRegionIds.join(", ") || "none"}`,
       `  staging: ${operation.stagingRegionId}`,
+      `  approaches: ${operation.actualActiveApproachCount}/${operation.plannedApproachRegionIds.length} ${operation.plannedApproachRegionIds.join(", ")}`,
+      `  synchronized: ${operation.synchronizationReady ? "ready" : "waiting"} (${operation.synchronizationWaitTicks} ticks)`,
       `  units: ${operation.assignedUnitIds.length}`,
       `  strength: ${operation.assignedStrength.toFixed(1)}`,
       `  target coverage: ${operation.targetCoverageState ?? "none"}`,
@@ -614,6 +641,13 @@ function advanceOperation(
   if (operation.phase === "preparing") {
     const preparationTicks = now - operation.phaseStartedAtTick;
     const stagedRatio = getStagedUnitRatio(world, operation);
+    const approachReadiness = getApproachReadiness(world, operation);
+    operationChanged = operationChanged ||
+      operation.actualActiveApproachCount !== approachReadiness.readyCount ||
+      operation.synchronizationReady !== approachReadiness.ready;
+    operation.actualActiveApproachCount = approachReadiness.readyCount;
+    operation.synchronizationReady = approachReadiness.ready;
+    operation.synchronizationWaitTicks = preparationTicks;
     const majorSettings = WORLD_BALANCE.war.landFront.stalemate;
     const minimumPreparation = operation.isMajorOffensive
       ? majorSettings.majorMinimumPreparationTicks : settings.minimumPreparationTicks;
@@ -624,7 +658,8 @@ function advanceOperation(
       : operation.assignedStrength / operation.targetLocalDefenderStrength;
     const readyForOvermatch = !operation.isMajorOffensive || localRatio >= majorSettings.majorLocalOvermatchRatio;
     if (
-      preparationTicks >= minimumPreparation && stagedRatio >= requiredStaged && readyForOvermatch
+      preparationTicks >= minimumPreparation && stagedRatio >= requiredStaged &&
+      approachReadiness.ready && readyForOvermatch
     ) {
       operation.localStrengthRatioAtAttack = localRatio;
       transitionToAttacking(world, operation);
@@ -754,6 +789,13 @@ function createOperation(
     return null;
   }
   const assignedStrength = sumUnitStrength(assignedUnits);
+  const approachPlan = planOperationApproaches(
+    world,
+    plan.nationId,
+    targets,
+    assignedUnits,
+    isMajorOffensive,
+  );
   const initialStrengthRatio = getStrengthRatio(friendly.strength, enemy.strength);
   const operation: OffensiveOperation = {
     id: createOperationId(world.offensiveOperations.nextOperationNumber),
@@ -773,6 +815,13 @@ function createOperation(
     initialAssignedUnitCount: assignedUnits.length,
     initialAssignedStrength: assignedStrength,
     unitTargetRegionIds: new Map(),
+    plannedApproachRegionIds: approachPlan.regionIds,
+    approachRegionByUnitId: approachPlan.regionByUnitId,
+    plannedStrengthByApproach: approachPlan.strengthByRegion,
+    actualActiveApproachCount: 0,
+    synchronizationReady: false,
+    synchronizationWaitTicks: 0,
+    fellBackToSingleApproach: approachPlan.fellBackToSingle,
     startedAtTick: world.time.fastTick,
     phaseStartedAtTick: world.time.fastTick,
     minimumCommitUntilTick:
@@ -812,6 +861,18 @@ function createOperation(
     completedAtTick: null,
   };
   world.offensiveOperations.nextOperationNumber += 1;
+  world.offensiveOperations.plannedApproachCountTotal += approachPlan.regionIds.length;
+  world.instrumentation?.incrementCounter(
+    "offensiveOperation.plannedApproaches",
+    approachPlan.regionIds.length,
+  );
+  if (approachPlan.regionIds.length >= 2) {
+    world.offensiveOperations.coordinatedCreatedCount += 1;
+    world.instrumentation?.incrementCounter("offensiveOperation.coordinatedCreated");
+  } else if (approachPlan.fellBackToSingle) {
+    world.offensiveOperations.singleApproachFallbackCount += 1;
+    world.instrumentation?.incrementCounter("offensiveOperation.singleApproachFallbacks");
+  }
   return operation;
 }
 
@@ -932,6 +993,89 @@ function selectOperationTargets(
     tacticalScore: primary.tactical.score,
     tacticalReasons: primary.tactical.reasons,
   };
+}
+
+export function planOperationApproaches(
+  world: WorldState,
+  nationId: NationId,
+  targets: OperationTargetSelection,
+  assignedUnits: UnitState[],
+  isMajorOffensive: boolean,
+): OperationApproachPlan {
+  const settings = WORLD_BALANCE.war.landFront.offensiveOperation.multiDirection;
+  const single = (fellBackToSingle: boolean): OperationApproachPlan => ({
+    regionIds: [targets.stagingRegionId],
+    regionByUnitId: new Map(assignedUnits.map((unit) => [unit.id, targets.stagingRegionId])),
+    strengthByRegion: new Map([[targets.stagingRegionId, sumUnitStrength(assignedUnits)]]),
+    fellBackToSingle,
+  });
+  if (
+    assignedUnits.length < settings.minimumAssignedUnits ||
+    targets.targetCoverageState === "gap" ||
+    targets.targetLocalDefenderStrength <= 0
+  ) return single(true);
+
+  const target = getMesoById(world).get(targets.primaryTargetRegionId);
+  if (!target) return single(true);
+  const distanceField = getControlledDistanceField(world, nationId, [targets.stagingRegionId]);
+  const occupiedStrength = new Map<MesoRegionId, number>();
+  for (const unit of assignedUnits) {
+    occupiedStrength.set(
+      unit.regionId,
+      (occupiedStrength.get(unit.regionId) ?? 0) + finiteUnitStrength(unit),
+    );
+  }
+  const candidates = target.neighbors
+    .map((neighbor) => neighbor.id)
+    .filter((regionId) => {
+      const region = getMesoById(world).get(regionId);
+      const distance = distanceField.distanceByRegionId.get(regionId);
+      return !!region && region.type !== "sea" && isRegionControlledBy(world, regionId, nationId) &&
+        distance !== undefined && distance <= settings.maximumUnitDetourRegions &&
+        canReachControlled(world, nationId, targets.stagingRegionId, regionId);
+    })
+    .sort((a, b) =>
+      (occupiedStrength.get(b) ?? 0) - (occupiedStrength.get(a) ?? 0) ||
+      (distanceField.distanceByRegionId.get(a) ?? 0) - (distanceField.distanceByRegionId.get(b) ?? 0) ||
+      compareIds(a, b),
+    );
+  const desiredCount = Math.min(
+    candidates.length,
+    isMajorOffensive ? settings.majorApproachCount : settings.normalApproachCount,
+    Math.floor(assignedUnits.length / 2),
+  );
+  if (desiredCount < 2) return single(true);
+  const regionIds = candidates.slice(0, desiredCount);
+  const fractions = settings.approachFractions.slice(0, desiredCount);
+  const fractionTotal = fractions.reduce((sum, value) => sum + value, 0) || 1;
+  const totalStrength = sumUnitStrength(assignedUnits);
+  const desiredStrengths = fractions.map((fraction) => totalStrength * fraction / fractionTotal);
+  const regionByUnitId = new Map<UnitId, MesoRegionId>();
+  const strengthByRegion = new Map(regionIds.map((regionId) => [regionId, 0]));
+  const units = [...assignedUnits].sort((a, b) =>
+    finiteUnitStrength(b) - finiteUnitStrength(a) || compareIds(a.id, b.id),
+  );
+  for (let unitIndex = 0; unitIndex < units.length; unitIndex += 1) {
+    const unit = units[unitIndex];
+    const unfilled = regionIds
+      .map((regionId, index) => ({
+        regionId,
+        index,
+        need: desiredStrengths[index] - (strengthByRegion.get(regionId) ?? 0),
+        occupied: unit.regionId === regionId ? 1 : 0,
+      }))
+      .sort((a, b) => b.occupied - a.occupied || b.need - a.need || a.index - b.index)[0];
+    regionByUnitId.set(unit.id, unfilled.regionId);
+    strengthByRegion.set(
+      unfilled.regionId,
+      (strengthByRegion.get(unfilled.regionId) ?? 0) + finiteUnitStrength(unit),
+    );
+  }
+  const strongest = Math.max(...strengthByRegion.values());
+  if ([...strengthByRegion.values()].some((strength) =>
+    strength <= 0 || strength < strongest * settings.minimumApproachStrengthRatio
+  )) return single(true);
+  return { regionIds, regionByUnitId, strengthByRegion, fellBackToSingle: false };
 }
 
 function assessTargetTactics(
@@ -1166,6 +1310,18 @@ function transitionToAttacking(
     now + WORLD_BALANCE.war.landFront.offensiveOperation.minimumCommitTicks;
   operation.expiresAtTick =
     now + WORLD_BALANCE.war.landFront.offensiveOperation.attackTimeoutTicks;
+  operation.actualActiveApproachCount = operation.plannedApproachRegionIds.length;
+  operation.synchronizationReady = true;
+  world.offensiveOperations.achievedApproachCountTotal += operation.actualActiveApproachCount;
+  world.offensiveOperations.synchronizationWaitTicks += operation.synchronizationWaitTicks;
+  world.instrumentation?.incrementCounter(
+    "offensiveOperation.achievedApproaches",
+    operation.actualActiveApproachCount,
+  );
+  world.instrumentation?.incrementCounter(
+    "offensiveOperation.synchronizationWaitTicks",
+    operation.synchronizationWaitTicks,
+  );
   assignStableOperationTargets(operation);
   world.offensiveOperations.phaseTransitionCount += 1;
   world.instrumentation?.incrementCounter("offensiveOperation.phaseTransitions");
@@ -1771,6 +1927,13 @@ function finishOperation(
 }
 
 function assignStableOperationTargets(operation: OffensiveOperation): void {
+  if (operation.plannedApproachRegionIds.length >= 2) {
+    operation.unitTargetRegionIds.clear();
+    for (const unitId of operation.assignedUnitIds) {
+      operation.unitTargetRegionIds.set(unitId, operation.primaryTargetRegionId);
+    }
+    return;
+  }
   const targets = [
     operation.primaryTargetRegionId,
     ...operation.supportingTargetRegionIds,
@@ -1854,7 +2017,7 @@ function getStagedUnitRatio(
       unit &&
       getBoundedGraphDistance(
         unit.regionId,
-        operation.stagingRegionId,
+        operation.approachRegionByUnitId.get(unitId) ?? operation.stagingRegionId,
         radius,
         undefined,
         neighborsById,
@@ -1864,6 +2027,37 @@ function getStagedUnitRatio(
     }
   }
   return staged / operation.assignedUnitIds.length;
+}
+
+export function getApproachReadiness(
+  world: WorldState,
+  operation: OffensiveOperation,
+): { readyCount: number; ready: boolean; stagedStrengthByApproach: Map<MesoRegionId, number> } {
+  const settings = WORLD_BALANCE.war.landFront.offensiveOperation.multiDirection;
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+  const stagedStrengthByApproach = new Map(
+    operation.plannedApproachRegionIds.map((regionId) => [regionId, 0]),
+  );
+  for (const unitId of operation.assignedUnitIds) {
+    const unit = unitById.get(unitId);
+    const approach = operation.approachRegionByUnitId.get(unitId);
+    if (!unit || !approach || unit.regionId !== approach) continue;
+    stagedStrengthByApproach.set(
+      approach,
+      (stagedStrengthByApproach.get(approach) ?? 0) + finiteUnitStrength(unit),
+    );
+  }
+  let readyCount = 0;
+  for (const approach of operation.plannedApproachRegionIds) {
+    const planned = operation.plannedStrengthByApproach.get(approach) ?? 0;
+    const staged = stagedStrengthByApproach.get(approach) ?? 0;
+    if (planned > 0 && staged >= planned * settings.synchronizedStagedFraction) readyCount += 1;
+  }
+  return {
+    readyCount,
+    ready: readyCount === operation.plannedApproachRegionIds.length,
+    stagedStrengthByApproach,
+  };
 }
 
 function isTargetReachableWithinFront(
@@ -2043,6 +2237,9 @@ function cloneOperation(operation: OffensiveOperation): OffensiveOperation {
     exploitationHoldUnitIds: [...operation.exploitationHoldUnitIds],
     capturedRegionIds: [...operation.capturedRegionIds],
     unitTargetRegionIds: new Map(operation.unitTargetRegionIds),
+    plannedApproachRegionIds: [...operation.plannedApproachRegionIds],
+    approachRegionByUnitId: new Map(operation.approachRegionByUnitId),
+    plannedStrengthByApproach: new Map(operation.plannedStrengthByApproach),
     reasonFlags: [...operation.reasonFlags],
   };
 }

@@ -163,6 +163,18 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     operationAverageAttackDuration: resolvedOperations > 0
       ? world.offensiveOperations.attackingDurationTicks / resolvedOperations
       : 0,
+    coordinatedOperationsCreated: world.offensiveOperations.coordinatedCreatedCount,
+    operationAveragePlannedApproaches: world.offensiveOperations.createdCount > 0
+      ? world.offensiveOperations.plannedApproachCountTotal / world.offensiveOperations.createdCount
+      : 0,
+    operationAverageAchievedApproaches: world.offensiveOperations.createdCount > 0
+      ? world.offensiveOperations.achievedApproachCountTotal / world.offensiveOperations.createdCount
+      : 0,
+    operationAverageSynchronizationWait: world.offensiveOperations.achievedApproachCountTotal > 0
+      ? world.offensiveOperations.synchronizationWaitTicks /
+        Math.max(1, world.offensiveOperations.operations.filter((operation) => operation.synchronizationReady).length + world.offensiveOperations.history.filter((operation) => operation.synchronizationReady).length)
+      : 0,
+    operationSingleApproachFallbacks: world.offensiveOperations.singleApproachFallbackCount,
     exploitationStarts: exploitation.exploitationStartedCount,
     exploitationSuccesses: exploitation.exploitationSuccessCount,
     exploitationSuccessRatePercent: exploitation.exploitationStartedCount > 0

@@ -22,6 +22,21 @@ export interface BattleState {
   defenderNationId: NationId;
   startedAtFastTick: number;
   lastActiveFastTick: number;
+  attackDirectionCount: number;
+  attackSourceRegionIds: MesoRegionId[];
+  attackStrengthBySourceRegion: Map<MesoRegionId, number>;
+  multiDirectionModifier: number;
+  attackerOrganizationLoss: number;
+  defenderOrganizationLoss: number;
+  attackerManpowerLoss: number;
+  defenderManpowerLoss: number;
+}
+
+export interface AttackDirectionSummary {
+  directionCount: number;
+  sourceRegionIds: MesoRegionId[];
+  strengthBySourceRegion: Map<MesoRegionId, number>;
+  modifier: number;
 }
 
 export function createBattleId(index: number): BattleId {
@@ -162,6 +177,7 @@ function updateLandBattles(
             defenderNationId: defenderNation,
             startedAtFastTick: now,
             lastActiveFastTick: now,
+            ...createBattleDiagnostics(),
           };
           world.battles.push(battle);
           existingByKey.set(key, battle);
@@ -172,8 +188,32 @@ function updateLandBattles(
           battle.lastActiveFastTick = now;
         }
 
-        const outcome = resolveBattle(battle, attackers, defenders, removedUnitIds, now);
+        const directions = summarizeAttackDirections(world, battle.mesoId, attackers);
+        battle.attackDirectionCount = directions.directionCount;
+        battle.attackSourceRegionIds = directions.sourceRegionIds;
+        battle.attackStrengthBySourceRegion = directions.strengthBySourceRegion;
+        battle.multiDirectionModifier = directions.modifier;
+        recordDirectionSample(world, directions.directionCount, directions.modifier);
+        const outcome = resolveBattle(
+          battle,
+          attackers,
+          defenders,
+          removedUnitIds,
+          now,
+          directions.modifier,
+        );
         if (outcome) {
+          battle.attackerManpowerLoss += outcome.attackerManpowerLoss;
+          battle.defenderManpowerLoss += outcome.defenderManpowerLoss;
+          battle.attackerOrganizationLoss += outcome.attackerOrganizationLoss;
+          battle.defenderOrganizationLoss += outcome.defenderOrganizationLoss;
+          world.instrumentation?.incrementCounter("battle.attackerOrganizationLoss", outcome.attackerOrganizationLoss);
+          world.instrumentation?.incrementCounter("battle.defenderOrganizationLoss", outcome.defenderOrganizationLoss);
+          world.instrumentation?.incrementCounter("battle.attackerManpowerLoss", outcome.attackerManpowerLoss);
+          world.instrumentation?.incrementCounter("battle.defenderManpowerLoss", outcome.defenderManpowerLoss);
+          if (outcome.attackerWon) {
+            world.instrumentation?.incrementCounter(`battle.wins.${directionBucket(directions.directionCount)}`);
+          }
           addWarContribution(
             world.wars,
             battle.attackerNationId,
@@ -268,6 +308,7 @@ function updateNavalBattles(
             defenderNationId,
             startedAtFastTick: now,
             lastActiveFastTick: now,
+            ...createBattleDiagnostics(),
           };
           world.battles.push(battle);
           existingByKey.set(key, battle);
@@ -475,13 +516,20 @@ const DAMAGE_SCALE = 10_000;
 const ORG_DAMAGE_PER_TICK = 0.5;
 const ORG_DAMAGE_SCALE = 10_000;
 
-function resolveBattle(
+export function resolveBattle(
   battle: BattleState,
   unitsA: UnitState[],
   unitsB: UnitState[],
   removedUnitIds: Set<UnitId>,
   now: number,
-): { attackerManpowerLoss: number; defenderManpowerLoss: number } | null {
+  defenderOrganizationPressure = 1,
+): {
+  attackerManpowerLoss: number;
+  defenderManpowerLoss: number;
+  attackerOrganizationLoss: number;
+  defenderOrganizationLoss: number;
+  attackerWon: boolean;
+} | null {
   const aliveA = collectAliveUnits(unitsA, removedUnitIds);
   const aliveB = collectAliveUnits(unitsB, removedUnitIds);
   if (aliveA.length === 0 || aliveB.length === 0) {
@@ -497,7 +545,9 @@ function resolveBattle(
   const damageToA = strengthB > 0 ? DAMAGE_PER_TICK * (strengthB / DAMAGE_SCALE) : 0;
   const damageToB = strengthA > 0 ? DAMAGE_PER_TICK * (strengthA / DAMAGE_SCALE) : 0;
   const orgDamageToA = strengthB > 0 ? ORG_DAMAGE_PER_TICK * (strengthB / ORG_DAMAGE_SCALE) : 0;
-  const orgDamageToB = strengthA > 0 ? ORG_DAMAGE_PER_TICK * (strengthA / ORG_DAMAGE_SCALE) : 0;
+  const orgDamageToB = strengthA > 0
+    ? ORG_DAMAGE_PER_TICK * (strengthA / ORG_DAMAGE_SCALE) * defenderOrganizationPressure
+    : 0;
 
   const damageWeightA = sumDamageWeight(aliveA);
   const damageWeightB = sumDamageWeight(aliveB);
@@ -524,7 +574,95 @@ function resolveBattle(
   return {
     attackerManpowerLoss: lossA.manpowerLoss,
     defenderManpowerLoss: lossB.manpowerLoss,
+    attackerOrganizationLoss: lossA.orgLoss,
+    defenderOrganizationLoss: lossB.orgLoss,
+    attackerWon: remainingA && !remainingB,
   };
+}
+
+export function summarizeAttackDirections(
+  world: WorldState,
+  targetId: MesoRegionId,
+  attackers: readonly UnitState[],
+): AttackDirectionSummary {
+  const adjacent = new Set(getMesoById(world).get(targetId)?.neighbors.map((neighbor) => neighbor.id) ?? []);
+  const strengthBySourceRegion = new Map<MesoRegionId, number>();
+  for (const unit of attackers) {
+    if (
+      unit.domain !== "land" ||
+      unit.moveToId !== targetId ||
+      unit.regionId === targetId ||
+      !adjacent.has(unit.regionId) ||
+      unit.manpower <= 0 ||
+      unit.org <= 0
+    ) continue;
+    strengthBySourceRegion.set(
+      unit.regionId,
+      (strengthBySourceRegion.get(unit.regionId) ?? 0) + getUnitCombatStrength(unit),
+    );
+  }
+  const strongest = Math.max(0, ...strengthBySourceRegion.values());
+  const threshold = strongest * WORLD_BALANCE.war.combat.multiDirection.minimumSecondaryStrengthRatio;
+  const sourceRegionIds = [...strengthBySourceRegion.entries()]
+    .filter(([, strength]) => strength > 0 && strength >= threshold)
+    .map(([regionId]) => regionId)
+    .sort(compareIds);
+  return {
+    directionCount: sourceRegionIds.length,
+    sourceRegionIds,
+    strengthBySourceRegion: new Map(
+      sourceRegionIds.map((regionId) => [regionId, strengthBySourceRegion.get(regionId) ?? 0]),
+    ),
+    modifier: getMultiDirectionModifier(sourceRegionIds.length),
+  };
+}
+
+export function getMultiDirectionModifier(directionCount: number): number {
+  const settings = WORLD_BALANCE.war.combat.multiDirection;
+  if (directionCount < 2) return 1;
+  if (directionCount === 2) return settings.twoDirections;
+  if (directionCount === 3) return settings.threeDirections;
+  return Math.min(
+    settings.maximumBonus,
+    settings.threeDirections + (directionCount - 3) * settings.additionalDirectionBonus,
+  );
+}
+
+function createBattleDiagnostics(): Pick<BattleState,
+  | "attackDirectionCount"
+  | "attackSourceRegionIds"
+  | "attackStrengthBySourceRegion"
+  | "multiDirectionModifier"
+  | "attackerOrganizationLoss"
+  | "defenderOrganizationLoss"
+  | "attackerManpowerLoss"
+  | "defenderManpowerLoss"
+> {
+  return {
+    attackDirectionCount: 0,
+    attackSourceRegionIds: [],
+    attackStrengthBySourceRegion: new Map(),
+    multiDirectionModifier: 1,
+    attackerOrganizationLoss: 0,
+    defenderOrganizationLoss: 0,
+    attackerManpowerLoss: 0,
+    defenderManpowerLoss: 0,
+  };
+}
+
+function recordDirectionSample(world: WorldState, count: number, modifier: number): void {
+  world.instrumentation?.incrementCounter(`battle.directions.${directionBucket(count)}`);
+  world.instrumentation?.incrementCounter("battle.directionCountTotal", count);
+  world.instrumentation?.incrementCounter("battle.directionSamples");
+  world.instrumentation?.incrementCounter("battle.multiDirectionBonus", Math.max(0, modifier - 1));
+}
+
+function directionBucket(count: number): "one" | "two" | "three" | "fourPlus" {
+  return count <= 1 ? "one" : count === 2 ? "two" : count === 3 ? "three" : "fourPlus";
+}
+
+function compareIds(a: string, b: string): number {
+  return a.localeCompare(b);
 }
 
 function collectAliveUnits(

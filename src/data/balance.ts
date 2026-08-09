@@ -127,6 +127,15 @@ export const WORLD_BALANCE = {
     maxUnitsPerNation: 100,
   },
   war: {
+    combat: {
+      multiDirection: {
+        twoDirections: 1.12,
+        threeDirections: 1.24,
+        maximumBonus: 1.3,
+        additionalDirectionBonus: 0.06,
+        minimumSecondaryStrengthRatio: 0.25,
+      },
+    },
     macroOccupationRatio: 0.6,
     landFront: {
       // One region is the smallest useful depth: it includes immediate reserves
@@ -278,6 +287,15 @@ export const WORLD_BALANCE = {
         forceFraction: 0.6,
         stagedFraction: 0.6,
         stagingRadius: 1,
+        multiDirection: {
+          minimumAssignedUnits: 4,
+          normalApproachCount: 2,
+          majorApproachCount: 3,
+          maximumUnitDetourRegions: 3,
+          minimumApproachStrengthRatio: 0.25,
+          approachFractions: [0.6, 0.25, 0.15],
+          synchronizedStagedFraction: 0.6,
+        },
         minimumPreparationTicks: 20,
         preparationTimeoutTicks: 100,
         minimumCommitTicks: 100,

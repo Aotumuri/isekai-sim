@@ -131,6 +131,11 @@ export interface WorldSummary {
   operationMaxTargetConcentration: number;
   operationAverageCapturedRegions: number;
   operationAverageAttackDuration: number;
+  coordinatedOperationsCreated: number;
+  operationAveragePlannedApproaches: number;
+  operationAverageAchievedApproaches: number;
+  operationAverageSynchronizationWait: number;
+  operationSingleApproachFallbacks: number;
   exploitationStarts: number;
   exploitationSuccesses: number;
   exploitationSuccessRatePercent: number;

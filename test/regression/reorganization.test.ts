@@ -108,6 +108,14 @@ test("unit in an active battle is not pulled into Reorganization", () => {
     defenderNationId: NATION_A,
     startedAtFastTick: 0,
     lastActiveFastTick: 0,
+    attackDirectionCount: 1,
+    attackSourceRegionIds: [],
+    attackStrengthBySourceRegion: new Map(),
+    multiDirectionModifier: 1,
+    attackerOrganizationLoss: 0,
+    defenderOrganizationLoss: 0,
+    attackerManpowerLoss: 0,
+    defenderManpowerLoss: 0,
   });
   updateReorganization(world);
   assert.equal(getReorganizationPlanForUnit(world, unit.id), undefined);

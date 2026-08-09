@@ -58,6 +58,7 @@ interface OverlayVersions {
   coverage: number;
   stalemate: number;
   reserveDeployments: string;
+  battles: string;
 }
 
 interface LabelRect {
@@ -422,8 +423,25 @@ function appendOperationalDetails(
         lines.push(
           `  primary ${operation.primaryTargetRegionId} | coverage ${operation.targetCoverageState ?? "none"}`,
           `  local defense ${formatStrength(operation.targetLocalDefenderStrength)} | tactical ${operation.targetTacticalScore.toFixed(1)}`,
+          `  APPROACHES ${operation.actualActiveApproachCount}/${operation.plannedApproachRegionIds.length} | sync ${operation.synchronizationReady ? "READY" : "WAIT"} ${operation.synchronizationWaitTicks}t`,
+          ...operation.plannedApproachRegionIds.map((regionId, index) =>
+            `    A${index + 1} ${regionId} ${formatStrength(operation.plannedStrengthByApproach.get(regionId) ?? 0)}`
+          ),
           `  reasons ${operation.reasonFlags.join(", ")}`,
         );
+        const battle = world.battles.find((candidate) =>
+          candidate.mesoId === operation.primaryTargetRegionId &&
+          candidate.attackerNationId === operation.nationId
+        );
+        if (battle) {
+          lines.push(
+            `  ATTACK DIRECTIONS ${battle.attackDirectionCount}`,
+            ...battle.attackSourceRegionIds.map((regionId) =>
+              `    ${regionId} ${formatStrength(battle.attackStrengthBySourceRegion.get(regionId) ?? 0)}`
+            ),
+            `  FLANK MODIFIER x${battle.multiDirectionModifier.toFixed(2)}`,
+          );
+        }
         if (operation.exploitationStartedAtTick !== null) {
           const startedAt = world.instrumentation ? performance.now() : 0;
           lines.push(
@@ -502,6 +520,9 @@ function drawFrontMarkers(
     const operation = getOffensiveOperationForFront(world, front.id, nationId);
     if (operation) {
       drawMarker(layer, world, operation.stagingRegionId, "S", color, "circle");
+      operation.plannedApproachRegionIds.forEach((regionId, index) => {
+        drawMarker(layer, world, regionId, `A${index + 1}`, color, "circle");
+      });
       const primaryLabel = operation.targetCoverageState === "gap"
         ? "G"
         : operation.targetCoverageState === "weak"
@@ -628,6 +649,9 @@ function readVersions(world: WorldState): OverlayVersions {
           : "";
       })
       .join("|"),
+    battles: world.battles.map((battle) =>
+      `${battle.id}:${battle.attackDirectionCount}:${battle.multiDirectionModifier}`
+    ).join("|"),
   };
 }
 
@@ -635,7 +659,7 @@ function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
   return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
     a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances &&
     a.retreats === b.retreats && a.coverage === b.coverage && a.stalemate === b.stalemate &&
-    a.reserveDeployments === b.reserveDeployments;
+    a.reserveDeployments === b.reserveDeployments && a.battles === b.battles;
 }
 
 function mesoPairKey(a: MesoRegionId, b: MesoRegionId): string {

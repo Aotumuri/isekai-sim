@@ -901,7 +901,7 @@ function buildOperationMovementGroup(
   for (const unit of orderedUnits) {
     const targetId =
       operation.phase === "preparing"
-        ? operation.stagingRegionId
+        ? (operation.approachRegionByUnitId.get(unit.id) ?? operation.stagingRegionId)
         : (operation.unitTargetRegionIds.get(unit.id) ??
           operation.primaryTargetRegionId);
     if (unit.moveTargetId === targetId) {
