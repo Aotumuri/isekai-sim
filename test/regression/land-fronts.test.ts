@@ -98,6 +98,8 @@ import { createTestScenario } from "../helpers/test-scenario";
 import {
   createBattlefieldTopologyState,
   getBattlefieldTopologyAssessment,
+  getPocketReductionObjectives,
+  getPockets,
   updateBattlefieldTopology,
 } from "../../src/sim/battlefield-topology";
 
@@ -1391,6 +1393,78 @@ test("Pocket Closure records failure when another exit opens during target captu
   assert.equal(operation.pocketClosureConfirmation?.status, "failed");
   assert.equal(operation.pocketClosureConfirmation?.resultingPocketId, null);
   assert.equal(world.offensiveOperations.pocketClosureFailureCount, 1);
+});
+
+test("Battlefield Topology keeps stable meaningful Pocket records across rebuilds", () => {
+  const world = createIsolatedPocketWorld();
+  updateBattlefieldTopology(world);
+  const pocket = getPockets(world, NATION_A).find((item) =>
+    item.regionIds.includes(id("pocket-city"))
+  );
+  assert(pocket);
+  assert.equal(pocket.status, "isolated");
+  assert.equal(pocket.regionIds.length, 2);
+  assert.equal(pocket.cities, 1);
+  assert(pocket.enemyStrength > 0);
+  const originalId = pocket.id;
+
+  world.time.fastTick += 10;
+  updateBattlefieldTopology(world);
+  assert.equal(getPockets(world, NATION_A).find((item) => item.id === originalId)?.createdTick, 0);
+});
+
+test("Pocket Reduction scenario A: a small contained Pocket uses a scaled local Operation", () => {
+  const world = createIsolatedPocketWorld();
+  updateBattlefieldTopology(world);
+  const objective = getPocketReductionObjectives(world, NATION_A)[0];
+  assert(objective);
+  assert.equal(objective.targetRegionId, id("pocket-city"));
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  assert(operation.reasonFlags.includes("pocket-reduction"));
+  assert.equal(operation.pocketReductionObjective?.pocketId, objective.pocketId);
+  assert(operation.assignedStrength >= objective.trappedStrength);
+  assert.equal(world.battlefieldTopology.pocketsById.get(objective.pocketId)?.status, "reducing");
+});
+
+test("Pocket Reduction scenario C: a reconnected Pocket is marked reopened and invalidated", () => {
+  const world = createIsolatedPocketWorld();
+  updateBattlefieldTopology(world);
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  const pocketId = operation.pocketReductionObjective?.pocketId;
+  assert(pocketId);
+  world.occupation.mesoById.set(id("bypass"), NATION_B);
+  world.occupation.version += 1;
+  updateLandFronts(world);
+  updateFrontlineCoverage(world);
+  updateBattlefieldTopology(world);
+  updateOffensiveOperations(world);
+  assert.equal(operation.outcome, "cancelled");
+  assert.equal(world.battlefieldTopology.pocketHistory.find((pocket) => pocket.id === pocketId)?.status, "reopened");
+});
+
+test("Pocket Reduction scenario B: a large defended Pocket starts at its boundary with more force", () => {
+  const small = createIsolatedPocketWorld();
+  updateBattlefieldTopology(small); updateOffensiveOperations(small);
+  const smallStrength = onlyOperation(small, NATION_A).assignedStrength;
+  const world = createLargeIsolatedPocketWorld();
+  updateBattlefieldTopology(world);
+  const pocket = getPockets(world, NATION_A).find((item) => item.regionIds.length >= 10);
+  assert(pocket);
+  const objective = getPocketReductionObjectives(world, NATION_A).find((item) => item.pocketId === pocket.id);
+  assert(objective);
+  assert(pocket.boundaryRegionIds.includes(objective.targetRegionId));
+  updateOffensiveOperations(world);
+  const operation = getOffensiveOperations(world, NATION_A)[0];
+  assert(operation, JSON.stringify({
+    objective,
+    candidate: getOperationCandidateForFront(world, objective.sectorId, NATION_A),
+    plans: getNationFrontPlans(world, NATION_A),
+  }));
+  assert(operation.reasonFlags.includes("pocket-reduction"));
+  assert(operation.assignedStrength > smallStrength);
+  assert(operation.supportingTargetRegionIds.every((regionId) => pocket.regionIds.includes(regionId)));
 });
 
 test("fragmented weak front creates a topology Collapse Opportunity", () => {
@@ -3443,6 +3517,47 @@ function createPocketClosureWorld(): WorldState {
     setUnitStrength(addLandUnit(world, NATION_A, "a-front", "Infantry"), 300);
   }
   setUnitStrength(addLandUnit(world, NATION_B, "pocket-force", "Infantry"), 1_000);
+  updateAllocationSystem(world);
+  updateFrontlineCoverage(world);
+  return world;
+}
+
+function createIsolatedPocketWorld(): WorldState {
+  const world = createPocketClosureWorld();
+  world.occupation.mesoById.set(id("gate"), NATION_A);
+  world.occupation.version += 1;
+  const friendly = world.units.filter((unit) => unit.nationId === NATION_A && unit.domain === "land");
+  for (const unit of friendly.slice(0, 5)) unit.regionId = id("gate");
+  updateAllocationSystem(world);
+  updateFrontlineCoverage(world);
+  return world;
+}
+
+function createLargeIsolatedPocketWorld(): WorldState {
+  const pocketRegions: RegionSpec[] = Array.from({ length: 12 }, (_, index) => ({
+    id: `p${index}`, owner: NATION_B,
+    building: index === 5 ? "city" as const : undefined,
+  }));
+  const pocketEdges: Edge[] = Array.from({ length: 11 }, (_, index) => [`p${index}`, `p${index + 1}`]);
+  const world = createFrontWorld(
+    [
+      { id: "a-front", owner: NATION_A }, { id: "gate", owner: NATION_B },
+      { id: "rear", owner: NATION_B, building: "capital" }, { id: "bypass", owner: NATION_C },
+      ...pocketRegions,
+    ],
+    [["a-front", "gate"], ["gate", "rear"], ["gate", "p0"], ["rear", "bypass"], ["bypass", "p11"], ...pocketEdges],
+  );
+  const enemyNation = world.nations.find((nation) => nation.id === NATION_B);
+  if (enemyNation) enemyNation.capitalMesoId = id("rear");
+  startWar(world, NATION_A, NATION_B);
+  for (let index = 0; index < 40; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_A, index < 30 ? "gate" : "a-front", "Infantry"), 500);
+  }
+  for (let index = 0; index < 10; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_B, `p${index}`, "Infantry"), 250);
+  }
+  world.occupation.mesoById.set(id("gate"), NATION_A);
+  world.occupation.version += 1;
   updateAllocationSystem(world);
   updateFrontlineCoverage(world);
   return world;

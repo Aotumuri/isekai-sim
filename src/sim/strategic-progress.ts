@@ -17,7 +17,10 @@ export type StrategicProgressReason =
   | "operational-front-collapse"
   | "successful-operation"
   | "important-capture"
-  | "successful-exploitation";
+  | "successful-exploitation"
+  | "pocket-closed"
+  | "pocket-reduced-significantly"
+  | "pocket-destroyed";
 
 export interface StrategicProgressAssessment {
   nationId: NationId;
@@ -46,6 +49,7 @@ interface StrategicProgressTracker {
   lastProgressTick: number | null;
   lastProgressReasons: StrategicProgressReason[];
   seenSuccessfulOperationIds: Set<string>;
+  seenPocketEventKeys: Set<string>;
 }
 
 export interface StrategicProgressState {
@@ -199,6 +203,9 @@ function evaluatePair(
   const operationEvidence = collectOperationEvidence(world, tracker);
   for (const reason of operationEvidence.reasons) reasons.add(reason);
   evidenceAdded += operationEvidence.evidenceUnits;
+  const pocketEvidence = collectPocketEvidence(world, tracker);
+  for (const reason of pocketEvidence.reasons) reasons.add(reason);
+  evidenceAdded += pocketEvidence.evidenceUnits;
   tracker.previousPhysicalFrontCount = currentPhysicalFrontCount;
   tracker.evidenceUnits = evidenceAdded > 0
     ? Math.min(REQUIRED_EVIDENCE_UNITS, tracker.evidenceUnits + evidenceAdded)
@@ -251,6 +258,7 @@ function createTracker(
     lastProgressTick: null,
     lastProgressReasons: [],
     seenSuccessfulOperationIds: new Set(),
+    seenPocketEventKeys: new Set(),
   };
   rebaseTracker(
     world,
@@ -264,6 +272,38 @@ function createTracker(
     }
   }
   return tracker;
+}
+
+function collectPocketEvidence(
+  world: WorldState,
+  tracker: StrategicProgressTracker,
+): { reasons: StrategicProgressReason[]; evidenceUnits: number } {
+  const reasons = new Set<StrategicProgressReason>();
+  let evidenceUnits = 0;
+  const active = world.battlefieldTopology.pockets.filter((pocket) =>
+    pocket.attackerNationId === tracker.nationId && pocket.enemyNationId === tracker.enemyNationId
+  );
+  const history = world.battlefieldTopology.pocketHistory.filter((pocket) =>
+    pocket.attackerNationId === tracker.nationId && pocket.enemyNationId === tracker.enemyNationId
+  );
+  for (const pocket of active) {
+    const closedKey = `${pocket.id}:closed`;
+    if (!tracker.seenPocketEventKeys.has(closedKey)) {
+      tracker.seenPocketEventKeys.add(closedKey); reasons.add("pocket-closed"); evidenceUnits += 1;
+    }
+    const reducedKey = `${pocket.id}:reduced`;
+    if (pocket.regionIds.length * 2 <= pocket.initialRegionCount &&
+      !tracker.seenPocketEventKeys.has(reducedKey)) {
+      tracker.seenPocketEventKeys.add(reducedKey); reasons.add("pocket-reduced-significantly"); evidenceUnits += 2;
+    }
+  }
+  for (const pocket of history) {
+    const key = `${pocket.id}:destroyed`;
+    if (pocket.status === "destroyed" && !tracker.seenPocketEventKeys.has(key)) {
+      tracker.seenPocketEventKeys.add(key); reasons.add("pocket-destroyed"); evidenceUnits = REQUIRED_EVIDENCE_UNITS;
+    }
+  }
+  return { reasons: [...reasons], evidenceUnits };
 }
 
 function rebaseTracker(
@@ -476,6 +516,9 @@ function createReasonCounts(): Record<StrategicProgressReason, number> {
     "successful-operation": 0,
     "important-capture": 0,
     "successful-exploitation": 0,
+    "pocket-closed": 0,
+    "pocket-reduced-significantly": 0,
+    "pocket-destroyed": 0,
   };
 }
 

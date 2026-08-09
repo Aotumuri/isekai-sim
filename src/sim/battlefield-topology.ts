@@ -6,9 +6,61 @@ import { getFrontlineCoverage } from "./frontline-coverage";
 import { getFrontSide, getOpposingFrontSide, type FrontId } from "./land-fronts";
 import { isNationActive } from "./nation-active";
 import type { WorldState } from "./world-state";
-import { getMesoById, getNeighborsById } from "./world-cache";
+import { getMesoById, getNeighborsById, getOwnerByMesoId } from "./world-cache";
+import { getUnitCombatStrength } from "./unit-strength";
 
 export type BattlefieldComponentId = string & { __brand: "BattlefieldComponentId" };
+export type PocketId = string & { __brand: "PocketId" };
+export type PocketStatus = "isolated" | "reducing" | "collapsing" | "destroyed" | "reopened";
+
+export interface PocketRecord {
+  id: PocketId;
+  attackerNationId: NationId;
+  enemyNationId: NationId;
+  componentId: BattlefieldComponentId;
+  regionIds: MesoRegionId[];
+  boundaryRegionIds: MesoRegionId[];
+  closureRegionIds: MesoRegionId[];
+  enemyUnitIds: string[];
+  enemyStrength: number;
+  cities: number;
+  hasCapital: boolean;
+  createdTick: number;
+  lastChangedTick: number;
+  status: PocketStatus;
+  initialRegionCount: number;
+  initialStrength: number;
+  initialCities: number;
+  capturedCities: number;
+  reductionOperationCount: number;
+  firstReductionTick: number | null;
+  idleTicks: number;
+  containmentRequired: number;
+  containmentActual: number;
+  reductionStrength: number;
+  currentReductionTargetId: MesoRegionId | null;
+  destroyedTick: number | null;
+  reopenedTick: number | null;
+  reopenReason: string | null;
+  strengthAfter50Ticks: number | null;
+  strengthAfter100Ticks: number | null;
+  strengthAfter200Ticks: number | null;
+  strengthAfter500Ticks: number | null;
+}
+
+export interface PocketReductionObjective {
+  pocketId: PocketId;
+  attackerNationId: NationId;
+  enemyNationId: NationId;
+  sectorId: FrontId;
+  targetRegionId: MesoRegionId;
+  regionIds: MesoRegionId[];
+  boundaryRegionIds: MesoRegionId[];
+  trappedStrength: number;
+  containmentRequired: number;
+  containmentActual: number;
+  score: number;
+}
 
 export type CollapseTopologyReason =
   | "enemy-front-fragmented"
@@ -161,6 +213,23 @@ export interface BattlefieldTopologyState {
   previousComponentCountByPair: Map<string, number>;
   activePairKeys: Set<string>;
   lastCollapseTickByPair: Map<string, number>;
+  pockets: PocketRecord[];
+  pocketsById: Map<PocketId, PocketRecord>;
+  pocketHistory: PocketRecord[];
+  nextPocketNumber: number;
+  meaningfulPocketCount: number;
+  pocketsCreatedCount: number;
+  pocketsDestroyedCount: number;
+  pocketsReopenedCount: number;
+  pocketLifetimeTotal: number;
+  longestPocketLifetime: number;
+  isolatedStrengthDestroyed: number;
+  isolatedRegionsCaptured: number;
+  pocketCitiesCaptured: number;
+  pocketClosureOpportunityCount: number;
+  highValuePocketClosureOpportunityCount: number;
+  pocketClosureInvalidationCount: number;
+  lastPocketEvaluationTick: number;
 }
 
 const WAR_END_COLLAPSE_WINDOW = 100;
@@ -176,7 +245,67 @@ export function createBattlefieldTopologyState(): BattlefieldTopologyState {
     componentFragmentationEvents: 0, warsEndingAfterCollapse: 0,
     previousComponentCountByPair: new Map(), activePairKeys: new Set(),
     lastCollapseTickByPair: new Map(),
+    pockets: [], pocketsById: new Map(), pocketHistory: [], nextPocketNumber: 0,
+    meaningfulPocketCount: 0, pocketsCreatedCount: 0, pocketsDestroyedCount: 0,
+    pocketsReopenedCount: 0, pocketLifetimeTotal: 0, longestPocketLifetime: 0,
+    isolatedStrengthDestroyed: 0, isolatedRegionsCaptured: 0, pocketCitiesCaptured: 0,
+    pocketClosureOpportunityCount: 0, highValuePocketClosureOpportunityCount: 0,
+    pocketClosureInvalidationCount: 0,
+    lastPocketEvaluationTick: 0,
   };
+}
+
+export function getPockets(world: WorldState, attackerNationId?: NationId): readonly PocketRecord[] {
+  return attackerNationId === undefined ? world.battlefieldTopology.pockets
+    : world.battlefieldTopology.pockets.filter((pocket) => pocket.attackerNationId === attackerNationId);
+}
+
+export function getPocketReductionObjectives(
+  world: WorldState,
+  attackerNationId?: NationId,
+): PocketReductionObjective[] {
+  const startedAt = world.instrumentation ? performance.now() : 0;
+  const strengthByAttacker = new Map<NationId, ReadonlyMap<MesoRegionId, number>>();
+  const mesoById = getMesoById(world);
+  const neighborsById = getNeighborsById(world);
+  const objectives = world.battlefieldTopology.pockets.flatMap((pocket) => {
+    if (attackerNationId && pocket.attackerNationId !== attackerNationId) return [];
+    if (pocket.status === "destroyed" || pocket.status === "reopened" || pocket.regionIds.length === 0) return [];
+    const regionSet = new Set(pocket.regionIds);
+    let strengthByRegion = strengthByAttacker.get(pocket.attackerNationId);
+    if (!strengthByRegion) {
+      strengthByRegion = getEnemyStrengthByRegion(world, pocket.attackerNationId);
+      strengthByAttacker.set(pocket.attackerNationId, strengthByRegion);
+    }
+    const candidates = world.landFronts.operationalSectors.flatMap((sector) => {
+      const friendly = getFrontSide(sector, pocket.attackerNationId);
+      const enemy = getOpposingFrontSide(sector, pocket.attackerNationId);
+      if (!friendly || enemy?.nationId !== pocket.enemyNationId) return [];
+      const coverage = getFrontlineCoverage(world, sector.id, pocket.enemyNationId);
+      return enemy.influenceRegionIds.filter((id) => regionSet.has(id)).map((regionId) => {
+        const position = coverage?.positions.find((item) => item.friendlyRegionId === regionId);
+        const strength = strengthByRegion.get(regionId) ?? 0;
+        const strategic = mesoById.get(regionId)?.building;
+        const connectivity = (neighborsById.get(regionId) ?? []).filter((id) => regionSet.has(id)).length;
+        const score = (position?.state === "gap" ? 70 : position?.state === "weak" ? 40 : 10) +
+          (strength > 0 ? 20 / Math.max(1, Math.sqrt(strength / 1_000)) : 25) +
+          (strategic === "capital" ? 35 : strategic === "city" ? 20 : 0) +
+          Math.max(0, 8 - connectivity * 2) + Math.min(25, pocket.regionIds.length * 1.5);
+        return { sectorId: sector.id, regionId, score };
+      });
+    }).sort((a, b) => b.score - a.score || compareIds(a.regionId, b.regionId));
+    const target = candidates[0];
+    return target ? [{
+      pocketId: pocket.id, attackerNationId: pocket.attackerNationId,
+      enemyNationId: pocket.enemyNationId, sectorId: target.sectorId,
+      targetRegionId: target.regionId, regionIds: [...pocket.regionIds],
+      boundaryRegionIds: [...pocket.boundaryRegionIds], trappedStrength: pocket.enemyStrength,
+      containmentRequired: pocket.containmentRequired,
+      containmentActual: pocket.containmentActual, score: target.score,
+    }] : [];
+  });
+  world.instrumentation?.recordDuration("pocketReduction.evaluation", performance.now() - startedAt);
+  return objectives;
 }
 
 export function getBattlefieldTopologyAssessment(
@@ -267,6 +396,12 @@ export function updateBattlefieldTopology(world: WorldState): void {
     for (const opportunity of assessment.pocketClosureOpportunities) {
       const previous = previousClosures.get(pocketClosureKey(opportunity));
       if (previous) opportunity.detectedAtTick = previous.detectedAtTick;
+      else {
+        state.pocketClosureOpportunityCount += 1;
+        if (opportunity.score >= WORLD_BALANCE.war.landFront.pocketClosure.dedicatedOperationThreshold) {
+          state.highValuePocketClosureOpportunityCount += 1;
+        }
+      }
     }
     for (const opportunity of assessment.collapseOpportunities) {
       const previous = previousOpportunities.get(opportunityKey(opportunity));
@@ -281,11 +416,128 @@ export function updateBattlefieldTopology(world: WorldState): void {
       }
     }
   }
+  const currentClosureKeys = new Set(state.assessments.flatMap((assessment) =>
+    assessment.pocketClosureOpportunities.map(pocketClosureKey)
+  ));
+  state.pocketClosureInvalidationCount += [...previousClosures.keys()]
+    .filter((key) => !currentClosureKeys.has(key)).length;
+  reconcilePockets(world, state);
   state.version += 1;
   world.instrumentation?.recordDuration(
     "battlefieldTopology.evaluation",
     performance.now() - startedAt,
   );
+}
+
+function reconcilePockets(world: WorldState, state: BattlefieldTopologyState): void {
+  const elapsedTicks = Math.max(0, world.time.fastTick - state.lastPocketEvaluationTick);
+  const current = state.assessments.flatMap((assessment) => assessment.enemyComponents
+    .filter((component) => component.exitCount === 0 && isMeaningfulPocket(component))
+    .map((component) => ({ assessment, component })));
+  const used = new Set<PocketId>();
+  const next: PocketRecord[] = [];
+  for (const { assessment, component } of current) {
+    const regionSet = new Set(component.regionIds);
+    const match = state.pockets.filter((pocket) => !used.has(pocket.id) &&
+      pocket.attackerNationId === assessment.attackerNationId &&
+      pocket.enemyNationId === assessment.enemyNationId)
+      .map((pocket) => ({ pocket, overlap: pocket.regionIds.filter((id) => regionSet.has(id)).length }))
+      .filter((item) => item.overlap > 0)
+      .sort((a, b) => b.overlap - a.overlap || compareIds(a.pocket.id, b.pocket.id))[0]?.pocket;
+    const boundary = component.regionIds.filter((id) => (getNeighborsById(world).get(id) ?? [])
+      .some((neighbor) => !regionSet.has(neighbor) && isControlledBy(world, neighbor, assessment.attackerNationId)));
+    const closure = [...new Set(boundary.flatMap((id) => getNeighborsById(world).get(id) ?? [])
+      .filter((id) => !regionSet.has(id) && isControlledBy(world, id, assessment.attackerNationId)))];
+    const enemyUnits = world.units.filter((unit) => unit.nationId === assessment.enemyNationId &&
+      unit.domain === "land" && regionSet.has(unit.regionId));
+    const containmentActual = world.units.filter((unit) => unit.nationId === assessment.attackerNationId &&
+      unit.domain === "land" && closure.includes(unit.regionId))
+      .reduce((sum, unit) => sum + getUnitCombatStrength(unit), 0);
+    const containmentRequired = Math.min(component.enemyStrength * 0.45,
+      Math.max(250, component.enemyStrength * 0.18 + boundary.length * 100));
+    if (match) {
+      used.add(match.id);
+      const changed = !sameIds(match.regionIds, component.regionIds) || Math.abs(match.enemyStrength - component.enemyStrength) > 1;
+      const capturedCities = Math.max(match.capturedCities, match.initialCities - component.cities);
+      const reductionOperation = world.offensiveOperations.operations.find((operation) =>
+        operation.phase !== "recovering" && operation.pocketReductionObjective?.pocketId === match.id
+      );
+      Object.assign(match, {
+        componentId: component.id, regionIds: [...component.regionIds], boundaryRegionIds: boundary,
+        closureRegionIds: closure, enemyUnitIds: enemyUnits.map((unit) => unit.id),
+        enemyStrength: component.enemyStrength, cities: component.cities, hasCapital: component.hasCapital,
+        lastChangedTick: changed ? world.time.fastTick : match.lastChangedTick,
+        status: reductionOperation ? "reducing" : component.regionCount <= Math.max(1, match.initialRegionCount / 3) ? "collapsing" : "isolated",
+        capturedCities, containmentRequired, containmentActual,
+        reductionStrength: reductionOperation?.assignedStrength ?? 0,
+        currentReductionTargetId: reductionOperation?.primaryTargetRegionId ?? null,
+      });
+      if (!reductionOperation) match.idleTicks += elapsedTicks;
+      const age = world.time.fastTick - match.createdTick;
+      if (age >= 50 && match.strengthAfter50Ticks === null) match.strengthAfter50Ticks = component.enemyStrength;
+      if (age >= 100 && match.strengthAfter100Ticks === null) match.strengthAfter100Ticks = component.enemyStrength;
+      if (age >= 200 && match.strengthAfter200Ticks === null) match.strengthAfter200Ticks = component.enemyStrength;
+      if (age >= 500 && match.strengthAfter500Ticks === null) match.strengthAfter500Ticks = component.enemyStrength;
+      next.push(match);
+    } else {
+      const pocket: PocketRecord = {
+        id: `pocket-${state.nextPocketNumber++}` as PocketId,
+        attackerNationId: assessment.attackerNationId, enemyNationId: assessment.enemyNationId,
+        componentId: component.id, regionIds: [...component.regionIds], boundaryRegionIds: boundary,
+        closureRegionIds: closure, enemyUnitIds: enemyUnits.map((unit) => unit.id),
+        enemyStrength: component.enemyStrength, cities: component.cities, hasCapital: component.hasCapital,
+        createdTick: world.time.fastTick, lastChangedTick: world.time.fastTick, status: "isolated",
+        initialRegionCount: component.regionCount, initialStrength: component.enemyStrength,
+        initialCities: component.cities, capturedCities: 0, reductionOperationCount: 0,
+        firstReductionTick: null, idleTicks: 0,
+        containmentRequired, containmentActual, reductionStrength: 0, currentReductionTargetId: null,
+        destroyedTick: null, reopenedTick: null, reopenReason: null,
+        strengthAfter50Ticks: null, strengthAfter100Ticks: null,
+        strengthAfter200Ticks: null, strengthAfter500Ticks: null,
+      };
+      state.pocketsCreatedCount += 1;
+      world.instrumentation?.incrementCounter("pocket.detected");
+      next.push(pocket);
+    }
+  }
+  for (const pocket of state.pockets.filter((item) => !used.has(item.id))) {
+    const overlapComponent = state.assessments.find((a) => a.attackerNationId === pocket.attackerNationId && a.enemyNationId === pocket.enemyNationId)
+      ?.enemyComponents.find((component) => component.regionIds.some((id) => pocket.regionIds.includes(id)));
+    const reopened = !!overlapComponent?.connectsToStrategicRear;
+    pocket.status = reopened ? "reopened" : "destroyed";
+    pocket.reopenedTick = reopened ? world.time.fastTick : null;
+    pocket.destroyedTick = reopened ? null : world.time.fastTick;
+    pocket.reopenReason = reopened ? "rear-connection-restored" : null;
+    const lifetime = world.time.fastTick - pocket.createdTick;
+    state.pocketLifetimeTotal += lifetime;
+    state.longestPocketLifetime = Math.max(state.longestPocketLifetime, lifetime);
+    if (reopened) { state.pocketsReopenedCount += 1; world.instrumentation?.incrementCounter("pocket.reopened"); }
+    else {
+      state.pocketsDestroyedCount += 1;
+      state.isolatedStrengthDestroyed += pocket.initialStrength;
+      state.isolatedRegionsCaptured += pocket.initialRegionCount;
+      state.pocketCitiesCaptured += pocket.initialCities;
+      world.instrumentation?.incrementCounter("pocket.destroyed");
+    }
+    state.pocketHistory.push({ ...pocket, regionIds: [...pocket.regionIds], boundaryRegionIds: [...pocket.boundaryRegionIds], closureRegionIds: [...pocket.closureRegionIds], enemyUnitIds: [...pocket.enemyUnitIds] });
+  }
+  state.pockets = next;
+  state.pocketsById = new Map(next.map((pocket) => [pocket.id, pocket]));
+  state.meaningfulPocketCount += current.length;
+  state.lastPocketEvaluationTick = world.time.fastTick;
+}
+
+function isMeaningfulPocket(component: EnemyTopologyComponent): boolean {
+  return component.regionCount >= 2 || component.enemyStrength > 0 || component.cities > 0 || component.hasCapital;
+}
+
+function isControlledBy(world: WorldState, regionId: MesoRegionId, nationId: NationId): boolean {
+  const region = getMesoById(world).get(regionId);
+  return !!region && (world.occupation.mesoById.get(regionId) ?? getOwnerByMesoId(world).get(regionId)) === nationId;
+}
+
+function sameIds(a: MesoRegionId[], b: MesoRegionId[]): boolean {
+  return a.length === b.length && a.every((id) => b.includes(id));
 }
 
 function rebuildStructure(world: WorldState, state: BattlefieldTopologyState): void {

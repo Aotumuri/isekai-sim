@@ -40,6 +40,7 @@ export function createScenarioWorld(
   world.strategicReserves.enabled = options.reserveEnabled ?? true;
   world.reorganization.enabled = options.reorganizationEnabled ?? true;
   world.offensiveOperations.exploitationEnabled = options.exploitationEnabled ?? true;
+  world.offensiveOperations.pocketReductionEnabled = options.pocketReductionEnabled ?? true;
   scenarioSetups[name](world, options);
   return world;
 }

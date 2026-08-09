@@ -41,6 +41,19 @@ export function summarizeWorld(world: WorldState): WorldSummary {
   const exploitation = world.offensiveOperations;
   const stalemate = world.stalematePressure;
   const strategicProgress = world.strategicProgress;
+  const pocketState = world.battlefieldTopology;
+  const allPockets = [...pocketState.pockets, ...pocketState.pocketHistory];
+  const completedPocketLifetimes = pocketState.pocketHistory.map((pocket) =>
+    (pocket.destroyedTick ?? pocket.reopenedTick ?? world.time.fastTick) - pocket.createdTick
+  ).sort((a, b) => a - b);
+  const reducedPockets = allPockets.filter((pocket) => pocket.firstReductionTick !== null);
+  const allOperations = [...world.offensiveOperations.operations, ...world.offensiveOperations.history];
+  const successfulClosures = allOperations.filter((operation) =>
+    operation.pocketClosureConfirmation?.status === "success"
+  );
+  const destroyedReducedPockets = pocketState.pocketHistory.filter((pocket) =>
+    pocket.status === "destroyed" && pocket.firstReductionTick !== null
+  );
   const majorOperations = [...world.offensiveOperations.operations, ...world.offensiveOperations.history]
     .filter((operation) => operation.isMajorOffensive);
   const exploitationOtherStops = Object.entries(exploitation.exploitationStopCounts)
@@ -171,8 +184,43 @@ export function summarizeWorld(world: WorldState): WorldSummary {
       (sum, assessment) => sum + assessment.pocketClosureOpportunities.length,
       0,
     ),
+    pocketClosureOpportunitiesDetected: pocketState.pocketClosureOpportunityCount,
+    highValuePocketClosureOpportunities: pocketState.highValuePocketClosureOpportunityCount,
+    pocketClosureInvalidations: pocketState.pocketClosureInvalidationCount,
     battlefieldComponentFragmentations: world.battlefieldTopology.componentFragmentationEvents,
     battlefieldWarsEndingAfterCollapse: world.battlefieldTopology.warsEndingAfterCollapse,
+    activeMeaningfulPockets: pocketState.pockets.length,
+    pocketsCreated: pocketState.pocketsCreatedCount,
+    pocketReductionsStarted: allPockets.filter((pocket) => pocket.firstReductionTick !== null).length,
+    pocketsDestroyed: pocketState.pocketsDestroyedCount,
+    pocketsReopened: pocketState.pocketsReopenedCount,
+    pocketAverageLifetime: completedPocketLifetimes.length > 0
+      ? completedPocketLifetimes.reduce((sum, value) => sum + value, 0) / completedPocketLifetimes.length : 0,
+    pocketMedianLifetime: completedPocketLifetimes.length > 0
+      ? completedPocketLifetimes[Math.floor((completedPocketLifetimes.length - 1) / 2)]! : 0,
+    pocketLongestLifetime: pocketState.longestPocketLifetime,
+    pocketInitialTrappedStrength: allPockets.reduce((sum, pocket) => sum + pocket.initialStrength, 0),
+    isolatedStrengthDestroyed: pocketState.isolatedStrengthDestroyed,
+    isolatedRegionsCaptured: pocketState.isolatedRegionsCaptured,
+    pocketCitiesCaptured: pocketState.pocketCitiesCaptured,
+    pocketContainmentStrength: pocketState.pockets.reduce((sum, pocket) => sum + pocket.containmentActual, 0),
+    pocketReductionStrength: pocketState.pockets.reduce((sum, pocket) => sum + pocket.reductionStrength, 0),
+    pocketReductionOperations: allPockets.reduce((sum, pocket) => sum + pocket.reductionOperationCount, 0),
+    pocketAverageRegionsPerOperation: allPockets.reduce((sum, pocket) => sum + pocket.reductionOperationCount, 0) > 0
+      ? pocketState.isolatedRegionsCaptured / allPockets.reduce((sum, pocket) => sum + pocket.reductionOperationCount, 0) : 0,
+    pocketIdleTicks: allPockets.reduce((sum, pocket) => sum + pocket.idleTicks, 0),
+    pocketClosureToReductionLatency: reducedPockets.length > 0
+      ? reducedPockets.reduce((sum, pocket) => sum + pocket.firstReductionTick! - pocket.createdTick, 0) / reducedPockets.length : 0,
+    pocketReductionToDestructionLatency: destroyedReducedPockets.length > 0
+      ? destroyedReducedPockets.reduce((sum, pocket) => sum + pocket.destroyedTick! - pocket.firstReductionTick!, 0) / destroyedReducedPockets.length : 0,
+    pocketsSurviving50Ticks: allPockets.filter((pocket) => pocket.strengthAfter50Ticks !== null).length,
+    pocketsSurviving100Ticks: allPockets.filter((pocket) => pocket.strengthAfter100Ticks !== null).length,
+    pocketsSurviving200Ticks: allPockets.filter((pocket) => pocket.strengthAfter200Ticks !== null).length,
+    pocketsSurviving500Ticks: allPockets.filter((pocket) => pocket.strengthAfter500Ticks !== null).length,
+    trappedStrengthAfter50Ticks: allPockets.reduce((sum, pocket) => sum + (pocket.strengthAfter50Ticks ?? 0), 0),
+    trappedStrengthAfter100Ticks: allPockets.reduce((sum, pocket) => sum + (pocket.strengthAfter100Ticks ?? 0), 0),
+    trappedStrengthAfter200Ticks: allPockets.reduce((sum, pocket) => sum + (pocket.strengthAfter200Ticks ?? 0), 0),
+    trappedStrengthAfter500Ticks: allPockets.reduce((sum, pocket) => sum + (pocket.strengthAfter500Ticks ?? 0), 0),
     majorOffensivesLaunched: stalemate.majorOffensivesLaunched,
     majorOffensiveSuccesses: stalemate.majorOffensiveSuccesses,
     majorOffensiveFailures: stalemate.majorOffensiveFailures,
@@ -196,6 +244,12 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     pocketClosureOperationsCreated: world.offensiveOperations.pocketClosureCreatedCount,
     pocketClosureSuccesses: world.offensiveOperations.pocketClosureSuccessCount,
     pocketClosureFailures: world.offensiveOperations.pocketClosureFailureCount,
+    pocketClosureAverageDuration: successfulClosures.length > 0
+      ? successfulClosures.reduce((sum, operation) => sum + operation.pocketClosureConfirmation!.confirmedAtTick - operation.pocketClosureObjective!.detectedAtTick, 0) / successfulClosures.length : 0,
+    pocketClosureTrappedRegions: successfulClosures.reduce((sum, operation) => sum + operation.pocketClosureConfirmation!.trappedRegionIds.length, 0),
+    pocketClosureTrappedStrength: successfulClosures.reduce((sum, operation) => sum + operation.pocketClosureConfirmation!.trappedStrength, 0),
+    pocketClosureTrappedCities: successfulClosures.reduce((sum, operation) => sum + operation.pocketClosureConfirmation!.trappedCities, 0),
+    pocketReductionOperationsCreated: world.offensiveOperations.pocketReductionCreatedCount,
     operationsCompleted: world.offensiveOperations.completedCount,
     operationsFailed: world.offensiveOperations.failedCount,
     operationsCancelled: world.offensiveOperations.cancelledCount,

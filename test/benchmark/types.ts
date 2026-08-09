@@ -30,6 +30,7 @@ export interface BenchmarkOptions {
   reserveEnabled: boolean;
   reorganizationEnabled: boolean;
   exploitationEnabled: boolean;
+  pocketReductionEnabled: boolean;
 }
 
 export interface MetricSummary {
@@ -138,8 +139,38 @@ export interface WorldSummary {
   battlefieldCollapseOpportunities: number;
   battlefieldCollapseOpportunitiesIgnored: number;
   battlefieldPocketClosureOpportunities: number;
+  pocketClosureOpportunitiesDetected: number;
+  highValuePocketClosureOpportunities: number;
+  pocketClosureInvalidations: number;
   battlefieldComponentFragmentations: number;
   battlefieldWarsEndingAfterCollapse: number;
+  activeMeaningfulPockets: number;
+  pocketsCreated: number;
+  pocketReductionsStarted: number;
+  pocketsDestroyed: number;
+  pocketsReopened: number;
+  pocketAverageLifetime: number;
+  pocketMedianLifetime: number;
+  pocketLongestLifetime: number;
+  pocketInitialTrappedStrength: number;
+  isolatedStrengthDestroyed: number;
+  isolatedRegionsCaptured: number;
+  pocketCitiesCaptured: number;
+  pocketContainmentStrength: number;
+  pocketReductionStrength: number;
+  pocketReductionOperations: number;
+  pocketAverageRegionsPerOperation: number;
+  pocketIdleTicks: number;
+  pocketClosureToReductionLatency: number;
+  pocketReductionToDestructionLatency: number;
+  pocketsSurviving50Ticks: number;
+  pocketsSurviving100Ticks: number;
+  pocketsSurviving200Ticks: number;
+  pocketsSurviving500Ticks: number;
+  trappedStrengthAfter50Ticks: number;
+  trappedStrengthAfter100Ticks: number;
+  trappedStrengthAfter200Ticks: number;
+  trappedStrengthAfter500Ticks: number;
   majorOffensivesLaunched: number;
   majorOffensiveSuccesses: number;
   majorOffensiveFailures: number;
@@ -154,6 +185,11 @@ export interface WorldSummary {
   pocketClosureOperationsCreated: number;
   pocketClosureSuccesses: number;
   pocketClosureFailures: number;
+  pocketClosureAverageDuration: number;
+  pocketClosureTrappedRegions: number;
+  pocketClosureTrappedStrength: number;
+  pocketClosureTrappedCities: number;
+  pocketReductionOperationsCreated: number;
   operationsCompleted: number;
   operationsFailed: number;
   operationsCancelled: number;
@@ -303,6 +339,7 @@ export interface BenchmarkResult {
   reserveEnabled: boolean;
   reorganizationEnabled: boolean;
   exploitationEnabled: boolean;
+  pocketReductionEnabled: boolean;
   virtualElapsedMs: number;
   wallClockMs: number;
   effectiveSimulationSpeed: number;

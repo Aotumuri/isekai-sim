@@ -48,6 +48,10 @@ function parseArguments(args: string[]): ParsedArguments {
   if (exploitationMode !== "on" && exploitationMode !== "off") {
     throw new Error(`Unknown exploitation mode: ${exploitationMode}`);
   }
+  const pocketReductionMode = readOption(args, "--pocket-reduction") ?? "on";
+  if (pocketReductionMode !== "on" && pocketReductionMode !== "off") {
+    throw new Error(`Unknown pocket reduction mode: ${pocketReductionMode}`);
+  }
   return {
     options: {
       scenario: scenario as BenchmarkScenarioName,
@@ -62,6 +66,7 @@ function parseArguments(args: string[]): ParsedArguments {
       reserveEnabled: reserveMode === "on",
       reorganizationEnabled: reorganizationMode === "on",
       exploitationEnabled: exploitationMode === "on",
+      pocketReductionEnabled: pocketReductionMode === "on",
     },
     outputPath: readOption(args, "--output"),
   };

@@ -38,8 +38,10 @@ import {
 import { canReachControlled, getControlledDistanceField } from "./ai-geography";
 import {
   getBattlefieldTopologyAssessment,
+  getPocketReductionObjectives,
   type BattlefieldComponentId,
   type PocketClosureOpportunity,
+  type PocketReductionObjective,
 } from "./battlefield-topology";
 
 export type OperationId = string & { __brand: "OperationId" };
@@ -78,6 +80,7 @@ export type OffensiveOperationReason =
   | "enemy-capital-opportunity"
   | "enemy-city-opportunity"
   | "pocket-closure"
+  | "pocket-reduction"
   | "high-front-priority"
   | "weak-enemy-presence";
 
@@ -159,6 +162,7 @@ export interface OperationCandidate {
   targetTacticalScore: number;
   targetTopologyScore: number;
   pocketClosureObjective: PocketClosureOpportunity | null;
+  pocketReductionObjective: PocketReductionObjective | null;
   reasonFlags: OffensiveOperationReason[];
   fellBackToSingleApproach: boolean;
 }
@@ -213,6 +217,7 @@ export interface OffensiveOperation {
   targetTacticalScore: number;
   targetTopologyScore: number;
   pocketClosureObjective: PocketClosureOpportunity | null;
+  pocketReductionObjective: PocketReductionObjective | null;
   pocketClosureConfirmation: PocketClosureConfirmation | null;
   attackSuccessReason: OffensiveOperationCompletionReason | null;
   exploitationTargetRegionId: MesoRegionId | null;
@@ -270,6 +275,7 @@ export interface OffensiveOperationEvent {
 
 export interface OffensiveOperationState {
   exploitationEnabled: boolean;
+  pocketReductionEnabled: boolean;
   operations: OffensiveOperation[];
   operationsById: Map<OperationId, OffensiveOperation>;
   operationsByNationId: Map<NationId, OffensiveOperation[]>;
@@ -341,6 +347,7 @@ export interface OffensiveOperationState {
   pocketClosureCreatedCount: number;
   pocketClosureSuccessCount: number;
   pocketClosureFailureCount: number;
+  pocketReductionCreatedCount: number;
 }
 
 export interface OperationTargetSelection {
@@ -353,6 +360,7 @@ export interface OperationTargetSelection {
   tacticalScore: number;
   topologyScore?: number;
   pocketClosure?: PocketClosureOpportunity | null;
+  pocketReduction?: PocketReductionObjective | null;
   tacticalReasons: OffensiveOperationReason[];
 }
 
@@ -387,6 +395,7 @@ interface OperationAdvanceResult {
 export function createOffensiveOperationState(): OffensiveOperationState {
   return {
     exploitationEnabled: true,
+    pocketReductionEnabled: true,
     operations: [],
     operationsById: new Map(),
     operationsByNationId: new Map(),
@@ -466,6 +475,7 @@ export function createOffensiveOperationState(): OffensiveOperationState {
     pocketClosureCreatedCount: 0,
     pocketClosureSuccessCount: 0,
     pocketClosureFailureCount: 0,
+    pocketReductionCreatedCount: 0,
   };
 }
 
@@ -515,6 +525,8 @@ export function updateOffensiveOperations(world: WorldState): void {
       .sort((a, b) =>
         bestPocketClosureScore(world, nationId, b.frontId) -
           bestPocketClosureScore(world, nationId, a.frontId) ||
+        bestPocketReductionScore(world, nationId, b.frontId) -
+          bestPocketReductionScore(world, nationId, a.frontId) ||
         Number(isSchwerpunktSector(world, nationId, b.frontId)) -
           Number(isSchwerpunktSector(world, nationId, a.frontId)) ||
         compareOperationCandidatePlans(a, b)
@@ -583,6 +595,18 @@ export function updateOffensiveOperations(world: WorldState): void {
       recordEvent(world, operation, "created", "attack-front-selected");
       if (operation.pocketClosureObjective) {
         state.pocketClosureCreatedCount += 1;
+      }
+      if (operation.pocketReductionObjective) {
+        state.pocketReductionCreatedCount += 1;
+        const pocket = world.battlefieldTopology.pocketsById.get(operation.pocketReductionObjective.pocketId);
+        if (pocket) {
+          pocket.status = "reducing";
+          pocket.reductionOperationCount += 1;
+          pocket.firstReductionTick ??= world.time.fastTick;
+          pocket.reductionStrength = operation.assignedStrength;
+          pocket.currentReductionTargetId = operation.primaryTargetRegionId;
+        }
+        world.instrumentation?.incrementCounter("pocket.reductionStarted");
       }
       changed = true;
       rebuildOperationIndexes(state);
@@ -839,7 +863,7 @@ function advanceOperation(
     );
   }
   const plan = getFrontPlan(world, operation.frontId, operation.nationId);
-  if (!plan || (plan.posture !== "attack" && !operation.isMajorOffensive && !operation.pocketClosureObjective)) {
+  if (!plan || (plan.posture !== "attack" && !operation.isMajorOffensive && !operation.pocketClosureObjective && !operation.pocketReductionObjective)) {
     finishOperation(world, operation, "cancelled", "posture-changed");
     return { keep: true, changed: true };
   }
@@ -862,6 +886,10 @@ function advanceOperation(
     return { keep: true, changed: true };
   }
   if (operation.pocketClosureObjective && !isPocketClosureStillValid(world, operation)) {
+    finishOperation(world, operation, "cancelled", "target-invalid");
+    return { keep: true, changed: true };
+  }
+  if (operation.pocketReductionObjective && !isPocketReductionStillValid(world, operation)) {
     finishOperation(world, operation, "cancelled", "target-invalid");
     return { keep: true, changed: true };
   }
@@ -1066,7 +1094,12 @@ function buildOperationCandidate(
   const forceFraction = isSchwerpunktOperation
     ? WORLD_BALANCE.war.landFront.stalemate.majorOperationForceFraction
     : settings.forceFraction;
-  const requiredOperationStrength = sumUnitStrength(surplusUnits) * forceFraction;
+  const requiredOperationStrength = targets.pocketReduction
+    ? Math.min(sumUnitStrength(surplusUnits), Math.max(
+      targets.pocketReduction.trappedStrength * 1.15,
+      targets.pocketReduction.regionIds.length * 300,
+    ))
+    : sumUnitStrength(surplusUnits) * forceFraction;
   const approachPlan = planOperationApproaches(
     world,
     plan.nationId,
@@ -1108,7 +1141,7 @@ function buildOperationCandidate(
     false,
   );
   const rejectionReasons: OperationCandidateRejectionReason[] = [];
-  if (manifestResult.manifest.length < 2) {
+  if (manifestResult.manifest.length < (targets.pocketReduction ? 1 : 2)) {
     rejectionReasons.push("insufficient-units");
   }
   if (!manifestResult.feasible) {
@@ -1145,6 +1178,8 @@ function buildOperationCandidate(
     targetTopologyScore: targets.topologyScore ?? 0,
     pocketClosureObjective: targets.pocketClosure
       ? clonePocketClosureOpportunity(targets.pocketClosure) : null,
+    pocketReductionObjective: targets.pocketReduction
+      ? clonePocketReductionObjective(targets.pocketReduction) : null,
     reasonFlags: collectOperationReasons(
       world,
       plan,
@@ -1264,6 +1299,8 @@ function createOperationFromCandidate(
     targetTopologyScore: candidate.targetTopologyScore,
     pocketClosureObjective: candidate.pocketClosureObjective
       ? clonePocketClosureOpportunity(candidate.pocketClosureObjective) : null,
+    pocketReductionObjective: candidate.pocketReductionObjective
+      ? clonePocketReductionObjective(candidate.pocketReductionObjective) : null,
     pocketClosureConfirmation: null,
     attackSuccessReason: null,
     exploitationTargetRegionId: null,
@@ -1362,6 +1399,10 @@ function selectOperationTargets(
         ? closure.score * (isSchwerpunktSector(world, plan.nationId, front.id)
           ? WORLD_BALANCE.war.landFront.pocketClosure.majorOffensiveMultiplier : 1)
         : 0;
+      const reduction = getPocketReductionForTarget(
+        world, plan.nationId, enemy.nationId, front.id, regionId,
+      );
+      const reductionScore = reduction ? 90 + reduction.score : 0;
       return {
         regionId,
         score:
@@ -1373,7 +1414,7 @@ function selectOperationTargets(
             enemy.nationId,
             enemyBorderSet,
             distanceFromFriendlyBorder.get(regionId) ?? 0,
-          ) + tactical.score + topologyScore + closureScore,
+          ) + tactical.score + topologyScore + closureScore + reductionScore,
         nearbyEnemyStrength: getNearbyEnemyStrength(
           world,
           regionId,
@@ -1382,6 +1423,7 @@ function selectOperationTargets(
         tactical,
         topologyScore,
         closure: closure?.tacticallyFeasible ? closure : null,
+        reduction,
       };
     })
     .sort((a, b) => b.score - a.score || compareIds(a.regionId, b.regionId));
@@ -1399,8 +1441,10 @@ function selectOperationTargets(
     return null;
   }
   const settings = WORLD_BALANCE.war.landFront.offensiveOperation;
-  const supportingTargetRegionIds = candidates
-    .slice(1)
+  const supportingCandidates = primary.reduction
+    ? candidates.slice(1).filter((candidate) => candidate.reduction?.pocketId === primary.reduction?.pocketId)
+    : candidates.slice(1);
+  const supportingTargetRegionIds = supportingCandidates
     .map((candidate) => ({
       candidate,
       distance: getBoundedGraphDistance(
@@ -1433,6 +1477,7 @@ function selectOperationTargets(
     tacticalScore: primary.tactical.score,
     topologyScore: primary.topologyScore,
     pocketClosure: primary.closure,
+    pocketReduction: primary.reduction,
     tacticalReasons: primary.tactical.reasons,
   };
 }
@@ -2890,6 +2935,7 @@ function collectOperationReasons(
   const targetBuilding = getMesoById(world).get(target)?.building;
   reasons.push(...targets.tacticalReasons);
   if (targets.pocketClosure) reasons.push("pocket-closure");
+  if (targets.pocketReduction) reasons.push("pocket-reduction");
   if (strengthRatio > 1.4) {
     reasons.push("front-superiority");
   }
@@ -3326,6 +3372,7 @@ function isOperationPlanEligible(
       closure.score >= WORLD_BALANCE.war.landFront.pocketClosure.dedicatedOperationThreshold) {
     return true;
   }
+  if (bestPocketReduction(world, nationId, plan.frontId)) return true;
   if (!isSchwerpunktSector(world, nationId, plan.frontId)) return false;
   const pressure = world.stalematePressure.assessments.find((assessment) =>
     assessment.nationId === nationId &&
@@ -3333,6 +3380,23 @@ function isOperationPlanEligible(
   )?.pressure ?? 0;
   return pressure >=
     WORLD_BALANCE.war.landFront.stalemate.majorOffensiveThreshold;
+}
+
+function bestPocketReduction(
+  world: WorldState,
+  nationId: NationId,
+  frontId: FrontId,
+): PocketReductionObjective | undefined {
+  if (!world.offensiveOperations.pocketReductionEnabled) return undefined;
+  return getPocketReductionObjectives(world, nationId)
+    .filter((objective) => objective.sectorId === frontId &&
+      (objective.containmentActual >= objective.containmentRequired * 0.5 ||
+        objective.trappedStrength < 500))
+    .sort((a, b) => b.score - a.score || compareIds(a.pocketId, b.pocketId))[0];
+}
+
+function bestPocketReductionScore(world: WorldState, nationId: NationId, frontId: FrontId): number {
+  return bestPocketReduction(world, nationId, frontId)?.score ?? 0;
 }
 
 function bestPocketClosure(
@@ -3365,6 +3429,21 @@ function getPocketClosureForTarget(
     );
 }
 
+function getPocketReductionForTarget(
+  world: WorldState,
+  attackerNationId: NationId,
+  enemyNationId: NationId,
+  sectorId: FrontId,
+  regionId: MesoRegionId,
+): PocketReductionObjective | undefined {
+  if (!world.offensiveOperations.pocketReductionEnabled) return undefined;
+  return getPocketReductionObjectives(world, attackerNationId).find((objective) =>
+    objective.enemyNationId === enemyNationId && objective.sectorId === sectorId &&
+    objective.targetRegionId === regionId &&
+    (objective.containmentActual >= objective.containmentRequired * 0.5 || objective.trappedStrength < 500)
+  );
+}
+
 function getBattlefieldTopologyTargetScore(
   world: WorldState,
   attackerNationId: NationId,
@@ -3386,6 +3465,18 @@ function clonePocketClosureOpportunity(opportunity: PocketClosureOpportunity): P
     affectedRegionIds: [...opportunity.affectedRegionIds],
     scoreComponents: { ...opportunity.scoreComponents },
   };
+}
+
+function clonePocketReductionObjective(objective: PocketReductionObjective): PocketReductionObjective {
+  return { ...objective, regionIds: [...objective.regionIds], boundaryRegionIds: [...objective.boundaryRegionIds] };
+}
+
+function isPocketReductionStillValid(world: WorldState, operation: OffensiveOperation): boolean {
+  const objective = operation.pocketReductionObjective;
+  if (!objective) return true;
+  const pocket = world.battlefieldTopology.pocketsById.get(objective.pocketId);
+  return !!pocket && pocket.status !== "reopened" && pocket.status !== "destroyed" &&
+    pocket.regionIds.includes(operation.primaryTargetRegionId);
 }
 
 function isPocketClosureStillValid(world: WorldState, operation: OffensiveOperation): boolean {

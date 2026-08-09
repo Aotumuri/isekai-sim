@@ -407,8 +407,12 @@ function appendOperationalDetails(
     if (selected) {
       const enemyId = nationId === front.nationAId ? front.nationBId : front.nationAId;
       const topology = getBattlefieldTopologyAssessment(world, nationId, enemyId);
-      const collapseOpportunity = topology?.collapseOpportunities.find((item) => item.sectorId === front.id);
       const enemyInfluence = nationId === front.nationAId ? front.sideB.influenceRegionIds : front.sideA.influenceRegionIds;
+      const pockets = world.battlefieldTopology.pockets.filter((pocket) =>
+        pocket.attackerNationId === nationId && pocket.enemyNationId === enemyId &&
+        pocket.boundaryRegionIds.some((regionId) => enemyInfluence.includes(regionId))
+      );
+      const collapseOpportunity = topology?.collapseOpportunities.find((item) => item.sectorId === front.id);
       const component = collapseOpportunity
         ? topology?.enemyComponents.find((item) => item.id === collapseOpportunity.componentId)
         : topology?.enemyComponents.find((item) => item.regionIds.some((id) => enemyInfluence.includes(id)));
@@ -425,6 +429,18 @@ function appendOperationalDetails(
             `  articulation ${articulation.regionId} | affected ${articulation.affectedRegionCount} regions`,
             `  affected strength ${formatStrength(articulation.enemyStrengthAffected)} | cities ${articulation.citiesAffected}`,
           ] : []),
+        );
+      }
+      for (const pocket of pockets) {
+        const risk = pocket.containmentActual < pocket.containmentRequired ? "HIGH"
+          : pocket.containmentActual < pocket.containmentRequired * 1.25 ? "MEDIUM" : "LOW";
+        lines.push(
+          `POCKET ${pocket.id}`,
+          `  status ${pocket.status.toUpperCase()} | regions ${pocket.regionIds.length} | strength ${formatStrength(pocket.enemyStrength)} | cities ${pocket.cities}`,
+          `  rear exits 0 | lifetime ${world.time.fastTick - pocket.createdTick}`,
+          `  containment required ${formatStrength(pocket.containmentRequired)} | actual ${formatStrength(pocket.containmentActual)}`,
+          `  reduction committed ${formatStrength(pocket.reductionStrength)} | target ${pocket.currentReductionTargetId ?? "none"}`,
+          `  progress ${pocket.initialRegionCount} -> ${pocket.regionIds.length} regions | reopen risk ${risk}`,
         );
       }
       const stalled = getStalemateAssessment(world, nationId, enemyId);
@@ -614,7 +630,9 @@ function drawFrontMarkers(
         : operation.targetCoverageState === "weak"
           ? "W"
           : "P";
-      drawMarker(layer, world, operation.primaryTargetRegionId, primaryLabel, color, "diamond");
+      const objectiveLabel = operation.pocketClosureObjective ? "K"
+        : operation.pocketReductionObjective ? "R" : primaryLabel;
+      drawMarker(layer, world, operation.primaryTargetRegionId, objectiveLabel, color, "diamond");
       for (const targetId of operation.supportingTargetRegionIds) {
         drawMarker(layer, world, targetId, "+", color, "diamond");
       }
