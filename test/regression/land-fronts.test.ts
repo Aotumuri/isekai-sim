@@ -1280,6 +1280,119 @@ test("Battlefield Topology classifies zero, one, and multiple rear exits", () =>
   assert.equal(getBattlefieldTopologyAssessment(multiple, NATION_A, NATION_B)?.escapeCorridors.length, 0);
 });
 
+test("Pocket Closure identifies one reachable capture that cuts the last rear exit", () => {
+  const world = createPocketClosureWorld();
+  updateBattlefieldTopology(world);
+  const opportunity = getBattlefieldTopologyAssessment(world, NATION_A, NATION_B)
+    ?.pocketClosureOpportunities.find((item) => item.candidateRegionId === id("gate"));
+  assert(opportunity);
+  assert.equal(opportunity.currentExits, 1);
+  assert.equal(opportunity.expectedExitsAfterCapture, 0);
+  assert.deepEqual(opportunity.affectedRegionIds, ids("pocket-city", "pocket-force"));
+  assert(opportunity.affectedEnemyStrength > 0);
+  assert.equal(opportunity.affectedCities, 1);
+  assert.equal(opportunity.attackerReachable, true);
+  assert.equal(opportunity.tacticallyFeasible, true);
+  assert.equal(
+    opportunity.score,
+    Object.values(opportunity.scoreComponents).reduce((sum, value) => sum + value, 0),
+  );
+});
+
+test("a feasible high-value Pocket Closure becomes a stable dedicated Operation objective", () => {
+  const world = createPocketClosureWorld();
+  updateBattlefieldTopology(world);
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  assert.equal(operation.primaryTargetRegionId, id("gate"));
+  assert(operation.reasonFlags.includes("pocket-closure"));
+  assert.equal(operation.pocketClosureObjective?.candidateRegionId, id("gate"));
+  const initialScore = operation.pocketClosureObjective?.score;
+
+  setUnitStrength(addLandUnit(world, NATION_B, "pocket-force", "Infantry"), 1);
+  beginAiGeographyEvaluation(world);
+  updateFrontlineCoverage(world);
+  updateBattlefieldTopology(world);
+  updateOffensiveOperations(world);
+  assert.equal(operation.primaryTargetRegionId, id("gate"));
+  assert.equal(operation.pocketClosureObjective?.score, initialScore);
+});
+
+test("a hopelessly defended closure remains diagnostic instead of launching an Operation", () => {
+  const world = createPocketClosureWorld();
+  for (let index = 0; index < 8; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_B, "gate", "Infantry"), 1_000);
+  }
+  updateAllocationSystem(world);
+  updateFrontlineCoverage(world);
+  updateBattlefieldTopology(world);
+  const opportunity = getBattlefieldTopologyAssessment(world, NATION_A, NATION_B)
+    ?.pocketClosureOpportunities.find((item) => item.candidateRegionId === id("gate"));
+  assert(opportunity);
+  assert.equal(opportunity.tacticallyFeasible, false);
+  updateOffensiveOperations(world);
+  assert.equal(getOffensiveOperations(world, NATION_A).length, 0);
+});
+
+test("capturing a Pocket Closure target confirms the resulting isolated component", () => {
+  const world = createPocketClosureWorld();
+  updateBattlefieldTopology(world);
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  operation.phase = "attacking";
+  world.occupation.mesoById.set(id("gate"), NATION_A);
+  world.occupation.version += 1;
+  updateLandFronts(world);
+  updateFrontlineCoverage(world);
+  updateBattlefieldTopology(world);
+  updateOffensiveOperations(world);
+
+  assert.equal(operation.pocketClosureConfirmation?.status, "success");
+  assert(operation.pocketClosureConfirmation?.resultingPocketId);
+  assert.deepEqual(
+    operation.pocketClosureConfirmation?.trappedRegionIds,
+    ids("pocket-city", "pocket-force"),
+  );
+  assert.equal(operation.pocketClosureConfirmation?.trappedCities, 1);
+  assert((operation.pocketClosureConfirmation?.trappedStrength ?? 0) > 0);
+});
+
+test("a widened corridor invalidates a preparing Pocket Closure objective", () => {
+  const world = createPocketClosureWorld();
+  updateBattlefieldTopology(world);
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+
+  world.occupation.mesoById.set(id("bypass"), NATION_B);
+  world.occupation.version += 1;
+  updateLandFronts(world);
+  updateFrontlineCoverage(world);
+  updateBattlefieldTopology(world);
+  updateOffensiveOperations(world);
+
+  assert.equal(operation.outcome, "cancelled");
+  assert.equal(operation.completionReason, "target-invalid");
+});
+
+test("Pocket Closure records failure when another exit opens during target capture", () => {
+  const world = createPocketClosureWorld();
+  updateBattlefieldTopology(world);
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  operation.phase = "attacking";
+  world.occupation.mesoById.set(id("gate"), NATION_A);
+  world.occupation.mesoById.set(id("bypass"), NATION_B);
+  world.occupation.version += 1;
+  updateLandFronts(world);
+  updateFrontlineCoverage(world);
+  updateBattlefieldTopology(world);
+  updateOffensiveOperations(world);
+
+  assert.equal(operation.pocketClosureConfirmation?.status, "failed");
+  assert.equal(operation.pocketClosureConfirmation?.resultingPocketId, null);
+  assert.equal(world.offensiveOperations.pocketClosureFailureCount, 1);
+});
+
 test("fragmented weak front creates a topology Collapse Opportunity", () => {
   const world = createCollapseAdvanceWorld();
   updateBattlefieldTopology(world);
@@ -3303,6 +3416,35 @@ function createCollapseAdvanceWorld(): WorldState {
   const sector = world.landFronts.operationalSectors[0];
   assert(sector);
   world.stalematePressure.assessments = [{ nationId: NATION_A, enemyNationId: NATION_B, pressure: 0, staticTicks: 1, reasonFlags: ["artificial-inactivity"], artificialInactivity: true, artificialInactivityBlocker: "target-validity", collapseAdvanceCandidate: true, inactivityCategory: "artificial-inactivity", inactivityReason: "no-valid-target", nextEvaluationTick: world.time.fastTick + 1, targetValidityFailureReason: "no-valid-frontline-position", targetValidityOtherReason: null, schwerpunktSectorId: null, selectedAtTick: null, cooldownUntilTick: 0, lastOperationSuccessCount: 0, lastOperationFailureCount: 0, releasedSecondaryStrength: 0 }];
+  return world;
+}
+
+function createPocketClosureWorld(): WorldState {
+  const world = createFrontWorld(
+    [
+      { id: "a-front", owner: NATION_A },
+      { id: "rear", owner: NATION_B, building: "capital" },
+      { id: "gate", owner: NATION_B },
+      { id: "pocket-city", owner: NATION_B, building: "city" },
+      { id: "pocket-force", owner: NATION_B },
+      { id: "bypass", owner: NATION_C },
+    ],
+    [
+      ["a-front", "gate"],
+      ["gate", "rear"],
+      ["gate", "pocket-city"],
+      ["pocket-city", "pocket-force"],
+      ["rear", "bypass"],
+      ["bypass", "pocket-force"],
+    ],
+  );
+  startWar(world, NATION_A, NATION_B);
+  for (let index = 0; index < 10; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_A, "a-front", "Infantry"), 300);
+  }
+  setUnitStrength(addLandUnit(world, NATION_B, "pocket-force", "Infantry"), 1_000);
+  updateAllocationSystem(world);
+  updateFrontlineCoverage(world);
   return world;
 }
 

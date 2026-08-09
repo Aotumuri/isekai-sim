@@ -137,6 +137,7 @@ export interface WorldSummary {
   battlefieldOneExitComponents: number;
   battlefieldCollapseOpportunities: number;
   battlefieldCollapseOpportunitiesIgnored: number;
+  battlefieldPocketClosureOpportunities: number;
   battlefieldComponentFragmentations: number;
   battlefieldWarsEndingAfterCollapse: number;
   majorOffensivesLaunched: number;
@@ -150,6 +151,9 @@ export interface WorldSummary {
   recoveringOffensiveOperations: number;
   operationAssignedUnits: number;
   operationsCreated: number;
+  pocketClosureOperationsCreated: number;
+  pocketClosureSuccesses: number;
+  pocketClosureFailures: number;
   operationsCompleted: number;
   operationsFailed: number;
   operationsCancelled: number;

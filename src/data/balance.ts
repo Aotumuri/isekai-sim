@@ -347,6 +347,29 @@ export const WORLD_BALANCE = {
         capitalPreferenceDistance: 4,
         timelineLimit: 512,
       },
+      pocketClosure: {
+        maximumAttackerDistance: 5,
+        minimumLocalStrengthRatio: 0.8,
+        dedicatedOperationThreshold: 70,
+        majorOffensiveMultiplier: 1.5,
+        score: {
+          // These are deliberately on the same scale as ordinary target scoring:
+          // a city is 30, a capital 60, a weak segment 28, and a gap 55.
+          closeLastExit: 40,
+          strengthReference: 1_000,
+          strengthScale: 8,
+          maximumStrength: 30,
+          perRegion: 3,
+          maximumRegions: 24,
+          perCity: 12,
+          maximumCities: 36,
+          capital: 45,
+          perDistance: 4,
+          localDefensePenalty: 30,
+          gap: 20,
+          weak: 10,
+        },
+      },
       retreat: {
         persistenceTicks: 20,
         extremeDisadvantageRatio: 0.22,

@@ -1,7 +1,7 @@
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { WORLD_BALANCE } from "../data/balance";
-import { getControlledTopology, getEnemyStrengthByRegion } from "./ai-geography";
+import { getControlledTopology, getEnemyStrengthByRegion, getFrontDistanceField } from "./ai-geography";
 import { getFrontlineCoverage } from "./frontline-coverage";
 import { getFrontSide, getOpposingFrontSide, type FrontId } from "./land-fronts";
 import { isNationActive } from "./nation-active";
@@ -42,6 +42,42 @@ export interface BattlefieldArticulationRegion {
   citiesAffected: number;
   capitalAffected: boolean;
   frontlineContactsAffected: number;
+  affectedRegionIds: MesoRegionId[];
+}
+
+export interface PocketClosureScoreComponents {
+  exitReduction: number;
+  trappedStrength: number;
+  trappedRegions: number;
+  trappedCities: number;
+  trappedCapital: number;
+  attackerDistance: number;
+  localDefense: number;
+  gapWeak: number;
+}
+
+export interface PocketClosureOpportunity {
+  attackerNationId: NationId;
+  enemyNationId: NationId;
+  sectorId: FrontId;
+  candidateRegionId: MesoRegionId;
+  componentId: BattlefieldComponentId;
+  currentExits: number;
+  expectedExitsAfterCapture: number;
+  affectedRegionIds: MesoRegionId[];
+  affectedEnemyStrength: number;
+  affectedCities: number;
+  capitalInside: boolean;
+  attackerReachable: boolean;
+  attackerDistance: number | null;
+  attackerStrength: number;
+  localDefenderStrength: number;
+  localStrengthRatio: number;
+  targetCoverageState: "covered" | "weak" | "gap" | null;
+  tacticallyFeasible: boolean;
+  scoreComponents: PocketClosureScoreComponents;
+  score: number;
+  detectedAtTick: number;
 }
 
 export interface EscapeCorridor {
@@ -77,6 +113,7 @@ export interface BattlefieldTopologyAssessment {
   escapeCorridors: EscapeCorridor[];
   collapseComponents: EnemyTopologyComponent[];
   pocketCandidates: EnemyTopologyComponent[];
+  pocketClosureOpportunities: PocketClosureOpportunity[];
   collapseOpportunities: CollapseOpportunity[];
   topologyVersion: number;
   evaluatedAtTick: number;
@@ -161,6 +198,17 @@ export function getCollapseOpportunities(
   );
 }
 
+export function getPocketClosureOpportunities(
+  world: WorldState,
+  attackerNationId?: NationId,
+): readonly PocketClosureOpportunity[] {
+  return world.battlefieldTopology.assessments.flatMap((assessment) =>
+    attackerNationId && assessment.attackerNationId !== attackerNationId
+      ? []
+      : assessment.pocketClosureOpportunities,
+  );
+}
+
 export function updateBattlefieldTopology(world: WorldState): void {
   const state = world.battlefieldTopology;
   const startedAt = world.instrumentation ? performance.now() : 0;
@@ -183,6 +231,11 @@ export function updateBattlefieldTopology(world: WorldState): void {
   const previousOpportunities = new Map(
     state.assessments.flatMap((assessment) => assessment.collapseOpportunities.map(
       (opportunity) => [opportunityKey(opportunity), opportunity] as const,
+    )),
+  );
+  const previousClosures = new Map(
+    state.assessments.flatMap((assessment) => assessment.pocketClosureOpportunities.map(
+      (opportunity) => [pocketClosureKey(opportunity), opportunity] as const,
     )),
   );
   const dynamicStartedAt = world.instrumentation ? performance.now() : 0;
@@ -211,6 +264,10 @@ export function updateBattlefieldTopology(world: WorldState): void {
     world.instrumentation?.incrementCounter("battlefieldTopology.oneExitComponents", oneExit);
   }
   for (const assessment of state.assessments) {
+    for (const opportunity of assessment.pocketClosureOpportunities) {
+      const previous = previousClosures.get(pocketClosureKey(opportunity));
+      if (previous) opportunity.detectedAtTick = previous.detectedAtTick;
+    }
     for (const opportunity of assessment.collapseOpportunities) {
       const previous = previousOpportunities.get(opportunityKey(opportunity));
       if (previous) opportunity.detectedAtTick = previous.detectedAtTick;
@@ -422,6 +479,7 @@ function materializeAssessment(
         citiesAffected: affected.cities,
         capitalAffected: affected.capitals > 0,
         frontlineContactsAffected: affected.contacts,
+        affectedRegionIds: expandRanges(item.affectedRanges, structural.dfsOrder),
       };
       articulations.push(articulation);
       if (structural.connectsToStrategicRear && affected.regions > 0 && affected.contacts > 0) {
@@ -443,6 +501,10 @@ function materializeAssessment(
     world, structure.attackerNationId, structure.enemyNationId,
     components, corridors, enemyStrengthByRegion,
   );
+  const pocketClosureOpportunities = buildPocketClosureOpportunities(
+    world, structure.attackerNationId, structure.enemyNationId,
+    components, articulations, enemyStrengthByRegion,
+  );
   return {
     attackerNationId: structure.attackerNationId,
     enemyNationId: structure.enemyNationId,
@@ -453,9 +515,93 @@ function materializeAssessment(
       opportunities.some((opportunity) => opportunity.componentId === component.id),
     ),
     pocketCandidates: components.filter((component) => component.exitCount <= 1),
+    pocketClosureOpportunities,
     collapseOpportunities: opportunities,
     topologyVersion, evaluatedAtTick: world.time.fastTick,
   };
+}
+
+function buildPocketClosureOpportunities(
+  world: WorldState,
+  attackerNationId: NationId,
+  enemyNationId: NationId,
+  components: EnemyTopologyComponent[],
+  articulations: BattlefieldArticulationRegion[],
+  enemyStrengthByRegion: ReadonlyMap<MesoRegionId, number>,
+): PocketClosureOpportunity[] {
+  const settings = WORLD_BALANCE.war.landFront.pocketClosure;
+  const result: PocketClosureOpportunity[] = [];
+  for (const articulation of articulations) {
+    const component = components.find((item) => item.id === articulation.componentId);
+    if (!component?.connectsToStrategicRear || articulation.affectedRegionIds.length === 0) continue;
+    for (const sector of world.landFronts.operationalSectors) {
+      const friendly = getFrontSide(sector, attackerNationId);
+      const enemy = getOpposingFrontSide(sector, attackerNationId);
+      if (!friendly || !enemy || enemy.nationId !== enemyNationId ||
+          !enemy.influenceRegionIds.includes(articulation.regionId)) continue;
+      const distance = getFrontDistanceField(world, sector.id, attackerNationId)
+        ?.distanceByRegionId.get(articulation.regionId);
+      const coverage = getFrontlineCoverage(world, sector.id, enemyNationId);
+      const position = coverage?.positions.find((item) =>
+        item.friendlyRegionId === articulation.regionId
+      );
+      const localDefenderStrength = Math.max(
+        enemyStrengthByRegion.get(articulation.regionId) ?? 0,
+        position?.defenderStrength ?? 0,
+      );
+      const attackerStrength = Math.max(0, friendly.strength);
+      const localStrengthRatio = localDefenderStrength <= 0
+        ? (attackerStrength > 0 ? 100 : 0)
+        : Math.min(100, attackerStrength / localDefenderStrength);
+      const attackerReachable = distance !== undefined && distance > 0 &&
+        distance <= settings.maximumAttackerDistance;
+      const tacticallyFeasible = attackerReachable && attackerStrength > 0 &&
+        localStrengthRatio >= settings.minimumLocalStrengthRatio;
+      const scoreComponents: PocketClosureScoreComponents = {
+        exitReduction: settings.score.closeLastExit,
+        trappedStrength: Math.min(
+          settings.score.maximumStrength,
+          Math.sqrt(Math.max(0, articulation.enemyStrengthAffected) /
+            settings.score.strengthReference) * settings.score.strengthScale,
+        ),
+        trappedRegions: Math.min(
+          settings.score.maximumRegions,
+          articulation.affectedRegionCount * settings.score.perRegion,
+        ),
+        trappedCities: Math.min(
+          settings.score.maximumCities,
+          articulation.citiesAffected * settings.score.perCity,
+        ),
+        trappedCapital: articulation.capitalAffected ? settings.score.capital : 0,
+        attackerDistance: -(distance ?? settings.maximumAttackerDistance + 1) *
+          settings.score.perDistance,
+        localDefense: localStrengthRatio < 1
+          ? -settings.score.localDefensePenalty * (1 - localStrengthRatio)
+          : 0,
+        gapWeak: position?.state === "gap" ? settings.score.gap
+          : position?.state === "weak" ? settings.score.weak : 0,
+      };
+      const score = Object.values(scoreComponents).reduce((sum, value) => sum + value, 0);
+      result.push({
+        attackerNationId, enemyNationId, sectorId: sector.id,
+        candidateRegionId: articulation.regionId, componentId: articulation.componentId,
+        currentExits: 1, expectedExitsAfterCapture: 0,
+        affectedRegionIds: [...articulation.affectedRegionIds],
+        affectedEnemyStrength: articulation.enemyStrengthAffected,
+        affectedCities: articulation.citiesAffected,
+        capitalInside: articulation.capitalAffected,
+        attackerReachable, attackerDistance: distance ?? null,
+        attackerStrength, localDefenderStrength, localStrengthRatio,
+        targetCoverageState: position?.state ?? null,
+        tacticallyFeasible, scoreComponents, score,
+        detectedAtTick: world.time.fastTick,
+      });
+    }
+  }
+  return result.sort((a, b) =>
+    Number(b.tacticallyFeasible) - Number(a.tacticallyFeasible) ||
+    b.score - a.score || compareIds(a.candidateRegionId, b.candidateRegionId)
+  );
 }
 
 function materializeComponent(
@@ -595,8 +741,15 @@ function sumRanges(ranges: Range[], prefixes: ReturnType<typeof buildPrefixes>) 
     capitals: sum(prefixes.capitals), contacts: sum(prefixes.frontline) };
 }
 
+function expandRanges(ranges: Range[], order: MesoRegionId[]): MesoRegionId[] {
+  return ranges.flatMap((range) => order.slice(range.start, range.end)).sort(compareIds);
+}
+
 function opportunityKey(opportunity: CollapseOpportunity): string {
   return `${opportunity.attackerNationId}|${opportunity.enemyNationId}|${opportunity.sectorId}|${opportunity.componentId}`;
+}
+function pocketClosureKey(opportunity: PocketClosureOpportunity): string {
+  return `${opportunity.attackerNationId}|${opportunity.enemyNationId}|${opportunity.candidateRegionId}|${opportunity.componentId}`;
 }
 function pairKey(attacker: NationId, enemy: NationId): string { return `${attacker}|${enemy}`; }
 function compareAssessments(a: BattlefieldTopologyAssessment, b: BattlefieldTopologyAssessment): number {

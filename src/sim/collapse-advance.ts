@@ -7,7 +7,7 @@ import { getFrontlineCoverage } from "./frontline-coverage";
 import { getFrontSide, getOpposingFrontSide, type FrontId, type OperationalSector } from "./land-fronts";
 import { isNationActive } from "./nation-active";
 import { getFrontAllocation } from "./nation-front-allocations";
-import { getOffensiveOperations } from "./offensive-operations";
+import { getOffensiveOperations, getOperationCandidateForFront } from "./offensive-operations";
 import type { UnitId, UnitState } from "./unit";
 import { getUnitCombatStrength } from "./unit-strength";
 import type { WorldState } from "./world-state";
@@ -24,7 +24,7 @@ import {
 
 export type CollapseAdvancePhase = "forming" | "advancing" | "completed" | "cancelled";
 export type CollapseAdvanceReason = "no-valid-frontline-target" | "enemy-defense-collapsed" | "reachable-open-territory";
-export type CollapseAdvanceStopReason = "front-reformed" | "capital-emergency" | "retreat-started" | "war-ended" | "nation-inactive" | "timeout" | "depth-limit" | "no-open-target" | "force-depleted" | "normal-operation-available";
+export type CollapseAdvanceStopReason = "front-reformed" | "capital-emergency" | "retreat-started" | "war-ended" | "nation-inactive" | "timeout" | "depth-limit" | "no-open-target" | "force-depleted" | "normal-operation-available" | "pocket-closure-available";
 
 export interface CollapseAdvance {
   nationId: NationId;
@@ -70,7 +70,7 @@ export interface CollapseAdvanceState {
 }
 
 export function createCollapseAdvanceState(): CollapseAdvanceState {
-  return { enabled: true, advances: [], history: [], advanceByNationId: new Map(), advanceNationByUnitId: new Map(), timeline: [], version: 0, membershipVersion: 0, opportunitiesDetected: 0, createdCount: 0, unitsCommitted: 0, strengthCommitted: 0, depthTotal: 0, targetsOccupied: 0, citiesOccupied: 0, capitalsOccupied: 0, durationTotalTicks: 0, frontReformationStops: 0, artificialInactivityResolved: 0, artificialInactivityRemaining: 0, stopCounts: { "front-reformed": 0, "capital-emergency": 0, "retreat-started": 0, "war-ended": 0, "nation-inactive": 0, timeout: 0, "depth-limit": 0, "no-open-target": 0, "force-depleted": 0, "normal-operation-available": 0 } };
+  return { enabled: true, advances: [], history: [], advanceByNationId: new Map(), advanceNationByUnitId: new Map(), timeline: [], version: 0, membershipVersion: 0, opportunitiesDetected: 0, createdCount: 0, unitsCommitted: 0, strengthCommitted: 0, depthTotal: 0, targetsOccupied: 0, citiesOccupied: 0, capitalsOccupied: 0, durationTotalTicks: 0, frontReformationStops: 0, artificialInactivityResolved: 0, artificialInactivityRemaining: 0, stopCounts: { "front-reformed": 0, "capital-emergency": 0, "retreat-started": 0, "war-ended": 0, "nation-inactive": 0, timeout: 0, "depth-limit": 0, "no-open-target": 0, "force-depleted": 0, "normal-operation-available": 0, "pocket-closure-available": 0 } };
 }
 
 export function getCollapseAdvanceForUnit(world: WorldState, unitId: UnitId): CollapseAdvance | undefined {
@@ -121,7 +121,7 @@ export function updateCollapseAdvances(world: WorldState): void {
   for (const topologyOpportunity of opportunities) {
     const nationId = topologyOpportunity.attackerNationId;
     const enemyNationId = topologyOpportunity.enemyNationId;
-    if (stoppedNationIds.has(nationId) || state.advanceByNationId.has(nationId) || getOffensiveOperations(world, nationId).some((op) => op.phase !== "recovering")) {
+    if (stoppedNationIds.has(nationId) || state.advanceByNationId.has(nationId) || getOffensiveOperations(world, nationId).some((op) => op.phase !== "recovering") || hasPocketClosureCandidate(world, nationId)) {
       recordIgnoredOpportunity(world, topologyOpportunity);
       continue;
     }
@@ -179,7 +179,13 @@ function selectTarget(world: WorldState, nationId: NationId, enemyNationId: Nati
   const componentIds = new Set(assessment?.enemyComponents.find((component) => component.id === opportunity?.componentId)?.regionIds ?? []);
   return [...distances.entries()].filter(([id, d]) => d > 0 && d <= settings.maximumTargetDistance && !excluded.has(id) && controlledBy(world, id) === enemyNationId && mesoById.get(id)?.type !== "sea" && nearbyStrength(id, localEnemy, neighbors, settings.localDefenseRadius) <= settings.collapsedDefenseStrength).map(([regionId, distance]) => { const building = mesoById.get(regionId)?.building; const bonus = building === "capital" && distance <= settings.capitalPreferenceDistance ? 260 : building === "city" && distance <= settings.cityPreferenceDistance ? 150 : 0; const topologyBonus = regionId === opportunity?.targetRegionId ? 500 : componentIds.has(regionId) ? 120 : 0; return { regionId, distance, score: bonus + topologyBonus - distance * 100 }; }).sort((a, b) => b.score - a.score || a.distance - b.distance || compareIds(a.regionId, b.regionId))[0] ?? null;
 }
-function getStopReason(world: WorldState, advance: CollapseAdvance): CollapseAdvanceStopReason | null { const nation = world.nations.find((n) => n.id === advance.nationId); if (!nation || !isNationActive(nation)) return "nation-inactive"; if (!world.wars.some((w) => (w.nationAId === advance.nationId && w.nationBId === advance.enemyNationId) || (w.nationBId === advance.nationId && w.nationAId === advance.enemyNationId))) return "war-ended"; if (getCapitalDefenseAssessment(world, advance.nationId)?.threatLevel === "critical") return "capital-emergency"; if (world.retreatPlans.plansByNationId.get(advance.nationId)?.length) return "retreat-started"; if (getOffensiveOperations(world, advance.nationId).some((op) => op.phase !== "recovering")) return "normal-operation-available"; if (world.time.fastTick - advance.startedAtTick >= WORLD_BALANCE.war.landFront.collapseAdvance.timeoutTicks) return "timeout"; const settings = WORLD_BALANCE.war.landFront.collapseAdvance; const opportunity = matchingOpportunity(world, advance); const localDefense = nearbyStrength(advance.currentTargetRegionId, getEnemyStrengthByRegion(world, advance.nationId), getNeighborsById(world), settings.localDefenseRadius); return !opportunity || localDefense >= settings.reformedDefenseStrength ? "front-reformed" : null; }
+function getStopReason(world: WorldState, advance: CollapseAdvance): CollapseAdvanceStopReason | null { const nation = world.nations.find((n) => n.id === advance.nationId); if (!nation || !isNationActive(nation)) return "nation-inactive"; if (!world.wars.some((w) => (w.nationAId === advance.nationId && w.nationBId === advance.enemyNationId) || (w.nationBId === advance.nationId && w.nationAId === advance.enemyNationId))) return "war-ended"; if (getCapitalDefenseAssessment(world, advance.nationId)?.threatLevel === "critical") return "capital-emergency"; if (world.retreatPlans.plansByNationId.get(advance.nationId)?.length) return "retreat-started"; if (hasPocketClosureCandidate(world, advance.nationId)) return "pocket-closure-available"; if (getOffensiveOperations(world, advance.nationId).some((op) => op.phase !== "recovering")) return "normal-operation-available"; if (world.time.fastTick - advance.startedAtTick >= WORLD_BALANCE.war.landFront.collapseAdvance.timeoutTicks) return "timeout"; const settings = WORLD_BALANCE.war.landFront.collapseAdvance; const opportunity = matchingOpportunity(world, advance); const localDefense = nearbyStrength(advance.currentTargetRegionId, getEnemyStrengthByRegion(world, advance.nationId), getNeighborsById(world), settings.localDefenseRadius); return !opportunity || localDefense >= settings.reformedDefenseStrength ? "front-reformed" : null; }
+
+function hasPocketClosureCandidate(world: WorldState, nationId: NationId): boolean {
+  return (world.frontPlans.plansByNationId.get(nationId) ?? []).some((plan) =>
+    !!getOperationCandidateForFront(world, plan.frontId, nationId)?.pocketClosureObjective
+  );
+}
 function finish(world: WorldState, advance: CollapseAdvance, reason: CollapseAdvanceStopReason) { const state = world.collapseAdvances; advance.phase = reason === "depth-limit" || reason === "no-open-target" ? "completed" : "cancelled"; advance.stopReason = reason; state.history.push(advance); state.depthTotal += advance.targetRegionIds.length; state.durationTotalTicks += world.time.fastTick - advance.startedAtTick; state.stopCounts[reason] += 1; if (reason === "front-reformed") { state.frontReformationStops += 1; world.instrumentation?.incrementCounter("collapseAdvance.frontReformationStops"); } state.timeline.push({ tick: world.time.fastTick, nationId: advance.nationId, enemyNationId: advance.enemyNationId, type: "stopped", detail: reason }); state.version += 1; }
 function recordOccupation(world: WorldState, advance: CollapseAdvance) { const meso = getMesoById(world).get(advance.currentTargetRegionId); advance.occupiedTargetCount += 1; world.collapseAdvances.targetsOccupied += 1; if (meso?.building === "city") world.collapseAdvances.citiesOccupied += 1; if (meso?.building === "capital") world.collapseAdvances.capitalsOccupied += 1; world.instrumentation?.incrementCounter("collapseAdvance.targetsOccupied"); if (meso?.building === "city") world.instrumentation?.incrementCounter("collapseAdvance.citiesOccupied"); if (meso?.building === "capital") world.instrumentation?.incrementCounter("collapseAdvance.capitalsOccupied"); }
 function sectorsFor(world: WorldState, nationId: NationId, enemyNationId: NationId) { return world.landFronts.operationalSectors.filter((sector) => (sector.nationAId === nationId && sector.nationBId === enemyNationId) || (sector.nationBId === nationId && sector.nationAId === enemyNationId)); }

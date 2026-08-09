@@ -36,6 +36,11 @@ import {
   recordMajorOffensiveOutcome,
 } from "./stalemate-pressure";
 import { canReachControlled, getControlledDistanceField } from "./ai-geography";
+import {
+  getBattlefieldTopologyAssessment,
+  type BattlefieldComponentId,
+  type PocketClosureOpportunity,
+} from "./battlefield-topology";
 
 export type OperationId = string & { __brand: "OperationId" };
 
@@ -72,6 +77,7 @@ export type OffensiveOperationReason =
   | "recent-breakthrough"
   | "enemy-capital-opportunity"
   | "enemy-city-opportunity"
+  | "pocket-closure"
   | "high-front-priority"
   | "weak-enemy-presence";
 
@@ -151,6 +157,8 @@ export interface OperationCandidate {
   targetCoverageState: FrontlineCoverageLevel | null;
   targetLocalDefenderStrength: number;
   targetTacticalScore: number;
+  targetTopologyScore: number;
+  pocketClosureObjective: PocketClosureOpportunity | null;
   reasonFlags: OffensiveOperationReason[];
   fellBackToSingleApproach: boolean;
 }
@@ -203,6 +211,9 @@ export interface OffensiveOperation {
   targetCoverageState: FrontlineCoverageLevel | null;
   targetLocalDefenderStrength: number;
   targetTacticalScore: number;
+  targetTopologyScore: number;
+  pocketClosureObjective: PocketClosureOpportunity | null;
+  pocketClosureConfirmation: PocketClosureConfirmation | null;
   attackSuccessReason: OffensiveOperationCompletionReason | null;
   exploitationTargetRegionId: MesoRegionId | null;
   exploitationTargetCoverageState: FrontlineCoverageLevel | null;
@@ -220,6 +231,15 @@ export interface OffensiveOperation {
   outcome: OffensiveOperationOutcome | null;
   completionReason: OffensiveOperationCompletionReason | null;
   completedAtTick: number | null;
+}
+
+export interface PocketClosureConfirmation {
+  status: "success" | "failed";
+  confirmedAtTick: number;
+  resultingPocketId: BattlefieldComponentId | null;
+  trappedStrength: number;
+  trappedRegionIds: MesoRegionId[];
+  trappedCities: number;
 }
 
 export interface OperationApproachGroup {
@@ -318,6 +338,9 @@ export interface OffensiveOperationState {
     unreachable: number;
     reserveThreat: number;
   };
+  pocketClosureCreatedCount: number;
+  pocketClosureSuccessCount: number;
+  pocketClosureFailureCount: number;
 }
 
 export interface OperationTargetSelection {
@@ -328,6 +351,8 @@ export interface OperationTargetSelection {
   targetCoverageState: FrontlineCoverageLevel | null;
   targetLocalDefenderStrength: number;
   tacticalScore: number;
+  topologyScore?: number;
+  pocketClosure?: PocketClosureOpportunity | null;
   tacticalReasons: OffensiveOperationReason[];
 }
 
@@ -438,6 +463,9 @@ export function createOffensiveOperationState(): OffensiveOperationState {
       unreachable: 0,
       reserveThreat: 0,
     },
+    pocketClosureCreatedCount: 0,
+    pocketClosureSuccessCount: 0,
+    pocketClosureFailureCount: 0,
   };
 }
 
@@ -485,6 +513,8 @@ export function updateOffensiveOperations(world: WorldState): void {
     const candidates = plans
       .filter((plan) => isOperationPlanEligible(world, nationId, plan))
       .sort((a, b) =>
+        bestPocketClosureScore(world, nationId, b.frontId) -
+          bestPocketClosureScore(world, nationId, a.frontId) ||
         Number(isSchwerpunktSector(world, nationId, b.frontId)) -
           Number(isSchwerpunktSector(world, nationId, a.frontId)) ||
         compareOperationCandidatePlans(a, b)
@@ -551,6 +581,9 @@ export function updateOffensiveOperations(world: WorldState): void {
         operation.assignedUnitIds.length,
       );
       recordEvent(world, operation, "created", "attack-front-selected");
+      if (operation.pocketClosureObjective) {
+        state.pocketClosureCreatedCount += 1;
+      }
       changed = true;
       rebuildOperationIndexes(state);
     }
@@ -710,6 +743,9 @@ export function formatOffensiveOperationSummary(world: WorldState): string {
       `  target coverage: ${operation.targetCoverageState ?? "none"}`,
       `  local defense: ${operation.targetLocalDefenderStrength.toFixed(1)}`,
       `  tactical score: ${operation.targetTacticalScore.toFixed(1)}`,
+      `  topology score: ${operation.targetTopologyScore.toFixed(1)}`,
+      `  pocket closure: ${operation.pocketClosureObjective ? `${operation.pocketClosureObjective.candidateRegionId} exits ${operation.pocketClosureObjective.currentExits}->${operation.pocketClosureObjective.expectedExitsAfterCapture} score ${operation.pocketClosureObjective.score.toFixed(1)}` : "none"}`,
+      `  closure result: ${operation.pocketClosureConfirmation?.status ?? "pending"}`,
       `  exploitation target: ${operation.exploitationTargetRegionId ?? "none"}`,
       `  exploitation coverage: ${operation.exploitationTargetCoverageState ?? "none"}`,
       `  exploitation local defense: ${operation.exploitationTargetLocalEnemyStrength.toFixed(1)}`,
@@ -749,6 +785,7 @@ function advanceOperation(
     isRegionControlledBy(world, operation.primaryTargetRegionId, operation.nationId)
   ) {
     recordOperationCaptures(world, operation);
+    confirmPocketClosure(world, operation);
     if (!tryStartExploitation(world, operation, "primary-target-occupied")) {
       finishOperation(
         world,
@@ -802,7 +839,7 @@ function advanceOperation(
     );
   }
   const plan = getFrontPlan(world, operation.frontId, operation.nationId);
-  if (!plan || (plan.posture !== "attack" && !operation.isMajorOffensive)) {
+  if (!plan || (plan.posture !== "attack" && !operation.isMajorOffensive && !operation.pocketClosureObjective)) {
     finishOperation(world, operation, "cancelled", "posture-changed");
     return { keep: true, changed: true };
   }
@@ -821,6 +858,10 @@ function advanceOperation(
     return { keep: true, changed: true };
   }
   if (!enemySide.influenceRegionIds.includes(operation.primaryTargetRegionId)) {
+    finishOperation(world, operation, "cancelled", "target-invalid");
+    return { keep: true, changed: true };
+  }
+  if (operation.pocketClosureObjective && !isPocketClosureStillValid(world, operation)) {
     finishOperation(world, operation, "cancelled", "target-invalid");
     return { keep: true, changed: true };
   }
@@ -1101,6 +1142,9 @@ function buildOperationCandidate(
     targetCoverageState: targets.targetCoverageState,
     targetLocalDefenderStrength: targets.targetLocalDefenderStrength,
     targetTacticalScore: targets.tacticalScore,
+    targetTopologyScore: targets.topologyScore ?? 0,
+    pocketClosureObjective: targets.pocketClosure
+      ? clonePocketClosureOpportunity(targets.pocketClosure) : null,
     reasonFlags: collectOperationReasons(
       world,
       plan,
@@ -1217,6 +1261,10 @@ function createOperationFromCandidate(
     targetCoverageState: candidate.targetCoverageState,
     targetLocalDefenderStrength: candidate.targetLocalDefenderStrength,
     targetTacticalScore: candidate.targetTacticalScore,
+    targetTopologyScore: candidate.targetTopologyScore,
+    pocketClosureObjective: candidate.pocketClosureObjective
+      ? clonePocketClosureOpportunity(candidate.pocketClosureObjective) : null,
+    pocketClosureConfirmation: null,
     attackSuccessReason: null,
     exploitationTargetRegionId: null,
     exploitationTargetCoverageState: null,
@@ -1304,6 +1352,16 @@ function selectOperationTargets(
         frontScope,
         neighborsById,
       );
+      const topologyScore = getBattlefieldTopologyTargetScore(
+        world, plan.nationId, enemy.nationId, front.id, regionId,
+      );
+      const closure = getPocketClosureForTarget(
+        world, plan.nationId, enemy.nationId, front.id, regionId,
+      );
+      const closureScore = closure?.tacticallyFeasible
+        ? closure.score * (isSchwerpunktSector(world, plan.nationId, front.id)
+          ? WORLD_BALANCE.war.landFront.pocketClosure.majorOffensiveMultiplier : 1)
+        : 0;
       return {
         regionId,
         score:
@@ -1315,13 +1373,15 @@ function selectOperationTargets(
             enemy.nationId,
             enemyBorderSet,
             distanceFromFriendlyBorder.get(regionId) ?? 0,
-          ) + tactical.score,
+          ) + tactical.score + topologyScore + closureScore,
         nearbyEnemyStrength: getNearbyEnemyStrength(
           world,
           regionId,
           enemy.nationId,
         ),
         tactical,
+        topologyScore,
+        closure: closure?.tacticallyFeasible ? closure : null,
       };
     })
     .sort((a, b) => b.score - a.score || compareIds(a.regionId, b.regionId));
@@ -1371,6 +1431,8 @@ function selectOperationTargets(
     targetCoverageState: primary.tactical.coverageState,
     targetLocalDefenderStrength: primary.tactical.localDefenderStrength,
     tacticalScore: primary.tactical.score,
+    topologyScore: primary.topologyScore,
+    pocketClosure: primary.closure,
     tacticalReasons: primary.tactical.reasons,
   };
 }
@@ -2827,6 +2889,7 @@ function collectOperationReasons(
   const target = targets.primaryTargetRegionId;
   const targetBuilding = getMesoById(world).get(target)?.building;
   reasons.push(...targets.tacticalReasons);
+  if (targets.pocketClosure) reasons.push("pocket-closure");
   if (strengthRatio > 1.4) {
     reasons.push("front-superiority");
   }
@@ -2973,6 +3036,12 @@ function cloneOperation(operation: OffensiveOperation): OffensiveOperation {
     leaseOverrideReasons: [...operation.leaseOverrideReasons],
     allocationReclaimedUnitIds: [...operation.allocationReclaimedUnitIds],
     reasonFlags: [...operation.reasonFlags],
+    pocketClosureObjective: operation.pocketClosureObjective
+      ? clonePocketClosureOpportunity(operation.pocketClosureObjective) : null,
+    pocketClosureConfirmation: operation.pocketClosureConfirmation
+      ? { ...operation.pocketClosureConfirmation,
+        trappedRegionIds: [...operation.pocketClosureConfirmation.trappedRegionIds] }
+      : null,
   };
 }
 
@@ -3252,6 +3321,11 @@ function isOperationPlanEligible(
   plan: NationFrontPlan,
 ): boolean {
   if (plan.posture === "attack") return true;
+  const closure = bestPocketClosure(world, nationId, plan.frontId);
+  if (closure?.tacticallyFeasible &&
+      closure.score >= WORLD_BALANCE.war.landFront.pocketClosure.dedicatedOperationThreshold) {
+    return true;
+  }
   if (!isSchwerpunktSector(world, nationId, plan.frontId)) return false;
   const pressure = world.stalematePressure.assessments.find((assessment) =>
     assessment.nationId === nationId &&
@@ -3259,6 +3333,105 @@ function isOperationPlanEligible(
   )?.pressure ?? 0;
   return pressure >=
     WORLD_BALANCE.war.landFront.stalemate.majorOffensiveThreshold;
+}
+
+function bestPocketClosure(
+  world: WorldState,
+  nationId: NationId,
+  frontId: FrontId,
+): PocketClosureOpportunity | undefined {
+  return world.battlefieldTopology.assessments
+    .filter((assessment) => assessment.attackerNationId === nationId)
+    .flatMap((assessment) => assessment.pocketClosureOpportunities)
+    .filter((opportunity) => opportunity.sectorId === frontId)
+    .sort((a, b) => b.score - a.score || compareIds(a.candidateRegionId, b.candidateRegionId))[0];
+}
+
+function bestPocketClosureScore(world: WorldState, nationId: NationId, frontId: FrontId): number {
+  const opportunity = bestPocketClosure(world, nationId, frontId);
+  return opportunity?.tacticallyFeasible ? opportunity.score : 0;
+}
+
+function getPocketClosureForTarget(
+  world: WorldState,
+  attackerNationId: NationId,
+  enemyNationId: NationId,
+  sectorId: FrontId,
+  regionId: MesoRegionId,
+): PocketClosureOpportunity | undefined {
+  return getBattlefieldTopologyAssessment(world, attackerNationId, enemyNationId)
+    ?.pocketClosureOpportunities.find((opportunity) =>
+      opportunity.sectorId === sectorId && opportunity.candidateRegionId === regionId
+    );
+}
+
+function getBattlefieldTopologyTargetScore(
+  world: WorldState,
+  attackerNationId: NationId,
+  enemyNationId: NationId,
+  sectorId: FrontId,
+  regionId: MesoRegionId,
+): number {
+  const assessment = getBattlefieldTopologyAssessment(world, attackerNationId, enemyNationId);
+  const collapse = assessment?.collapseOpportunities.find((opportunity) =>
+    opportunity.sectorId === sectorId && opportunity.targetRegionId === regionId
+  );
+  const articulation = assessment?.articulationRegions.find((item) => item.regionId === regionId);
+  return (collapse?.score ?? 0) * 4 + Math.min(12, articulation?.affectedRegionCount ?? 0);
+}
+
+function clonePocketClosureOpportunity(opportunity: PocketClosureOpportunity): PocketClosureOpportunity {
+  return {
+    ...opportunity,
+    affectedRegionIds: [...opportunity.affectedRegionIds],
+    scoreComponents: { ...opportunity.scoreComponents },
+  };
+}
+
+function isPocketClosureStillValid(world: WorldState, operation: OffensiveOperation): boolean {
+  const objective = operation.pocketClosureObjective;
+  if (!objective) return true;
+  const assessment = getBattlefieldTopologyAssessment(
+    world, operation.nationId, operation.enemyNationId,
+  );
+  return assessment?.pocketClosureOpportunities.some((opportunity) =>
+    opportunity.candidateRegionId === objective.candidateRegionId &&
+    opportunity.expectedExitsAfterCapture === 0 &&
+    opportunity.affectedRegionIds.some((id) => objective.affectedRegionIds.includes(id))
+  ) ?? false;
+}
+
+function confirmPocketClosure(world: WorldState, operation: OffensiveOperation): void {
+  const objective = operation.pocketClosureObjective;
+  if (!objective || operation.pocketClosureConfirmation) return;
+  const assessment = getBattlefieldTopologyAssessment(
+    world, operation.nationId, operation.enemyNationId,
+  );
+  const expected = new Set(objective.affectedRegionIds);
+  const resulting = assessment?.enemyComponents
+    .map((component) => ({
+      component,
+      overlap: component.regionIds.filter((regionId) => expected.has(regionId)).length,
+    }))
+    .filter((item) => item.overlap > 0 && !item.component.connectsToStrategicRear)
+    .sort((a, b) => b.overlap - a.overlap || compareIds(a.component.id, b.component.id))[0];
+  operation.pocketClosureConfirmation = resulting ? {
+    status: "success",
+    confirmedAtTick: world.time.fastTick,
+    resultingPocketId: resulting.component.id,
+    trappedStrength: resulting.component.enemyStrength,
+    trappedRegionIds: [...resulting.component.regionIds],
+    trappedCities: resulting.component.cities,
+  } : {
+    status: "failed",
+    confirmedAtTick: world.time.fastTick,
+    resultingPocketId: null,
+    trappedStrength: 0,
+    trappedRegionIds: [],
+    trappedCities: 0,
+  };
+  if (resulting) world.offensiveOperations.pocketClosureSuccessCount += 1;
+  else world.offensiveOperations.pocketClosureFailureCount += 1;
 }
 
 function compareOperations(
