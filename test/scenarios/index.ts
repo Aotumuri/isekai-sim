@@ -12,6 +12,7 @@ import { setupStrategicReserve } from "./strategic-reserve";
 import { setupReorganizationHeavy } from "./reorganization-heavy";
 import { setupLongFrontline } from "./long-frontline";
 import { setupGapExploitation } from "./gap-exploitation";
+import { setupStalemateBreaker } from "./stalemate-breaker";
 import type { ScenarioOptions, ScenarioSetup } from "./types";
 
 const scenarioSetups: Record<BenchmarkScenarioName, ScenarioSetup> = {
@@ -26,6 +27,7 @@ const scenarioSetups: Record<BenchmarkScenarioName, ScenarioSetup> = {
   "reorganization-heavy": setupReorganizationHeavy,
   "long-frontline": setupLongFrontline,
   "gap-exploitation": setupGapExploitation,
+  "stalemate-breaker": setupStalemateBreaker,
 };
 
 export function createScenarioWorld(

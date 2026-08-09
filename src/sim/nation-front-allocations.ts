@@ -18,6 +18,7 @@ import { isNationActive } from "./nation-active";
 import type { UnitId, UnitState } from "./unit";
 import { getUnitCombatStrength } from "./unit-strength";
 import type { WorldState } from "./world-state";
+import { getNationSchwerpunkt } from "./stalemate-pressure";
 
 export interface NationFrontAllocation {
   nationId: NationId;
@@ -63,6 +64,7 @@ interface FrontAllocationInputSnapshot {
   frontVersion: number;
   territoryVersion: number;
   occupationVersion: number;
+  stalemateVersion: number;
   activeNationIds: NationId[];
   plans: Array<Pick<NationFrontPlan, "frontId" | "nationId" | "posture" | "priority" | "desiredStrength">>;
   units: Array<{
@@ -292,6 +294,7 @@ function captureAllocationInput(
     frontVersion: world.landFronts.version,
     territoryVersion: world.territoryVersion,
     occupationVersion: world.occupation.version,
+    stalemateVersion: world.stalematePressure.allocationVersion,
     activeNationIds: world.nations.filter(isNationActive).map((nation) => nation.id),
     plans: world.frontPlans.plans.map((plan) => ({
       frontId: plan.frontId,
@@ -323,6 +326,7 @@ function allocationInputMatches(
     snapshot.frontVersion !== world.landFronts.version ||
     snapshot.territoryVersion !== world.territoryVersion ||
     snapshot.occupationVersion !== world.occupation.version ||
+    snapshot.stalemateVersion !== world.stalematePressure.allocationVersion ||
     snapshot.plans.length !== world.frontPlans.plans.length ||
     snapshot.units.length !== landUnits.length
   ) return false;
@@ -589,6 +593,8 @@ function createAllocationContexts(
   plans: NationFrontPlan[],
 ): FrontAllocationContext[] {
   const contexts: FrontAllocationContext[] = [];
+  const focus = getNationSchwerpunkt(world, nationId);
+  const concentration = WORLD_BALANCE.war.landFront.stalemate;
   for (const plan of plans) {
     const front = world.landFronts.operationalSectorsById.get(plan.frontId);
     if (!front) {
@@ -599,8 +605,17 @@ function createAllocationContexts(
     if (!friendlySide || !enemySide) {
       continue;
     }
+    const isFocus = focus?.schwerpunktSectorId === front.id;
+    const isSameEnemy = focus?.enemyNationId === enemySide.nationId;
+    const effectivePlan = !focus ? plan : {
+      ...plan,
+      desiredStrength: plan.desiredStrength * (isFocus
+        ? concentration.schwerpunktDesiredStrengthMultiplier
+        : isSameEnemy ? concentration.secondaryDesiredStrengthRatio : 1),
+      priority: Math.min(100, plan.priority + (isFocus ? concentration.schwerpunktPriorityBonus : 0)),
+    };
     contexts.push({
-      plan,
+      plan: effectivePlan,
       front,
       friendlySide,
       distanceByRegionId:

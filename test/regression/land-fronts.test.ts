@@ -78,6 +78,12 @@ import {
   getFrontlineCoverage,
   updateFrontlineCoverage,
 } from "../../src/sim/frontline-coverage";
+import {
+  createStalematePressureState,
+  getNationSchwerpunkt,
+  getStalemateAssessment,
+  updateStalematePressure,
+} from "../../src/sim/stalemate-pressure";
 import { BenchmarkMetrics } from "../benchmark/metrics";
 import { createTestScenario } from "../helpers/test-scenario";
 
@@ -120,6 +126,56 @@ test("a continuous border between the same enemies creates one front", () => {
   assert.deepEqual(getFrontSide(fronts[0], NATION_B)?.borderRegionIds, ids("b1", "b2"));
   assert.equal(fronts[0].borderLength, 2);
   assert.equal(fronts[0].borderEdges.length, 2);
+});
+
+test("a static balanced war accumulates pressure and selects one Schwerpunkt", () => {
+  const world = createBalancedStalemateWorld();
+  for (let tick = 0; tick < 20; tick += 1) {
+    world.time.fastTick += 10;
+    updateStalematePressure(world);
+  }
+  const assessment = getStalemateAssessment(world, NATION_A, NATION_B);
+  assert(assessment);
+  assert(assessment.pressure >= WORLD_BALANCE.war.landFront.stalemate.selectionThreshold);
+  assert(assessment.reasonFlags.includes("balanced-strength"));
+  assert(assessment.reasonFlags.includes("no-territory-progress"));
+  assert(assessment.schwerpunktSectorId);
+  assert.equal(getNationSchwerpunkt(world, NATION_A)?.schwerpunktSectorId, assessment.schwerpunktSectorId);
+  assert.equal([...world.stalematePressure.schwerpunktByNationId.keys()].filter((id) => id === NATION_A).length, 1);
+});
+
+test("territory or breakthrough progress reduces stalemate pressure", () => {
+  const world = createBalancedStalemateWorld();
+  for (let tick = 0; tick < 12; tick += 1) updateStalematePressure(world);
+  const before = getStalemateAssessment(world, NATION_A, NATION_B)?.pressure ?? 0;
+  world.occupation.mesoById.set(id("b-front"), NATION_A);
+  world.occupation.version += 1;
+  updateStalematePressure(world);
+  const afterTerritory = getStalemateAssessment(world, NATION_A, NATION_B)?.pressure ?? 0;
+  assert(afterTerritory < before);
+  for (let tick = 0; tick < 8; tick += 1) updateStalematePressure(world);
+  const beforeBreakthrough = getStalemateAssessment(world, NATION_A, NATION_B)?.pressure ?? 0;
+  const tracked = getStalemateAssessment(world, NATION_A, NATION_B);
+  assert(tracked);
+  tracked.lastOperationSuccessCount = -1;
+  updateStalematePressure(world);
+  assert((getStalemateAssessment(world, NATION_A, NATION_B)?.pressure ?? 0) < beforeBreakthrough);
+});
+
+test("Schwerpunkt concentration preserves defense and exposes a larger offensive surplus", () => {
+  const world = createBalancedStalemateWorld();
+  for (let tick = 0; tick < 20; tick += 1) updateStalematePressure(world);
+  updateNationFrontAllocations(world);
+  updateFrontlineCoverage(world);
+  const focus = getNationSchwerpunkt(world, NATION_A);
+  assert(focus?.schwerpunktSectorId);
+  const allocation = getFrontAllocation(world, focus.schwerpunktSectorId, NATION_A);
+  const coverage = getFrontlineCoverage(world, focus.schwerpunktSectorId, NATION_A);
+  assert(allocation && coverage);
+  assert(coverage.minimumRequiredStrength > 0);
+  assert(coverage.defenderStrength > 0);
+  assert(coverage.offensiveSurplusStrength > 0);
+  assert(allocation.allocatedStrength >= coverage.minimumRequiredStrength);
 });
 
 test("frontline coverage creates topology-ordered positions and spreads defenders", () => {
@@ -2985,6 +3041,28 @@ function createStrengthPlanWorld(
   return world;
 }
 
+function createBalancedStalemateWorld(): WorldState {
+  const world = createFrontWorld(
+    [
+      { id: "a-rear", owner: NATION_A },
+      { id: "a-front", owner: NATION_A },
+      { id: "b-front", owner: NATION_B },
+      { id: "b-rear", owner: NATION_B },
+    ],
+    [["a-rear", "a-front"], ["a-front", "b-front"], ["b-front", "b-rear"]],
+  );
+  startWar(world, NATION_A, NATION_B);
+  for (const nationId of [NATION_A, NATION_B]) {
+    const regionId = nationId === NATION_A ? "a-front" : "b-front";
+    for (let index = 0; index < 6; index += 1) {
+      setUnitStrength(addLandUnit(world, nationId, regionId, "Infantry"), 1_000);
+    }
+  }
+  updateAllocationSystem(world);
+  updateFrontlineCoverage(world);
+  return world;
+}
+
 function updateFrontSystem(world: WorldState): void {
   updateLandFronts(world);
   updateCapitalDefense(world);
@@ -3127,6 +3205,7 @@ function createFrontWorld(
     capitalDefense: createCapitalDefenseState(),
     strategicReserves: createStrategicReserveState(),
     reorganization: createReorganizationState(),
+    stalematePressure: createStalematePressureState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

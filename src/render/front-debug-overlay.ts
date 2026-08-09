@@ -15,6 +15,8 @@ import type { MesoRegionId } from "../worldgen/meso-region";
 import type { MicroRegion } from "../worldgen/micro-region";
 import type { NationId } from "../worldgen/nation";
 import { getFrontlineCoverage } from "../sim/frontline-coverage";
+import { getFrontAllocation } from "../sim/nation-front-allocations";
+import { getStalemateAssessment } from "../sim/stalemate-pressure";
 import type { Vec2 } from "../utils/vector";
 import { clearLayer } from "./clear-layer";
 import { findSharedSegments, type Segment } from "./meso-border-geometry";
@@ -52,6 +54,7 @@ interface OverlayVersions {
   operations: number;
   retreats: number;
   coverage: number;
+  stalemate: number;
   reserveDeployments: string;
 }
 
@@ -391,6 +394,24 @@ function appendOperationalDetails(
 ): void {
   for (const nationId of [front.nationAId, front.nationBId]) {
     const operation = getOffensiveOperationForFront(world, front.id, nationId);
+    if (selected) {
+      const enemyId = nationId === front.nationAId ? front.nationBId : front.nationAId;
+      const stalled = getStalemateAssessment(world, nationId, enemyId);
+      if (stalled) {
+        const coverage = getFrontlineCoverage(world, front.id, nationId);
+        const allocation = getFrontAllocation(world, front.id, nationId);
+        const focused = stalled.schwerpunktSectorId === front.id;
+        lines.push(
+          `STALEMATE ${stalled.staticTicks} slow ticks | pressure ${stalled.pressure.toFixed(0)}${focused ? " | SCHWERPUNKT" : ""}`,
+          `  reasons ${stalled.reasonFlags.join(", ") || "none"}`,
+          `  inactivity blocker ${stalled.artificialInactivityBlocker ?? "none"}`,
+          `  sector ${stalled.schwerpunktSectorId ?? "none"} | defense ${formatStrength(coverage?.minimumRequiredStrength ?? 0)} | allocated ${formatStrength(allocation?.allocatedStrength ?? 0)}`,
+          `  surplus ${formatStrength(coverage?.offensiveSurplusStrength ?? 0)} | committed ${formatStrength(operation?.assignedStrength ?? 0)} | released ${formatStrength(stalled.releasedSecondaryStrength)}`,
+          `  local ${formatRatio(operation?.localStrengthRatioAtAttack || getStrengthRatio(operation?.assignedStrength ?? 0, operation?.targetLocalDefenderStrength ?? 0))} | status ${(operation?.phase ?? (focused ? "concentrating" : "normal")).toUpperCase()}`,
+          `  operation ${formatStrength(operation?.assignedStrength ?? 0)} / available ${formatStrength(operation?.offensiveSurplusAvailable ?? coverage?.offensiveSurplusStrength ?? 0)}`,
+        );
+      }
+    }
     if (operation) {
       lines.push(`OP ${nationId} ${operation.phase.toUpperCase()} ${operation.id}`);
       if (selected) {
@@ -565,6 +586,7 @@ function readVersions(world: WorldState): OverlayVersions {
     operations: world.offensiveOperations.version,
     retreats: world.retreatPlans.version,
     coverage: world.frontlineCoverage.version,
+    stalemate: world.stalematePressure.version,
     reserveDeployments: world.strategicReserves.reserves
       .map((reserve) => {
         const deployment = reserve.deployment;
@@ -579,7 +601,7 @@ function readVersions(world: WorldState): OverlayVersions {
 function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
   return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
     a.plans === b.plans && a.operations === b.operations &&
-    a.retreats === b.retreats && a.coverage === b.coverage &&
+    a.retreats === b.retreats && a.coverage === b.coverage && a.stalemate === b.stalemate &&
     a.reserveDeployments === b.reserveDeployments;
 }
 

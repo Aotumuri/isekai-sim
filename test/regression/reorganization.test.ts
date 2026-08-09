@@ -34,6 +34,7 @@ import { createUnitId, type UnitState } from "../../src/sim/unit";
 import { declareWar } from "../../src/sim/war-state";
 import type { WorldState } from "../../src/sim/world-state";
 import { createFrontlineCoverageState } from "../../src/sim/frontline-coverage";
+import { createStalematePressureState } from "../../src/sim/stalemate-pressure";
 import { createWorldCache } from "../../src/sim/world-cache";
 import { createMacroRegionId, type MacroRegion } from "../../src/worldgen/macro-region";
 import type { MicroRegionId } from "../../src/worldgen/micro-region";
@@ -404,6 +405,7 @@ function createReorganizationWorld(): { world: WorldState; unit: UnitState } {
     capitalDefense: createCapitalDefenseState(),
     strategicReserves: createStrategicReserveState(false),
     reorganization: createReorganizationState(),
+    stalematePressure: createStalematePressureState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

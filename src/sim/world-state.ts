@@ -20,6 +20,7 @@ import type { CapitalDefenseState } from "./capital-defense";
 import type { StrategicReserveState } from "./strategic-reserves";
 import type { ReorganizationState } from "./reorganization";
 import type { FrontlineCoverageState } from "./frontline-coverage";
+import type { StalematePressureState } from "./stalemate-pressure";
 
 export interface WorldState {
   width: number;
@@ -41,6 +42,7 @@ export interface WorldState {
   capitalDefense: CapitalDefenseState;
   strategicReserves: StrategicReserveState;
   reorganization: ReorganizationState;
+  stalematePressure: StalematePressureState;
   mapVersion: number;
   territoryVersion: number;
   buildingVersion: number;

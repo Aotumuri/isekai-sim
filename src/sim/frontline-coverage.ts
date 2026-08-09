@@ -7,6 +7,7 @@ import { getFrontPlan } from "./nation-front-plans";
 import type { UnitId, UnitState } from "./unit";
 import { getUnitCombatStrength } from "./unit-strength";
 import type { WorldState } from "./world-state";
+import { isSchwerpunktSector } from "./stalemate-pressure";
 import { getMesoById, getNeighborsById } from "./world-cache";
 
 export type FrontlineCoverageLevel = "covered" | "weak" | "gap";
@@ -164,7 +165,7 @@ export function updateFrontlineCoverage(world: WorldState): void {
         !operationIds.has(unit.id) && !world.reorganization.planIdByUnitId.has(unit.id),
     );
     const plan = getFrontPlan(world, sector.id, allocation.nationId);
-    const ratio = plan?.posture === "attack"
+    const ratio = plan?.posture === "attack" || isSchwerpunktSector(world, allocation.nationId, sector.id)
       ? WORLD_BALANCE.war.landFront.frontlineCoverage.attackMinimumStrengthRatio
       : plan?.posture === "retreat"
         ? WORLD_BALANCE.war.landFront.frontlineCoverage.emergencyMinimumStrengthRatio

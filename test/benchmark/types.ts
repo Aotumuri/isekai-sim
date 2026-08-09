@@ -10,6 +10,7 @@ export const BENCHMARK_SCENARIOS = [
   "reorganization-heavy",
   "long-frontline",
   "gap-exploitation",
+  "stalemate-breaker",
 ] as const;
 
 export type BenchmarkScenarioName = (typeof BENCHMARK_SCENARIOS)[number];
@@ -70,6 +71,24 @@ export interface WorldSummary {
   frontlineOffensiveSurplusStrength: number;
   frontlineAssignmentSwitches: number;
   frontlineBreakthroughs: number;
+  stalemateDetections: number;
+  stalemateAverageDuration: number;
+  stalemateMaximumDuration: number;
+  stalemateAveragePressure: number;
+  stalemateMaximumPressure: number;
+  schwerpunktSelections: number;
+  schwerpunktChanges: number;
+  activeSchwerpunkts: number;
+  artificialInactivitySamples: number;
+  artificialInactivityPostureBlocks: number;
+  artificialInactivityAllocationBlocks: number;
+  artificialInactivityTargetBlocks: number;
+  majorOffensivesLaunched: number;
+  majorOffensiveSuccesses: number;
+  majorOffensiveFailures: number;
+  majorOffensiveAverageStrength: number;
+  majorOffensiveSurplusUtilizationPercent: number;
+  majorOffensiveAverageLocalRatio: number;
   activeOffensiveOperations: number;
   exploitingOffensiveOperations: number;
   recoveringOffensiveOperations: number;

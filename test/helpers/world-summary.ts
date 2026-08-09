@@ -39,6 +39,9 @@ export function summarizeWorld(world: WorldState): WorldSummary {
   const frontlineSegments = coverage.reduce((total, item) => total + item.positions.length, 0);
   const gapRuns = coverage.filter((item) => item.maxGapLength > 0);
   const exploitation = world.offensiveOperations;
+  const stalemate = world.stalematePressure;
+  const majorOperations = [...world.offensiveOperations.operations, ...world.offensiveOperations.history]
+    .filter((operation) => operation.isMajorOffensive);
   const exploitationOtherStops = Object.entries(exploitation.exploitationStopCounts)
     .filter(([reason]) => ![
       "covered-frontline",
@@ -82,6 +85,29 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     frontlineOffensiveSurplusStrength: coverage.reduce((total, item) => total + item.offensiveSurplusStrength, 0),
     frontlineAssignmentSwitches: world.frontlineCoverage.totalAssignmentSwitches,
     frontlineBreakthroughs: world.frontlineCoverage.breakthroughEvents,
+    stalemateDetections: stalemate.detections,
+    stalemateAverageDuration: stalemate.staticTickSampleCount > 0
+      ? stalemate.staticTickSampleTotal / stalemate.staticTickSampleCount : 0,
+    stalemateMaximumDuration: stalemate.maxStaticTicks,
+    stalemateAveragePressure: stalemate.pressureSampleCount > 0
+      ? stalemate.pressureSampleTotal / stalemate.pressureSampleCount : 0,
+    stalemateMaximumPressure: stalemate.maxPressure,
+    schwerpunktSelections: stalemate.selections,
+    schwerpunktChanges: stalemate.selectionChanges,
+    activeSchwerpunkts: stalemate.schwerpunktByNationId.size,
+    artificialInactivitySamples: stalemate.artificialInactivitySamples,
+    artificialInactivityPostureBlocks: stalemate.artificialInactivityByBlocker.posture,
+    artificialInactivityAllocationBlocks: stalemate.artificialInactivityByBlocker.allocation,
+    artificialInactivityTargetBlocks: stalemate.artificialInactivityByBlocker["target-validity"],
+    majorOffensivesLaunched: stalemate.majorOffensivesLaunched,
+    majorOffensiveSuccesses: stalemate.majorOffensiveSuccesses,
+    majorOffensiveFailures: stalemate.majorOffensiveFailures,
+    majorOffensiveAverageStrength: majorOperations.length > 0
+      ? majorOperations.reduce((sum, operation) => sum + operation.initialAssignedStrength, 0) / majorOperations.length : 0,
+    majorOffensiveSurplusUtilizationPercent: majorOperations.length > 0
+      ? majorOperations.reduce((sum, operation) => sum + operation.initialAssignedStrength / Math.max(1, operation.offensiveSurplusAvailable), 0) / majorOperations.length * 100 : 0,
+    majorOffensiveAverageLocalRatio: majorOperations.length > 0
+      ? majorOperations.reduce((sum, operation) => sum + operation.localStrengthRatioAtAttack, 0) / majorOperations.length : 0,
     activeOffensiveOperations: world.offensiveOperations.operations.filter(
       (operation) => operation.phase !== "recovering",
     ).length,

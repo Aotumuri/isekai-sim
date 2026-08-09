@@ -166,6 +166,26 @@ export const WORLD_BALANCE = {
         surplusDistanceWeight: 0.75,
         surplusLoadPenalty: 20,
       },
+      stalemate: {
+        pressureGainPerSlowTick: 4,
+        pressureDecayOnProgress: 28,
+        pressureDecayOnFailure: 35,
+        selectionThreshold: 60,
+        majorOffensiveThreshold: 72,
+        maximumPressure: 100,
+        balancedMinimumRatio: 0.65,
+        balancedMaximumRatio: 1.55,
+        minimumMeaningfulStrength: 2_000,
+        secondaryDesiredStrengthRatio: 0.65,
+        schwerpunktDesiredStrengthMultiplier: 1.8,
+        schwerpunktPriorityBonus: 45,
+        minimumSelectionTicks: 80,
+        failedOffensiveCooldownTicks: 120,
+        majorOperationForceFraction: 0.9,
+        majorMinimumPreparationTicks: 35,
+        majorStagedFraction: 0.72,
+        majorLocalOvermatchRatio: 1.5,
+      },
       frontlineCoverage: {
         // Holding fronts use every available defender; attacking fronts keep a
         // coherent skeleton and expose only the remainder to Operations.

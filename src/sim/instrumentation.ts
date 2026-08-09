@@ -11,6 +11,7 @@ export type SimulationMetricName =
   | "landFront.planEvaluation"
   | "landFront.allocation"
   | "frontlineCoverage.evaluation"
+  | "stalemate.evaluation"
   | "offensiveOperation.evaluation"
   | "offensiveOperation.exploitationEvaluation"
   | "offensiveOperation.exploitationCandidateScoring"
