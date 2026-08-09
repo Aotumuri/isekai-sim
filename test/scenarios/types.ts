@@ -7,6 +7,7 @@ export interface ScenarioOptions {
   quick: boolean;
   reserveEnabled?: boolean;
   reorganizationEnabled?: boolean;
+  exploitationEnabled?: boolean;
 }
 
 export type ScenarioSetup = (world: WorldState, options: ScenarioOptions) => void;

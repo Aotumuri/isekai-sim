@@ -116,6 +116,21 @@ export function assertWorldInvariants(world: WorldState): void {
     for (const targetId of operation.supportingTargetRegionIds) {
       assert(mesoIds.has(targetId), `${operation.id} supporting target is missing`);
     }
+    if (operation.exploitationTargetRegionId) {
+      assert(
+        mesoIds.has(operation.exploitationTargetRegionId),
+        `${operation.id} exploitation target is missing`,
+      );
+    }
+    const exploitationIds = new Set(operation.exploitationUnitIds);
+    const holdIds = new Set(operation.exploitationHoldUnitIds);
+    for (const unitId of exploitationIds) {
+      assert(operation.assignedUnitIds.includes(unitId), `${operation.id} exploitation unit is unassigned`);
+      assert(!holdIds.has(unitId), `${operation.id} exploitation and hold forces overlap`);
+    }
+    for (const unitId of holdIds) {
+      assert(operation.assignedUnitIds.includes(unitId), `${operation.id} hold unit is unassigned`);
+    }
   }
   const retreatIds = new Set(world.retreatPlans.plans.map((retreat) => retreat.id));
   assert.equal(
@@ -358,6 +373,16 @@ export function semanticWorldSignature(world: WorldState): unknown {
       staging: operation.stagingRegionId,
       units: [...operation.assignedUnitIds],
       targets: [...operation.unitTargetRegionIds.entries()],
+      exploitationTarget: operation.exploitationTargetRegionId,
+      exploitationCoverage: operation.exploitationTargetCoverageState,
+      exploitationLocalDefense: operation.exploitationTargetLocalEnemyStrength,
+      exploitationScore: operation.exploitationTargetScore,
+      exploitationDepth: operation.exploitationDepth,
+      exploitationUnits: [...operation.exploitationUnitIds],
+      exploitationHoldUnits: [...operation.exploitationHoldUnitIds],
+      exploitationForceStrength: operation.exploitationForceStrength,
+      exploitationStopReason: operation.exploitationStopReason,
+      capturedRegions: [...operation.capturedRegionIds],
       outcome: operation.outcome,
       reason: operation.completionReason,
     })),

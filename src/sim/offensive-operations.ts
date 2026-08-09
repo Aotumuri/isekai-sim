@@ -32,7 +32,22 @@ export type OperationId = string & { __brand: "OperationId" };
 export type OffensiveOperationPhase =
   | "preparing"
   | "attacking"
+  | "exploiting"
   | "recovering";
+
+export type ExploitationStopReason =
+  | "target-occupied"
+  | "covered-frontline"
+  | "local-strength-disadvantage"
+  | "enemy-reserve-arrival"
+  | "retreat-started"
+  | "capital-emergency"
+  | "front-disappeared"
+  | "timeout"
+  | "force-depleted"
+  | "allocation-lost"
+  | "war-ended"
+  | "target-invalid";
 
 export type OffensiveOperationOutcome =
   | "success"
@@ -67,6 +82,8 @@ export type OffensiveOperationCompletionReason =
 export type OffensiveOperationEventType =
   | "created"
   | "phase-transition"
+  | "exploitation-started"
+  | "exploitation-stopped"
   | "front-remapped"
   | "success"
   | "failure"
@@ -98,6 +115,19 @@ export interface OffensiveOperation {
   targetCoverageState: FrontlineCoverageLevel | null;
   targetLocalDefenderStrength: number;
   targetTacticalScore: number;
+  attackSuccessReason: OffensiveOperationCompletionReason | null;
+  exploitationTargetRegionId: MesoRegionId | null;
+  exploitationTargetCoverageState: FrontlineCoverageLevel | null;
+  exploitationTargetLocalEnemyStrength: number;
+  exploitationTargetScore: number;
+  exploitationDepth: number;
+  exploitationUnitIds: UnitId[];
+  exploitationHoldUnitIds: UnitId[];
+  exploitationForceStrength: number;
+  exploitationStartedAtTick: number | null;
+  exploitationFrontVersion: number;
+  exploitationStopReason: ExploitationStopReason | null;
+  capturedRegionIds: MesoRegionId[];
   reasonFlags: OffensiveOperationReason[];
   outcome: OffensiveOperationOutcome | null;
   completionReason: OffensiveOperationCompletionReason | null;
@@ -115,6 +145,7 @@ export interface OffensiveOperationEvent {
 }
 
 export interface OffensiveOperationState {
+  exploitationEnabled: boolean;
   operations: OffensiveOperation[];
   operationsById: Map<OperationId, OffensiveOperation>;
   operationsByNationId: Map<NationId, OffensiveOperation[]>;
@@ -136,6 +167,22 @@ export interface OffensiveOperationState {
   preparingDurationTicks: number;
   attackingDurationTicks: number;
   maxTargetConcentration: number;
+  exploitationStartedCount: number;
+  exploitationSuccessCount: number;
+  exploitationStoppedCount: number;
+  exploitationDepthTotal: number;
+  exploitationDurationTicks: number;
+  exploitationForceUnitTotal: number;
+  exploitationForceStrengthTotal: number;
+  exploitationStopCounts: Record<ExploitationStopReason, number>;
+  successfulCapturedRegionCount: number;
+  exploitationCandidateEvaluatedCounts: Record<FrontlineCoverageLevel, number>;
+  exploitationSelectedCounts: Record<FrontlineCoverageLevel, number>;
+  exploitationRejectionCounts: {
+    insufficientLocalStrength: number;
+    unreachable: number;
+    reserveThreat: number;
+  };
 }
 
 interface OperationTargetSelection {
@@ -156,6 +203,15 @@ interface TargetTacticalAssessment {
   reasons: OffensiveOperationReason[];
 }
 
+interface ExploitationTargetSelection {
+  regionId: MesoRegionId;
+  sectorId: FrontId;
+  depth: number;
+  score: number;
+  coverageState: FrontlineCoverageLevel;
+  localEnemyStrength: number;
+}
+
 interface OperationAdvanceResult {
   keep: boolean;
   changed: boolean;
@@ -163,6 +219,7 @@ interface OperationAdvanceResult {
 
 export function createOffensiveOperationState(): OffensiveOperationState {
   return {
+    exploitationEnabled: true,
     operations: [],
     operationsById: new Map(),
     operationsByNationId: new Map(),
@@ -184,6 +241,22 @@ export function createOffensiveOperationState(): OffensiveOperationState {
     preparingDurationTicks: 0,
     attackingDurationTicks: 0,
     maxTargetConcentration: 0,
+    exploitationStartedCount: 0,
+    exploitationSuccessCount: 0,
+    exploitationStoppedCount: 0,
+    exploitationDepthTotal: 0,
+    exploitationDurationTicks: 0,
+    exploitationForceUnitTotal: 0,
+    exploitationForceStrengthTotal: 0,
+    exploitationStopCounts: createExploitationStopCounts(),
+    successfulCapturedRegionCount: 0,
+    exploitationCandidateEvaluatedCounts: { gap: 0, weak: 0, covered: 0 },
+    exploitationSelectedCounts: { gap: 0, weak: 0, covered: 0 },
+    exploitationRejectionCounts: {
+      insufficientLocalStrength: 0,
+      unreachable: 0,
+      reserveThreat: 0,
+    },
   };
 }
 
@@ -322,7 +395,11 @@ export function cancelOffensiveOperationForRetreat(
     return false;
   }
   const previousMembership = state.operationIdByUnitId;
-  finishOperation(world, operation, "cancelled", "posture-changed");
+  if (operation.phase === "exploiting") {
+    stopExploitation(world, operation, "retreat-started");
+  } else {
+    finishOperation(world, operation, "cancelled", "posture-changed");
+  }
   rebuildOperationIndexes(state);
   if (!areAssignmentMapsEqual(previousMembership, state.operationIdByUnitId)) {
     state.membershipVersion += 1;
@@ -344,7 +421,11 @@ export function cancelOffensiveOperationsForCapitalEmergency(
         "critical",
   );
   for (const operation of operations) {
-    finishOperation(world, operation, "cancelled", "capital-emergency");
+    if (operation.phase === "exploiting") {
+      stopExploitation(world, operation, "capital-emergency");
+    } else {
+      finishOperation(world, operation, "cancelled", "capital-emergency");
+    }
   }
   if (operations.length === 0) return 0;
   rebuildOperationIndexes(state);
@@ -352,7 +433,10 @@ export function cancelOffensiveOperationsForCapitalEmergency(
     state.membershipVersion += 1;
   }
   state.version += 1;
-  recordCapitalOperationCancellations(world, operations.length);
+  const cancelledCount = operations.filter(
+    (operation) => operation.exploitationStopReason !== "capital-emergency",
+  ).length;
+  recordCapitalOperationCancellations(world, cancelledCount);
   return operations.length;
 }
 
@@ -371,6 +455,13 @@ export function formatOffensiveOperationSummary(world: WorldState): string {
       `  target coverage: ${operation.targetCoverageState ?? "none"}`,
       `  local defense: ${operation.targetLocalDefenderStrength.toFixed(1)}`,
       `  tactical score: ${operation.targetTacticalScore.toFixed(1)}`,
+      `  exploitation target: ${operation.exploitationTargetRegionId ?? "none"}`,
+      `  exploitation coverage: ${operation.exploitationTargetCoverageState ?? "none"}`,
+      `  exploitation local defense: ${operation.exploitationTargetLocalEnemyStrength.toFixed(1)}`,
+      `  exploitation score: ${operation.exploitationTargetScore.toFixed(1)}`,
+      `  exploitation depth: ${operation.exploitationDepth}`,
+      `  exploitation force: ${operation.exploitationUnitIds.length} / ${operation.assignedUnitIds.length}`,
+      `  exploitation stop: ${operation.exploitationStopReason ?? "none"}`,
       `  started: ${operation.startedAtTick}`,
       `  outcome: ${operation.outcome ?? "active"}`,
       `  completion: ${operation.completionReason ?? "none"}`,
@@ -394,28 +485,38 @@ function advanceOperation(
     return { keep: false, changed: true };
   }
 
+  if (operation.phase === "exploiting") {
+    return advanceExploitation(world, operation);
+  }
+
   if (
     operation.phase === "attacking" &&
     isRegionControlledBy(world, operation.primaryTargetRegionId, operation.nationId)
   ) {
-    finishOperation(
-      world,
-      operation,
-      "success",
-      "primary-target-occupied",
-    );
+    recordOperationCaptures(world, operation);
+    if (!tryStartExploitation(world, operation, "primary-target-occupied")) {
+      finishOperation(
+        world,
+        operation,
+        "success",
+        "primary-target-occupied",
+      );
+    }
     return { keep: true, changed: true };
   }
   if (
     operation.phase === "attacking" &&
     hasOccupiedSupportingMajority(world, operation)
   ) {
-    finishOperation(
-      world,
-      operation,
-      "success",
-      "supporting-targets-occupied",
-    );
+    recordOperationCaptures(world, operation);
+    if (!tryStartExploitation(world, operation, "supporting-targets-occupied")) {
+      finishOperation(
+        world,
+        operation,
+        "success",
+        "supporting-targets-occupied",
+      );
+    }
     return { keep: true, changed: true };
   }
 
@@ -489,11 +590,7 @@ function advanceOperation(
     return { keep: true, changed: true };
   }
 
-  const assignmentChanged = refreshOperationUnitAssignment(
-    world,
-    operation,
-    allocation,
-  );
+  const assignmentChanged = pruneExploitationForce(world, operation);
   if (operation.assignedUnitIds.length === 0) {
     finishOperation(world, operation, "cancelled", "allocation-lost");
     return { keep: true, changed: true };
@@ -654,6 +751,19 @@ function createOperation(
     targetCoverageState: targets.targetCoverageState,
     targetLocalDefenderStrength: targets.targetLocalDefenderStrength,
     targetTacticalScore: targets.tacticalScore,
+    attackSuccessReason: null,
+    exploitationTargetRegionId: null,
+    exploitationTargetCoverageState: null,
+    exploitationTargetLocalEnemyStrength: 0,
+    exploitationTargetScore: 0,
+    exploitationDepth: 0,
+    exploitationUnitIds: [],
+    exploitationHoldUnitIds: [],
+    exploitationForceStrength: 0,
+    exploitationStartedAtTick: null,
+    exploitationFrontVersion: world.landFronts.version,
+    exploitationStopReason: null,
+    capturedRegionIds: [],
     reasonFlags: collectOperationReasons(
       world,
       plan,
@@ -987,6 +1097,13 @@ function refreshOperationUnitAssignment(
   }
   if (operation.phase === "attacking") {
     assignStableOperationTargets(operation);
+  } else if (operation.phase === "exploiting") {
+    operation.exploitationUnitIds = operation.exploitationUnitIds.filter((unitId) =>
+      nextIds.includes(unitId),
+    );
+    const exploitingIds = new Set(operation.exploitationUnitIds);
+    operation.exploitationHoldUnitIds = nextIds.filter((unitId) => !exploitingIds.has(unitId));
+    assignExploitationTargets(operation);
   }
   return changed;
 }
@@ -1012,6 +1129,554 @@ function transitionToAttacking(
   world.offensiveOperations.phaseTransitionCount += 1;
   world.instrumentation?.incrementCounter("offensiveOperation.phaseTransitions");
   recordEvent(world, operation, "phase-transition", "preparing->attacking");
+}
+
+function tryStartExploitation(
+  world: WorldState,
+  operation: OffensiveOperation,
+  successReason: OffensiveOperationCompletionReason,
+): boolean {
+  if (!world.offensiveOperations.exploitationEnabled) return false;
+  if (!isRegionControlledBy(world, operation.primaryTargetRegionId, operation.nationId)) {
+    return false;
+  }
+  if (getCapitalDefenseAssessment(world, operation.nationId)?.threatLevel === "critical") {
+    return false;
+  }
+  const front = findExploitationFront(world, operation);
+  if (!front) return false;
+  const plan = getFrontPlan(world, front.id, operation.nationId);
+  const allocation = getFrontAllocation(world, front.id, operation.nationId);
+  if (!plan || plan.posture !== "attack" || !allocation) return false;
+  if (
+    world.retreatPlans.plansByFrontNation.has(
+      createFrontNationKey(front.id, operation.nationId),
+    )
+  ) {
+    return false;
+  }
+  const settings = WORLD_BALANCE.war.landFront.offensiveOperation;
+  const remainingStrength = sumUnitStrength(
+    getOperationUnits(world, operation.assignedUnitIds),
+  );
+  operation.assignedStrength = remainingStrength;
+  if (
+    operation.initialAssignedStrength <= 0 ||
+    remainingStrength / operation.initialAssignedStrength <
+      settings.exploitationMinimumRemainingStrengthRatio
+  ) {
+    return false;
+  }
+  const exploitationUnits = selectExploitationUnits(world, operation);
+  if (exploitationUnits.length === 0 || exploitationUnits.length >= operation.assignedUnitIds.length) {
+    return false;
+  }
+  const target = selectExploitationTarget(world, operation, front, plan, exploitationUnits);
+  if (!target) return false;
+
+  const previousFrontId = operation.frontId;
+  operation.frontId = target.sectorId;
+  if (previousFrontId !== operation.frontId) {
+    recordEvent(world, operation, "front-remapped", `${previousFrontId}->${operation.frontId}`);
+  }
+  operation.attackSuccessReason = successReason;
+  operation.exploitationTargetRegionId = target.regionId;
+  operation.exploitationTargetCoverageState = target.coverageState;
+  operation.exploitationTargetLocalEnemyStrength = target.localEnemyStrength;
+  operation.exploitationTargetScore = target.score;
+  operation.exploitationDepth = target.depth;
+  operation.exploitationUnitIds = exploitationUnits.map((unit) => unit.id).sort(compareIds);
+  const exploitationIds = new Set(operation.exploitationUnitIds);
+  operation.exploitationHoldUnitIds = operation.assignedUnitIds.filter(
+    (unitId) => !exploitationIds.has(unitId),
+  );
+  operation.exploitationForceStrength = sumUnitStrength(exploitationUnits);
+  operation.exploitationStartedAtTick = world.time.fastTick;
+  operation.exploitationFrontVersion = world.landFronts.version;
+  operation.exploitationStopReason = null;
+  const attackingDuration = Math.max(0, world.time.fastTick - operation.phaseStartedAtTick);
+  world.offensiveOperations.attackingDurationTicks += attackingDuration;
+  world.instrumentation?.incrementCounter("offensiveOperation.attackingTicks", attackingDuration);
+  operation.phase = "exploiting";
+  operation.phaseStartedAtTick = world.time.fastTick;
+  operation.expiresAtTick = world.time.fastTick + settings.exploitationTimeoutTicks;
+  assignExploitationTargets(operation);
+
+  const state = world.offensiveOperations;
+  state.exploitationStartedCount += 1;
+  state.exploitationDepthTotal += target.depth;
+  state.exploitationForceUnitTotal += operation.exploitationUnitIds.length;
+  state.exploitationForceStrengthTotal += operation.exploitationForceStrength;
+  state.phaseTransitionCount += 1;
+  world.instrumentation?.incrementCounter("offensiveOperation.phaseTransitions");
+  world.instrumentation?.incrementCounter("offensiveOperation.exploitationStarts");
+  world.instrumentation?.incrementCounter("offensiveOperation.exploitationDepth", target.depth);
+  world.instrumentation?.incrementCounter(
+    "offensiveOperation.exploitationForceUnits",
+    operation.exploitationUnitIds.length,
+  );
+  world.instrumentation?.incrementCounter(
+    "offensiveOperation.exploitationForceStrength",
+    operation.exploitationForceStrength,
+  );
+  recordEvent(
+    world,
+    operation,
+    "exploitation-started",
+    `${target.regionId}:depth-${target.depth}:score-${target.score.toFixed(1)}`,
+  );
+  return true;
+}
+
+function advanceExploitation(
+  world: WorldState,
+  operation: OffensiveOperation,
+): OperationAdvanceResult {
+  const startedAt = world.instrumentation ? performance.now() : 0;
+  const finish = (reason: ExploitationStopReason): OperationAdvanceResult => {
+    stopExploitation(world, operation, reason);
+    if (world.instrumentation) {
+      world.instrumentation.recordDuration(
+        "offensiveOperation.exploitationEvaluation",
+        performance.now() - startedAt,
+      );
+    }
+    return { keep: true, changed: true };
+  };
+  const targetId = operation.exploitationTargetRegionId;
+  if (!targetId) return finish("target-invalid");
+  if (isRegionControlledBy(world, targetId, operation.nationId)) {
+    recordOperationCaptures(world, operation);
+    return finish("target-occupied");
+  }
+  if (!isAtWar(operation.nationId, operation.enemyNationId, buildWarAdjacency(world.wars))) {
+    return finish("war-ended");
+  }
+  if (getCapitalDefenseAssessment(world, operation.nationId)?.threatLevel === "critical") {
+    return finish("capital-emergency");
+  }
+  if (world.time.fastTick >= operation.expiresAtTick) return finish("timeout");
+
+  let front = findExploitationFrontForTarget(world, operation, targetId);
+  if (!front) return finish("front-disappeared");
+  const retreat = world.retreatPlans.plansByFrontNation.get(
+    createFrontNationKey(front.id, operation.nationId),
+  );
+  const plan = getFrontPlan(world, front.id, operation.nationId);
+  if (retreat || plan?.posture === "retreat") return finish("retreat-started");
+  if (!plan || plan.posture !== "attack") return finish("local-strength-disadvantage");
+  if (!getFrontAllocation(world, front.id, operation.nationId)) {
+    return finish("allocation-lost");
+  }
+  const assignmentChanged = pruneExploitationForce(world, operation);
+  if (operation.exploitationUnitIds.length === 0) return finish("force-depleted");
+  if (operation.exploitationHoldUnitIds.length === 0) return finish("allocation-lost");
+
+  if (world.landFronts.version !== operation.exploitationFrontVersion) {
+    operation.exploitationFrontVersion = world.landFronts.version;
+    const targetStillValid = findExploitationCoveragePosition(
+      world,
+      front.id,
+      operation.enemyNationId,
+      targetId,
+    );
+    if (!targetStillValid) {
+      const units = getOperationUnits(world, operation.exploitationUnitIds);
+      const replacement = selectExploitationTarget(world, operation, front, plan, units);
+      if (!replacement) return finish("target-invalid");
+      operation.exploitationTargetRegionId = replacement.regionId;
+      operation.exploitationTargetCoverageState = replacement.coverageState;
+      operation.exploitationTargetLocalEnemyStrength = replacement.localEnemyStrength;
+      operation.exploitationTargetScore = replacement.score;
+      operation.exploitationDepth = replacement.depth;
+      const previousFrontId = operation.frontId;
+      operation.frontId = replacement.sectorId;
+      front = world.landFronts.operationalSectorsById.get(replacement.sectorId) ?? front;
+      assignExploitationTargets(operation);
+      if (previousFrontId !== operation.frontId) {
+        recordEvent(world, operation, "front-remapped", `${previousFrontId}->${operation.frontId}`);
+      }
+    }
+  }
+
+  const currentTargetId = operation.exploitationTargetRegionId;
+  if (!currentTargetId) return finish("target-invalid");
+  const position = findExploitationCoveragePosition(
+    world,
+    operation.frontId,
+    operation.enemyNationId,
+    currentTargetId,
+  );
+  if (!position) return finish("target-invalid");
+  if (position.state === "covered") return finish("covered-frontline");
+  if (hasEnemyReserveNearExploitation(world, operation.enemyNationId, operation.frontId, currentTargetId)) {
+    return finish("enemy-reserve-arrival");
+  }
+  const exploitationUnits = getOperationUnits(world, operation.exploitationUnitIds);
+  const currentStrength = sumUnitStrength(exploitationUnits);
+  if (
+    exploitationUnits.length === 0 ||
+    operation.exploitationForceStrength <= 0 ||
+    currentStrength / operation.exploitationForceStrength <
+      WORLD_BALANCE.war.landFront.offensiveOperation.exploitationMinimumRemainingStrengthRatio
+  ) {
+    return finish("force-depleted");
+  }
+  const localEnemyStrength = Math.max(
+    position.defenderStrength,
+    getExploitationLocalEnemyStrength(world, currentTargetId, operation.enemyNationId),
+  );
+  if (
+    getStrengthRatio(currentStrength, localEnemyStrength) <
+    WORLD_BALANCE.war.landFront.offensiveOperation.exploitationStopStrengthRatio
+  ) {
+    return finish("local-strength-disadvantage");
+  }
+  if (!isExploitationTargetWithinDepth(world, operation, currentTargetId)) {
+    return finish("target-invalid");
+  }
+  if (world.instrumentation) {
+    world.instrumentation.recordDuration(
+      "offensiveOperation.exploitationEvaluation",
+      performance.now() - startedAt,
+    );
+  }
+  return { keep: true, changed: assignmentChanged };
+}
+
+function stopExploitation(
+  world: WorldState,
+  operation: OffensiveOperation,
+  reason: ExploitationStopReason,
+): void {
+  if (operation.phase !== "exploiting") return;
+  const duration = Math.max(0, world.time.fastTick - operation.phaseStartedAtTick);
+  const state = world.offensiveOperations;
+  state.exploitationDurationTicks += duration;
+  state.exploitationStoppedCount += 1;
+  state.exploitationStopCounts[reason] += 1;
+  if (reason === "target-occupied") state.exploitationSuccessCount += 1;
+  operation.exploitationStopReason = reason;
+  world.instrumentation?.incrementCounter("offensiveOperation.exploitingTicks", duration);
+  world.instrumentation?.incrementCounter("offensiveOperation.exploitationStops");
+  world.instrumentation?.incrementCounter(`offensiveOperation.exploitationStop.${reason}`);
+  if (reason === "target-occupied") {
+    world.instrumentation?.incrementCounter("offensiveOperation.exploitationSuccesses");
+  }
+  recordEvent(world, operation, "exploitation-stopped", reason);
+  finishOperation(
+    world,
+    operation,
+    "success",
+    operation.attackSuccessReason ?? "primary-target-occupied",
+  );
+}
+
+function selectExploitationUnits(
+  world: WorldState,
+  operation: OffensiveOperation,
+): UnitState[] {
+  const units = getOperationUnits(world, operation.assignedUnitIds);
+  if (units.length < 2) return [];
+  const settings = WORLD_BALANCE.war.landFront.offensiveOperation;
+  const desiredCount = clamp(
+    Math.ceil(units.length * settings.exploitationForceFraction),
+    1,
+    units.length - 1,
+  );
+  const primaryCenter = getMesoById(world).get(operation.primaryTargetRegionId)?.center;
+  return [...units]
+    .sort((a, b) =>
+      scoreOperationUnit(a, primaryCenter, world) -
+        scoreOperationUnit(b, primaryCenter, world) ||
+      compareIds(a.id, b.id),
+    )
+    .slice(0, desiredCount);
+}
+
+function selectExploitationTarget(
+  world: WorldState,
+  operation: OffensiveOperation,
+  front: OperationalSector,
+  plan: NationFrontPlan,
+  exploitationUnits: UnitState[],
+): ExploitationTargetSelection | null {
+  if (exploitationUnits.length === 0) return null;
+  const settings = WORLD_BALANCE.war.landFront.offensiveOperation;
+  const depths = collectShallowExploitationDepths(
+    world,
+    operation.primaryTargetRegionId,
+    operation.nationId,
+    operation.enemyNationId,
+    settings.exploitationMaximumDepth,
+  );
+  const forceStrength = sumUnitStrength(exploitationUnits);
+  const candidates: ExploitationTargetSelection[] = [];
+  for (const [regionId, depth] of depths) {
+    if (!isRegionControlledBy(world, regionId, operation.enemyNationId)) continue;
+    const sector = findExploitationSectorForRegion(world, operation, regionId, front.id);
+    if (!sector) continue;
+    const position = findExploitationCoveragePosition(
+      world,
+      sector.id,
+      operation.enemyNationId,
+      regionId,
+    );
+    if (!position) continue;
+    world.offensiveOperations.exploitationCandidateEvaluatedCounts[position.state] += 1;
+    if (position.state === "covered") continue;
+    if (hasEnemyReserveNearExploitation(world, operation.enemyNationId, sector.id, regionId)) {
+      world.offensiveOperations.exploitationRejectionCounts.reserveThreat += 1;
+      continue;
+    }
+    const localEnemyStrength = Math.max(
+      position.defenderStrength,
+      getExploitationLocalEnemyStrength(world, regionId, operation.enemyNationId),
+    );
+    const localRatio = getStrengthRatio(forceStrength, localEnemyStrength);
+    if (localRatio < settings.exploitationStartStrengthRatio) {
+      world.offensiveOperations.exploitationRejectionCounts.insufficientLocalStrength += 1;
+      continue;
+    }
+    const enemySide = getOpposingFrontSide(sector, operation.nationId);
+    if (!enemySide) continue;
+    const coverageScore = position.state === "gap"
+      ? settings.targetScore.frontlineGap
+      : settings.targetScore.frontlineWeak;
+    const localScore = localRatio >= 1.5
+      ? settings.targetScore.localStrengthSuperiority *
+        Math.min(1.5, Math.log2(localRatio) / 2)
+      : 0;
+    const recentBreakthroughScore =
+      getFrontlineCoverage(world, sector.id, operation.enemyNationId)?.breakthroughCount
+        ? settings.targetScore.recentBreakthrough
+        : 0;
+    const sameSectorScore = sector.id === front.id ? settings.exploitationSameSectorBonus : 0;
+    const scoringStartedAt = world.instrumentation ? performance.now() : 0;
+    const score = scoreOperationTarget(
+      world,
+      regionId,
+      plan,
+      exploitationUnits,
+      operation.enemyNationId,
+      new Set(enemySide.borderRegionIds),
+      depth,
+    ) + coverageScore + localScore + recentBreakthroughScore + sameSectorScore;
+    if (world.instrumentation) {
+      world.instrumentation.recordDuration(
+        "offensiveOperation.exploitationCandidateScoring",
+        performance.now() - scoringStartedAt,
+      );
+    }
+    candidates.push({
+      regionId,
+      sectorId: sector.id,
+      depth,
+      score: finiteNumber(score),
+      coverageState: position.state,
+      localEnemyStrength: finiteNumber(localEnemyStrength),
+    });
+  }
+  const selected = candidates.sort((a, b) =>
+    b.score - a.score || a.depth - b.depth || compareIds(a.regionId, b.regionId),
+  )[0] ?? null;
+  if (selected) {
+    world.offensiveOperations.exploitationSelectedCounts[selected.coverageState] += 1;
+  }
+  return selected;
+}
+
+function collectShallowExploitationDepths(
+  world: WorldState,
+  startId: MesoRegionId,
+  nationId: NationId,
+  enemyNationId: NationId,
+  maximumDepth: number,
+): Map<MesoRegionId, number> {
+  const result = new Map<MesoRegionId, number>();
+  const visited = new Set<MesoRegionId>([startId]);
+  let frontier = [startId];
+  const mesoById = getMesoById(world);
+  const neighborsById = getNeighborsById(world);
+  for (let depth = 1; depth <= maximumDepth; depth += 1) {
+    const next: MesoRegionId[] = [];
+    for (const currentId of frontier.sort(compareIds)) {
+      for (const regionId of [...(neighborsById.get(currentId) ?? [])].sort(compareIds)) {
+        if (visited.has(regionId)) continue;
+        visited.add(regionId);
+        const meso = mesoById.get(regionId);
+        if (!meso || meso.type === "sea") continue;
+        const traversable =
+          isRegionControlledBy(world, regionId, nationId) ||
+          isRegionControlledBy(world, regionId, enemyNationId);
+        if (!traversable) continue;
+        next.push(regionId);
+        if (isRegionControlledBy(world, regionId, enemyNationId)) {
+          result.set(regionId, depth);
+        }
+      }
+    }
+    frontier = next;
+    if (frontier.length === 0) break;
+  }
+  return result;
+}
+
+function findExploitationFront(
+  world: WorldState,
+  operation: OffensiveOperation,
+): OperationalSector | undefined {
+  const current = world.landFronts.operationalSectorsById.get(operation.frontId);
+  if (
+    current &&
+    getFrontSide(current, operation.nationId)?.influenceRegionIds.includes(
+      operation.primaryTargetRegionId,
+    )
+  ) {
+    return current;
+  }
+  return world.landFronts.operationalSectors
+    .filter((sector) => {
+      const samePair =
+        (sector.nationAId === operation.nationId && sector.nationBId === operation.enemyNationId) ||
+        (sector.nationBId === operation.nationId && sector.nationAId === operation.enemyNationId);
+      return samePair && !!getFrontSide(sector, operation.nationId)?.influenceRegionIds.includes(
+        operation.primaryTargetRegionId,
+      );
+    })
+    .sort((a, b) => compareIds(a.id, b.id))[0];
+}
+
+function findExploitationFrontForTarget(
+  world: WorldState,
+  operation: OffensiveOperation,
+  targetId: MesoRegionId,
+): OperationalSector | undefined {
+  return findExploitationSectorForRegion(world, operation, targetId, operation.frontId);
+}
+
+function findExploitationSectorForRegion(
+  world: WorldState,
+  operation: OffensiveOperation,
+  regionId: MesoRegionId,
+  preferredSectorId: FrontId,
+): OperationalSector | undefined {
+  return world.landFronts.operationalSectors
+    .filter((sector) => {
+      const samePair =
+        (sector.nationAId === operation.nationId && sector.nationBId === operation.enemyNationId) ||
+        (sector.nationBId === operation.nationId && sector.nationAId === operation.enemyNationId);
+      return samePair && !!getOpposingFrontSide(sector, operation.nationId)?.influenceRegionIds.includes(regionId);
+    })
+    .sort((a, b) =>
+      Number(b.id === preferredSectorId) - Number(a.id === preferredSectorId) ||
+      compareIds(a.id, b.id),
+    )[0];
+}
+
+function findExploitationCoveragePosition(
+  world: WorldState,
+  sectorId: FrontId,
+  enemyNationId: NationId,
+  regionId: MesoRegionId,
+): FrontlineDefensivePosition | undefined {
+  const startedAt = world.instrumentation ? performance.now() : 0;
+  const result = getFrontlineCoverage(world, sectorId, enemyNationId)?.positions.find(
+    (position) => position.friendlyRegionId === regionId,
+  );
+  if (world.instrumentation) {
+    world.instrumentation.recordDuration(
+      "offensiveOperation.exploitationCoverageLookup",
+      performance.now() - startedAt,
+    );
+  }
+  return result;
+}
+
+function getExploitationLocalEnemyStrength(
+  world: WorldState,
+  targetId: MesoRegionId,
+  enemyNationId: NationId,
+): number {
+  const startedAt = world.instrumentation ? performance.now() : 0;
+  const strength = getNearbyEnemyStrength(world, targetId, enemyNationId);
+  if (world.instrumentation) {
+    world.instrumentation.recordDuration(
+      "offensiveOperation.exploitationLocalStrength",
+      performance.now() - startedAt,
+    );
+  }
+  return strength;
+}
+
+function hasEnemyReserveNearExploitation(
+  world: WorldState,
+  enemyNationId: NationId,
+  sectorId: FrontId,
+  targetId: MesoRegionId,
+): boolean {
+  const neighboringIds = new Set([targetId, ...(getNeighborsById(world).get(targetId) ?? [])]);
+  return world.strategicReserves.reserves.some((reserve) => {
+    const deployment = reserve.deployment;
+    return reserve.nationId === enemyNationId &&
+      !!deployment &&
+      deployment.status !== "returning" &&
+      (deployment.targetFrontId === sectorId ||
+        deployment.targetRegionIds.some((regionId) => neighboringIds.has(regionId)));
+  });
+}
+
+function getOperationUnits(world: WorldState, unitIds: readonly UnitId[]): UnitState[] {
+  const ids = new Set(unitIds);
+  return world.units.filter(
+    (unit) => ids.has(unit.id) && unit.domain === "land",
+  );
+}
+
+function isExploitationTargetWithinDepth(
+  world: WorldState,
+  operation: OffensiveOperation,
+  targetId: MesoRegionId,
+): boolean {
+  return collectShallowExploitationDepths(
+    world,
+    operation.primaryTargetRegionId,
+    operation.nationId,
+    operation.enemyNationId,
+    WORLD_BALANCE.war.landFront.offensiveOperation.exploitationMaximumDepth,
+  ).has(targetId);
+}
+
+function assignExploitationTargets(operation: OffensiveOperation): void {
+  const targetId = operation.exploitationTargetRegionId;
+  if (!targetId) return;
+  operation.unitTargetRegionIds.clear();
+  for (const unitId of operation.exploitationUnitIds) {
+    operation.unitTargetRegionIds.set(unitId, targetId);
+  }
+  for (const unitId of operation.exploitationHoldUnitIds) {
+    operation.unitTargetRegionIds.set(unitId, operation.primaryTargetRegionId);
+  }
+}
+
+function pruneExploitationForce(
+  world: WorldState,
+  operation: OffensiveOperation,
+): boolean {
+  const liveIds = new Set(getOperationUnits(world, operation.assignedUnitIds).map((unit) => unit.id));
+  const assignedUnitIds = operation.assignedUnitIds.filter((unitId) => liveIds.has(unitId));
+  const exploitationUnitIds = operation.exploitationUnitIds.filter((unitId) => liveIds.has(unitId));
+  const exploitationHoldUnitIds = operation.exploitationHoldUnitIds.filter((unitId) => liveIds.has(unitId));
+  const changed =
+    !arraysEqual(operation.assignedUnitIds, assignedUnitIds) ||
+    !arraysEqual(operation.exploitationUnitIds, exploitationUnitIds) ||
+    !arraysEqual(operation.exploitationHoldUnitIds, exploitationHoldUnitIds);
+  operation.assignedUnitIds = assignedUnitIds;
+  operation.exploitationUnitIds = exploitationUnitIds;
+  operation.exploitationHoldUnitIds = exploitationHoldUnitIds;
+  operation.assignedStrength = sumUnitStrength(getOperationUnits(world, assignedUnitIds));
+  if (changed) assignExploitationTargets(operation);
+  return changed;
 }
 
 function finishOperation(
@@ -1045,6 +1710,8 @@ function finishOperation(
   world.offensiveOperations.phaseTransitionCount += 1;
   world.instrumentation?.incrementCounter("offensiveOperation.phaseTransitions");
   if (outcome === "success") {
+    recordOperationCaptures(world, operation);
+    world.offensiveOperations.successfulCapturedRegionCount += operation.capturedRegionIds.length;
     world.offensiveOperations.completedCount += 1;
     world.instrumentation?.incrementCounter("offensiveOperation.completed");
     recordEvent(world, operation, "success", completionReason);
@@ -1235,7 +1902,7 @@ function sampleOperationMetrics(world: WorldState): void {
     0,
   );
   for (const operation of active) {
-    if (operation.phase !== "attacking") {
+    if (operation.phase !== "attacking" && operation.phase !== "exploiting") {
       continue;
     }
     const targetCounts = new Map<MesoRegionId, number>();
@@ -1328,8 +1995,40 @@ function cloneOperation(operation: OffensiveOperation): OffensiveOperation {
     supportingTargetRegionIds: [...operation.supportingTargetRegionIds],
     assignedUnitIds: [...operation.assignedUnitIds],
     initialAssignedUnitIds: [...operation.initialAssignedUnitIds],
+    exploitationUnitIds: [...operation.exploitationUnitIds],
+    exploitationHoldUnitIds: [...operation.exploitationHoldUnitIds],
+    capturedRegionIds: [...operation.capturedRegionIds],
     unitTargetRegionIds: new Map(operation.unitTargetRegionIds),
     reasonFlags: [...operation.reasonFlags],
+  };
+}
+
+function recordOperationCaptures(world: WorldState, operation: OffensiveOperation): void {
+  const captured = new Set(operation.capturedRegionIds);
+  for (const regionId of [
+    operation.primaryTargetRegionId,
+    ...operation.supportingTargetRegionIds,
+    ...(operation.exploitationTargetRegionId ? [operation.exploitationTargetRegionId] : []),
+  ]) {
+    if (isRegionControlledBy(world, regionId, operation.nationId)) captured.add(regionId);
+  }
+  operation.capturedRegionIds = [...captured].sort(compareIds);
+}
+
+function createExploitationStopCounts(): Record<ExploitationStopReason, number> {
+  return {
+    "target-occupied": 0,
+    "covered-frontline": 0,
+    "local-strength-disadvantage": 0,
+    "enemy-reserve-arrival": 0,
+    "retreat-started": 0,
+    "capital-emergency": 0,
+    "front-disappeared": 0,
+    timeout: 0,
+    "force-depleted": 0,
+    "allocation-lost": 0,
+    "war-ended": 0,
+    "target-invalid": 0,
   };
 }
 

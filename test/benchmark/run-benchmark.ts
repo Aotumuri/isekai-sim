@@ -44,6 +44,10 @@ function parseArguments(args: string[]): ParsedArguments {
   if (reorganizationMode !== "on" && reorganizationMode !== "off") {
     throw new Error(`Unknown reorganization mode: ${reorganizationMode}`);
   }
+  const exploitationMode = readOption(args, "--exploitation") ?? "on";
+  if (exploitationMode !== "on" && exploitationMode !== "off") {
+    throw new Error(`Unknown exploitation mode: ${exploitationMode}`);
+  }
   return {
     options: {
       scenario: scenario as BenchmarkScenarioName,
@@ -57,6 +61,7 @@ function parseArguments(args: string[]): ParsedArguments {
       quick,
       reserveEnabled: reserveMode === "on",
       reorganizationEnabled: reorganizationMode === "on",
+      exploitationEnabled: exploitationMode === "on",
     },
     outputPath: readOption(args, "--output"),
   };

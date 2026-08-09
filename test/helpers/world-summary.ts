@@ -38,6 +38,18 @@ export function summarizeWorld(world: WorldState): WorldSummary {
   const coverage = world.frontlineCoverage.coverages;
   const frontlineSegments = coverage.reduce((total, item) => total + item.positions.length, 0);
   const gapRuns = coverage.filter((item) => item.maxGapLength > 0);
+  const exploitation = world.offensiveOperations;
+  const exploitationOtherStops = Object.entries(exploitation.exploitationStopCounts)
+    .filter(([reason]) => ![
+      "covered-frontline",
+      "local-strength-disadvantage",
+      "enemy-reserve-arrival",
+      "retreat-started",
+      "capital-emergency",
+      "front-disappeared",
+      "timeout",
+    ].includes(reason))
+    .reduce((total, [, count]) => total + count, 0);
   return {
     nations: world.nations.length,
     activeNations,
@@ -73,6 +85,9 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     activeOffensiveOperations: world.offensiveOperations.operations.filter(
       (operation) => operation.phase !== "recovering",
     ).length,
+    exploitingOffensiveOperations: world.offensiveOperations.operations.filter(
+      (operation) => operation.phase === "exploiting",
+    ).length,
     recoveringOffensiveOperations: world.offensiveOperations.operations.filter(
       (operation) => operation.phase === "recovering",
     ).length,
@@ -87,6 +102,46 @@ export function summarizeWorld(world: WorldState): WorldSummary {
         : 0,
     operationMaxTargetConcentration:
       world.offensiveOperations.maxTargetConcentration,
+    operationAverageCapturedRegions: world.offensiveOperations.completedCount > 0
+      ? world.offensiveOperations.successfulCapturedRegionCount / world.offensiveOperations.completedCount
+      : 0,
+    operationAverageAttackDuration: resolvedOperations > 0
+      ? world.offensiveOperations.attackingDurationTicks / resolvedOperations
+      : 0,
+    exploitationStarts: exploitation.exploitationStartedCount,
+    exploitationSuccesses: exploitation.exploitationSuccessCount,
+    exploitationSuccessRatePercent: exploitation.exploitationStartedCount > 0
+      ? exploitation.exploitationSuccessCount / exploitation.exploitationStartedCount * 100
+      : 0,
+    exploitationAverageDepth: exploitation.exploitationStartedCount > 0
+      ? exploitation.exploitationDepthTotal / exploitation.exploitationStartedCount
+      : 0,
+    exploitationAverageForceUnits: exploitation.exploitationStartedCount > 0
+      ? exploitation.exploitationForceUnitTotal / exploitation.exploitationStartedCount
+      : 0,
+    exploitationAverageForceStrength: exploitation.exploitationStartedCount > 0
+      ? exploitation.exploitationForceStrengthTotal / exploitation.exploitationStartedCount
+      : 0,
+    exploitationAverageDuration: exploitation.exploitationStoppedCount > 0
+      ? exploitation.exploitationDurationTicks / exploitation.exploitationStoppedCount
+      : 0,
+    exploitationStopsCovered: exploitation.exploitationStopCounts["covered-frontline"],
+    exploitationStopsLocalDisadvantage: exploitation.exploitationStopCounts["local-strength-disadvantage"],
+    exploitationStopsReserve: exploitation.exploitationStopCounts["enemy-reserve-arrival"],
+    exploitationStopsRetreat: exploitation.exploitationStopCounts["retreat-started"],
+    exploitationStopsCapital: exploitation.exploitationStopCounts["capital-emergency"],
+    exploitationStopsFrontDisappeared: exploitation.exploitationStopCounts["front-disappeared"],
+    exploitationStopsTimeout: exploitation.exploitationStopCounts.timeout,
+    exploitationStopsOther: exploitationOtherStops,
+    exploitationCandidatesGap: exploitation.exploitationCandidateEvaluatedCounts.gap,
+    exploitationCandidatesWeak: exploitation.exploitationCandidateEvaluatedCounts.weak,
+    exploitationCandidatesCovered: exploitation.exploitationCandidateEvaluatedCounts.covered,
+    exploitationSelectedGap: exploitation.exploitationSelectedCounts.gap,
+    exploitationSelectedWeak: exploitation.exploitationSelectedCounts.weak,
+    exploitationSelectedCovered: exploitation.exploitationSelectedCounts.covered,
+    exploitationRejectedLocalStrength: exploitation.exploitationRejectionCounts.insufficientLocalStrength,
+    exploitationRejectedUnreachable: exploitation.exploitationRejectionCounts.unreachable,
+    exploitationRejectedReserve: exploitation.exploitationRejectionCounts.reserveThreat,
     activeRetreatPlans: world.retreatPlans.plans.length,
     retreatCommittedUnits: world.retreatPlans.retreatIdByUnitId.size,
     retreatsCreated: world.retreatPlans.createdCount,

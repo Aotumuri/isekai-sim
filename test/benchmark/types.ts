@@ -9,6 +9,7 @@ export const BENCHMARK_SCENARIOS = [
   "strategic-reserve",
   "reorganization-heavy",
   "long-frontline",
+  "gap-exploitation",
 ] as const;
 
 export type BenchmarkScenarioName = (typeof BENCHMARK_SCENARIOS)[number];
@@ -26,6 +27,7 @@ export interface BenchmarkOptions {
   quick: boolean;
   reserveEnabled: boolean;
   reorganizationEnabled: boolean;
+  exploitationEnabled: boolean;
 }
 
 export interface MetricSummary {
@@ -69,6 +71,7 @@ export interface WorldSummary {
   frontlineAssignmentSwitches: number;
   frontlineBreakthroughs: number;
   activeOffensiveOperations: number;
+  exploitingOffensiveOperations: number;
   recoveringOffensiveOperations: number;
   operationAssignedUnits: number;
   operationsCreated: number;
@@ -77,6 +80,32 @@ export interface WorldSummary {
   operationsCancelled: number;
   operationSuccessRatePercent: number;
   operationMaxTargetConcentration: number;
+  operationAverageCapturedRegions: number;
+  operationAverageAttackDuration: number;
+  exploitationStarts: number;
+  exploitationSuccesses: number;
+  exploitationSuccessRatePercent: number;
+  exploitationAverageDepth: number;
+  exploitationAverageForceUnits: number;
+  exploitationAverageForceStrength: number;
+  exploitationAverageDuration: number;
+  exploitationStopsCovered: number;
+  exploitationStopsLocalDisadvantage: number;
+  exploitationStopsReserve: number;
+  exploitationStopsRetreat: number;
+  exploitationStopsCapital: number;
+  exploitationStopsFrontDisappeared: number;
+  exploitationStopsTimeout: number;
+  exploitationStopsOther: number;
+  exploitationCandidatesGap: number;
+  exploitationCandidatesWeak: number;
+  exploitationCandidatesCovered: number;
+  exploitationSelectedGap: number;
+  exploitationSelectedWeak: number;
+  exploitationSelectedCovered: number;
+  exploitationRejectedLocalStrength: number;
+  exploitationRejectedUnreachable: number;
+  exploitationRejectedReserve: number;
   activeRetreatPlans: number;
   retreatCommittedUnits: number;
   retreatsCreated: number;
@@ -170,6 +199,7 @@ export interface BenchmarkResult {
   frameDeltaMs: number;
   reserveEnabled: boolean;
   reorganizationEnabled: boolean;
+  exploitationEnabled: boolean;
   virtualElapsedMs: number;
   wallClockMs: number;
   effectiveSimulationSpeed: number;

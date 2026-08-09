@@ -312,6 +312,19 @@ export function formatFrontLabel(
         `OP ${nationId} ${operation.phase.toUpperCase()} ${operation.id}`,
         `  targets ${targets.join(", ")}`,
       );
+      if (operation.exploitationStartedAtTick !== null) {
+        const startedAt = world.instrumentation ? performance.now() : 0;
+        lines.push(
+          `  E target ${operation.exploitationTargetRegionId ?? "none"} | depth ${operation.exploitationDepth}`,
+          `  force ${operation.exploitationUnitIds.length}/${operation.assignedUnitIds.length} units (${formatStrength(operation.exploitationForceStrength)})`,
+          `  ${operation.exploitationTargetCoverageState ?? "none"} | local ${formatStrength(operation.exploitationTargetLocalEnemyStrength)} | ratio ${formatRatio(getStrengthRatio(operation.exploitationForceStrength, operation.exploitationTargetLocalEnemyStrength))} | score ${operation.exploitationTargetScore.toFixed(1)}`,
+          `  stop ${operation.exploitationStopReason ?? "none"}`,
+        );
+        world.instrumentation?.recordDuration(
+          "debugOverlay.exploitation",
+          performance.now() - startedAt,
+        );
+      }
     }
     const retreat = getRetreatPlanForFront(world, front.id, nationId);
     if (retreat) {
@@ -386,6 +399,19 @@ function appendOperationalDetails(
           `  local defense ${formatStrength(operation.targetLocalDefenderStrength)} | tactical ${operation.targetTacticalScore.toFixed(1)}`,
           `  reasons ${operation.reasonFlags.join(", ")}`,
         );
+        if (operation.exploitationStartedAtTick !== null) {
+          const startedAt = world.instrumentation ? performance.now() : 0;
+          lines.push(
+            `  E target ${operation.exploitationTargetRegionId ?? "none"} | depth ${operation.exploitationDepth}`,
+            `  force ${operation.exploitationUnitIds.length}/${operation.assignedUnitIds.length} units (${formatStrength(operation.exploitationForceStrength)})`,
+            `  ${operation.exploitationTargetCoverageState ?? "none"} | local ${formatStrength(operation.exploitationTargetLocalEnemyStrength)} | ratio ${formatRatio(getStrengthRatio(operation.exploitationForceStrength, operation.exploitationTargetLocalEnemyStrength))} | score ${operation.exploitationTargetScore.toFixed(1)}`,
+            `  stop ${operation.exploitationStopReason ?? "none"}`,
+          );
+          world.instrumentation?.recordDuration(
+            "debugOverlay.exploitation",
+            performance.now() - startedAt,
+          );
+        }
       }
     }
     const retreat = getRetreatPlanForFront(world, front.id, nationId);
@@ -442,6 +468,21 @@ function drawFrontMarkers(
       drawMarker(layer, world, operation.primaryTargetRegionId, primaryLabel, color, "diamond");
       for (const targetId of operation.supportingTargetRegionIds) {
         drawMarker(layer, world, targetId, "+", color, "diamond");
+      }
+      if (operation.phase === "exploiting" && operation.exploitationTargetRegionId) {
+        const startedAt = world.instrumentation ? performance.now() : 0;
+        drawMarker(
+          layer,
+          world,
+          operation.exploitationTargetRegionId,
+          "E",
+          0xff8c42,
+          "diamond",
+        );
+        world.instrumentation?.recordDuration(
+          "debugOverlay.exploitation",
+          performance.now() - startedAt,
+        );
       }
     }
     const retreat = getRetreatPlanForFront(world, front.id, nationId);

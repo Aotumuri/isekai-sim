@@ -11,6 +11,7 @@ import { setupCapitalThreat } from "./capital-threat";
 import { setupStrategicReserve } from "./strategic-reserve";
 import { setupReorganizationHeavy } from "./reorganization-heavy";
 import { setupLongFrontline } from "./long-frontline";
+import { setupGapExploitation } from "./gap-exploitation";
 import type { ScenarioOptions, ScenarioSetup } from "./types";
 
 const scenarioSetups: Record<BenchmarkScenarioName, ScenarioSetup> = {
@@ -24,6 +25,7 @@ const scenarioSetups: Record<BenchmarkScenarioName, ScenarioSetup> = {
   "strategic-reserve": setupStrategicReserve,
   "reorganization-heavy": setupReorganizationHeavy,
   "long-frontline": setupLongFrontline,
+  "gap-exploitation": setupGapExploitation,
 };
 
 export function createScenarioWorld(
@@ -33,6 +35,7 @@ export function createScenarioWorld(
   const world = createSeededWorld(options);
   world.strategicReserves.enabled = options.reserveEnabled ?? true;
   world.reorganization.enabled = options.reorganizationEnabled ?? true;
+  world.offensiveOperations.exploitationEnabled = options.exploitationEnabled ?? true;
   scenarioSetups[name](world, options);
   return world;
 }

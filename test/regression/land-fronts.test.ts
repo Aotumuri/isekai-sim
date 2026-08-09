@@ -1141,6 +1141,150 @@ test("occupying the primary target completes an attacking operation", () => {
   assert.equal(operation.completionReason, "primary-target-occupied");
 });
 
+test("successful attack exploits an adjacent gap with a bounded force split", () => {
+  const world = createExploitationPursuitWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  advanceOperationEvaluation(
+    world,
+    WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks,
+  );
+  world.occupation.mesoById.set(operation.primaryTargetRegionId, NATION_A);
+  world.occupation.version += 1;
+  updateAllocationSystem(world);
+  updateFrontlineCoverage(world);
+
+  updateOffensiveOperations(world);
+
+  assert.equal(
+    operation.phase,
+    "exploiting",
+    `${formatOffensiveOperationSummary(world)}\n${JSON.stringify(world.frontlineCoverage.coverages)}`,
+  );
+  assert.equal(operation.exploitationTargetRegionId, id("b2"));
+  assert.equal(operation.exploitationDepth, 1);
+  assert.equal(
+    operation.exploitationUnitIds.length,
+    Math.ceil(operation.assignedUnitIds.length * 0.7),
+  );
+  assert(operation.exploitationHoldUnitIds.length > 0);
+  assert(
+    operation.exploitationHoldUnitIds.every(
+      (unitId) => operation.unitTargetRegionIds.get(unitId) === operation.primaryTargetRegionId,
+    ),
+  );
+
+  const stableTarget = operation.exploitationTargetRegionId;
+  updateOffensiveOperations(world);
+  assert.equal(operation.exploitationTargetRegionId, stableTarget);
+
+  world.occupation.mesoById.set(id("b2"), NATION_A);
+  world.occupation.version += 1;
+  updateOffensiveOperations(world);
+  assert.equal(operation.phase, "recovering");
+  assert.equal(operation.exploitationStopReason, "target-occupied");
+  assert.equal(world.offensiveOperations.exploitationSuccessCount, 1);
+  assert.deepEqual(operation.capturedRegionIds, [id("b1"), id("b2")]);
+});
+
+test("exploitation rejects a weak route without local force superiority", () => {
+  const world = createExploitationPursuitWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  advanceOperationEvaluation(
+    world,
+    WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks,
+  );
+  world.occupation.mesoById.set(operation.primaryTargetRegionId, NATION_A);
+  world.occupation.version += 1;
+  updateAllocationSystem(world);
+  updateFrontlineCoverage(world);
+  const enemyUnit = world.units.find((unit) => unit.nationId === NATION_B);
+  assert(enemyUnit);
+  setUnitStrength(enemyUnit, 1_000);
+
+  updateOffensiveOperations(world);
+
+  assert.equal(operation.phase, "recovering");
+  assert.equal(operation.exploitationStartedAtTick, null);
+  assert(world.offensiveOperations.exploitationRejectionCounts.insufficientLocalStrength > 0);
+});
+
+test("an exploitation target persists until coverage closes, then stops", () => {
+  const world = createExploitationPursuitWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  advanceOperationEvaluation(
+    world,
+    WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks,
+  );
+  world.occupation.mesoById.set(operation.primaryTargetRegionId, NATION_A);
+  world.occupation.version += 1;
+  updateAllocationSystem(world);
+  updateFrontlineCoverage(world);
+  updateOffensiveOperations(world);
+  assert.equal(operation.phase, "exploiting");
+  const targetId = operation.exploitationTargetRegionId;
+  const targetPosition = world.frontlineCoverage.coverages
+    .find((coverage) => coverage.nationId === NATION_B)
+    ?.positions.find((position) => position.friendlyRegionId === targetId);
+  assert(targetPosition);
+  targetPosition.state = "covered";
+
+  updateOffensiveOperations(world);
+
+  assert.equal(operation.exploitationTargetRegionId, targetId);
+  assert.equal(operation.phase, "recovering");
+  assert.equal(operation.exploitationStopReason, "covered-frontline");
+});
+
+test("a city behind a gap beats a stronger weak capital route", () => {
+  const { world, operation } = prepareStrategicExploitationWorld();
+  const enemyCoverage = world.frontlineCoverage.coverages.find(
+    (coverage) => coverage.nationId === NATION_B,
+  );
+  assert(enemyCoverage);
+  const city = enemyCoverage.positions.find((position) => position.friendlyRegionId === id("city"));
+  const capital = enemyCoverage.positions.find((position) => position.friendlyRegionId === id("capital"));
+  assert(city && capital);
+  city.state = "gap";
+  city.defenderStrength = 0;
+  capital.state = "weak";
+  capital.defenderStrength = 300;
+
+  updateOffensiveOperations(world);
+
+  assert.equal(operation.phase, "exploiting");
+  assert.equal(operation.exploitationTargetRegionId, id("city"));
+  assert.equal(operation.exploitationTargetCoverageState, "gap");
+  assert.equal(operation.exploitationTargetLocalEnemyStrength, 0);
+  assert.equal(operation.exploitationForceStrength, 200);
+  assert.equal(operation.exploitationTargetScore, 144.55);
+});
+
+test("a gap toward the capital beats a weaker city route", () => {
+  const { world, operation } = prepareStrategicExploitationWorld();
+  const enemyCoverage = world.frontlineCoverage.coverages.find(
+    (coverage) => coverage.nationId === NATION_B,
+  );
+  assert(enemyCoverage);
+  const city = enemyCoverage.positions.find((position) => position.friendlyRegionId === id("city"));
+  const capital = enemyCoverage.positions.find((position) => position.friendlyRegionId === id("capital"));
+  assert(city && capital);
+  city.state = "weak";
+  city.defenderStrength = 100;
+  capital.state = "gap";
+  capital.defenderStrength = 0;
+
+  updateOffensiveOperations(world);
+
+  assert.equal(operation.phase, "exploiting");
+  assert.equal(operation.exploitationTargetRegionId, id("capital"));
+  assert.equal(operation.exploitationTargetCoverageState, "gap");
+  assert.equal(operation.exploitationForceStrength, 200);
+  assert(Math.abs(operation.exploitationTargetScore - 174.525) < 0.001);
+});
+
 test("a disappearing Front cancels its offensive operation", () => {
   const world = createOperationWorld();
   updateOffensiveOperations(world);
@@ -2625,6 +2769,67 @@ function createOperationClusterWorld(): WorldState {
   }
   updateAllocationSystem(world);
   return world;
+}
+
+function createExploitationPursuitWorld(): WorldState {
+  const world = createFrontWorld(
+    [
+      { id: "a", owner: NATION_A },
+      { id: "b0", owner: NATION_B },
+      { id: "b1", owner: NATION_B, building: "city" },
+      { id: "b2", owner: NATION_B },
+    ],
+    [
+      ["a", "b0"],
+      ["b0", "b1"],
+      ["b1", "b2"],
+    ],
+  );
+  startWar(world, NATION_A, NATION_B);
+  for (let index = 0; index < 8; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_A, "a", "Infantry"), 100);
+  }
+  setUnitStrength(addLandUnit(world, NATION_B, "b1", "Infantry"), 40);
+  updateAllocationSystem(world);
+  return world;
+}
+
+function prepareStrategicExploitationWorld(): {
+  world: WorldState;
+  operation: OffensiveOperation;
+} {
+  const world = createFrontWorld(
+    [
+      { id: "a", owner: NATION_A },
+      { id: "b0", owner: NATION_B },
+      { id: "city", owner: NATION_B, building: "city" },
+      { id: "capital", owner: NATION_B, building: "capital" },
+    ],
+    [
+      ["a", "b0"],
+      ["b0", "city"],
+      ["b0", "capital"],
+    ],
+  );
+  startWar(world, NATION_A, NATION_B);
+  for (let index = 0; index < 8; index += 1) {
+    setUnitStrength(addLandUnit(world, NATION_A, "a", "Infantry"), 100);
+  }
+  updateAllocationSystem(world);
+  updateFrontlineCoverage(world);
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  operation.primaryTargetRegionId = id("b0");
+  operation.supportingTargetRegionIds = [];
+  advanceOperationEvaluation(
+    world,
+    WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks,
+  );
+  world.occupation.mesoById.set(id("b0"), NATION_A);
+  world.occupation.version += 1;
+  updateAllocationSystem(world);
+  updateFrontlineCoverage(world);
+  return { world, operation };
 }
 
 function createGapExploitationWorld(): WorldState {

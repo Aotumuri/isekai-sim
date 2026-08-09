@@ -280,7 +280,13 @@ function buildPositions(
     : undefined;
   const enemyOperationTargets = new Set(
     enemyOperation && enemyOperation.phase !== "recovering"
-      ? [enemyOperation.primaryTargetRegionId, ...enemyOperation.supportingTargetRegionIds]
+      ? [
+          enemyOperation.primaryTargetRegionId,
+          ...enemyOperation.supportingTargetRegionIds,
+          ...(enemyOperation.exploitationTargetRegionId
+            ? [enemyOperation.exploitationTargetRegionId]
+            : []),
+        ]
       : [],
   );
   return ordered.map((friendlyRegionId, segmentIndex) => {

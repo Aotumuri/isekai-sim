@@ -268,6 +268,13 @@ export const WORLD_BALANCE = {
         supportingTargetCount: 2,
         supportingTargetRadius: 2,
         targetFractions: [0.6, 0.25, 0.15],
+        exploitationForceFraction: 0.7,
+        exploitationMaximumDepth: 2,
+        exploitationTimeoutTicks: 80,
+        exploitationMinimumRemainingStrengthRatio: 0.7,
+        exploitationStartStrengthRatio: 1.25,
+        exploitationStopStrengthRatio: 1,
+        exploitationSameSectorBonus: 12,
         targetScore: {
           capital: 60,
           city: 30,
