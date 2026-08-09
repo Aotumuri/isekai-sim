@@ -114,7 +114,7 @@ test("AI uses one approach when only one is viable or a gap should be taken imme
   assert.equal(planOperationApproaches(gapWorld, A, targetSelection("gap", 0), units, true).regionIds.length, 1);
 });
 
-test("Operation synchronization waits until every planned approach has meaningful staged strength", () => {
+test("Approach readiness uses the same staging radius as preparation", () => {
   const world = approachWorld();
   const units = [unit("u1", SOURCES[0]), unit("u2", SOURCES[0]), unit("u3", SOURCES[0]), unit("u4", SOURCES[1])];
   world.units = units;
@@ -124,9 +124,10 @@ test("Operation synchronization waits until every planned approach has meaningfu
     approachRegionByUnitId: new Map(units.map((item, index) => [item.id, index < 2 ? SOURCES[0] : SOURCES[1]])),
     plannedStrengthByApproach: new Map([[SOURCES[0], 2_000], [SOURCES[1], 2_000]]),
   } as OffensiveOperation;
-  const waiting = getApproachReadiness(world, operation);
-  assert.equal(waiting.readyCount, 1);
-  assert.equal(waiting.ready, false);
+  const withinApproachRadius = getApproachReadiness(world, operation);
+  assert.equal(withinApproachRadius.readyCount, 2);
+  assert.equal(withinApproachRadius.ready, true);
+  assert.equal(withinApproachRadius.operationCompletion, 1);
   units[2].regionId = SOURCES[1];
   const ready = getApproachReadiness(world, operation);
   assert.equal(ready.readyCount, 2);

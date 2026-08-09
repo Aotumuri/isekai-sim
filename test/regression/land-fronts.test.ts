@@ -1367,6 +1367,37 @@ test("staged operation force transitions from preparing to attacking", () => {
   );
 });
 
+test("a preparing Approach replaces lost strength instead of preserving unit identity", () => {
+  const world = createOperationWorld();
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  const lostId = operation.assignedUnitIds[0];
+  assert(lostId);
+  for (const group of operation.approachGroups) {
+    group.requiredStrength = group.currentAssignedStrength;
+    operation.plannedStrengthByApproach.set(group.regionId, group.requiredStrength);
+  }
+  world.units = world.units.filter((unit) => unit.id !== lostId);
+  const replacement = addLandUnit(world, NATION_A, "a", "Infantry");
+  replacement.id = "replacement-unit" as typeof replacement.id;
+  setUnitStrength(replacement, 100);
+  const allocation = world.frontAllocations.allocationsByFrontNation.get(
+    `${operation.frontId}::${operation.nationId}`,
+  );
+  assert(allocation);
+  allocation.unitIds = [...allocation.unitIds.filter((unitId) => unitId !== lostId), replacement.id];
+  allocation.allocatedStrength += 100;
+  world.frontAllocations.frontIdByUnitId.delete(lostId);
+  world.frontAllocations.frontIdByUnitId.set(replacement.id, operation.frontId);
+
+  updateOffensiveOperations(world);
+
+  assert(!operation.assignedUnitIds.includes(lostId));
+  assert(operation.assignedUnitIds.includes(replacement.id));
+  assert.equal(operation.replacementRecruitCount, 1);
+  assert(operation.approachGroups.some((group) => group.assignedUnitIds.includes(replacement.id)));
+});
+
 test("occupying the primary target completes an attacking operation", () => {
   const world = createOperationWorld();
   updateOffensiveOperations(world);

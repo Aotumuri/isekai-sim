@@ -431,14 +431,7 @@ function appendOperationalDetails(
             Math.max(1, pairAllocated + reserveContribution)
           : 0;
         const preparationProgress = operation?.phase === "preparing"
-          ? Math.min(1, Math.max(
-            (world.time.fastTick - operation.phaseStartedAtTick) /
-              (operation.isMajorOffensive
-                ? WORLD_BALANCE.war.landFront.stalemate.majorMinimumPreparationTicks
-                : WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks),
-            operation.actualActiveApproachCount /
-              Math.max(1, operation.plannedApproachRegionIds.length),
-          ))
+          ? operation.readinessCompletion
           : operation ? 1 : 0;
         lines.push(
           `AI STATUS ${formatInactivityStatus(stalled.inactivityCategory)} | ${formatInactivityStatus(stalled.inactivityReason)}`,
@@ -468,9 +461,9 @@ function appendOperationalDetails(
         lines.push(
           `  primary ${operation.primaryTargetRegionId} | coverage ${operation.targetCoverageState ?? "none"}`,
           `  local defense ${formatStrength(operation.targetLocalDefenderStrength)} | tactical ${operation.targetTacticalScore.toFixed(1)}`,
-          `  APPROACHES ${operation.actualActiveApproachCount}/${operation.plannedApproachRegionIds.length} | sync ${operation.synchronizationReady ? "READY" : "WAIT"} ${operation.synchronizationWaitTicks}t`,
-          ...operation.plannedApproachRegionIds.map((regionId, index) =>
-            `    A${index + 1} ${regionId} ${formatStrength(operation.plannedStrengthByApproach.get(regionId) ?? 0)}`
+          `  APPROACHES ${operation.actualActiveApproachCount}/${operation.plannedApproachRegionIds.length} | readiness ${(operation.readinessCompletion * 100).toFixed(0)}% ${operation.synchronizationWaitTicks}t`,
+          ...operation.approachGroups.map((group, index) =>
+            `    A${index + 1} ${group.regionId} assigned ${formatStrength(group.currentAssignedStrength)}/${formatStrength(group.requiredStrength)} ready ${formatStrength(group.readyStrength)} (${(group.completion * 100).toFixed(0)}%)`
           ),
           `  reasons ${operation.reasonFlags.join(", ")}`,
         );

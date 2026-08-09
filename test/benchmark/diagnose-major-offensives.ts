@@ -39,6 +39,8 @@ interface Sample {
   stagedStrength: number;
   stagedFraction: number;
   readyApproaches: number;
+  operationCompletion: number;
+  averageApproachCompletion: number;
   attackerDirections: number;
   breakthroughCount: number;
 }
@@ -135,6 +137,7 @@ const report = {
   majorOffensiveSuccesses: world.stalematePressure.majorOffensiveSuccesses,
   majorOffensiveFailures: world.stalematePressure.majorOffensiveFailures,
   completedRecords: offensiveRecords.filter((record) => record.result !== null).length,
+  preparation: summarizePreparation(offensiveRecords, world),
   failureDistribution: countBy(
     offensiveRecords.filter((record) => record.result !== "success"),
     (record) => record.failureCategory ?? (record.result === null ? "active at end" : "other"),
@@ -181,7 +184,7 @@ function sampleWorld(
         schwerpunktSelectedTick: assessment?.selectedAtTick ?? null,
         pressure: assessment?.pressure ?? 0,
         priority: plan?.priority ?? 0,
-        plannedForce: operation.initialAssignedStrength,
+        plannedForce: [...operation.plannedStrengthByApproach.values()].reduce((sum, value) => sum + value, 0),
         actualStagedForce: sample.stagedStrength,
         actualStagedFraction: sample.stagedFraction,
         reserveContribution: sample.reserveContribution,
@@ -233,7 +236,7 @@ function sampleWorld(
     record.reserveRecalledDuringOperation ||= reserveWasRecalled(state, operation);
 
     if (record.lastPhase === "preparing" && operation.phase !== "preparing") {
-      record.finalPreparationSample = record.lastSample;
+      record.finalPreparationSample = sample;
       record.attackStartTick = operation.phase === "attacking" || operation.phase === "exploiting"
         ? operation.phaseStartedAtTick
         : null;
@@ -329,10 +332,59 @@ function takeSample(world: WorldState, operation: OffensiveOperation): Sample {
     defenderStrength,
     localSuperiorityRatio: offensiveStrength / Math.max(1, defenderStrength),
     stagedStrength,
-    stagedFraction: operation.assignedUnitIds.length > 0 ? staged.length / operation.assignedUnitIds.length : 0,
+    stagedFraction: Math.min(1, stagedStrength / Math.max(
+      1,
+      [...operation.plannedStrengthByApproach.values()].reduce((sum, strength) => sum + strength, 0),
+    )),
     readyApproaches: operation.actualActiveApproachCount,
+    operationCompletion: operation.readinessCompletion ?? 0,
+    averageApproachCompletion: operation.approachGroups?.length > 0
+      ? operation.approachGroups.reduce((sum, group) => sum + group.completion, 0) / operation.approachGroups.length
+      : 0,
     attackerDirections,
     breakthroughCount: enemyCoverage?.breakthroughCount ?? 0,
+  };
+}
+
+function summarizePreparation(
+  records: MajorOffensiveRecord[],
+  world: WorldState,
+): Record<string, number> {
+  const resolvedPreparation = records.filter((record) => record.preparationDuration !== null);
+  const launched = records.filter((record) => record.attackStartTick !== null);
+  const timeout = records.filter((record) =>
+    record.attackStartTick === null && record.completionReason === "strength-collapsed"
+  );
+  const finalSamples = resolvedPreparation
+    .map((record) => record.finalPreparationSample ?? record.lastSample)
+    .filter((sample): sample is Sample => !!sample);
+  const average = (values: number[]): number =>
+    values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+  return {
+    resolved: resolvedPreparation.length,
+    succeeded: launched.length,
+    successRatePercent: resolvedPreparation.length > 0 ? launched.length / resolvedPreparation.length * 100 : 0,
+    timeoutCount: timeout.length,
+    timeoutRatePercent: resolvedPreparation.length > 0 ? timeout.length / resolvedPreparation.length * 100 : 0,
+    averageStagedPlannedRatio: average(finalSamples.map((sample, index) => {
+      const planned = resolvedPreparation[index]?.plannedForce ?? 0;
+      return planned > 0 ? sample.stagedStrength / planned : 0;
+    })),
+    averageReadyPlannedRatio: average(finalSamples.map((sample, index) => {
+      const planned = resolvedPreparation[index]?.approachCount ?? 0;
+      return planned > 0 ? sample.readyApproaches / planned : 0;
+    })),
+    averageApproachCompletion: average(finalSamples.map((sample) => sample.averageApproachCompletion)),
+    stagingReadinessInconsistencyCount: finalSamples.filter((sample) =>
+      sample.operationCompletion >= 1 && sample.readyApproaches === 0
+    ).length,
+    averageRecruitmentDistance: world.offensiveOperations.recruitmentCount > 0
+      ? world.offensiveOperations.recruitmentDistanceTotal / world.offensiveOperations.recruitmentCount
+      : 0,
+    replacementRecruitCount: world.offensiveOperations.replacementRecruitCount,
+    averagePreparationDuration: average(resolvedPreparation.map((record) => record.preparationDuration ?? 0)),
+    launchedOffensives: launched.length,
+    successfulOffensives: records.filter((record) => record.result === "success").length,
   };
 }
 
