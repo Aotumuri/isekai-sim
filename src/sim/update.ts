@@ -28,6 +28,7 @@ import { updateCollapseAdvances } from "./collapse-advance";
 import { updateBattlefieldTopology } from "./battlefield-topology";
 import { updateSupplyAssessment } from "./supply-assessment";
 import { updateIsolationEffects } from "./isolation-effects";
+import { updateMaritimeLogisticsMovement } from "./maritime-supply";
 import { updateSupplyCutoffAnalysis } from "./supply-cutoff";
 import { updateSupplyDefense } from "./supply-defense";
 import { updateSupplyRelief } from "./supply-relief";
@@ -100,6 +101,7 @@ export function stepFastTick(world: WorldState, dtMs: number): void {
     repositionNavalUnits(world, dtMs);
     updateAmphibiousOperations(world);
   }
+  updateMaritimeLogisticsMovement(world, dtMs);
   startedAt = instrumentation ? performance.now() : 0;
   updateBattles(world);
   if (instrumentation) {

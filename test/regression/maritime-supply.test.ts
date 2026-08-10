@@ -18,7 +18,11 @@ import { createNationFrontPlanState } from "../../src/sim/nation-front-plans";
 import { createNationResourceFlow, createNationResources, type NationRuntime } from "../../src/sim/nation-runtime";
 import { createOccupationState } from "../../src/sim/occupation";
 import { createOffensiveOperationState } from "../../src/sim/offensive-operations";
-import { createReorganizationState } from "../../src/sim/reorganization";
+import {
+  createReorganizationState,
+  getReorganizationPlanForUnit,
+  updateReorganization,
+} from "../../src/sim/reorganization";
 import { createRetreatPlanState } from "../../src/sim/retreat-plans";
 import { createStalematePressureState } from "../../src/sim/stalemate-pressure";
 import { createStrategicProgressState } from "../../src/sim/strategic-progress";
@@ -34,7 +38,8 @@ import {
   updateIsolationEffects,
 } from "../../src/sim/isolation-effects";
 import { createUnitId } from "../../src/sim/unit";
-import { createSimTime } from "../../src/sim/time";
+import { createSimTime, FAST_TICK_MS } from "../../src/sim/time";
+import { updateMaritimeLogisticsMovement } from "../../src/sim/maritime-supply";
 import type { WorldState } from "../../src/sim/world-state";
 import { createWorldCache } from "../../src/sim/world-cache";
 import {
@@ -60,17 +65,174 @@ test("land supply remains capital-component based without ports", () => {
   assert.equal(world.supplyAssessment.maritimeLinks.length, 0);
 });
 
-test("disabled naval gameplay supplies a remote island without ships", () => {
-  const world = createMaritimeWorld();
+test("disabled naval gameplay does not provide abstract shipping", () => {
+  const world = createMaritimeWorld(true, 0);
   assert.equal(world.units.length, 0);
   updateSupplyAssessment(world);
-  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-b")), true);
+  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-b")), false);
   assert(world.supplyAssessment.maritimeLinks.some((link) =>
     link.sourcePortId === id("port-a") &&
     link.destinationPortId === id("port-b") &&
-    link.active &&
-    link.transportSupport.includes("abstract-shipping")
+    !link.active &&
+    link.reason === "no-transport"
   ));
+});
+
+test("one real TransportShip activates one link and cannot support the second hop", () => {
+  const world = createMaritimeWorld(true, 1);
+  updateSupplyAssessment(world);
+  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-b")), true);
+  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-c")), false);
+  assert.equal(world.supplyAssessment.maritimeLogistics.assignments.length, 1);
+  assert.equal(new Set(
+    world.supplyAssessment.maritimeLogistics.assignments.map((assignment) => assignment.transportId),
+  ).size, 1);
+  const active = world.supplyAssessment.maritimeLinks.filter((link) => link.active);
+  assert.equal(active.length, 1);
+  assert.equal(active[0]?.requiredTransportCount, 1);
+});
+
+test("two real TransportShips support both multi-hop links", () => {
+  const world = createMaritimeWorld(true, 2);
+  updateSupplyAssessment(world);
+  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-b")), true);
+  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-c")), true);
+  assert.equal(world.supplyAssessment.maritimeLogistics.assignments.length, 2);
+  assert.equal(new Set(
+    world.supplyAssessment.maritimeLogistics.assignments.map((assignment) => assignment.transportId),
+  ).size, 2);
+});
+
+test("transport destruction breaks supply and a physical replacement restores it", () => {
+  const world = createMaritimeWorld(true, 1);
+  updateSupplyAssessment(world);
+  const lostId = world.supplyAssessment.maritimeLogistics.assignments[0]?.transportId;
+  assert(lostId);
+  world.units = world.units.filter((unit) => unit.id !== lostId);
+  updateSupplyAssessment(world);
+  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-b")), false);
+  assert.equal(world.supplyAssessment.maritimeLogistics.transportLosses, 1);
+  assert.equal(world.supplyAssessment.maritimeLogistics.linksBrokenByTransportLoss, 1);
+
+  const replacement = createUnitForType(
+    createUnitId(world.unitIdCounter++),
+    NATION_A,
+    id("port-a"),
+    "TransportShip",
+  );
+  world.units.push(replacement);
+  updateSupplyAssessment(world);
+  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-b")), true);
+  assert.equal(world.supplyAssessment.maritimeLogistics.assignments[0]?.transportId, replacement.id);
+  assert(world.supplyAssessment.maritimeLogistics.linksRestoredByReplacement > 0);
+});
+
+test("scarce transport deterministically prioritizes a remote component with land forces", () => {
+  const first = createMaritimeWorld(true, 1);
+  const second = createMaritimeWorld(true, 1);
+  for (const world of [first, second]) {
+    connect(world, "sea-ab", "sea-cd");
+    world.mapVersion += 1;
+    world.units.push(createUnitForType(
+      createUnitId(world.unitIdCounter++), NATION_A, id("island-c"), "Infantry",
+    ));
+    updateSupplyAssessment(world);
+  }
+  const summarize = (world: WorldState) => world.supplyAssessment.maritimeLinks
+    .filter((link) => link.active)
+    .map((link) => link.id);
+  assert.deepEqual(summarize(first), summarize(second));
+  assert.equal(isNationRegionSupplied(first, NATION_A, id("island-c")), true);
+  assert.equal(isNationRegionSupplied(first, NATION_A, id("island-b")), false);
+});
+
+test("CombatShips never satisfy maritime transport demand", () => {
+  const world = createMaritimeWorld(true, 0);
+  world.units.push(createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip",
+  ));
+  updateSupplyAssessment(world);
+  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-b")), false);
+  assert.equal(world.supplyAssessment.maritimeLogistics.assignments.length, 0);
+  assert.equal(WORLD_BALANCE.unit.naval?.enabled, false);
+});
+
+test("logistics-only movement stations an assigned transport while naval gameplay stays disabled", () => {
+  const world = createMaritimeWorld(true, 0);
+  connect(world, "sea-ab", "sea-cd");
+  world.mapVersion += 1;
+  const transport = createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, id("port-d"), "TransportShip",
+  );
+  transport.moveTicksPerRegion = 1;
+  world.units.push(transport);
+  updateSupplyAssessment(world);
+  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-b")), false);
+  assert.equal(
+    world.supplyAssessment.maritimeLogistics.assignmentByTransportId.get(transport.id)?.status,
+    "moving-to-source",
+  );
+  for (let tick = 0; tick < 4; tick += 1) {
+    world.time.fastTick += 1;
+    updateMaritimeLogisticsMovement(world, FAST_TICK_MS);
+  }
+  updateSupplyAssessment(world);
+  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-b")), true);
+  assert.equal(
+    world.supplyAssessment.maritimeLogistics.assignmentByTransportId.get(transport.id)?.status,
+    "stationed",
+  );
+  assert.equal(WORLD_BALANCE.unit.naval?.enabled, false);
+});
+
+test("disabled general naval production allows only demanded logistics transports", () => {
+  const world = createMaritimeWorld(true, 0);
+  const nation = world.nations[0]!;
+  nation.resources.manpower = 100_000;
+  nation.resources.weapons = 10_000;
+  nation.nextUnitProductionTick = 0;
+  updateSupplyAssessment(world);
+  updateProduction(world);
+  assert(world.units.some((unit) => unit.type === "TransportShip"));
+  assert(!world.units.some((unit) => unit.type === "CombatShip"));
+});
+
+test("Reorganization reads maritime loss and reconnection only through Supply Assessment", () => {
+  const world = createMaritimeWorld(true, 1);
+  const unit = createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, id("island-b"), "Infantry",
+  );
+  unit.org = 0.2;
+  unit.manpower *= 0.5;
+  for (const slot of unit.equipment) slot.fill = 0.5;
+  world.units.push(unit);
+  world.nations[0]!.resources.manpower = 10_000;
+  world.nations[0]!.resources.weapons = 1_000;
+  updateSupplyAssessment(world);
+  updateReorganization(world);
+  const plan = getReorganizationPlanForUnit(world, unit.id);
+  assert(plan);
+  plan.phase = "reorganizing";
+  plan.locationRegionId = unit.regionId;
+
+  updateReorganization(world);
+  const suppliedOrg = unit.org;
+  assert(suppliedOrg > 0.2);
+  const transportId = world.supplyAssessment.maritimeLogistics.assignments[0]?.transportId;
+  assert(transportId);
+  world.units = world.units.filter((candidate) => candidate.id !== transportId);
+  updateSupplyAssessment(world);
+  updateReorganization(world);
+  assert.equal(unit.org, suppliedOrg);
+  assert.equal(plan.supplyStatus, "isolated");
+
+  world.units.push(createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "TransportShip",
+  ));
+  updateSupplyAssessment(world);
+  updateReorganization(world);
+  assert(unit.org > suppliedOrg);
+  assert.equal(plan.supplyStatus, "supplied");
 });
 
 test("a port without a sea route cannot extend supply", () => {
@@ -270,23 +432,25 @@ test("Supply defense consumes the shared corridor prediction with force and port
   assert(risk.reasonFlags.includes("maritime-supply-entry-risk"));
 });
 
-test("a second active maritime entry prevents a false port cutoff prediction", () => {
+test("a redundant maritime entry does not consume another transport assignment", () => {
   const world = createMaritimeCutoffWorld(true);
   updateSupplyAssessment(world);
   assert(world.supplyAssessment.maritimeLinks.some((link) =>
     link.active && link.destinationPortId === id("port-b")
   ));
-  assert(world.supplyAssessment.maritimeLinks.some((link) =>
-    link.active && link.destinationPortId === id("port-c")
-  ));
+  assert.equal(
+    world.supplyAssessment.maritimeLinks.filter((link) => link.active).length,
+    1,
+  );
+  assert.equal(world.supplyAssessment.maritimeLogistics.assignments.length, 2);
   updateLandFronts(world);
   updateBattlefieldTopology(world);
   updateSupplyCutoffAnalysis(world);
-  assert(!world.supplyCutoffs.candidates.some((item) =>
+  assert(world.supplyCutoffs.candidates.some((item) =>
     item.attackerNationId === NATION_B && item.targetRegionId === id("port-b")
   ));
   updateSupplyDefense(world);
-  assert(!world.supplyDefense.risks.some((item) => item.regionId === id("port-b")));
+  assert(world.supplyDefense.risks.some((item) => item.regionId === id("port-b")));
 });
 
 function createMaritimeCutoffWorld(alternateEntry: boolean): WorldState {
@@ -335,7 +499,7 @@ function createMaritimeCutoffWorld(alternateEntry: boolean): WorldState {
   return world;
 }
 
-function createMaritimeWorld(withPorts = true): WorldState {
+function createMaritimeWorld(withPorts = true, transportCount = 2): WorldState {
   const specs: Array<{
     name: string;
     type?: MesoRegion["type"];
@@ -387,7 +551,7 @@ function createMaritimeWorld(withPorts = true): WorldState {
     isCore: true,
   }));
   const nation = createNation(NATION_A, id("capital"), macroRegions.map((macro) => macro.id));
-  return {
+  const world: WorldState = {
     width: 100,
     height: 100,
     microRegions: [],
@@ -426,6 +590,18 @@ function createMaritimeWorld(withPorts = true): WorldState {
     cache: createWorldCache(),
     time: createSimTime(),
   };
+  if (withPorts) {
+    const spawnPorts = [id("port-a"), id("port-c")];
+    for (let index = 0; index < transportCount; index += 1) {
+      world.units.push(createUnitForType(
+        createUnitId(world.unitIdCounter++),
+        NATION_A,
+        spawnPorts[index % spawnPorts.length],
+        "TransportShip",
+      ));
+    }
+  }
+  return world;
 }
 
 function createNation(
@@ -457,6 +633,20 @@ function disconnect(world: WorldState, a: string, b: string): void {
   assert(regionA && regionB);
   regionA.neighbors = regionA.neighbors.filter((neighbor) => neighbor.id !== id(b));
   regionB.neighbors = regionB.neighbors.filter((neighbor) => neighbor.id !== id(a));
+  world.cache.mesoById.clear();
+  world.cache.neighborsById.clear();
+}
+
+function connect(world: WorldState, a: string, b: string): void {
+  const regionA = world.mesoRegions.find((region) => region.id === id(a));
+  const regionB = world.mesoRegions.find((region) => region.id === id(b));
+  assert(regionA && regionB);
+  if (!regionA.neighbors.some((neighbor) => neighbor.id === regionB.id)) {
+    regionA.neighbors.push({ id: regionB.id, hasRiver: false });
+  }
+  if (!regionB.neighbors.some((neighbor) => neighbor.id === regionA.id)) {
+    regionB.neighbors.push({ id: regionA.id, hasRiver: false });
+  }
   world.cache.mesoById.clear();
   world.cache.neighborsById.clear();
 }

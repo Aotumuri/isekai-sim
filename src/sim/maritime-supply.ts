@@ -1,7 +1,8 @@
-import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { SupplyComponentId } from "./supply-assessment";
+import type { UnitId, UnitState } from "./unit";
+import { getMoveMsPerRegion } from "./movement";
 import type { WorldState } from "./world-state";
 import { getMesoById, getNeighborsById, getOwnerByMesoId } from "./world-cache";
 
@@ -18,10 +19,56 @@ export interface MaritimeSupplyLink {
   destinationPortId: MesoRegionId;
   sourceLandComponentId: SupplyComponentId | null;
   destinationLandComponentId: SupplyComponentId | null;
+  /** @deprecated Use assignedTransportIds. Kept for debug/save compatibility. */
   transportSupport: string[];
+  assignedTransportIds: UnitId[];
+  requiredTransportCount: number;
   routeRegionIds: MesoRegionId[];
   active: boolean;
   reason: MaritimeSupplyInactiveReason | null;
+}
+
+export type TransportAssignmentStatus =
+  | "assigned"
+  | "moving-to-source"
+  | "loading/ready"
+  | "transit"
+  | "stationed"
+  | "unavailable";
+
+export interface TransportAssignment {
+  transportId: UnitId;
+  maritimeLinkId: string;
+  sourcePortId: MesoRegionId;
+  destinationPortId: MesoRegionId;
+  status: TransportAssignmentStatus;
+  assignedAtFastTick: number;
+  routeRegionIds: MesoRegionId[];
+  positioningRouteIds: MesoRegionId[];
+}
+
+export interface MaritimeLogisticsState {
+  assignments: TransportAssignment[];
+  assignmentByTransportId: Map<UnitId, TransportAssignment>;
+  assignmentChanges: number;
+  transportLosses: number;
+  linksBrokenByTransportLoss: number;
+  linksRestoredByReplacement: number;
+  totalArrivalLatencyTicks: number;
+  completedArrivals: number;
+}
+
+export function createMaritimeLogisticsState(): MaritimeLogisticsState {
+  return {
+    assignments: [],
+    assignmentByTransportId: new Map(),
+    assignmentChanges: 0,
+    transportLosses: 0,
+    linksBrokenByTransportLoss: 0,
+    linksRestoredByReplacement: 0,
+    totalArrivalLatencyTicks: 0,
+    completedArrivals: 0,
+  };
 }
 
 export interface MaritimeConnectivityCache {
@@ -32,12 +79,6 @@ export interface MaritimeConnectivityCache {
   routeByPortPair: Map<string, MesoRegionId[] | null>;
   rebuildCount: number;
   hitCount: number;
-}
-
-export interface MaritimeTransportPolicyResult {
-  satisfied: boolean;
-  support: string[];
-  reason: "no-transport" | null;
 }
 
 export function createMaritimeConnectivityCache(): MaritimeConnectivityCache {
@@ -52,25 +93,106 @@ export function createMaritimeConnectivityCache(): MaritimeConnectivityCache {
   };
 }
 
-/**
- * The transport decision is deliberately isolated here. Disabled naval gameplay
- * currently represents abstract civilian/military shipping. A later convoy
- * system can replace this policy without changing Supply Assessment.
- */
-export function evaluateMaritimeTransportPolicy(
+export function isOperationalTransport(
+  unit: UnitState | undefined,
+  nationId?: NationId,
+): unit is UnitState {
+  return !!unit &&
+    unit.domain === "naval" &&
+    unit.type === "TransportShip" &&
+    unit.manpower > 0 &&
+    unit.org > 0 &&
+    (!nationId || unit.nationId === nationId);
+}
+
+export function getTransportAssignment(
+  world: WorldState,
+  transportId: UnitId,
+): TransportAssignment | undefined {
+  return world.supplyAssessment.maritimeLogistics.assignmentByTransportId.get(transportId);
+}
+
+export function getTransportsForLink(
+  world: WorldState,
+  linkId: string,
+): UnitState[] {
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+  return world.supplyAssessment.maritimeLogistics.assignments
+    .filter((assignment) => assignment.maritimeLinkId === linkId)
+    .map((assignment) => unitById.get(assignment.transportId))
+    .filter((unit): unit is UnitState => isOperationalTransport(unit));
+}
+
+export function getMaritimeLinkProtectionState(
   _world: WorldState,
-  _nationId: NationId,
-  _sourcePortId: MesoRegionId,
-  _destinationPortId: MesoRegionId,
-): MaritimeTransportPolicyResult {
-  if (WORLD_BALANCE.unit.naval?.enabled === false) {
-    return {
-      satisfied: true,
-      support: ["abstract-shipping"],
-      reason: null,
-    };
+  _linkId: string,
+): "unprotected" {
+  return "unprotected";
+}
+
+/** Logistics-only movement. General naval roaming, combat, and amphibious AI stay disabled. */
+export function updateMaritimeLogisticsMovement(world: WorldState, dtMs: number): void {
+  const logistics = world.supplyAssessment.maritimeLogistics;
+  if (logistics.assignments.length === 0) return;
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+  const neighborsById = getNeighborsById(world);
+  for (const assignment of logistics.assignments) {
+    const unit = unitById.get(assignment.transportId);
+    if (!isOperationalTransport(unit) || assignment.status === "stationed") continue;
+    if (assignment.routeRegionIds.includes(unit.regionId)) {
+      completeTransportArrival(world, unit, assignment);
+      continue;
+    }
+    const currentIndex = assignment.positioningRouteIds.indexOf(unit.regionId);
+    const nextId = currentIndex >= 0
+      ? assignment.positioningRouteIds[currentIndex + 1]
+      : undefined;
+    if (!nextId || !(neighborsById.get(unit.regionId) ?? []).includes(nextId)) {
+      assignment.status = "unavailable";
+      resetTransportMovement(unit);
+      continue;
+    }
+    if (unit.moveToId !== nextId) {
+      unit.moveFromId = unit.regionId;
+      unit.moveToId = nextId;
+      unit.moveTargetId = assignment.sourcePortId;
+      unit.moveProgressMs = 0;
+    }
+    unit.moveProgressMs += Math.max(0, dtMs);
+    const moveMs = getMoveMsPerRegion(unit);
+    if (unit.moveProgressMs < moveMs) continue;
+    unit.regionId = nextId;
+    unit.moveProgressMs = Math.max(0, unit.moveProgressMs - moveMs);
+    unit.moveFromId = null;
+    unit.moveToId = null;
+    world.instrumentation?.incrementCounter("maritimeLogistics.regionArrivals");
+    if (assignment.routeRegionIds.includes(unit.regionId)) {
+      completeTransportArrival(world, unit, assignment);
+    }
   }
-  return { satisfied: false, support: [], reason: "no-transport" };
+}
+
+function completeTransportArrival(
+  world: WorldState,
+  unit: UnitState,
+  assignment: TransportAssignment,
+): void {
+  assignment.status = "stationed";
+  resetTransportMovement(unit);
+  const logistics = world.supplyAssessment.maritimeLogistics;
+  logistics.completedArrivals += 1;
+  logistics.totalArrivalLatencyTicks += Math.max(
+    0,
+    world.time.fastTick - assignment.assignedAtFastTick,
+  );
+  world.instrumentation?.incrementCounter("maritimeLogistics.completedArrivals");
+}
+
+function resetTransportMovement(unit: UnitState): void {
+  unit.moveTargetId = null;
+  unit.moveFromId = null;
+  unit.moveToId = null;
+  unit.moveProgressMs = 0;
 }
 
 export function getCachedMaritimeRoute(

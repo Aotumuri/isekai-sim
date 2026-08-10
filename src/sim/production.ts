@@ -110,6 +110,14 @@ function updateProductionInternal(world: WorldState): void {
   const newUnits: UnitState[] = [];
   const cityUnitsPerCycle = Math.max(0, Math.round(production.cityUnitsPerCycle));
   const navalEnabled = WORLD_BALANCE.unit.naval?.enabled !== false;
+  const logisticsTransportDemandByNation = new Map<NationId, number>();
+  for (const link of world.supplyAssessment.maritimeLinks) {
+    if (link.reason !== "no-transport") continue;
+    logisticsTransportDemandByNation.set(
+      link.nationId,
+      (logisticsTransportDemandByNation.get(link.nationId) ?? 0) + 1,
+    );
+  }
   const portNavalUnitsPerCycle = Math.max(
     0,
     Math.round(production.portNavalUnitsPerCycle ?? 0),
@@ -212,7 +220,11 @@ function updateProductionInternal(world: WorldState): void {
       const diagnostics = world.productionDiagnostics;
       diagnostics.attemptedProductions += 1;
       world.instrumentation?.incrementCounter("production.attempted");
-      const unitType = pickNavalUnitType(nation.resources, world.simRng);
+      const unitType = pickNavalUnitType(
+        nation.resources,
+        world.simRng,
+        !navalEnabled,
+      );
       if (!unitType) {
         recordResourceBlock(world, nation.resources, "naval");
         return false;
@@ -264,12 +276,19 @@ function updateProductionInternal(world: WorldState): void {
     }
 
     const portTargets = portTargetsByNation.get(nation.id) ?? [];
-    if (navalEnabled && portNavalUnitsPerCycle > 0 && portTargets.length > 0) {
+    if (
+      (navalEnabled || logisticsTransportDemandByNation.has(nation.id)) &&
+      portNavalUnitsPerCycle > 0 &&
+      portTargets.length > 0
+    ) {
+      let logisticsRemaining = logisticsTransportDemandByNation.get(nation.id) ?? 0;
       for (const portId of portTargets) {
         for (let i = 0; i < portNavalUnitsPerCycle; i += 1) {
+          if (!navalEnabled && logisticsRemaining <= 0) break;
           if (!addNavalUnit(portId)) {
             break;
           }
+          if (!navalEnabled) logisticsRemaining -= 1;
         }
         if (currentCount >= capacity) {
           break;
@@ -571,12 +590,14 @@ function pickAffordableUnitType(
 function pickNavalUnitType(
   resources: NationResources,
   rng: WorldState["simRng"],
+  logisticsOnly = false,
 ): NavalUnitType | null {
   const navalEnabled = WORLD_BALANCE.unit.naval?.enabled !== false;
-  if (!navalEnabled) {
+  if (!navalEnabled && !logisticsOnly) {
     return null;
   }
   const canTransport = canAffordUnit(resources, "TransportShip");
+  if (logisticsOnly) return canTransport ? "TransportShip" : null;
   const canCombat = canAffordUnit(resources, "CombatShip");
   if (canTransport && canCombat) {
     const transportShare = clamp(WORLD_BALANCE.unit.navalTransportShare ?? 0.5, 0, 1);

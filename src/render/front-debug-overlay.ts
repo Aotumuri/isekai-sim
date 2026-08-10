@@ -863,6 +863,10 @@ function drawMaritimeSupplyLinks(layer: Container, world: WorldState): void {
     }
     drawMarker(layer, world, link.sourcePortId, "M", color, "circle");
     drawMarker(layer, world, link.destinationPortId, "M", color, "circle");
+    for (const transportId of link.assignedTransportIds) {
+      const transport = world.units.find((unit) => unit.id === transportId);
+      if (transport) drawMarker(layer, world, transport.regionId, "T", color, "diamond");
+    }
     const source = world.cache.mesoById.get(link.sourcePortId)?.center;
     const destination = world.cache.mesoById.get(link.destinationPortId)?.center;
     if (!source || !destination) continue;
@@ -904,14 +908,21 @@ export function formatMaritimeSupplyLink(
   const destination = link.destinationLandComponentId
     ? world.supplyAssessment.componentById.get(link.destinationLandComponentId)
     : undefined;
+  const assignments = link.assignedTransportIds.map((transportId) =>
+    world.supplyAssessment.maritimeLogistics.assignmentByTransportId.get(transportId)
+  );
   return [
-    "MARITIME SUPPLY",
+    "NAVAL LOGISTICS",
     `${link.sourcePortId} -> ${link.destinationPortId}`,
     link.active ? "ACTIVE" : "INACTIVE",
-    `transport: ${link.transportSupport.join(", ") || "none"}`,
+    `transport: ${link.assignedTransportIds.join(", ") || "none"}`,
+    `ship: ${assignments.map((assignment) => assignment?.status ?? "unavailable").join(", ") || "unavailable"}`,
+    `support: ${link.assignedTransportIds.length}/${link.requiredTransportCount}`,
     `source component: ${source?.supplied ? "SUPPLIED" : "ISOLATED"}`,
     `destination component: ${destination?.supplied ? "SUPPLIED" : "ISOLATED"}`,
+    `remote: strength ${(destination?.strength ?? 0).toFixed(1)}`,
     `route length: ${Math.max(0, link.routeRegionIds.length - 1)}`,
+    `SUPPLY: ${destination?.supplied ? "CONNECTED" : "ISOLATED"}`,
     ...(!link.active ? [`reason: ${link.reason ?? "route-invalid"}`] : []),
   ].join("\n");
 }
