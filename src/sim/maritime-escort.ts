@@ -112,10 +112,10 @@ export function getEscortAssignment(
 }
 
 export function getEscortsForLink(world: WorldState, linkId: string): UnitState[] {
-  const assignment = world.supplyAssessment.maritimeEscorts.assignmentByLinkId.get(linkId);
-  if (!assignment) return [];
-  const unit = world.units.find((candidate) => candidate.id === assignment.combatShipId);
-  return isOperationalCombatShip(unit) ? [unit] : [];
+  const ids = world.supplyAssessment.maritimeEscorts.assignments
+    .filter((assignment) => assignment.maritimeLinkId === linkId)
+    .map((assignment) => assignment.combatShipId);
+  return world.units.filter((unit) => ids.includes(unit.id) && isOperationalCombatShip(unit));
 }
 
 export function getMaritimeLinkProtection(
@@ -142,7 +142,12 @@ export function updateMaritimeEscortAssignments(
   }
   const startedAt = world.instrumentation ? performance.now() : 0;
   const previous = state.assignments;
-  const previousByLinkId = new Map(previous.map((assignment) => [assignment.maritimeLinkId, assignment]));
+  const previousByLinkId = new Map<string, EscortAssignment[]>();
+  for (const assignment of previous) {
+    const assignments = previousByLinkId.get(assignment.maritimeLinkId);
+    if (assignments) assignments.push(assignment);
+    else previousByLinkId.set(assignment.maritimeLinkId, [assignment]);
+  }
   const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
   const demandContext = createEscortDemandContext(world, links);
   const demands = links
@@ -170,26 +175,29 @@ export function updateMaritimeEscortAssignments(
   for (const demand of demands) {
     const link = linkById.get(demand.maritimeLinkId);
     if (!link) continue;
-    const old = previousByLinkId.get(link.id);
-    let ship = old && availableIds.has(old.combatShipId)
-      ? unitById.get(old.combatShipId)
-      : undefined;
-    if (!isOperationalCombatShip(ship, link.nationId)) {
-      const atDistance = (regionIds: Iterable<MesoRegionId>): UnitState | undefined =>
-        [...new Set(regionIds)].flatMap((regionId) => combatShipsByRegion.get(regionId) ?? [])
-          .filter((candidate) =>
-            candidate.nationId === link.nationId && availableIds.has(candidate.id)
-          ).sort((a, b) => compareIds(a.id, b.id))[0];
-      const onRoute = atDistance(link.routeRegionIds);
-      const adjacentToRoute = onRoute ? undefined : atDistance(
-        link.routeRegionIds.flatMap((regionId) => neighborsById.get(regionId) ?? []),
-      );
-      ship = onRoute ?? adjacentToRoute ?? combatShipsByNation.get(link.nationId)
-        ?.find((candidate) => availableIds.has(candidate.id));
+    const oldAssignments = previousByLinkId.get(link.id) ?? [];
+    for (let escortIndex = 0; escortIndex < demand.requiredEscortCount; escortIndex += 1) {
+      const old = oldAssignments[escortIndex];
+      let ship = old && availableIds.has(old.combatShipId)
+        ? unitById.get(old.combatShipId)
+        : undefined;
+      if (!isOperationalCombatShip(ship, link.nationId)) {
+        const atDistance = (regionIds: Iterable<MesoRegionId>): UnitState | undefined =>
+          [...new Set(regionIds)].flatMap((regionId) => combatShipsByRegion.get(regionId) ?? [])
+            .filter((candidate) =>
+              candidate.nationId === link.nationId && availableIds.has(candidate.id)
+            ).sort((a, b) => compareIds(a.id, b.id))[0];
+        const onRoute = atDistance(link.routeRegionIds);
+        const adjacentToRoute = onRoute ? undefined : atDistance(
+          link.routeRegionIds.flatMap((regionId) => neighborsById.get(regionId) ?? []),
+        );
+        ship = onRoute ?? adjacentToRoute ?? combatShipsByNation.get(link.nationId)
+          ?.find((candidate) => availableIds.has(candidate.id));
+      }
+      if (!ship) break;
+      availableIds.delete(ship.id);
+      next.push(createOrRefreshAssignment(world, link, ship, old));
     }
-    if (!ship) continue;
-    availableIds.delete(ship.id);
-    next.push(createOrRefreshAssignment(world, link, ship, old));
   }
 
   reconcileAssignments(world, links, previous, next, unitById);
@@ -214,7 +222,8 @@ export function updateMaritimeEscortMovement(world: WorldState, dtMs: number): v
   for (const assignment of state.assignments) {
     const unit = unitById.get(assignment.combatShipId);
     if (!isOperationalCombatShip(unit, assignment.nationId) || assignment.status === "escorting") continue;
-    if (isOnSeaRoute(world, unit.regionId, assignment.routeRegionIds)) {
+    const transport = getAssignedTransport(world, assignment.maritimeLinkId);
+    if (transport && unit.regionId === transport.regionId) {
       completeEscortArrival(world, unit, assignment);
       protectionDirty = true;
       continue;
@@ -241,7 +250,7 @@ export function updateMaritimeEscortMovement(world: WorldState, dtMs: number): v
     unit.moveFromId = null;
     unit.moveToId = null;
     world.instrumentation?.incrementCounter("maritimeEscort.regionArrivals");
-    if (isOnSeaRoute(world, unit.regionId, assignment.routeRegionIds)) {
+    if (transport && unit.regionId === transport.regionId) {
       completeEscortArrival(world, unit, assignment);
       protectionDirty = true;
     }
@@ -332,10 +341,12 @@ function buildEscortDemand(
   if (reorganizingCount > 0) reasons.push("reorganization");
   if (downstreamCount > 0) reasons.push("downstream-supply");
   if (reasons.length === 0) return null;
+  const assignedRaidCount = world.supplyAssessment.maritimeInterdiction.assignmentsByLinkId
+    .get(link.id)?.length ?? 0;
   return {
     maritimeLinkId: link.id,
     nationId: link.nationId,
-    requiredEscortCount: 1,
+    requiredEscortCount: Math.max(1, assignedRaidCount),
     remoteUnitCount: landUnits.length,
     remoteStrength,
     priority: [
@@ -365,13 +376,15 @@ function createOrRefreshAssignment(
   ship: UnitState,
   previous: EscortAssignment | undefined,
 ): EscortAssignment {
-  const positioned = isOnSeaRoute(world, ship.regionId, link.routeRegionIds);
+  const transport = getAssignedTransport(world, link.id);
+  const positioned = !!transport && ship.regionId === transport.regionId;
   const sameRoute = previous && arraysEqual(previous.routeRegionIds, link.routeRegionIds);
   let positioningRouteIds: MesoRegionId[] = [];
   if (!positioned) {
-    positioningRouteIds = sameRoute && previous.positioningRouteIds.includes(ship.regionId)
+    positioningRouteIds = sameRoute && previous.positioningRouteIds.includes(ship.regionId) &&
+        previous.positioningRouteIds.at(-1) === transport?.regionId
       ? previous.positioningRouteIds
-      : buildEscortPositioningRoute(world, ship.regionId, link.routeRegionIds);
+      : buildEscortPositioningRoute(world, ship.regionId, transport ? [transport.regionId] : link.routeRegionIds);
   }
   const isNew = previous?.combatShipId !== ship.id;
   if (isNew || (!sameRoute && !positioned)) {
@@ -442,15 +455,11 @@ function reconcileAssignments(
 function rebuildProtectionState(world: WorldState, links: MaritimeSupplyLink[]): void {
   const state = world.supplyAssessment.maritimeEscorts;
   const demandByLinkId = new Map(state.demands.map((demand) => [demand.maritimeLinkId, demand]));
-  const assignmentByLinkId = new Map(state.assignments.map((assignment) => [
-    assignment.maritimeLinkId,
-    assignment,
-  ]));
   const protectionByLinkId = new Map<string, MaritimeLinkProtection>();
   for (const link of links) {
     const demand = demandByLinkId.get(link.id);
-    const assignment = assignmentByLinkId.get(link.id);
-    const effectiveEscortCount = assignment?.status === "escorting" ? 1 : 0;
+    const assignments = state.assignments.filter((assignment) => assignment.maritimeLinkId === link.id);
+    const effectiveEscortCount = assignments.filter((assignment) => assignment.status === "escorting").length;
     const required = demand?.requiredEscortCount ?? 0;
     const protectionState: MaritimeProtectionState = required > 0 && effectiveEscortCount >= required
       ? "PROTECTED"
@@ -459,12 +468,12 @@ function rebuildProtectionState(world: WorldState, links: MaritimeSupplyLink[]):
         : "UNPROTECTED";
     const skippedReason: EscortSkippedReason | null = !demand
       ? link.reason === "port-lost" || link.reason === "route-invalid" ? "link-inactive" : "no-escort-demand"
-      : !assignment ? "no-escort-available"
-      : assignment.status !== "escorting" ? "escort-moving"
+      : assignments.length === 0 ? "no-escort-available"
+      : effectiveEscortCount < required ? "escort-moving"
       : null;
     protectionByLinkId.set(link.id, {
       linkId: link.id,
-      assignedEscortIds: assignment ? [assignment.combatShipId] : [],
+      assignedEscortIds: assignments.map((assignment) => assignment.combatShipId),
       requiredEscortCount: required,
       protectionState,
       skippedReason,
@@ -514,6 +523,12 @@ function completeEscortArrival(
 
 function isOnSeaRoute(world: WorldState, regionId: MesoRegionId, route: MesoRegionId[]): boolean {
   return route.includes(regionId) && getMesoById(world).get(regionId)?.type === "sea";
+}
+
+function getAssignedTransport(world: WorldState, linkId: string): UnitState | undefined {
+  const transportId = world.supplyAssessment.maritimeLogistics.assignments
+    .find((assignment) => assignment.maritimeLinkId === linkId)?.transportId;
+  return transportId ? world.units.find((unit) => unit.id === transportId) : undefined;
 }
 
 function resetMovement(unit: UnitState): void {

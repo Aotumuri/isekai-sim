@@ -24,6 +24,16 @@ import {
   type MaritimeEscortState,
 } from "./maritime-escort";
 import { buildNavalPositioningRoute } from "./naval-pathfinding";
+import {
+  createRaidState,
+  updateMaritimeInterdictionAssignments,
+  type RaidState,
+} from "./maritime-interdiction";
+import {
+  createConvoySystemState,
+  updateConvoyAssignments,
+  type ConvoySystemState,
+} from "./convoy-system";
 
 export type SupplyComponentId = string & { __brand: "SupplyComponentId" };
 
@@ -85,6 +95,8 @@ export interface SupplyAssessmentState {
   maritimeConnectivity: MaritimeConnectivityCache;
   maritimeLogistics: MaritimeLogisticsState;
   maritimeEscorts: MaritimeEscortState;
+  maritimeInterdiction: RaidState;
+  convoys: ConvoySystemState;
   maritimeLinksEvaluated: number;
   activeMaritimeLinkCount: number;
   inactiveMaritimeLinkCount: number;
@@ -119,6 +131,8 @@ export function createSupplyAssessmentState(): SupplyAssessmentState {
     maritimeConnectivity: createMaritimeConnectivityCache(),
     maritimeLogistics: createMaritimeLogisticsState(),
     maritimeEscorts: createMaritimeEscortState(),
+    maritimeInterdiction: createRaidState(),
+    convoys: createConvoySystemState(),
     maritimeLinksEvaluated: 0,
     activeMaritimeLinkCount: 0,
     inactiveMaritimeLinkCount: 0,
@@ -553,7 +567,7 @@ function propagateMaritimeSupply(
       link.assignedTransportIds = [assignment.transportId];
       link.transportSupport = [assignment.transportId];
       const transport = unitById.get(assignment.transportId);
-      if (!transport || !link.routeRegionIds.includes(transport.regionId)) {
+      if (!isOperationalTransport(transport, link.nationId)) {
         link.reason = "no-transport";
         recordIncomingReason(incomingReasonByComponentId, destinationId, link.reason);
         continue;
@@ -656,6 +670,8 @@ function propagateMaritimeSupply(
   state.remoteStrengthSupplied = remoteStrengthSupplied;
   state.remoteStrengthIsolatedDueToMissingTransport = remoteStrengthIsolatedDueToMissingTransport;
   updateMaritimeEscortAssignments(world, links);
+  updateConvoyAssignments(world, links);
+  updateMaritimeInterdictionAssignments(world, links);
   const transportCount = availableTransports.length;
   const assignedCount = state.maritimeLogistics.assignments.length;
   world.instrumentation?.incrementCounter("maritimeLogistics.availableTransports", transportCount);
@@ -744,7 +760,7 @@ function assignTransportForLink(
   availableIds: Set<UnitId>,
   previous: TransportAssignment | undefined,
 ): TransportAssignment | null {
-  let transport = previous && availableIds.has(previous.transportId)
+  let transport = previous && previous.status !== "unavailable" && availableIds.has(previous.transportId)
     ? transports.find((unit) => unit.id === previous.transportId)
     : undefined;
   if (!transport) {
@@ -757,7 +773,8 @@ function assignTransportForLink(
   }
   if (!transport) return null;
   availableIds.delete(transport.id);
-  const positioned = link.routeRegionIds.includes(transport.regionId);
+  const positioned = link.routeRegionIds.includes(transport.regionId) &&
+    getMesoById(world).get(transport.regionId)?.type === "sea";
   const positioningRouteIds = positioned
     ? []
     : buildTransportPositioningRoute(world, transport.regionId, link.routeRegionIds);
@@ -786,7 +803,7 @@ function buildTransportPositioningRoute(
   targetRouteIds: MesoRegionId[],
 ): MesoRegionId[] {
   const startedAt = world.instrumentation ? performance.now() : 0;
-  const path = buildNavalPositioningRoute(world, startId, targetRouteIds);
+  const path = buildNavalPositioningRoute(world, startId, targetRouteIds, true);
   world.instrumentation?.incrementCounter("maritimeLogistics.pathfindingRequests");
   if (world.instrumentation) {
     world.instrumentation.recordDuration(

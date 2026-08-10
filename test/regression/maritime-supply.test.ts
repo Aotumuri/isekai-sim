@@ -58,9 +58,290 @@ import {
 } from "../../src/sim/supply-defense";
 import { createSupplyReliefState } from "../../src/sim/supply-relief";
 import { declareWar } from "../../src/sim/war-state";
+import { updateBattles } from "../../src/sim/battles";
+import {
+  recordMaritimeInterdictionCombat,
+  updateMaritimeInterdictionMovement,
+} from "../../src/sim/maritime-interdiction";
+import { updateConvoyMovement } from "../../src/sim/convoy-system";
 
 const NATION_A = "nation-a" as NationId;
 const NATION_B = "nation-b" as NationId;
+
+test("CombatShips deliberately select moving enemy convoys without interdicting static routes", () => {
+  const world = createInterdictionWorld(["sea-ab", "sea-cd"]);
+  updateSupplyAssessment(world);
+  const raids = world.supplyAssessment.maritimeInterdiction.assignments;
+  assert.equal(raids.length, 2);
+  assert.equal(new Set(raids.map((raid) => raid.combatShipId)).size, 2);
+  assert.equal(new Set(raids.map((raid) => raid.maritimeLinkId)).size, 2);
+  assert(raids.every((raid) => Number.isFinite(raid.targetScore) && raid.targetReason.length > 0));
+  assert(raids.every((raid) => raid.status === "intercepting"));
+  assert.equal(world.supplyAssessment.maritimeInterdiction.interdictedLinkIds.size, 0);
+  assert.equal(WORLD_BALANCE.unit.naval?.enabled, false);
+});
+
+test("an unprotected raider destroys a transport and isolates a multi-hop overseas army", () => {
+  const world = createInterdictionWorld(["sea-ab"]);
+  const transport = world.units.find((unit) => unit.type === "TransportShip" && unit.regionId === id("port-a"));
+  assert(transport);
+  world.units = world.units.filter((unit) => unit.type !== "TransportShip" || unit.id === transport.id);
+  transport.moveTicksPerRegion = 1;
+  transport.org = 0.01;
+  updateSupplyAssessment(world);
+  updateMaritimeInterdictionMovement(world, FAST_TICK_MS);
+  updateMaritimeLogisticsMovement(world, FAST_TICK_MS);
+  updateBattles(world);
+  recordMaritimeInterdictionCombat(world);
+  assert(!world.units.some((unit) => unit.id === transport.id));
+  assert.equal(world.supplyAssessment.maritimeInterdiction.transportsDestroyed, 1);
+  updateSupplyAssessment(world);
+  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-b")), false);
+  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-c")), false);
+  assert.equal(world.supplyAssessment.maritimeInterdiction.supplyInterruptions, 1);
+});
+
+test("raid movement uses naval pathfinding only toward the selected sea route", () => {
+  const world = createInterdictionWorld(["port-b"]);
+  updateSupplyAssessment(world);
+  const raid = world.supplyAssessment.maritimeInterdiction.assignments[0];
+  assert(raid);
+  assert.equal(raid.status, "moving-to-route");
+  const ship = world.units.find((unit) => unit.id === raid.combatShipId);
+  assert(ship);
+  updateMaritimeInterdictionMovement(world, FAST_TICK_MS);
+  assert(raid.routeRegionIds.includes(ship.regionId));
+  assert.equal(world.mesoRegions.find((region) => region.id === ship.regionId)?.type, "sea");
+  assert.equal(ship.moveTargetId, null);
+  assert.equal(raid.status, "intercepting");
+});
+
+test("an escort fights before its transport becomes vulnerable", () => {
+  const world = createInterdictionWorld(["sea-ab"]);
+  const escort = createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, id("sea-ab"), "CombatShip",
+  );
+  escort.moveTicksPerRegion = 1;
+  world.units.push(escort);
+  const transport = world.units.find((unit) => unit.type === "TransportShip" && unit.regionId === id("port-a"));
+  assert(transport);
+  world.units = world.units.filter((unit) => unit.type !== "TransportShip" || unit.id === transport.id);
+  transport.moveTicksPerRegion = 1;
+  updateSupplyAssessment(world);
+  const escortLinkId = getEscortAssignment(world, escort.id)?.maritimeLinkId;
+  const escortTransportId = world.supplyAssessment.maritimeLogistics.assignments
+    .find((assignment) => assignment.maritimeLinkId === escortLinkId)?.transportId;
+  const escortedTransport = world.units.find((unit) => unit.id === escortTransportId);
+  assert(escortedTransport);
+  escort.regionId = escortedTransport.regionId;
+  updateSupplyAssessment(world);
+  updateConvoyMovement(world, FAST_TICK_MS);
+  updateMaritimeInterdictionMovement(world, FAST_TICK_MS);
+  const manpowerBefore = transport.manpower;
+  const orgBefore = transport.org;
+  updateBattles(world);
+  recordMaritimeInterdictionCombat(world);
+  assert.equal(transport.manpower, manpowerBefore);
+  assert.equal(transport.org, orgBefore);
+  assert(escort.manpower < WORLD_BALANCE.unit.types.CombatShip.manpower ||
+    world.units.find((unit) => unit.nationId === NATION_B && unit.type === "CombatShip")!.manpower <
+      WORLD_BALANCE.unit.types.CombatShip.manpower);
+  assert.equal(world.supplyAssessment.maritimeInterdiction.escortEngagements, 1);
+  assert.equal(getEscortAssignment(world, escort.id)?.status, "escorting");
+});
+
+test("a physical replacement transport restores interdicted supply and records reconnection duration", () => {
+  const world = createInterdictionWorld(["sea-ab"]);
+  const transport = world.units.find((unit) => unit.type === "TransportShip" && unit.regionId === id("port-a"));
+  assert(transport);
+  world.units = world.units.filter((unit) => unit.type !== "TransportShip" || unit.id === transport.id);
+  transport.moveTicksPerRegion = 1;
+  transport.org = 0.01;
+  updateSupplyAssessment(world);
+  updateConvoyMovement(world, FAST_TICK_MS);
+  updateMaritimeInterdictionMovement(world, FAST_TICK_MS);
+  updateBattles(world);
+  recordMaritimeInterdictionCombat(world);
+  updateSupplyAssessment(world);
+  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-b")), false);
+
+  const raider = world.units.find((unit) => unit.nationId === NATION_B && unit.type === "CombatShip");
+  assert(raider);
+  world.units = world.units.filter((unit) => unit.id !== raider.id);
+  world.time.fastTick += 7;
+  const replacement = createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, id("sea-ab"), "TransportShip",
+  );
+  world.units.push(replacement);
+  updateSupplyAssessment(world);
+  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-b")), true);
+  assert.equal(world.supplyAssessment.maritimeInterdiction.reconnections, 1);
+  assert.equal(world.supplyAssessment.maritimeInterdiction.totalInterruptionDurationTicks, 7);
+});
+
+test("port capture releases a raid and route restoration deterministically reassigns it", () => {
+  const world = createInterdictionWorld(["sea-ab"]);
+  updateSupplyAssessment(world);
+  const raid = world.supplyAssessment.maritimeInterdiction.assignments[0];
+  assert(raid);
+  world.occupation.mesoById.set(id("port-b"), NATION_B);
+  world.occupation.version += 1;
+  updateSupplyAssessment(world);
+  assert.equal(world.supplyAssessment.maritimeInterdiction.assignments.length, 0);
+  world.occupation.mesoById.delete(id("port-b"));
+  world.occupation.version += 1;
+  updateSupplyAssessment(world);
+  assert.equal(world.supplyAssessment.maritimeInterdiction.assignments[0]?.combatShipId, raid.combatShipId);
+});
+
+test("interdiction assessment and assignments are deterministic", () => {
+  const first = createInterdictionWorld(["sea-cd", "sea-ab"]);
+  const second = createInterdictionWorld(["sea-cd", "sea-ab"]);
+  updateSupplyAssessment(first);
+  updateSupplyAssessment(second);
+  const summarize = (world: WorldState) => ({
+    assessments: world.supplyAssessment.maritimeInterdiction.assessments.map((item) => ({
+      attacker: item.attackerNationId,
+      link: item.maritimeLinkId,
+      score: item.targetPriority.total,
+      reasons: item.targetPriority.reasons,
+    })),
+    assignments: world.supplyAssessment.maritimeInterdiction.assignments.map((item) => ({
+      ship: item.combatShipId,
+      link: item.maritimeLinkId,
+      route: item.positioningRouteIds,
+    })),
+  });
+  assert.deepEqual(summarize(first), summarize(second));
+});
+
+test("disabled general naval gameplay still ignores non-mission fleets", () => {
+  const world = createMaritimeCutoffWorld(false);
+  for (const region of world.mesoRegions) {
+    if (region.building === "port") region.building = null;
+  }
+  world.buildingVersion += 1;
+  world.units = world.units.filter((unit) => unit.domain === "land");
+  const shipA = createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, id("sea-ab"), "CombatShip",
+  );
+  const shipB = createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_B, id("sea-ab"), "CombatShip",
+  );
+  world.units.push(shipA, shipB);
+  updateSupplyAssessment(world);
+  assert.equal(world.supplyAssessment.maritimeLinks.length, 0);
+  assert.equal(world.supplyAssessment.maritimeInterdiction.assignments.length, 0);
+  updateBattles(world);
+  assert.equal(shipA.manpower, WORLD_BALANCE.unit.types.CombatShip.manpower);
+  assert.equal(shipB.manpower, WORLD_BALANCE.unit.types.CombatShip.manpower);
+  assert.equal(world.battles.length, 0);
+});
+
+test("a physical convoy continuously travels port-to-port and returns without teleporting", () => {
+  const world = createMaritimeWorld(true, 1);
+  updateSupplyAssessment(world);
+  const link = world.supplyAssessment.maritimeLinks.find((candidate) => candidate.active);
+  assert(link);
+  const convoy = world.supplyAssessment.convoys.convoyByLinkId.get(link.id);
+  assert(convoy?.transportId);
+  const transport = world.units.find((unit) => unit.id === convoy.transportId);
+  assert(transport);
+  transport.moveTicksPerRegion = 1;
+  const visited = [transport.regionId];
+  for (let tick = 0; tick < 6; tick += 1) {
+    world.time.fastTick += 1;
+    updateConvoyMovement(world, FAST_TICK_MS);
+    visited.push(transport.regionId);
+  }
+  assert.deepEqual(visited.slice(0, 3), [id("port-a"), id("sea-ab"), id("port-b")]);
+  assert(visited.includes(id("port-a")) && visited.includes(id("port-b")));
+  assert.equal(convoy.completedCycles, 1);
+  assert.equal(world.supplyAssessment.convoys.successfulDeliveries, 1);
+  assert.equal(link.active, true);
+});
+
+test("formed escorts remain co-located with their convoy transport throughout a cycle", () => {
+  const world = createMaritimeWorld(true, 1);
+  world.units.push(
+    createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("island-b"), "Infantry"),
+    createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip"),
+  );
+  updateSupplyAssessment(world);
+  const convoy = world.supplyAssessment.convoys.convoys.find((candidate) => candidate.escortIds.length > 0);
+  assert(convoy?.transportId);
+  const transport = world.units.find((unit) => unit.id === convoy.transportId);
+  const escort = world.units.find((unit) => unit.id === convoy.escortIds[0]);
+  assert(transport && escort);
+  transport.moveTicksPerRegion = 1;
+  escort.moveTicksPerRegion = 1;
+  for (let tick = 0; tick < 6; tick += 1) {
+    world.time.fastTick += 1;
+    updateConvoyMovement(world, FAST_TICK_MS);
+    assert.equal(escort.regionId, transport.regionId);
+    assert.equal(escort.moveToId, transport.moveToId);
+  }
+});
+
+test("one threatened convoy supports multiple escorts and preserves identity across replacement", () => {
+  const world = createInterdictionWorld(["sea-ab", "sea-ab"]);
+  updateSupplyAssessment(world);
+  const raidLinkId = world.supplyAssessment.maritimeInterdiction.assignments[0]?.maritimeLinkId;
+  assert(raidLinkId);
+  const link = world.supplyAssessment.maritimeLinks.find((candidate) => candidate.id === raidLinkId);
+  assert(link?.assignedTransportIds[0]);
+  const transport = world.units.find((unit) => unit.id === link.assignedTransportIds[0]);
+  assert(transport);
+  const escortA = createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, transport.regionId, "CombatShip",
+  );
+  const escortB = createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, transport.regionId, "CombatShip",
+  );
+  world.units.push(escortA, escortB);
+  updateSupplyAssessment(world);
+  const convoy = world.supplyAssessment.convoys.convoyByLinkId.get(raidLinkId);
+  assert(convoy);
+  assert.equal(convoy.escortIds.length, 2);
+  const convoyId = convoy.id;
+  world.units = world.units.filter((unit) => unit.id !== escortA.id);
+  const replacement = createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, transport.regionId, "CombatShip",
+  );
+  world.units.push(replacement);
+  updateSupplyAssessment(world);
+  const refreshed = world.supplyAssessment.convoys.convoyByLinkId.get(raidLinkId);
+  assert.equal(refreshed?.id, convoyId);
+  assert(refreshed?.escortIds.includes(replacement.id));
+  assert.equal(world.supplyAssessment.convoys.escortLosses, 1);
+  assert.equal(world.supplyAssessment.convoys.replacementEscorts, 1);
+});
+
+test("convoy identity survives port capture, reconnection, and transport replacement", () => {
+  const world = createMaritimeWorld(true, 1);
+  updateSupplyAssessment(world);
+  const link = world.supplyAssessment.maritimeLinks.find((candidate) => candidate.active);
+  assert(link);
+  const convoyId = world.supplyAssessment.convoys.convoyByLinkId.get(link.id)?.id;
+  const transportId = link.assignedTransportIds[0];
+  assert(convoyId && transportId);
+  world.occupation.mesoById.set(link.destinationPortId, NATION_B);
+  world.occupation.version += 1;
+  updateSupplyAssessment(world);
+  assert.equal(world.supplyAssessment.convoys.convoyByLinkId.get(link.id)?.state, "suspended");
+  world.occupation.mesoById.delete(link.destinationPortId);
+  world.occupation.version += 1;
+  world.units = world.units.filter((unit) => unit.id !== transportId);
+  world.units.push(createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, link.sourcePortId, "TransportShip",
+  ));
+  updateSupplyAssessment(world);
+  const restored = world.supplyAssessment.convoys.convoyByLinkId.get(link.id);
+  assert.equal(restored?.id, convoyId);
+  assert.notEqual(restored?.transportId, transportId);
+  assert.equal(restored?.state === "suspended", false);
+  assert.equal(world.supplyAssessment.convoys.replacementTransports, 1);
+});
 
 test("land supply remains capital-component based without ports", () => {
   const world = createMaritimeWorld(false);
@@ -174,7 +455,7 @@ test("logistics-only movement stations an assigned transport while naval gamepla
   transport.moveTicksPerRegion = 1;
   world.units.push(transport);
   updateSupplyAssessment(world);
-  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-b")), false);
+  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-b")), true);
   assert.equal(
     world.supplyAssessment.maritimeLogistics.assignmentByTransportId.get(transport.id)?.status,
     "moving-to-source",
@@ -218,7 +499,7 @@ test("a real CombatShip reaches and protects a physical maritime logistics link"
   const link = world.supplyAssessment.maritimeLinks.find((candidate) => candidate.active);
   assert(link);
   assert.equal(getEscortAssignment(world, escort.id)?.maritimeLinkId, link.id);
-  assert.equal(getMaritimeLinkProtection(world, link.id).protectionState, "UNPROTECTED");
+  assert.equal(getMaritimeLinkProtection(world, link.id).protectionState, "PROTECTED");
   world.time.fastTick += 1;
   updateMaritimeEscortMovement(world, FAST_TICK_MS);
   assert.equal(getEscortAssignment(world, escort.id)?.status, "escorting");
@@ -255,7 +536,9 @@ test("one CombatShip cannot escort two links and scarce escort favors the strong
     world.units.push(createUnitForType(
       createUnitId(world.unitIdCounter++), NATION_A, id("sea-cd"), "CombatShip",
     ));
+    world.units.at(-1)!.moveTicksPerRegion = 1;
     updateSupplyAssessment(world);
+    updateMaritimeEscortMovement(world, FAST_TICK_MS);
   }
   const summarize = (world: WorldState) => world.supplyAssessment.maritimeEscorts.assignments
     .map((assignment) => assignment.maritimeLinkId);
@@ -271,7 +554,7 @@ test("one CombatShip cannot escort two links and scarce escort favors the strong
     .filter((link) => link.active)
     .map((link) => getMaritimeLinkProtection(first, link.id).protectionState)
     .sort();
-  assert.deepEqual(protection, ["PROTECTED", "UNPROTECTED"]);
+  assert.deepEqual(protection, ["UNPROTECTED", "UNPROTECTED"]);
   for (const demand of first.supplyAssessment.maritimeEscorts.demands) {
     assert(Number.isFinite(demand.remoteStrength));
     assert(demand.priority.every(Number.isFinite));
@@ -287,8 +570,8 @@ test("two CombatShips independently protect two multi-hop maritime links", () =>
   world.units.push(
     createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("island-b"), "Infantry"),
     createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("island-c"), "Infantry"),
-    createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("sea-ab"), "CombatShip"),
-    createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("sea-cd"), "CombatShip"),
+    createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip"),
+    createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-c"), "CombatShip"),
   );
   updateSupplyAssessment(world);
   const activeLinks = world.supplyAssessment.maritimeLinks.filter((link) => link.active);
@@ -321,7 +604,7 @@ test("escort loss leaves Supply active and allows deterministic replacement", ()
   assert.equal(world.supplyAssessment.maritimeEscorts.escortLosses, 1);
 
   const replacement = createUnitForType(
-    createUnitId(world.unitIdCounter++), NATION_A, id("sea-ab"), "CombatShip",
+    createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip",
   );
   world.units.push(replacement);
   updateSupplyAssessment(world);
@@ -641,7 +924,7 @@ test("a redundant maritime entry does not consume another transport assignment",
   ));
   assert.equal(
     world.supplyAssessment.maritimeLinks.filter((link) => link.active).length,
-    1,
+    2,
   );
   assert.equal(world.supplyAssessment.maritimeLogistics.assignments.length, 2);
   updateLandFronts(world);
@@ -697,6 +980,18 @@ function createMaritimeCutoffWorld(alternateEntry: boolean): WorldState {
   world.units.push(createUnitForType(
     createUnitId(world.unitIdCounter++), NATION_A, id("island-b"), "Infantry",
   ));
+  return world;
+}
+
+function createInterdictionWorld(raiderRegions: string[]): WorldState {
+  const world = createMaritimeCutoffWorld(false);
+  for (const region of raiderRegions) {
+    const raider = createUnitForType(
+      createUnitId(world.unitIdCounter++), NATION_B, id(region), "CombatShip",
+    );
+    raider.moveTicksPerRegion = 1;
+    world.units.push(raider);
+  }
   return world;
 }
 

@@ -28,8 +28,12 @@ import { updateCollapseAdvances } from "./collapse-advance";
 import { updateBattlefieldTopology } from "./battlefield-topology";
 import { updateSupplyAssessment } from "./supply-assessment";
 import { updateIsolationEffects } from "./isolation-effects";
-import { updateMaritimeLogisticsMovement } from "./maritime-supply";
 import { updateMaritimeEscortMovement } from "./maritime-escort";
+import { updateConvoyMovement } from "./convoy-system";
+import {
+  recordMaritimeInterdictionCombat,
+  updateMaritimeInterdictionMovement,
+} from "./maritime-interdiction";
 import { updateSupplyCutoffAnalysis } from "./supply-cutoff";
 import { updateSupplyDefense } from "./supply-defense";
 import { updateSupplyRelief } from "./supply-relief";
@@ -102,10 +106,13 @@ export function stepFastTick(world: WorldState, dtMs: number): void {
     repositionNavalUnits(world, dtMs);
     updateAmphibiousOperations(world);
   }
-  updateMaritimeLogisticsMovement(world, dtMs);
   updateMaritimeEscortMovement(world, dtMs);
+  updateConvoyMovement(world, dtMs);
+  updateMaritimeInterdictionMovement(world, dtMs);
+  recordMaritimeInterdictionCombat(world);
   startedAt = instrumentation ? performance.now() : 0;
   updateBattles(world);
+  recordMaritimeInterdictionCombat(world);
   if (instrumentation) {
     instrumentation.recordDuration("battle.update", performance.now() - startedAt);
   }

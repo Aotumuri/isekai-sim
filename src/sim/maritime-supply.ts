@@ -140,7 +140,7 @@ export function updateMaritimeLogisticsMovement(world: WorldState, dtMs: number)
   for (const assignment of logistics.assignments) {
     const unit = unitById.get(assignment.transportId);
     if (!isOperationalTransport(unit) || assignment.status === "stationed") continue;
-    if (assignment.routeRegionIds.includes(unit.regionId)) {
+    if (isOnSeaRoute(world, unit.regionId, assignment.routeRegionIds)) {
       completeTransportArrival(world, unit, assignment);
       continue;
     }
@@ -167,7 +167,7 @@ export function updateMaritimeLogisticsMovement(world: WorldState, dtMs: number)
     unit.moveFromId = null;
     unit.moveToId = null;
     world.instrumentation?.incrementCounter("maritimeLogistics.regionArrivals");
-    if (assignment.routeRegionIds.includes(unit.regionId)) {
+    if (isOnSeaRoute(world, unit.regionId, assignment.routeRegionIds)) {
       completeTransportArrival(world, unit, assignment);
     }
   }
@@ -194,6 +194,14 @@ function resetTransportMovement(unit: UnitState): void {
   unit.moveFromId = null;
   unit.moveToId = null;
   unit.moveProgressMs = 0;
+}
+
+function isOnSeaRoute(
+  world: WorldState,
+  regionId: MesoRegionId,
+  route: readonly MesoRegionId[],
+): boolean {
+  return route.includes(regionId) && getMesoById(world).get(regionId)?.type === "sea";
 }
 
 export function getCachedMaritimeRoute(

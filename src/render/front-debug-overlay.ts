@@ -68,6 +68,8 @@ interface OverlayVersions {
   collapseAdvances: number;
   battlefieldTopology: number;
   supplyAssessment: number;
+  maritimeInterdiction: number;
+  convoys: number;
   isolationEffects: number;
   productionDiagnostics: number;
   supplyCutoffs: number;
@@ -873,9 +875,24 @@ function drawMaritimeSupplyLinks(layer: Container, world: WorldState): void {
       const transport = world.units.find((unit) => unit.id === transportId);
       if (transport) drawMarker(layer, world, transport.regionId, "T", color, "diamond");
     }
+    const convoy = world.supplyAssessment.convoys.convoyByLinkId.get(link.id);
+    const convoyTransport = convoy?.transportId
+      ? world.units.find((unit) => unit.id === convoy.transportId)
+      : undefined;
+    if (convoy && convoyTransport) {
+      drawMarker(layer, world, convoyTransport.regionId, "C", color, "circle");
+    }
     for (const escortId of protection.assignedEscortIds) {
       const escort = world.units.find((unit) => unit.id === escortId);
       if (escort) drawMarker(layer, world, escort.regionId, "E", color, "diamond");
+    }
+    const raids = world.supplyAssessment.maritimeInterdiction.assignmentsByLinkId.get(link.id) ?? [];
+    for (const raid of raids) {
+      const raider = world.units.find((unit) => unit.id === raid.combatShipId);
+      const markerRegionId = raider?.regionId ?? raid.routeRegionIds.find((regionId) =>
+        world.cache.mesoById.get(regionId)?.type === "sea"
+      );
+      if (markerRegionId) drawMarker(layer, world, markerRegionId, "I", 0xff3d81, "diamond");
     }
     const source = world.cache.mesoById.get(link.sourcePortId)?.center;
     const destination = world.cache.mesoById.get(link.destinationPortId)?.center;
@@ -928,10 +945,28 @@ export function formatMaritimeSupplyLink(
   const demand = world.supplyAssessment.maritimeEscorts.demands.find((item) =>
     item.maritimeLinkId === link.id
   );
+  const raids = world.supplyAssessment.maritimeInterdiction.assignmentsByLinkId.get(link.id) ?? [];
+  const interdicted = world.supplyAssessment.maritimeInterdiction.interdictedLinkIds.has(link.id);
+  const convoy = world.supplyAssessment.convoys.convoyByLinkId.get(link.id);
+  const convoyTransport = convoy?.transportId
+    ? world.units.find((unit) => unit.id === convoy.transportId)
+    : undefined;
   return [
-    "NAVAL ESCORT",
+    "MOVING CONVOY",
     `link ${link.id}`,
     `${link.sourcePortId} -> ${link.destinationPortId}`,
+    "CONVOY",
+    `  ID ${convoy?.id ?? "none"}`,
+    `  transport ${convoy?.transportId ?? "none"}`,
+    `  escorts ${convoy?.escortIds.join(", ") || "none"}`,
+    `  position ${convoyTransport?.regionId ?? "unavailable"}`,
+    `  waypoint ${convoy?.currentWaypoint ?? "-"}`,
+    `  destination ${convoy?.currentDestinationId ?? "-"}`,
+    `  progress ${((convoy?.progress ?? 0) * 100).toFixed(1)}%`,
+    `  mission ${convoy?.mission ?? "none"}`,
+    `  state ${convoy?.state.toUpperCase() ?? "UNAVAILABLE"}`,
+    `  assigned raid ${raids.map((raid) => raid.combatShipId).join(", ") || "none"}`,
+    `  supply link ${convoy?.maritimeLinkId ?? link.id}`,
     "TRANSPORT",
     `  ${link.assignedTransportIds.join(", ") || "none"}`,
     `  ${link.active ? "ACTIVE" : "INACTIVE"} (${assignments.map((assignment) => assignment?.status ?? "unavailable").join(", ") || "unavailable"})`,
@@ -941,6 +976,13 @@ export function formatMaritimeSupplyLink(
     "PROTECTION",
     `  ${protection.protectionState}`,
     `  support ${protection.assignedEscortIds.length}/${protection.requiredEscortCount}`,
+    "INTERDICTION",
+    `  raid target ${raids.length > 0 ? link.id : "none"}`,
+    `  target score ${raids.map((raid) => raid.targetScore.toFixed(1)).join(", ") || "-"}`,
+    `  raiding CombatShip ${raids.map((raid) => raid.combatShipId).join(", ") || "none"}`,
+    `  interdicted ${interdicted ? "YES" : "NO"}`,
+    `  route ${link.routeRegionIds.join(" -> ")}`,
+    `  reason ${raids.map((raid) => raid.targetReason).join(" | ") || "no enemy raid assignment"}`,
     `source component: ${source?.supplied ? "SUPPLIED" : "ISOLATED"}`,
     `destination component: ${destination?.supplied ? "SUPPLIED" : "ISOLATED"}`,
     `remote: units ${demand?.remoteUnitCount ?? 0}`,
@@ -1024,6 +1066,8 @@ function readVersions(world: WorldState): OverlayVersions {
     collapseAdvances: world.collapseAdvances.version,
     battlefieldTopology: world.battlefieldTopology.version,
     supplyAssessment: world.supplyAssessment.version,
+    maritimeInterdiction: world.supplyAssessment.maritimeInterdiction.version,
+    convoys: world.supplyAssessment.convoys.version,
     isolationEffects: world.isolationEffects.version,
     productionDiagnostics: world.productionDiagnostics.version,
     supplyCutoffs: world.supplyCutoffs.version,
@@ -1048,7 +1092,7 @@ function readVersions(world: WorldState): OverlayVersions {
 
 function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
   return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
-    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment && a.isolationEffects === b.isolationEffects && a.productionDiagnostics === b.productionDiagnostics && a.supplyCutoffs === b.supplyCutoffs && a.supplyDefense === b.supplyDefense && a.supplyRelief === b.supplyRelief &&
+    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment && a.maritimeInterdiction === b.maritimeInterdiction && a.convoys === b.convoys && a.isolationEffects === b.isolationEffects && a.productionDiagnostics === b.productionDiagnostics && a.supplyCutoffs === b.supplyCutoffs && a.supplyDefense === b.supplyDefense && a.supplyRelief === b.supplyRelief &&
     a.retreats === b.retreats && a.coverage === b.coverage && a.stalemate === b.stalemate &&
     a.reserveDeployments === b.reserveDeployments && a.battles === b.battles;
 }

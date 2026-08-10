@@ -245,6 +245,46 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     ),
     maritimeEscortCombatShipsProduced:
       world.supplyAssessment.maritimeEscorts.combatShipsProducedForEscortDemand,
+    maritimeInterdictionLinksEvaluated:
+      world.supplyAssessment.maritimeInterdiction.linksEvaluated,
+    maritimeRaidCandidates: world.supplyAssessment.maritimeInterdiction.raidCandidates,
+    maritimeRaidAssignments: world.supplyAssessment.maritimeInterdiction.assignments.length,
+    maritimeEscortEngagements: world.supplyAssessment.maritimeInterdiction.escortEngagements,
+    maritimeTransportsDestroyed: world.supplyAssessment.maritimeInterdiction.transportsDestroyed,
+    maritimeRoutesInterdicted: world.supplyAssessment.maritimeInterdiction.routesInterdicted,
+    maritimeRoutesCurrentlyInterdicted:
+      world.supplyAssessment.maritimeInterdiction.interdictedLinkIds.size,
+    maritimeSupplyInterruptions: world.supplyAssessment.maritimeInterdiction.supplyInterruptions,
+    maritimeAverageInterruptionDuration:
+      world.supplyAssessment.maritimeInterdiction.completedInterruptions > 0
+        ? world.supplyAssessment.maritimeInterdiction.totalInterruptionDurationTicks /
+          world.supplyAssessment.maritimeInterdiction.completedInterruptions
+        : 0,
+    maritimeInterdictionReconnections: world.supplyAssessment.maritimeInterdiction.reconnections,
+    maritimeInterdictionCpuMs: world.supplyAssessment.maritimeInterdiction.evaluationCpuMs,
+    maritimeInterdictionPathfindingCpuMs:
+      world.supplyAssessment.maritimeInterdiction.pathfindingCpuMs,
+    maritimeConvoysCreated: world.supplyAssessment.convoys.convoysCreated,
+    maritimeConvoyUptimeTicks: world.supplyAssessment.convoys.uptimeTicks,
+    maritimeConvoyAverageTravelDistance: world.supplyAssessment.convoys.convoysCreated > 0
+      ? world.supplyAssessment.convoys.totalTravelDistance /
+        world.supplyAssessment.convoys.convoysCreated
+      : 0,
+    maritimeConvoyAverageCycleTime: world.supplyAssessment.convoys.completedCycles > 0
+      ? world.supplyAssessment.convoys.completedCycleTimeTicks /
+        world.supplyAssessment.convoys.completedCycles
+      : 0,
+    maritimeConvoyEscortCount: world.supplyAssessment.convoys.convoys.reduce(
+      (sum, convoy) => sum + convoy.escortIds.length, 0,
+    ),
+    maritimeConvoyEscortLosses: world.supplyAssessment.convoys.escortLosses,
+    maritimeConvoyTransportLosses: world.supplyAssessment.convoys.transportLosses,
+    maritimeConvoyRaidInterceptions: world.supplyAssessment.convoys.raidInterceptions,
+    maritimeConvoySuccessfulDeliveries: world.supplyAssessment.convoys.successfulDeliveries,
+    maritimeConvoySupplyInterruptions: world.supplyAssessment.convoys.supplyInterruptions,
+    maritimeConvoyReplacementEscorts: world.supplyAssessment.convoys.replacementEscorts,
+    maritimeConvoyReplacementTransports: world.supplyAssessment.convoys.replacementTransports,
+    maritimeConvoyMovementCpuMs: world.supplyAssessment.convoys.movementCpuMs,
     isolatedUnitsEvaluated: world.isolationEffects.isolatedUnitsEvaluated,
     isolationGraceEvaluations: world.isolationEffects.unitsInGracePeriod,
     strainedUnitEvaluations: world.isolationEffects.strainedUnits,

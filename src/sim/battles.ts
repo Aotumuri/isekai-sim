@@ -12,6 +12,7 @@ import {
   normalizeWarPair,
   type WarAdjacency,
 } from "./war-state";
+import { getMaritimeMissionUnitIds } from "./maritime-interdiction";
 
 export type BattleId = string & { __brand: "BattleId" };
 
@@ -123,8 +124,11 @@ export function updateBattles(world: WorldState): void {
   }
 
   const navalEnabled = WORLD_BALANCE.unit.naval?.enabled !== false;
-  if (navalEnabled) {
-    const navalUnits = world.units.filter((unit) => unit.domain === "naval");
+  const missionUnitIds = navalEnabled ? null : getMaritimeMissionUnitIds(world);
+  if (navalEnabled || (missionUnitIds?.size ?? 0) > 0) {
+    const navalUnits = world.units.filter((unit) =>
+      unit.domain === "naval" && (navalEnabled || missionUnitIds?.has(unit.id))
+    );
     if (navalUnits.length >= 2) {
       updateNavalBattles(
         world,
