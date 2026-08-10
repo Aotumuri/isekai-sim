@@ -174,6 +174,23 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     collapseArtificialInactivityRemaining: world.collapseAdvances.artificialInactivityRemaining,
     battlefieldTopologyRebuilds: world.battlefieldTopology.rebuildCount,
     battlefieldTopologyCacheHits: world.battlefieldTopology.cacheHitCount,
+    supplyAssessmentRebuilds: world.supplyAssessment.rebuildCount,
+    supplyAssessmentCacheHits: world.supplyAssessment.cacheHitCount,
+    supplyAssessmentCacheHitRatePercent:
+      world.supplyAssessment.rebuildCount + world.supplyAssessment.cacheHitCount > 0
+        ? world.supplyAssessment.cacheHitCount /
+          (world.supplyAssessment.rebuildCount + world.supplyAssessment.cacheHitCount) * 100
+        : 0,
+    suppliedComponents: world.supplyAssessment.assessments.reduce(
+      (sum, assessment) => sum + assessment.suppliedComponentCount,
+      0,
+    ),
+    isolatedComponents: world.supplyAssessment.assessments.reduce(
+      (sum, assessment) => sum + assessment.isolatedComponentCount,
+      0,
+    ),
+    largestIsolatedStrength: world.supplyAssessment.largestIsolatedStrength,
+    longestIsolationDuration: world.supplyAssessment.longestIsolationDuration,
     battlefieldEnemyComponents: world.battlefieldTopology.enemyComponentCount,
     battlefieldArticulationPoints: world.battlefieldTopology.articulationPointCount,
     battlefieldZeroExitComponents: world.battlefieldTopology.zeroExitComponentCount,

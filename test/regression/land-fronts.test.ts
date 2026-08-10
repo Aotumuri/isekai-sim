@@ -102,6 +102,12 @@ import {
   getPockets,
   updateBattlefieldTopology,
 } from "../../src/sim/battlefield-topology";
+import {
+  createSupplyAssessmentState,
+  getNationSupplyAssessment,
+  isRegionSupplied,
+  updateSupplyAssessment,
+} from "../../src/sim/supply-assessment";
 
 const NATION_A = createNationId(0);
 const NATION_B = createNationId(1);
@@ -116,6 +122,162 @@ interface RegionSpec {
 }
 
 type Edge = [string, string];
+
+test("Supply Assessment marks the controlled capital component as supplied", () => {
+  const world = createSupplyTestWorld();
+  updateSupplyAssessment(world);
+
+  const assessment = getNationSupplyAssessment(world, NATION_A);
+  assert(assessment);
+  assert.deepEqual(assessment.supplySourceRegionIds, ids("capital"));
+  assert.equal(assessment.suppliedComponentCount, 1);
+  assert.equal(assessment.isolatedComponentCount, 0);
+  assert.equal(isRegionSupplied(world, id("island-3")), true);
+
+  updateSupplyAssessment(world);
+  assert.equal(world.supplyAssessment.rebuildCount, 1);
+  assert.equal(world.supplyAssessment.cacheHitCount, 1);
+});
+
+test("cutting a corridor creates an isolated controlled component", () => {
+  const world = createSupplyTestWorld();
+  updateSupplyAssessment(world);
+  occupyForSupplyTest(world, "corridor", NATION_B);
+  world.time.fastTick = 5;
+  updateSupplyAssessment(world);
+
+  const assessment = getNationSupplyAssessment(world, NATION_A);
+  assert(assessment);
+  assert.equal(assessment.suppliedComponentCount, 1);
+  assert.equal(assessment.isolatedComponentCount, 1);
+  assert.equal(isRegionSupplied(world, id("capital")), true);
+  assert.equal(isRegionSupplied(world, id("island-2")), false);
+  const isolated = assessment.components.find((component) => component.isolated);
+  assert(isolated);
+  assert.equal(isolated.isolatedSinceTick, 5);
+  assert.equal(isolated.reason, "capital-outside-component");
+});
+
+test("restoring a corridor reconnects supply without losing isolation history", () => {
+  const world = createSupplyTestWorld();
+  updateSupplyAssessment(world);
+  occupyForSupplyTest(world, "corridor", NATION_B);
+  world.time.fastTick = 5;
+  updateSupplyAssessment(world);
+  const isolatedId = supplyComponentForRegion(world, "island-2").id;
+  world.time.fastTick = 12;
+  updateSupplyAssessment(world);
+  restoreForSupplyTest(world, "corridor");
+  updateSupplyAssessment(world);
+
+  const reconnected = supplyComponentForRegion(world, "island-2");
+  assert.equal(reconnected.id, isolatedId);
+  assert.equal(reconnected.supplied, true);
+  assert.equal(reconnected.reconnectedTick, 12);
+  assert.equal(reconnected.isolatedDuration, 7);
+  assert.equal(reconnected.isolatedSinceTick, 5);
+});
+
+test("Supply Assessment reports multiple isolated components", () => {
+  const world = createFrontWorld(
+    [
+      { id: "capital", owner: NATION_A, building: "capital" },
+      { id: "island-a", owner: NATION_A },
+      { id: "island-b", owner: NATION_A },
+      { id: "enemy", owner: NATION_B },
+    ],
+    [],
+  );
+  updateSupplyAssessment(world);
+
+  const assessment = getNationSupplyAssessment(world, NATION_A);
+  assert(assessment);
+  assert.equal(assessment.suppliedComponentCount, 1);
+  assert.equal(assessment.isolatedComponentCount, 2);
+});
+
+test("capital relocation invalidates supply without a topology change", () => {
+  const world = createFrontWorld(
+    [
+      { id: "capital", owner: NATION_A, building: "capital" },
+      { id: "island", owner: NATION_A },
+      { id: "enemy", owner: NATION_B },
+    ],
+    [],
+  );
+  updateSupplyAssessment(world);
+  const rebuilds = world.supplyAssessment.rebuildCount;
+  const nation = world.nations.find((candidate) => candidate.id === NATION_A);
+  assert(nation);
+  nation.capitalMesoId = id("island");
+  updateSupplyAssessment(world);
+
+  assert.equal(world.supplyAssessment.rebuildCount, rebuilds + 1);
+  assert.equal(isRegionSupplied(world, id("capital")), false);
+  assert.equal(isRegionSupplied(world, id("island")), true);
+});
+
+test("overlap matching preserves the stable identity of the largest fragment", () => {
+  const world = createSupplyTestWorld();
+  updateSupplyAssessment(world);
+  const originalId = supplyComponentForRegion(world, "island-2").id;
+  occupyForSupplyTest(world, "corridor", NATION_B);
+  updateSupplyAssessment(world);
+
+  assert.equal(supplyComponentForRegion(world, "island-2").id, originalId);
+});
+
+test("repeated disconnect and reconnect preserves cumulative supply history", () => {
+  const world = createSupplyTestWorld();
+  updateSupplyAssessment(world);
+  world.time.fastTick = 5;
+  occupyForSupplyTest(world, "corridor", NATION_B);
+  updateSupplyAssessment(world);
+  const stableId = supplyComponentForRegion(world, "island-2").id;
+  world.time.fastTick = 10;
+  updateSupplyAssessment(world);
+  restoreForSupplyTest(world, "corridor");
+  updateSupplyAssessment(world);
+  world.time.fastTick = 15;
+  updateSupplyAssessment(world);
+  occupyForSupplyTest(world, "corridor", NATION_B);
+  updateSupplyAssessment(world);
+  world.time.fastTick = 20;
+  updateSupplyAssessment(world);
+
+  const component = supplyComponentForRegion(world, "island-2");
+  assert.equal(component.id, stableId);
+  assert.equal(component.isolated, true);
+  assert.equal(component.isolatedDuration, 10);
+  assert.equal(component.suppliedDuration, 10);
+  assert.equal(component.isolatedSinceTick, 15);
+  assert.equal(component.reconnectedTick, 10);
+});
+
+test("Supply Assessment is deterministic for a fixed seed and event sequence", () => {
+  const run = (): unknown => {
+    const world = createSupplyTestWorld();
+    updateSupplyAssessment(world);
+    world.time.fastTick = 7;
+    occupyForSupplyTest(world, "corridor", NATION_B);
+    updateSupplyAssessment(world);
+    world.time.fastTick = 19;
+    updateSupplyAssessment(world);
+    return world.supplyAssessment.assessments.map((assessment) => ({
+      nationId: assessment.nationId,
+      sources: assessment.supplySourceRegionIds,
+      components: assessment.components.map((component) => ({
+        id: component.id,
+        regions: component.regionIds,
+        supplied: component.supplied,
+        suppliedDuration: component.suppliedDuration,
+        isolatedDuration: component.isolatedDuration,
+      })),
+    }));
+  };
+
+  assert.deepEqual(run(), run());
+});
 
 test("a continuous border between the same enemies creates one front", () => {
   const world = createFrontWorld(
@@ -3874,6 +4036,49 @@ function createSimpleBorderWorld(inactiveNationIds = new Set<NationId>()): World
   );
 }
 
+function createSupplyTestWorld(): WorldState {
+  return createFrontWorld(
+    [
+      { id: "capital", owner: NATION_A, building: "capital" },
+      { id: "corridor", owner: NATION_A },
+      { id: "island-1", owner: NATION_A },
+      { id: "island-2", owner: NATION_A },
+      { id: "island-3", owner: NATION_A },
+      { id: "enemy", owner: NATION_B },
+    ],
+    [
+      ["capital", "corridor"],
+      ["corridor", "island-1"],
+      ["island-1", "island-2"],
+      ["island-2", "island-3"],
+    ],
+  );
+}
+
+function occupyForSupplyTest(
+  world: WorldState,
+  regionId: string,
+  nationId: NationId,
+): void {
+  world.occupation.mesoById.set(id(regionId), nationId);
+  world.occupation.version += 1;
+}
+
+function restoreForSupplyTest(world: WorldState, regionId: string): void {
+  world.occupation.mesoById.delete(id(regionId));
+  world.occupation.version += 1;
+}
+
+function supplyComponentForRegion(world: WorldState, regionId: string) {
+  const assessment = getNationSupplyAssessment(world, NATION_A);
+  assert(assessment);
+  const componentId = assessment.componentIdByRegionId.get(id(regionId));
+  assert(componentId);
+  const component = assessment.componentById.get(componentId);
+  assert(component);
+  return component;
+}
+
 function createThreeSegmentWorld(middleOwnedByThirdNation: boolean): WorldState {
   return createFrontWorld(
     [
@@ -3971,6 +4176,7 @@ function createFrontWorld(
     stalematePressure: createStalematePressureState(),
     collapseAdvances: createCollapseAdvanceState(),
     battlefieldTopology: createBattlefieldTopologyState(),
+    supplyAssessment: createSupplyAssessmentState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

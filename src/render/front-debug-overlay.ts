@@ -23,6 +23,7 @@ import { getFrontAllocation } from "../sim/nation-front-allocations";
 import { getStalemateAssessment } from "../sim/stalemate-pressure";
 import { getStrategicProgressAssessment } from "../sim/strategic-progress";
 import { getBattlefieldTopologyAssessment } from "../sim/battlefield-topology";
+import { getNationSupplyAssessment } from "../sim/supply-assessment";
 import type { Vec2 } from "../utils/vector";
 import { clearLayer } from "./clear-layer";
 import { findSharedSegments, type Segment } from "./meso-border-geometry";
@@ -60,6 +61,7 @@ interface OverlayVersions {
   operations: number;
   collapseAdvances: number;
   battlefieldTopology: number;
+  supplyAssessment: number;
   retreats: number;
   coverage: number;
   stalemate: number;
@@ -124,6 +126,7 @@ export function attachFrontDebugOverlay(
       placeLabel(label, getFrontAnchor(sector, world), index, [], world.width, world.height);
       layer.addChild(label);
     });
+    drawSupplySourceMarkers(layer, world);
     if (selectedSectorId && !world.landFronts.operationalSectorsById.has(selectedSectorId)) {
       selectedSectorId = null;
     }
@@ -405,6 +408,23 @@ function appendOperationalDetails(
     const operation = getOffensiveOperationForFront(world, front.id, nationId);
     const candidate = getOperationCandidateForFront(world, front.id, nationId);
     if (selected) {
+      const supply = getNationSupplyAssessment(world, nationId);
+      if (supply) {
+        lines.push(
+          `SUPPLY ${nationId}`,
+          `  sources ${supply.supplySourceRegionIds.join(", ") || "none"}`,
+          `  supplied ${supply.suppliedComponentCount} | isolated ${supply.isolatedComponentCount}`,
+        );
+        for (const component of supply.components) {
+          const reconnectDuration = component.reconnectedTick === null
+            ? 0
+            : world.time.fastTick - component.reconnectedTick;
+          lines.push(
+            `  component ${component.id} [${component.topologyComponentId}] ${component.supplied ? "SUPPLIED" : "ISOLATED"}`,
+            `    isolation ${component.isolatedDuration} | reconnect ${reconnectDuration} | ${component.reason}`,
+          );
+        }
+      }
       const enemyId = nationId === front.nationAId ? front.nationBId : front.nationAId;
       const topology = getBattlefieldTopologyAssessment(world, nationId, enemyId);
       const enemyInfluence = nationId === front.nationAId ? front.sideB.influenceRegionIds : front.sideA.influenceRegionIds;
@@ -672,6 +692,14 @@ function drawFrontMarkers(
   }
 }
 
+function drawSupplySourceMarkers(layer: Container, world: WorldState): void {
+  for (const assessment of world.supplyAssessment.assessments) {
+    for (const regionId of assessment.supplySourceRegionIds) {
+      drawMarker(layer, world, regionId, "S", 0x5be7c4, "diamond");
+    }
+  }
+}
+
 function drawMarker(
   layer: Container,
   world: WorldState,
@@ -743,6 +771,7 @@ function readVersions(world: WorldState): OverlayVersions {
     operations: world.offensiveOperations.version,
     collapseAdvances: world.collapseAdvances.version,
     battlefieldTopology: world.battlefieldTopology.version,
+    supplyAssessment: world.supplyAssessment.version,
     retreats: world.retreatPlans.version,
     coverage: world.frontlineCoverage.version,
     stalemate: world.stalematePressure.version,
@@ -762,7 +791,7 @@ function readVersions(world: WorldState): OverlayVersions {
 
 function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
   return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
-    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology &&
+    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment &&
     a.retreats === b.retreats && a.coverage === b.coverage && a.stalemate === b.stalemate &&
     a.reserveDeployments === b.reserveDeployments && a.battles === b.battles;
 }

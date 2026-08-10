@@ -26,6 +26,7 @@ import { updateStalematePressure } from "./stalemate-pressure";
 import { updateStrategicProgress } from "./strategic-progress";
 import { updateCollapseAdvances } from "./collapse-advance";
 import { updateBattlefieldTopology } from "./battlefield-topology";
+import { updateSupplyAssessment } from "./supply-assessment";
 import {
   beginAiGeographyEvaluation,
   prepareFrontDistanceFields,
@@ -140,6 +141,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateProduction(world);
   updateWarDeclarations(world);
   beginAiGeographyEvaluation(world);
+  updateSupplyAssessment(world);
   updateLandFronts(world);
   prepareFrontDistanceFields(world);
   updateCapitalDefense(world);

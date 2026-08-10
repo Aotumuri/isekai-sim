@@ -20,6 +20,7 @@ import { createOccupationState } from "../../src/sim/occupation";
 import { createOffensiveOperationState } from "../../src/sim/offensive-operations";
 import { createCollapseAdvanceState } from "../../src/sim/collapse-advance";
 import { createBattlefieldTopologyState } from "../../src/sim/battlefield-topology";
+import { createSupplyAssessmentState } from "../../src/sim/supply-assessment";
 import {
   createReorganizationState,
   getReorganizationPlanForUnit,
@@ -420,6 +421,7 @@ function createReorganizationWorld(): { world: WorldState; unit: UnitState } {
     stalematePressure: createStalematePressureState(),
     collapseAdvances: createCollapseAdvanceState(),
     battlefieldTopology: createBattlefieldTopologyState(),
+    supplyAssessment: createSupplyAssessmentState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

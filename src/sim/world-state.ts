@@ -24,6 +24,7 @@ import type { StalematePressureState } from "./stalemate-pressure";
 import type { CollapseAdvanceState } from "./collapse-advance";
 import type { StrategicProgressState } from "./strategic-progress";
 import type { BattlefieldTopologyState } from "./battlefield-topology";
+import type { SupplyAssessmentState } from "./supply-assessment";
 
 export interface WorldState {
   width: number;
@@ -47,6 +48,7 @@ export interface WorldState {
   reorganization: ReorganizationState;
   strategicProgress: StrategicProgressState;
   battlefieldTopology: BattlefieldTopologyState;
+  supplyAssessment: SupplyAssessmentState;
   stalematePressure: StalematePressureState;
   collapseAdvances: CollapseAdvanceState;
   mapVersion: number;

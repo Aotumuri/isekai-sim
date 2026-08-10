@@ -132,6 +132,13 @@ export interface WorldSummary {
   collapseArtificialInactivityRemaining: number;
   battlefieldTopologyRebuilds: number;
   battlefieldTopologyCacheHits: number;
+  supplyAssessmentRebuilds: number;
+  supplyAssessmentCacheHits: number;
+  supplyAssessmentCacheHitRatePercent: number;
+  suppliedComponents: number;
+  isolatedComponents: number;
+  largestIsolatedStrength: number;
+  longestIsolationDuration: number;
   battlefieldEnemyComponents: number;
   battlefieldArticulationPoints: number;
   battlefieldZeroExitComponents: number;
