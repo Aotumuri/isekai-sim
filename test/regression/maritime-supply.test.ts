@@ -7,12 +7,12 @@ import { createMacroRegionId } from "../../src/worldgen/macro-region";
 import type { MesoRegion, MesoRegionId } from "../../src/worldgen/meso-region";
 import type { MicroRegionId } from "../../src/worldgen/micro-region";
 import type { NationId } from "../../src/worldgen/nation";
-import { createBattlefieldTopologyState } from "../../src/sim/battlefield-topology";
+import { createBattlefieldTopologyState, updateBattlefieldTopology } from "../../src/sim/battlefield-topology";
 import { createUnitForType } from "../../src/sim/create-units";
 import { createCapitalDefenseState } from "../../src/sim/capital-defense";
 import { createCollapseAdvanceState } from "../../src/sim/collapse-advance";
 import { createFrontlineCoverageState } from "../../src/sim/frontline-coverage";
-import { createLandFrontState } from "../../src/sim/land-fronts";
+import { createLandFrontState, updateLandFronts } from "../../src/sim/land-fronts";
 import { createNationFrontAllocationState } from "../../src/sim/nation-front-allocations";
 import { createNationFrontPlanState } from "../../src/sim/nation-front-plans";
 import { createNationResourceFlow, createNationResources, type NationRuntime } from "../../src/sim/nation-runtime";
@@ -41,6 +41,8 @@ import {
   createProductionDiagnosticsState,
   updateProduction,
 } from "../../src/sim/production";
+import { createSupplyCutoffAnalysisState, updateSupplyCutoffAnalysis } from "../../src/sim/supply-cutoff";
+import { declareWar } from "../../src/sim/war-state";
 
 const NATION_A = "nation-a" as NationId;
 const NATION_B = "nation-b" as NationId;
@@ -224,6 +226,85 @@ test("maritime-supplied island production succeeds and stops when its route is d
   assert.equal(world.productionDiagnostics.blockedByIsolation, 1);
 });
 
+test("Supply Cutoff recognizes a maritime destination port as the remote component source", () => {
+  const world = createMaritimeCutoffWorld(false);
+  updateSupplyAssessment(world);
+  updateLandFronts(world);
+  updateBattlefieldTopology(world);
+  updateSupplyCutoffAnalysis(world);
+  const candidate = world.supplyCutoffs.candidates.find((item) =>
+    item.attackerNationId === NATION_B && item.targetRegionId === id("port-b")
+  );
+  assert(candidate);
+  assert.equal(candidate.sourceKind, "maritime");
+  assert(candidate.reasonFlags.includes("port-supply-cutoff"));
+  assert.equal(candidate.affectedUnitCount, 1);
+  assert(candidate.affectedRegionIds.includes(id("island-b")));
+});
+
+test("a second active maritime entry prevents a false port cutoff prediction", () => {
+  const world = createMaritimeCutoffWorld(true);
+  updateSupplyAssessment(world);
+  assert(world.supplyAssessment.maritimeLinks.some((link) =>
+    link.active && link.destinationPortId === id("port-b")
+  ));
+  assert(world.supplyAssessment.maritimeLinks.some((link) =>
+    link.active && link.destinationPortId === id("port-c")
+  ));
+  updateLandFronts(world);
+  updateBattlefieldTopology(world);
+  updateSupplyCutoffAnalysis(world);
+  assert(!world.supplyCutoffs.candidates.some((item) =>
+    item.attackerNationId === NATION_B && item.targetRegionId === id("port-b")
+  ));
+});
+
+function createMaritimeCutoffWorld(alternateEntry: boolean): WorldState {
+  const world = createMaritimeWorld();
+  const attackerRegion: MesoRegion = {
+    id: id("attacker-front"),
+    type: "land",
+    centerId: "micro-attacker" as MicroRegionId,
+    center: { x: 45, y: 10 },
+    microRegionIds: [],
+    neighbors: [{ id: id("port-b"), hasRiver: false }],
+    building: "capital",
+    resource: null,
+  };
+  world.mesoRegions.push(attackerRegion);
+  const portB = world.mesoRegions.find((region) => region.id === id("port-b"));
+  assert(portB);
+  portB.neighbors.push({ id: attackerRegion.id, hasRiver: false });
+  const macro: MacroRegion = {
+    id: createMacroRegionId(world.macroRegions.length),
+    nationId: NATION_B,
+    mesoRegionIds: [attackerRegion.id],
+    isCore: true,
+  };
+  world.macroRegions.push(macro);
+  world.nations.push(createNation(NATION_B, attackerRegion.id, [macro.id]));
+  if (alternateEntry) {
+    const seaAB = world.mesoRegions.find((region) => region.id === id("sea-ab"));
+    const seaCD = world.mesoRegions.find((region) => region.id === id("sea-cd"));
+    assert(seaAB && seaCD);
+    seaAB.neighbors.push({ id: seaCD.id, hasRiver: false });
+    seaCD.neighbors.push({ id: seaAB.id, hasRiver: false });
+  }
+  world.cache.mesoById.clear();
+  world.cache.neighborsById.clear();
+  world.mapVersion += 1;
+  declareWar(world.wars, NATION_B, NATION_A, 0, true);
+  for (let index = 0; index < 4; index += 1) {
+    world.units.push(createUnitForType(
+      createUnitId(world.unitIdCounter++), NATION_B, attackerRegion.id, "Infantry",
+    ));
+  }
+  world.units.push(createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, id("island-b"), "Infantry",
+  ));
+  return world;
+}
+
 function createMaritimeWorld(withPorts = true): WorldState {
   const specs: Array<{
     name: string;
@@ -301,6 +382,7 @@ function createMaritimeWorld(withPorts = true): WorldState {
     supplyAssessment: createSupplyAssessmentState(),
     isolationEffects: createIsolationEffectsState(),
     productionDiagnostics: createProductionDiagnosticsState(),
+    supplyCutoffs: createSupplyCutoffAnalysisState(),
     stalematePressure: createStalematePressureState(),
     collapseAdvances: createCollapseAdvanceState(),
     mapVersion: 0,

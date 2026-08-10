@@ -40,6 +40,7 @@ import { createUnitId, type UnitState } from "../../src/sim/unit";
 import type { WorldState } from "../../src/sim/world-state";
 import { createWorldCache } from "../../src/sim/world-cache";
 import { createProductionDiagnosticsState } from "../../src/sim/production";
+import { createSupplyCutoffAnalysisState } from "../../src/sim/supply-cutoff";
 
 const NATION = "nation-a" as NationId;
 
@@ -175,6 +176,7 @@ function createIsolationWorld(withUnit = true): { world: WorldState; unit: UnitS
     supplyAssessment: createSupplyAssessmentState(),
     isolationEffects: createIsolationEffectsState(),
     productionDiagnostics: createProductionDiagnosticsState(),
+    supplyCutoffs: createSupplyCutoffAnalysisState(),
     stalematePressure: createStalematePressureState(),
     collapseAdvances: createCollapseAdvanceState(),
     mapVersion: 0,

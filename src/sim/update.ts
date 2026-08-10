@@ -28,6 +28,7 @@ import { updateCollapseAdvances } from "./collapse-advance";
 import { updateBattlefieldTopology } from "./battlefield-topology";
 import { updateSupplyAssessment } from "./supply-assessment";
 import { updateIsolationEffects } from "./isolation-effects";
+import { updateSupplyCutoffAnalysis } from "./supply-cutoff";
 import {
   beginAiGeographyEvaluation,
   prepareFrontDistanceFields,
@@ -157,6 +158,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateNationFrontAllocations(world);
   updateFrontlineCoverage(world);
   updateBattlefieldTopology(world);
+  updateSupplyCutoffAnalysis(world);
   updateOffensiveOperations(world);
   updateCollapseAdvances(world);
 }

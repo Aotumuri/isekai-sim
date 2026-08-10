@@ -43,6 +43,14 @@ import {
   type PocketClosureOpportunity,
   type PocketReductionObjective,
 } from "./battlefield-topology";
+import {
+  cloneSupplyCutoffCandidate,
+  getSupplyCutoffCandidate,
+  isSupplyCutoffStillValid,
+  verifySupplyCutoff,
+  type SupplyCutoffCandidate,
+  type SupplyCutoffConfirmation,
+} from "./supply-cutoff";
 
 export type OperationId = string & { __brand: "OperationId" };
 
@@ -81,6 +89,11 @@ export type OffensiveOperationReason =
   | "enemy-city-opportunity"
   | "pocket-closure"
   | "pocket-reduction"
+  | "supply-cutoff"
+  | "major-force-isolation"
+  | "frontline-supply-cutoff"
+  | "port-supply-cutoff"
+  | "pocket-and-supply-cutoff"
   | "high-front-priority"
   | "weak-enemy-presence";
 
@@ -161,6 +174,8 @@ export interface OperationCandidate {
   targetLocalDefenderStrength: number;
   targetTacticalScore: number;
   targetTopologyScore: number;
+  targetSupplyScore: number;
+  supplyCutoffObjective: SupplyCutoffCandidate | null;
   pocketClosureObjective: PocketClosureOpportunity | null;
   pocketReductionObjective: PocketReductionObjective | null;
   reasonFlags: OffensiveOperationReason[];
@@ -216,6 +231,9 @@ export interface OffensiveOperation {
   targetLocalDefenderStrength: number;
   targetTacticalScore: number;
   targetTopologyScore: number;
+  targetSupplyScore: number;
+  supplyCutoffObjective: SupplyCutoffCandidate | null;
+  supplyCutoffConfirmation: SupplyCutoffConfirmation | null;
   pocketClosureObjective: PocketClosureOpportunity | null;
   pocketReductionObjective: PocketReductionObjective | null;
   pocketClosureConfirmation: PocketClosureConfirmation | null;
@@ -359,6 +377,8 @@ export interface OperationTargetSelection {
   targetLocalDefenderStrength: number;
   tacticalScore: number;
   topologyScore?: number;
+  supplyScore?: number;
+  supplyCutoff?: SupplyCutoffCandidate | null;
   pocketClosure?: PocketClosureOpportunity | null;
   pocketReduction?: PocketReductionObjective | null;
   tacticalReasons: OffensiveOperationReason[];
@@ -482,6 +502,7 @@ export function createOffensiveOperationState(): OffensiveOperationState {
 export function updateOffensiveOperations(world: WorldState): void {
   const state = world.offensiveOperations;
   const startedAt = world.instrumentation ? performance.now() : 0;
+  reconcileSupplyCutoffConfirmations(world);
   const previousMembership = state.operationIdByUnitId;
   let changed = false;
   const retained: OffensiveOperation[] = [];
@@ -523,6 +544,8 @@ export function updateOffensiveOperations(world: WorldState): void {
     const candidates = plans
       .filter((plan) => isOperationPlanEligible(world, nationId, plan))
       .sort((a, b) =>
+        bestSupplyCutoffScore(world, nationId, b.frontId) -
+          bestSupplyCutoffScore(world, nationId, a.frontId) ||
         bestPocketClosureScore(world, nationId, b.frontId) -
           bestPocketClosureScore(world, nationId, a.frontId) ||
         bestPocketReductionScore(world, nationId, b.frontId) -
@@ -595,6 +618,22 @@ export function updateOffensiveOperations(world: WorldState): void {
       recordEvent(world, operation, "created", "attack-front-selected");
       if (operation.pocketClosureObjective) {
         state.pocketClosureCreatedCount += 1;
+      }
+      if (operation.supplyCutoffObjective) {
+        world.supplyCutoffs.operationsCreated += 1;
+        world.supplyCutoffs.predictedIsolatedStrength +=
+          operation.supplyCutoffObjective.affectedStrength;
+        world.instrumentation?.incrementCounter("supplyCutoff.operationsCreated");
+        world.instrumentation?.incrementCounter(
+          "supplyCutoff.predictedStrength",
+          operation.supplyCutoffObjective.affectedStrength,
+        );
+        world.supplyCutoffs.tacticalScoreTotal += operation.targetTacticalScore;
+        world.supplyCutoffs.supplyScoreTotal += operation.targetSupplyScore;
+        world.supplyCutoffs.scoreSamples += 1;
+        world.instrumentation?.incrementCounter("supplyCutoff.tacticalScore", operation.targetTacticalScore);
+        world.instrumentation?.incrementCounter("supplyCutoff.supplyScore", operation.targetSupplyScore);
+        world.instrumentation?.incrementCounter("supplyCutoff.scoreSamples");
       }
       if (operation.pocketReductionObjective) {
         state.pocketReductionCreatedCount += 1;
@@ -768,6 +807,9 @@ export function formatOffensiveOperationSummary(world: WorldState): string {
       `  local defense: ${operation.targetLocalDefenderStrength.toFixed(1)}`,
       `  tactical score: ${operation.targetTacticalScore.toFixed(1)}`,
       `  topology score: ${operation.targetTopologyScore.toFixed(1)}`,
+      `  supply score: ${operation.targetSupplyScore.toFixed(1)}`,
+      `  supply cutoff: ${operation.supplyCutoffObjective ? `${operation.supplyCutoffObjective.targetRegionId} predicts ${operation.supplyCutoffObjective.affectedStrength.toFixed(1)} strength / ${operation.supplyCutoffObjective.affectedUnitCount} units / ${operation.supplyCutoffObjective.affectedRegionCount} regions` : "none"}`,
+      `  cutoff result: ${operation.supplyCutoffConfirmation ? `${operation.supplyCutoffConfirmation.state} actual ${operation.supplyCutoffConfirmation.actualIsolatedStrength.toFixed(1)}${operation.supplyCutoffConfirmation.mismatchReason ? ` (${operation.supplyCutoffConfirmation.mismatchReason})` : ""}` : "pending"}`,
       `  pocket closure: ${operation.pocketClosureObjective ? `${operation.pocketClosureObjective.candidateRegionId} exits ${operation.pocketClosureObjective.currentExits}->${operation.pocketClosureObjective.expectedExitsAfterCapture} score ${operation.pocketClosureObjective.score.toFixed(1)}` : "none"}`,
       `  closure result: ${operation.pocketClosureConfirmation?.status ?? "pending"}`,
       `  exploitation target: ${operation.exploitationTargetRegionId ?? "none"}`,
@@ -810,6 +852,7 @@ function advanceOperation(
   ) {
     recordOperationCaptures(world, operation);
     confirmPocketClosure(world, operation);
+    confirmSupplyCutoff(world, operation);
     if (!tryStartExploitation(world, operation, "primary-target-occupied")) {
       finishOperation(
         world,
@@ -863,7 +906,7 @@ function advanceOperation(
     );
   }
   const plan = getFrontPlan(world, operation.frontId, operation.nationId);
-  if (!plan || (plan.posture !== "attack" && !operation.isMajorOffensive && !operation.pocketClosureObjective && !operation.pocketReductionObjective)) {
+  if (!plan || (plan.posture !== "attack" && !operation.isMajorOffensive && !operation.pocketClosureObjective && !operation.pocketReductionObjective && !operation.supplyCutoffObjective)) {
     finishOperation(world, operation, "cancelled", "posture-changed");
     return { keep: true, changed: true };
   }
@@ -890,6 +933,11 @@ function advanceOperation(
     return { keep: true, changed: true };
   }
   if (operation.pocketReductionObjective && !isPocketReductionStillValid(world, operation)) {
+    finishOperation(world, operation, "cancelled", "target-invalid");
+    return { keep: true, changed: true };
+  }
+  if (operation.supplyCutoffObjective &&
+      !isSupplyCutoffStillValid(world, operation.supplyCutoffObjective)) {
     finishOperation(world, operation, "cancelled", "target-invalid");
     return { keep: true, changed: true };
   }
@@ -1176,6 +1224,9 @@ function buildOperationCandidate(
     targetLocalDefenderStrength: targets.targetLocalDefenderStrength,
     targetTacticalScore: targets.tacticalScore,
     targetTopologyScore: targets.topologyScore ?? 0,
+    targetSupplyScore: targets.supplyScore ?? 0,
+    supplyCutoffObjective: targets.supplyCutoff
+      ? cloneSupplyCutoffCandidate(targets.supplyCutoff) : null,
     pocketClosureObjective: targets.pocketClosure
       ? clonePocketClosureOpportunity(targets.pocketClosure) : null,
     pocketReductionObjective: targets.pocketReduction
@@ -1297,6 +1348,10 @@ function createOperationFromCandidate(
     targetLocalDefenderStrength: candidate.targetLocalDefenderStrength,
     targetTacticalScore: candidate.targetTacticalScore,
     targetTopologyScore: candidate.targetTopologyScore,
+    targetSupplyScore: candidate.targetSupplyScore,
+    supplyCutoffObjective: candidate.supplyCutoffObjective
+      ? cloneSupplyCutoffCandidate(candidate.supplyCutoffObjective) : null,
+    supplyCutoffConfirmation: null,
     pocketClosureObjective: candidate.pocketClosureObjective
       ? clonePocketClosureOpportunity(candidate.pocketClosureObjective) : null,
     pocketReductionObjective: candidate.pocketReductionObjective
@@ -1403,6 +1458,18 @@ function selectOperationTargets(
         world, plan.nationId, enemy.nationId, front.id, regionId,
       );
       const reductionScore = reduction ? 90 + reduction.score : 0;
+      const supplyCutoff = getSupplyCutoffCandidate(
+        world,
+        plan.nationId,
+        enemy.nationId,
+        front.id,
+        regionId,
+      );
+      const supplyScore = supplyCutoff?.tacticalFeasibility
+        ? supplyCutoff.score * (isSchwerpunktSector(world, plan.nationId, front.id)
+          ? WORLD_BALANCE.war.landFront.supplyCutoff.majorOffensiveWeight
+          : WORLD_BALANCE.war.landFront.supplyCutoff.normalWeight)
+        : 0;
       return {
         regionId,
         score:
@@ -1414,7 +1481,7 @@ function selectOperationTargets(
             enemy.nationId,
             enemyBorderSet,
             distanceFromFriendlyBorder.get(regionId) ?? 0,
-          ) + tactical.score + topologyScore + closureScore + reductionScore,
+          ) + tactical.score + topologyScore + closureScore + reductionScore + supplyScore,
         nearbyEnemyStrength: getNearbyEnemyStrength(
           world,
           regionId,
@@ -1424,6 +1491,8 @@ function selectOperationTargets(
         topologyScore,
         closure: closure?.tacticallyFeasible ? closure : null,
         reduction,
+        supplyCutoff: supplyCutoff?.tacticalFeasibility ? supplyCutoff : null,
+        supplyScore,
       };
     })
     .sort((a, b) => b.score - a.score || compareIds(a.regionId, b.regionId));
@@ -1478,6 +1547,8 @@ function selectOperationTargets(
     topologyScore: primary.topologyScore,
     pocketClosure: primary.closure,
     pocketReduction: primary.reduction,
+    supplyCutoff: primary.supplyCutoff,
+    supplyScore: primary.supplyScore,
     tacticalReasons: primary.tactical.reasons,
   };
 }
@@ -2046,6 +2117,10 @@ function transitionToAttacking(
     now + WORLD_BALANCE.war.landFront.offensiveOperation.attackTimeoutTicks;
   operation.actualActiveApproachCount = operation.plannedApproachRegionIds.length;
   operation.synchronizationReady = true;
+  if (operation.supplyCutoffObjective) {
+    world.supplyCutoffs.attacksLaunched += 1;
+    world.instrumentation?.incrementCounter("supplyCutoff.attacksLaunched");
+  }
   world.offensiveOperations.achievedApproachCountTotal += operation.actualActiveApproachCount;
   world.offensiveOperations.synchronizationWaitTicks += operation.synchronizationWaitTicks;
   world.instrumentation?.incrementCounter(
@@ -2936,6 +3011,9 @@ function collectOperationReasons(
   reasons.push(...targets.tacticalReasons);
   if (targets.pocketClosure) reasons.push("pocket-closure");
   if (targets.pocketReduction) reasons.push("pocket-reduction");
+  if (targets.supplyCutoff) {
+    reasons.push(...targets.supplyCutoff.reasonFlags);
+  }
   if (strengthRatio > 1.4) {
     reasons.push("front-superiority");
   }
@@ -3084,6 +3162,16 @@ function cloneOperation(operation: OffensiveOperation): OffensiveOperation {
     reasonFlags: [...operation.reasonFlags],
     pocketClosureObjective: operation.pocketClosureObjective
       ? clonePocketClosureOpportunity(operation.pocketClosureObjective) : null,
+    supplyCutoffObjective: operation.supplyCutoffObjective
+      ? cloneSupplyCutoffCandidate(operation.supplyCutoffObjective) : null,
+    supplyCutoffConfirmation: operation.supplyCutoffConfirmation
+      ? {
+        ...operation.supplyCutoffConfirmation,
+        predictedComponentIds: [...operation.supplyCutoffConfirmation.predictedComponentIds],
+        actualComponentIds: [...operation.supplyCutoffConfirmation.actualComponentIds],
+        actualRegionIds: [...operation.supplyCutoffConfirmation.actualRegionIds],
+      }
+      : null,
     pocketClosureConfirmation: operation.pocketClosureConfirmation
       ? { ...operation.pocketClosureConfirmation,
         trappedRegionIds: [...operation.pocketClosureConfirmation.trappedRegionIds] }
@@ -3101,6 +3189,137 @@ function recordOperationCaptures(world: WorldState, operation: OffensiveOperatio
     if (isRegionControlledBy(world, regionId, operation.nationId)) captured.add(regionId);
   }
   operation.capturedRegionIds = [...captured].sort(compareIds);
+}
+
+function confirmSupplyCutoff(
+  world: WorldState,
+  operation: OffensiveOperation,
+): void {
+  if (!operation.supplyCutoffObjective || operation.supplyCutoffConfirmation) return;
+  const confirmation = verifySupplyCutoff(world, operation.supplyCutoffObjective);
+  operation.supplyCutoffConfirmation = confirmation;
+  const state = world.supplyCutoffs;
+  state.targetCaptures += 1;
+  world.instrumentation?.incrementCounter("supplyCutoff.targetCaptures");
+  if (confirmation.state === "failed") {
+    state.failedCutoffs += 1;
+    world.instrumentation?.incrementCounter("supplyCutoff.failed");
+    return;
+  }
+  state.successfulCutoffs += 1;
+  state.actualIsolatedStrength += confirmation.actualIsolatedStrength;
+  state.isolatedUnits += confirmation.actualUnitCount;
+  state.isolatedRegions += confirmation.actualRegionIds.length;
+  state.isolatedCities += confirmation.actualCities;
+  state.isolatedPorts += confirmation.actualPorts;
+  state.frontlineComponentsIsolated += Number(
+    operation.supplyCutoffObjective.frontlineAffected,
+  );
+  state.cutoffToIsolationSamples += 1;
+  state.cutoffToIsolationTicks += Math.max(
+    0,
+    confirmation.confirmedAtTick - operation.phaseStartedAtTick,
+  );
+  world.instrumentation?.incrementCounter("supplyCutoff.successful");
+  world.instrumentation?.incrementCounter(
+    "supplyCutoff.actualStrength",
+    confirmation.actualIsolatedStrength,
+  );
+  world.instrumentation?.incrementCounter(
+    "supplyCutoff.isolatedUnits",
+    confirmation.actualUnitCount,
+  );
+  world.instrumentation?.incrementCounter(
+    "supplyCutoff.isolatedRegions",
+    confirmation.actualRegionIds.length,
+  );
+  world.instrumentation?.incrementCounter("supplyCutoff.isolatedCities", confirmation.actualCities);
+  world.instrumentation?.incrementCounter("supplyCutoff.isolatedPorts", confirmation.actualPorts);
+}
+
+function reconcileSupplyCutoffConfirmations(world: WorldState): void {
+  const now = world.time.fastTick;
+  const operations = [...world.offensiveOperations.operations, ...world.offensiveOperations.history];
+  const seen = new Set<OperationId>();
+  for (const operation of operations) {
+    if (seen.has(operation.id)) continue;
+    seen.add(operation.id);
+    const objective = operation.supplyCutoffObjective;
+    const confirmation = operation.supplyCutoffConfirmation;
+    if (!objective || !confirmation ||
+        (confirmation.state !== "cut" && confirmation.state !== "sustained")) continue;
+    const current = verifySupplyCutoff(world, objective);
+    const elapsed = Math.max(0, now - confirmation.lastEvaluatedAtTick);
+    confirmation.lastEvaluatedAtTick = now;
+    if (current.state === "failed") {
+      confirmation.state = "reconnected";
+      confirmation.reconnectedAtTick = now;
+      world.supplyCutoffs.reconnections += 1;
+      world.instrumentation?.incrementCounter("supplyCutoff.reconnections");
+      continue;
+    }
+    world.supplyCutoffs.isolationDurationTicks += elapsed;
+    world.instrumentation?.incrementCounter("supplyCutoff.isolationDurationTicks", elapsed);
+    confirmation.actualComponentIds = [...current.actualComponentIds];
+    confirmation.actualRegionIds = [...current.actualRegionIds];
+    confirmation.actualIsolatedStrength = current.actualIsolatedStrength;
+    confirmation.actualUnitCount = current.actualUnitCount;
+    confirmation.actualCities = current.actualCities;
+    confirmation.actualPorts = current.actualPorts;
+    if (confirmation.state === "cut" &&
+        now - confirmation.confirmedAtTick >= WORLD_BALANCE.war.landFront.supplyCutoff.sustainedTicks) {
+      confirmation.state = "sustained";
+      confirmation.sustainedAtTick = now;
+      world.supplyCutoffs.sustainedCutoffs += 1;
+      world.instrumentation?.incrementCounter("supplyCutoff.sustained");
+    }
+  }
+  recordSupplyCutoffFollowups(world, operations);
+}
+
+function recordSupplyCutoffFollowups(
+  world: WorldState,
+  operations: OffensiveOperation[],
+): void {
+  const state = world.supplyCutoffs;
+  const allCollapseAdvances = [
+    ...world.collapseAdvances.advances,
+    ...world.collapseAdvances.history,
+  ];
+  for (const operation of operations) {
+    const confirmation = operation.supplyCutoffConfirmation;
+    const objective = operation.supplyCutoffObjective;
+    if (!objective || !confirmation || confirmation.state === "failed") continue;
+    const affected = new Set(confirmation.actualRegionIds);
+    if (!state.correlatedPocketOperationIds.has(operation.id) &&
+        operations.some((later) => later.id !== operation.id &&
+          later.startedAtTick >= confirmation.confirmedAtTick &&
+          later.nationId === operation.nationId &&
+          later.enemyNationId === operation.enemyNationId &&
+          !!later.pocketReductionObjective?.regionIds.some((regionId) => affected.has(regionId)))) {
+      state.correlatedPocketOperationIds.add(operation.id);
+      state.cutoffToPocketReduction += 1;
+      world.instrumentation?.incrementCounter("supplyCutoff.toPocketReduction");
+    }
+    if (!state.correlatedCollapseOperationIds.has(operation.id) &&
+        allCollapseAdvances.some((advance) =>
+          advance.startedAtTick >= confirmation.confirmedAtTick &&
+          advance.nationId === operation.nationId &&
+          advance.enemyNationId === operation.enemyNationId &&
+          advance.targetRegionIds.some((regionId) => affected.has(regionId)))) {
+      state.correlatedCollapseOperationIds.add(operation.id);
+      state.cutoffToCollapseAdvance += 1;
+      world.instrumentation?.incrementCounter("supplyCutoff.toCollapseAdvance");
+    }
+    const enemy = world.nations.find((nation) => nation.id === operation.enemyNationId);
+    if (!state.correlatedSurrenderOperationIds.has(operation.id) && enemy &&
+        enemy.macroRegionIds.length === 0 &&
+        world.time.fastTick - confirmation.confirmedAtTick <= 500) {
+      state.correlatedSurrenderOperationIds.add(operation.id);
+      state.cutoffToSurrender += 1;
+      world.instrumentation?.incrementCounter("supplyCutoff.toSurrender");
+    }
+  }
 }
 
 function createExploitationStopCounts(): Record<ExploitationStopReason, number> {
@@ -3373,6 +3592,11 @@ function isOperationPlanEligible(
     return true;
   }
   if (bestPocketReduction(world, nationId, plan.frontId)) return true;
+  const cutoff = bestSupplyCutoff(world, nationId, plan.frontId);
+  if (cutoff?.tacticalFeasibility &&
+      cutoff.score >= WORLD_BALANCE.war.landFront.supplyCutoff.dedicatedOperationThreshold) {
+    return true;
+  }
   if (!isSchwerpunktSector(world, nationId, plan.frontId)) return false;
   const pressure = world.stalematePressure.assessments.find((assessment) =>
     assessment.nationId === nationId &&
@@ -3380,6 +3604,25 @@ function isOperationPlanEligible(
   )?.pressure ?? 0;
   return pressure >=
     WORLD_BALANCE.war.landFront.stalemate.majorOffensiveThreshold;
+}
+
+function bestSupplyCutoff(
+  world: WorldState,
+  nationId: NationId,
+  frontId: FrontId,
+): SupplyCutoffCandidate | undefined {
+  return world.supplyCutoffs.candidates
+    .filter((candidate) => candidate.attackerNationId === nationId &&
+      candidate.sectorId === frontId && candidate.tacticalFeasibility)
+    .sort((a, b) => b.score - a.score || compareIds(a.key, b.key))[0];
+}
+
+function bestSupplyCutoffScore(
+  world: WorldState,
+  nationId: NationId,
+  frontId: FrontId,
+): number {
+  return bestSupplyCutoff(world, nationId, frontId)?.score ?? 0;
 }
 
 function bestPocketReduction(

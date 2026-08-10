@@ -20,7 +20,11 @@ export type StrategicProgressReason =
   | "successful-exploitation"
   | "pocket-closed"
   | "pocket-reduced-significantly"
-  | "pocket-destroyed";
+  | "pocket-destroyed"
+  | "meaningful-force-isolated"
+  | "frontline-supply-cut"
+  | "major-component-isolated"
+  | "maritime-supply-cut";
 
 export interface StrategicProgressAssessment {
   nationId: NationId;
@@ -49,6 +53,7 @@ interface StrategicProgressTracker {
   lastProgressTick: number | null;
   lastProgressReasons: StrategicProgressReason[];
   seenSuccessfulOperationIds: Set<string>;
+  seenSustainedCutoffOperationIds: Set<string>;
   seenPocketEventKeys: Set<string>;
 }
 
@@ -258,6 +263,7 @@ function createTracker(
     lastProgressTick: null,
     lastProgressReasons: [],
     seenSuccessfulOperationIds: new Set(),
+    seenSustainedCutoffOperationIds: new Set(),
     seenPocketEventKeys: new Set(),
   };
   rebaseTracker(
@@ -429,7 +435,25 @@ function collectOperationEvidence(
       tracker.seenSuccessfulOperationIds.delete(operationId);
     }
   }
+  for (const operationId of tracker.seenSustainedCutoffOperationIds) {
+    if (!retainedOperationIds.has(operationId)) {
+      tracker.seenSustainedCutoffOperationIds.delete(operationId);
+    }
+  }
   for (const operation of pairOperations) {
+    if (operation.supplyCutoffConfirmation?.state === "sustained" &&
+        !tracker.seenSustainedCutoffOperationIds.has(operation.id)) {
+      tracker.seenSustainedCutoffOperationIds.add(operation.id);
+      reasons.add("meaningful-force-isolated");
+      const objective = operation.supplyCutoffObjective;
+      evidenceUnits += objective?.majorForceAffected ||
+        (objective?.affectedStrength ?? 0) >= 5000 ? 2 : 1;
+      if (objective?.frontlineAffected) reasons.add("frontline-supply-cut");
+      if (objective?.majorForceAffected) reasons.add("major-component-isolated");
+      if (objective?.sourceKind === "maritime" || objective?.sourceKind === "mixed") {
+        reasons.add("maritime-supply-cut");
+      }
+    }
     if (
       operation.outcome !== "success" ||
       tracker.seenSuccessfulOperationIds.has(operation.id)
@@ -519,6 +543,10 @@ function createReasonCounts(): Record<StrategicProgressReason, number> {
     "pocket-closed": 0,
     "pocket-reduced-significantly": 0,
     "pocket-destroyed": 0,
+    "meaningful-force-isolated": 0,
+    "frontline-supply-cut": 0,
+    "major-component-isolated": 0,
+    "maritime-supply-cut": 0,
   };
 }
 

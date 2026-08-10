@@ -69,6 +69,7 @@ interface OverlayVersions {
   supplyAssessment: number;
   isolationEffects: number;
   productionDiagnostics: number;
+  supplyCutoffs: number;
   retreats: number;
   coverage: number;
   stalemate: number;
@@ -134,6 +135,7 @@ export function attachFrontDebugOverlay(
       layer.addChild(label);
     });
     drawSupplySourceMarkers(layer, world);
+    drawSupplyCutoffMarkers(layer, world);
     drawMaritimeSupplyLinks(layer, world);
     if (selectedSectorId && !world.landFronts.operationalSectorsById.has(selectedSectorId)) {
       selectedSectorId = null;
@@ -524,6 +526,16 @@ function appendOperationalDetails(
           ] : []),
         );
       }
+      for (const cutoff of world.supplyCutoffs.candidates
+        .filter((item) => item.attackerNationId === nationId && item.sectorId === front.id)
+        .slice(0, 4)) {
+        lines.push(
+          `SUPPLY CUTOFF ${cutoff.targetRegionId} | ${cutoff.tacticalFeasibility ? "FEASIBLE" : "BLOCKED"}`,
+          `  predicted ${formatStrength(cutoff.affectedStrength)} | ${cutoff.affectedUnitCount} units | ${cutoff.affectedRegionCount} regions`,
+          `  cities ${cutoff.affectedCities} | ports ${cutoff.affectedPorts} | component ${cutoff.affectedComponentIds.join(",")}`,
+          `  source ${cutoff.sourceKind} | score ${cutoff.score.toFixed(1)} | reasons ${cutoff.reasonFlags.join(", ")}`,
+        );
+      }
       for (const pocket of pockets) {
         const risk = pocket.containmentActual < pocket.containmentRequired ? "HIGH"
           : pocket.containmentActual < pocket.containmentRequired * 1.25 ? "MEDIUM" : "LOW";
@@ -604,6 +616,10 @@ function appendOperationalDetails(
           `  MANIFEST ${operation.committedManifest.length} | committed ${formatStrength(operation.assignedStrength)} | feasible ${operation.preparationFeasible ? "YES" : "NO"}`,
           `  PREPARATION LEASE ${operation.preparationLeaseEndedAtTick === null ? "ACTIVE" : `ENDED @${operation.preparationLeaseEndedAtTick}`} | overrides ${operation.leaseOverrideReasons.join(", ") || "none"}`,
           `  reasons ${operation.reasonFlags.join(", ")}`,
+          ...(operation.supplyCutoffObjective ? [
+            `  CUTOFF target ${operation.supplyCutoffObjective.targetRegionId} | predicted ${formatStrength(operation.supplyCutoffObjective.affectedStrength)}`,
+            `    actual ${formatStrength(operation.supplyCutoffConfirmation?.actualIsolatedStrength ?? 0)} | state ${operation.supplyCutoffConfirmation?.state.toUpperCase() ?? "PENDING"}`,
+          ] : []),
         );
         const battle = world.battles.find((candidate) =>
           candidate.mesoId === operation.primaryTargetRegionId &&
@@ -773,6 +789,17 @@ function drawSupplySourceMarkers(layer: Container, world: WorldState): void {
   }
 }
 
+function drawSupplyCutoffMarkers(layer: Container, world: WorldState): void {
+  const targetIds = new Set<MesoRegionId>();
+  for (const operation of world.offensiveOperations.operations) {
+    if (!operation.supplyCutoffObjective || operation.phase === "recovering") continue;
+    targetIds.add(operation.supplyCutoffObjective.targetRegionId);
+  }
+  for (const regionId of targetIds) {
+    drawMarker(layer, world, regionId, "X", 0xffd740, "diamond");
+  }
+}
+
 function drawMaritimeSupplyLinks(layer: Container, world: WorldState): void {
   const selectedByPair = new Map<string, WorldState["supplyAssessment"]["maritimeLinks"][number]>();
   for (const link of world.supplyAssessment.maritimeLinks) {
@@ -903,6 +930,7 @@ function readVersions(world: WorldState): OverlayVersions {
     supplyAssessment: world.supplyAssessment.version,
     isolationEffects: world.isolationEffects.version,
     productionDiagnostics: world.productionDiagnostics.version,
+    supplyCutoffs: world.supplyCutoffs.version,
     retreats: world.retreatPlans.version,
     coverage: world.frontlineCoverage.version,
     stalemate: world.stalematePressure.version,
@@ -922,7 +950,7 @@ function readVersions(world: WorldState): OverlayVersions {
 
 function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
   return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
-    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment && a.isolationEffects === b.isolationEffects && a.productionDiagnostics === b.productionDiagnostics &&
+    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment && a.isolationEffects === b.isolationEffects && a.productionDiagnostics === b.productionDiagnostics && a.supplyCutoffs === b.supplyCutoffs &&
     a.retreats === b.retreats && a.coverage === b.coverage && a.stalemate === b.stalemate &&
     a.reserveDeployments === b.reserveDeployments && a.battles === b.battles;
 }

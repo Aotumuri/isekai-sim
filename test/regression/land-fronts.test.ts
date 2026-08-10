@@ -10,6 +10,10 @@ import { createUnitForType } from "../../src/sim/create-units";
 import { createIsolationEffectsState } from "../../src/sim/isolation-effects";
 import { createProductionDiagnosticsState } from "../../src/sim/production";
 import {
+  createSupplyCutoffAnalysisState,
+  updateSupplyCutoffAnalysis,
+} from "../../src/sim/supply-cutoff";
+import {
   createCapitalDefenseState,
   getCapitalDefenseAssessment,
   updateCapitalDefense,
@@ -1463,6 +1467,216 @@ test("Pocket Closure identifies one reachable capture that cuts the last rear ex
     opportunity.score,
     Object.values(opportunity.scoreComponents).reduce((sum, value) => sum + value, 0),
   );
+});
+
+test("Supply Cutoff detects one supplied corridor with exact affected force metadata", () => {
+  const world = createPocketClosureWorld();
+  updateSupplyAssessment(world);
+  updateBattlefieldTopology(world);
+  updateSupplyCutoffAnalysis(world);
+  const candidate = world.supplyCutoffs.candidates.find((item) =>
+    item.attackerNationId === NATION_A && item.targetRegionId === id("gate")
+  );
+  assert(candidate);
+  assert.deepEqual(candidate.affectedRegionIds, ids("pocket-city", "pocket-force"));
+  assert.equal(candidate.affectedUnitCount, 1);
+  assert(Math.abs(candidate.affectedStrength - 1_000) < 0.001);
+  assert.equal(candidate.affectedCities, 1);
+  assert.equal(candidate.affectedPorts, 0);
+  assert.equal(candidate.currentlySupplied, true);
+  assert.equal(candidate.predictedIsolated, true);
+});
+
+test("Supply Cutoff does not falsely isolate a component with two land routes", () => {
+  const world = createFrontWorld(
+    [
+      { id: "a", owner: NATION_A },
+      { id: "front", owner: NATION_B },
+      { id: "left", owner: NATION_B },
+      { id: "right", owner: NATION_B },
+      { id: "rear", owner: NATION_B, building: "capital" },
+    ],
+    [["a", "front"], ["front", "left"], ["front", "right"], ["left", "rear"], ["right", "rear"]],
+  );
+  startWar(world, NATION_A, NATION_B);
+  setUnitStrength(addLandUnit(world, NATION_B, "front", "Infantry"), 1_000);
+  updateLandFronts(world);
+  updateSupplyAssessment(world);
+  updateBattlefieldTopology(world);
+  updateSupplyCutoffAnalysis(world);
+  assert(!world.supplyCutoffs.candidates.some((item) =>
+    item.targetRegionId === id("left") || item.targetRegionId === id("right")
+  ));
+});
+
+test("Supply Cutoff filters an empty, infrastructure-free rear fragment", () => {
+  const world = createFrontWorld(
+    [
+      { id: "a", owner: NATION_A },
+      { id: "gate", owner: NATION_B },
+      { id: "empty", owner: NATION_B },
+      { id: "rear", owner: NATION_B, building: "capital" },
+    ],
+    [["a", "gate"], ["gate", "empty"], ["gate", "rear"]],
+  );
+  setTestCapital(world, NATION_B, "rear");
+  startWar(world, NATION_A, NATION_B);
+  updateLandFronts(world);
+  updateSupplyAssessment(world);
+  updateBattlefieldTopology(world);
+  updateSupplyCutoffAnalysis(world);
+  assert(!world.supplyCutoffs.candidates.some((item) => item.targetRegionId === id("gate")));
+});
+
+test("Pocket Closure and Supply Cutoff share one stable Operation objective", () => {
+  const world = createPocketClosureWorld();
+  updateSupplyAssessment(world);
+  updateBattlefieldTopology(world);
+  updateSupplyCutoffAnalysis(world);
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  assert.equal(operation.primaryTargetRegionId, id("gate"));
+  assert.equal(operation.pocketClosureObjective?.candidateRegionId, id("gate"));
+  assert.equal(operation.supplyCutoffObjective?.targetRegionId, id("gate"));
+  assert(operation.reasonFlags.includes("pocket-and-supply-cutoff"));
+  const objective = operation.supplyCutoffObjective;
+  updateSupplyCutoffAnalysis(world);
+  updateOffensiveOperations(world);
+  assert.equal(operation.supplyCutoffObjective, objective);
+  assert.equal(getOffensiveOperations(world, NATION_A).length, 1);
+});
+
+test("Supply Cutoff records real post-capture isolation and later reconnection", () => {
+  const world = createPocketClosureWorld();
+  updateSupplyAssessment(world);
+  updateBattlefieldTopology(world);
+  updateSupplyCutoffAnalysis(world);
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  operation.phase = "attacking";
+  world.occupation.mesoById.set(id("gate"), NATION_A);
+  world.occupation.version += 1;
+  updateSupplyAssessment(world);
+  updateLandFronts(world);
+  updateFrontlineCoverage(world);
+  updateBattlefieldTopology(world);
+  updateSupplyCutoffAnalysis(world);
+  updateOffensiveOperations(world);
+  assert.equal(operation.supplyCutoffConfirmation?.state, "cut");
+  assert(Math.abs((operation.supplyCutoffConfirmation?.actualIsolatedStrength ?? 0) - 1_000) < 0.001);
+  assert.equal(world.supplyCutoffs.successfulCutoffs, 1);
+
+  world.occupation.mesoById.set(id("bypass"), NATION_B);
+  world.occupation.version += 1;
+  world.time.fastTick += 10;
+  updateSupplyAssessment(world);
+  updateOffensiveOperations(world);
+  assert.equal(operation.supplyCutoffConfirmation?.state, "reconnected");
+  assert.equal(world.supplyCutoffs.reconnections, 1);
+});
+
+test("Supply Cutoff verifies a failed prediction when an alternate route opens at capture", () => {
+  const world = createPocketClosureWorld();
+  updateSupplyAssessment(world);
+  updateBattlefieldTopology(world);
+  updateSupplyCutoffAnalysis(world);
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  operation.phase = "attacking";
+  world.occupation.mesoById.set(id("gate"), NATION_A);
+  world.occupation.mesoById.set(id("bypass"), NATION_B);
+  world.occupation.version += 1;
+  updateSupplyAssessment(world);
+  updateLandFronts(world);
+  updateFrontlineCoverage(world);
+  updateBattlefieldTopology(world);
+  updateSupplyCutoffAnalysis(world);
+  updateOffensiveOperations(world);
+  assert.equal(operation.supplyCutoffConfirmation?.state, "failed");
+  assert.equal(operation.supplyCutoffConfirmation?.mismatchReason,
+    "alternate-supply-source-active-or-no-isolated-overlap");
+  assert.equal(world.supplyCutoffs.failedCutoffs, 1);
+});
+
+test("an alternate Supply Source invalidates a preparing Supply Cutoff objective", () => {
+  const world = createPocketClosureWorld();
+  updateSupplyAssessment(world);
+  updateBattlefieldTopology(world);
+  updateSupplyCutoffAnalysis(world);
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  assert(operation.supplyCutoffObjective);
+  world.occupation.mesoById.set(id("bypass"), NATION_B);
+  world.occupation.version += 1;
+  updateSupplyAssessment(world);
+  updateLandFronts(world);
+  updateFrontlineCoverage(world);
+  updateBattlefieldTopology(world);
+  updateSupplyCutoffAnalysis(world);
+  updateOffensiveOperations(world);
+  assert.equal(operation.outcome, "cancelled");
+  assert.equal(operation.completionReason, "target-invalid");
+});
+
+test("Strategic Progress ignores a fresh cutoff and records only sustained isolation", () => {
+  const world = createPocketClosureWorld();
+  updateSupplyAssessment(world);
+  updateBattlefieldTopology(world);
+  updateSupplyCutoffAnalysis(world);
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  operation.phase = "attacking";
+  world.occupation.mesoById.set(id("gate"), NATION_A);
+  world.occupation.version += 1;
+  updateSupplyAssessment(world);
+  updateLandFronts(world);
+  updateFrontlineCoverage(world);
+  updateBattlefieldTopology(world);
+  updateSupplyCutoffAnalysis(world);
+  updateOffensiveOperations(world);
+  updateStrategicProgress(world);
+  assert(!getStrategicProgressAssessment(world, NATION_A, NATION_B)
+    ?.reasonFlags.includes("meaningful-force-isolated"));
+
+  world.time.fastTick += WORLD_BALANCE.war.landFront.supplyCutoff.sustainedTicks;
+  updateSupplyAssessment(world);
+  updateOffensiveOperations(world);
+  updateStrategicProgress(world);
+  assert.equal(operation.supplyCutoffConfirmation?.state, "sustained");
+  assert(getStrategicProgressAssessment(world, NATION_A, NATION_B)
+    ?.reasonFlags.includes("meaningful-force-isolated"));
+});
+
+test("normal and Schwerpunkt Operations apply moderate and strong Supply weighting", () => {
+  const normal = createPocketClosureWorld();
+  updateSupplyAssessment(normal);
+  updateBattlefieldTopology(normal);
+  updateSupplyCutoffAnalysis(normal);
+  const normalCandidate = normal.supplyCutoffs.candidates.find((item) =>
+    item.attackerNationId === NATION_A && item.targetRegionId === id("gate")
+  );
+  assert(normalCandidate);
+  updateOffensiveOperations(normal);
+  assert(Math.abs(onlyOperation(normal, NATION_A).targetSupplyScore -
+    normalCandidate.score * WORLD_BALANCE.war.landFront.supplyCutoff.normalWeight) < 0.001);
+
+  const major = createPocketClosureWorld();
+  updateSupplyAssessment(major);
+  updateBattlefieldTopology(major);
+  updateSupplyCutoffAnalysis(major);
+  const sector = major.landFronts.operationalSectors[0];
+  assert(sector);
+  major.stalematePressure.assessments = [{ nationId: NATION_A, enemyNationId: NATION_B, pressure: 100, staticTicks: 100, reasonFlags: ["artificial-inactivity"], artificialInactivity: false, artificialInactivityBlocker: null, collapseAdvanceCandidate: false, inactivityCategory: "natural-stalemate", inactivityReason: "natural-stalemate", nextEvaluationTick: 0, targetValidityFailureReason: null, targetValidityOtherReason: null, schwerpunktSectorId: sector.id, selectedAtTick: 0, cooldownUntilTick: 0, lastOperationSuccessCount: 0, lastOperationFailureCount: 0, releasedSecondaryStrength: 0 }];
+  const majorCandidate = major.supplyCutoffs.candidates.find((item) =>
+    item.attackerNationId === NATION_A && item.targetRegionId === id("gate")
+  );
+  assert(majorCandidate);
+  updateOffensiveOperations(major);
+  const majorOperation = onlyOperation(major, NATION_A);
+  assert.equal(majorOperation.isSchwerpunktOperation, true);
+  assert(Math.abs(majorOperation.targetSupplyScore -
+    majorCandidate.score * WORLD_BALANCE.war.landFront.supplyCutoff.majorOffensiveWeight) < 0.001);
+  assert(majorOperation.targetSupplyScore > onlyOperation(normal, NATION_A).targetSupplyScore);
 });
 
 test("a feasible high-value Pocket Closure becomes a stable dedicated Operation objective", () => {
@@ -4181,6 +4395,7 @@ function createFrontWorld(
     supplyAssessment: createSupplyAssessmentState(),
     isolationEffects: createIsolationEffectsState(),
     productionDiagnostics: createProductionDiagnosticsState(),
+    supplyCutoffs: createSupplyCutoffAnalysisState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

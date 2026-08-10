@@ -36,6 +36,7 @@ import {
 import { createSimTime } from "../../src/sim/time";
 import type { WorldState } from "../../src/sim/world-state";
 import { createWorldCache } from "../../src/sim/world-cache";
+import { createSupplyCutoffAnalysisState } from "../../src/sim/supply-cutoff";
 
 const NATION = "nation-a" as NationId;
 
@@ -219,6 +220,7 @@ function createProductionWorld(options: ProductionWorldOptions): WorldState {
     supplyAssessment: createSupplyAssessmentState(),
     isolationEffects: createIsolationEffectsState(),
     productionDiagnostics: createProductionDiagnosticsState(),
+    supplyCutoffs: createSupplyCutoffAnalysisState(),
     stalematePressure: createStalematePressureState(),
     collapseAdvances: createCollapseAdvanceState(),
     mapVersion: 0,

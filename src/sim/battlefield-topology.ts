@@ -95,6 +95,7 @@ export interface BattlefieldArticulationRegion {
   capitalAffected: boolean;
   frontlineContactsAffected: number;
   affectedRegionIds: MesoRegionId[];
+  resultingRegionGroups: MesoRegionId[][];
 }
 
 export interface PocketClosureScoreComponents {
@@ -176,6 +177,7 @@ interface StructuralArticulation {
   regionId: MesoRegionId;
   resultingComponentSizes: number[];
   affectedRanges: Range[];
+  resultingRangeGroups: Range[][];
 }
 interface StructuralComponent {
   id: BattlefieldComponentId;
@@ -685,10 +687,19 @@ function analyzeArticulations(
       : capitalChild
         ? complementRanges(regionIds.length, [capitalChild, { start: articulationIndex, end: articulationIndex + 1 }])
         : childRanges;
+    const remainderRanges = complementRanges(regionIds.length, [
+      ...childRanges,
+      { start: articulationIndex, end: articulationIndex + 1 },
+    ]);
+    const resultingRangeGroups = [
+      ...childRanges.map((range) => [range]),
+      ...(remainderRanges.length > 0 ? [remainderRanges] : []),
+    ];
     articulations.push({
       regionId,
       resultingComponentSizes: sizes.sort((a, b) => b - a),
       affectedRanges,
+      resultingRangeGroups,
     });
   }
   return { order, articulations };
@@ -732,6 +743,9 @@ function materializeAssessment(
         capitalAffected: affected.capitals > 0,
         frontlineContactsAffected: affected.contacts,
         affectedRegionIds: expandRanges(item.affectedRanges, structural.dfsOrder),
+        resultingRegionGroups: item.resultingRangeGroups.map((ranges) =>
+          expandRanges(ranges, structural.dfsOrder)
+        ),
       };
       articulations.push(articulation);
       if (structural.connectsToStrategicRear && affected.regions > 0 && affected.contacts > 0) {

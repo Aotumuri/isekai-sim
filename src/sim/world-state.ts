@@ -27,6 +27,7 @@ import type { BattlefieldTopologyState } from "./battlefield-topology";
 import type { SupplyAssessmentState } from "./supply-assessment";
 import type { IsolationEffectsState } from "./isolation-effects";
 import type { ProductionDiagnosticsState } from "./production";
+import type { SupplyCutoffAnalysisState } from "./supply-cutoff";
 
 export interface WorldState {
   width: number;
@@ -53,6 +54,7 @@ export interface WorldState {
   supplyAssessment: SupplyAssessmentState;
   isolationEffects: IsolationEffectsState;
   productionDiagnostics: ProductionDiagnosticsState;
+  supplyCutoffs: SupplyCutoffAnalysisState;
   stalematePressure: StalematePressureState;
   collapseAdvances: CollapseAdvanceState;
   mapVersion: number;
