@@ -238,6 +238,12 @@ export interface WorldSummary {
   productionBlockedByEconomy: number;
   productionSuccessful: number;
   productionSupplyLookups: number;
+  navalTransportProductionRequests: number;
+  navalEscortProductionRequests: number;
+  navalReserveProductionRequests: number;
+  navalTransportProductionFulfilled: number;
+  navalEscortProductionFulfilled: number;
+  navalReserveProductionFulfilled: number;
   productionBlockedComponentCount: number;
   battlefieldEnemyComponents: number;
   battlefieldArticulationPoints: number;

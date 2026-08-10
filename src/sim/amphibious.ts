@@ -10,7 +10,7 @@ export function updateAmphibiousOperations(world: WorldState): void {
   if (world.units.length === 0) {
     return;
   }
-  if (WORLD_BALANCE.unit.naval?.enabled === false) {
+  if (!Boolean(WORLD_BALANCE.unit.naval?.amphibiousEnabled)) {
     return;
   }
 

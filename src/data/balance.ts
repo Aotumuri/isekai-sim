@@ -53,6 +53,7 @@ export const WORLD_BALANCE = {
   unit: {
     naval: {
       enabled: false,
+      amphibiousEnabled: false,
       strategy: {
         reserveFraction: 0.25,
         reserveMinimumFleetSize: 3,
@@ -63,7 +64,6 @@ export const WORLD_BALANCE = {
       },
     },
     tankShare: 0.2,
-    navalTransportShare: 0.4,
     navalTransportCapacity: 10,
     amphibiousInvasionLossRatio: 0.6,
     types: {

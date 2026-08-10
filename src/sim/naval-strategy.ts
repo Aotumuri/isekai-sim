@@ -67,6 +67,20 @@ export interface NavalStrategyState {
   pathfindingCpuMs: number;
 }
 
+export type NavalUnitOwnership =
+  | {
+      controller: "NAVAL_STRATEGY";
+      missionType: NavalMissionType;
+      missionId: string;
+      reservePortId?: MesoRegionId;
+    }
+  | {
+      controller: "MARITIME_LOGISTICS";
+      missionType: "LOGISTICS" | "RESERVE";
+      assignmentId?: string;
+      reservePortId?: MesoRegionId;
+    };
+
 interface MissionCandidate {
   key: string;
   nationId: NationId;
@@ -104,18 +118,19 @@ export function updateNavalStrategy(world: WorldState): void {
   const previousByKey = new Map(state.missions.map((mission) => [missionKey(mission), mission]));
   const previousByShip = state.missionByShipId;
   const shipsByNation = new Map<NationId, UnitState[]>();
-  for (const ship of world.units.filter((unit) => isOperationalCombatShip(unit)).sort(compareUnits)) {
+  for (const ship of world.units.filter(isLiveCombatShip).sort(compareUnits)) {
     const ships = shipsByNation.get(ship.nationId);
     if (ships) ships.push(ship); else shipsByNation.set(ship.nationId, [ship]);
   }
   const nextMissions: NavalMission[] = [];
   const assessments: NavalStrategicAssessment[] = [];
   for (const [nationId, ships] of [...shipsByNation].sort(([a], [b]) => compareIds(a, b))) {
+    const operationalShips = ships.filter((ship) => isOperationalCombatShip(ship));
     const candidates = buildCandidates(world, nationId);
     const bestRaid = candidates.find((candidate) => candidate.type === "RAID");
-    const concentrateRaid = new Set(ships.map((ship) => ship.regionId)).size === 1 &&
+    const concentrateRaid = new Set(operationalShips.map((ship) => ship.regionId)).size === 1 &&
       !candidates.some((candidate) => candidate.type === "BLOCKADE");
-    for (let slot = 1; bestRaid && concentrateRaid && slot < ships.length; slot += 1) {
+    for (let slot = 1; bestRaid && concentrateRaid && slot < operationalShips.length; slot += 1) {
       candidates.push({ ...bestRaid, key: `${bestRaid.key}:reinforcement-${slot}`, slotIndex: slot,
         priority: bestRaid.priority + 0.1 - slot * 0.001,
         reasonFlags: [...bestRaid.reasonFlags, "fleet-concentration"] });
@@ -123,9 +138,9 @@ export function updateNavalStrategy(world: WorldState): void {
     candidates.sort((a, b) => b.priority - a.priority || compareIds(a.key, b.key));
     const emergencyCount = candidates.filter((candidate) => candidate.emergency).length;
     const config = WORLD_BALANCE.unit.naval.strategy;
-    const reserveRequirement = ships.length >= config.reserveMinimumFleetSize && emergencyCount === 0
-      ? Math.max(1, Math.floor(ships.length * config.reserveFraction)) : 0;
-    const committedCapacity = Math.max(emergencyCount, ships.length - reserveRequirement);
+    const reserveRequirement = operationalShips.length >= config.reserveMinimumFleetSize && emergencyCount === 0
+      ? Math.max(1, Math.floor(operationalShips.length * config.reserveFraction)) : 0;
+    const committedCapacity = Math.max(emergencyCount, operationalShips.length - reserveRequirement);
     const selected = candidates.slice(0, committedCapacity);
     if (emergencyCount === 0 && selected.length > 0) {
       for (const old of state.missions.filter((mission) => mission.nationId === nationId)) {
@@ -141,7 +156,7 @@ export function updateNavalStrategy(world: WorldState): void {
       }
       selected.sort((a, b) => b.priority - a.priority || compareIds(a.key, b.key));
     }
-    const available = new Set(ships.map((ship) => ship.id));
+    const available = new Set(operationalShips.map((ship) => ship.id));
     const assignments = new Map<string, UnitId[]>();
 
     // Stable ownership wins ties and small score changes; emergency missions may override it.
@@ -169,6 +184,15 @@ export function updateNavalStrategy(world: WorldState): void {
         reasonFlags: ["strategic-reserve"], targetPortId: portId,
       });
     }
+    for (const ship of ships.filter((item): boolean => !isOperationalCombatShip(item))) {
+      const portId = selectReservePort(world, nationId, ship);
+      const key = `RESERVE:${nationId}:${portId ?? ship.regionId}`;
+      assignments.set(key, [...(assignments.get(key) ?? []), ship.id]);
+      if (!selected.some((candidate) => candidate.key === key)) selected.push({
+        key, nationId, type: "RESERVE", priority: 10,
+        reasonFlags: ["strategic-reserve", "unit-unavailable"], targetPortId: portId,
+      });
+    }
 
     for (const candidate of selected) {
       const shipIds = assignments.get(candidate.key);
@@ -176,7 +200,8 @@ export function updateNavalStrategy(world: WorldState): void {
       const previous = previousByKey.get(candidate.key);
       const fuelUnavailable = shipIds.every((shipId) => {
         const ship = ships.find((item) => item.id === shipId);
-        return !ship || !Number.isFinite(ship.moveTicksPerRegion) || ship.combatPower <= 0;
+        return !isOperationalCombatShip(ship) ||
+          !Number.isFinite(ship.moveTicksPerRegion) || ship.combatPower <= 0;
       });
       const mission: NavalMission = {
         id: previous?.id ?? `naval-mission-${state.nextMissionNumber++}`,
@@ -196,7 +221,7 @@ export function updateNavalStrategy(world: WorldState): void {
       nextMissions.push(mission);
     }
     assessments.push({
-      nationId, availableCombatShips: ships.length,
+      nationId, availableCombatShips: operationalShips.length,
       escortDemand: world.supplyAssessment.maritimeEscorts.demands.filter((d) => d.nationId === nationId).length,
       raidOpportunities: world.supplyAssessment.maritimeInterdiction.assessments.filter((a) => a.attackerNationId === nationId).length,
       interceptionThreats: candidates.filter((c) => c.type === "INTERCEPT").length,
@@ -383,6 +408,77 @@ export function getNavalMission(world: WorldState, shipId: UnitId): NavalMission
   return world.supplyAssessment.navalStrategy.missionByShipId.get(shipId);
 }
 
+/** Gives newly produced CombatShips an immediate, stationary owner without
+ * duplicating the slow-tick strategic evaluation or doing any pathfinding. */
+export function registerNewCombatShipsAsReserve(
+  world: WorldState,
+  ships: readonly UnitState[],
+): void {
+  const state = world.supplyAssessment.navalStrategy;
+  let changed = false;
+  for (const ship of [...ships].filter(isLiveCombatShip).sort(compareUnits)) {
+    if (state.missionByShipId.has(ship.id)) continue;
+    let mission = state.missions.find((candidate) =>
+      candidate.nationId === ship.nationId && candidate.type === "RESERVE" &&
+      candidate.targetPortId === ship.regionId);
+    if (!mission) {
+      mission = {
+        id: `naval-mission-${state.nextMissionNumber++}`,
+        nationId: ship.nationId,
+        type: "RESERVE",
+        shipIds: [],
+        targetPortId: ship.regionId,
+        priority: 10,
+        createdTick: world.time.fastTick,
+        status: "ACTIVE",
+        reasonFlags: ["new-production", "strategic-reserve"],
+      };
+      state.missions.push(mission);
+      state.missionById.set(mission.id, mission);
+      state.missionCreations += 1;
+      world.instrumentation?.incrementCounter("navalStrategy.missionCreations");
+    }
+    mission.shipIds.push(ship.id);
+    mission.shipIds.sort(compareIds);
+    state.missionByShipId.set(ship.id, mission);
+    changed = true;
+  }
+  if (changed) {
+    state.missions.sort((a, b) => compareIds(a.id, b.id));
+    state.version += 1;
+  }
+}
+
+/** Single public ownership API. Escort and interdiction are mission executors,
+ * never independent owners. Unassigned transports remain logistics reserves. */
+export function getNavalUnitOwnership(
+  world: WorldState,
+  unitId: UnitId,
+): NavalUnitOwnership | undefined {
+  const unit = world.units.find((candidate) => candidate.id === unitId);
+  if (!unit || unit.domain !== "naval" || unit.manpower <= 0) return undefined;
+  if (unit.type === "CombatShip") {
+    const mission = getNavalMission(world, unit.id);
+    return mission ? {
+      controller: "NAVAL_STRATEGY",
+      missionType: mission.type,
+      missionId: mission.id,
+      reservePortId: mission.type === "RESERVE" ? mission.targetPortId : undefined,
+    } : undefined;
+  }
+  if (unit.type !== "TransportShip") return undefined;
+  const assignment = world.supplyAssessment.maritimeLogistics.assignmentByTransportId.get(unit.id);
+  return assignment ? {
+    controller: "MARITIME_LOGISTICS",
+    missionType: "LOGISTICS",
+    assignmentId: assignment.maritimeLinkId,
+  } : {
+    controller: "MARITIME_LOGISTICS",
+    missionType: "RESERVE",
+    reservePortId: selectReservePort(world, unit.nationId, unit),
+  };
+}
+
 function missionKey(mission: NavalMission): string {
   const base = `${mission.type}:${mission.nationId}:${mission.targetShipId ?? mission.targetLinkId ?? mission.targetPortId ?? ""}`;
   if (mission.type === "ESCORT") return `${base}:${mission.slotIndex ?? 0}`;
@@ -406,9 +502,14 @@ function recordMetrics(world: WorldState): void {
       | "navalStrategy.ships.blockade" | "navalStrategy.ships.reserve",
       state.missions.filter((mission) => mission.type === type).reduce((n, mission) => n + mission.shipIds.length, 0));
   }
-  const assigned = state.missionByShipId.size;
-  const operational = world.units.filter((unit) => isOperationalCombatShip(unit)).length;
+  const operationalIds = new Set(world.units.filter((unit) => isOperationalCombatShip(unit))
+    .map((unit) => unit.id));
+  const assigned = [...state.missionByShipId.keys()].filter((shipId) => operationalIds.has(shipId)).length;
+  const operational = operationalIds.size;
   world.instrumentation?.incrementCounter("navalStrategy.ships.unassigned", operational - assigned);
 }
 function compareUnits(a: UnitState, b: UnitState): number { return compareIds(a.id, b.id); }
+function isLiveCombatShip(unit: UnitState): boolean {
+  return unit.domain === "naval" && unit.type === "CombatShip" && unit.manpower > 0;
+}
 function compareIds(a: string, b: string): number { return a < b ? -1 : a > b ? 1 : 0; }

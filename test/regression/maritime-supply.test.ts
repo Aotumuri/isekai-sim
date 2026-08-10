@@ -64,7 +64,11 @@ import {
   updateMaritimeInterdictionMovement,
 } from "../../src/sim/maritime-interdiction";
 import { updateConvoyMovement } from "../../src/sim/convoy-system";
-import { updateNavalStrategy } from "../../src/sim/naval-strategy";
+import {
+  getNavalUnitOwnership,
+  updateNavalStrategy,
+  updateNavalStrategyMovement,
+} from "../../src/sim/naval-strategy";
 
 const NATION_A = "nation-a" as NationId;
 const NATION_B = "nation-b" as NationId;
@@ -76,6 +80,10 @@ test("Naval AI gives every CombatShip exactly one mission and never assigns Tran
   assert.equal(new Set(world.supplyAssessment.navalStrategy.missions.flatMap((mission) => mission.shipIds)).size, 2);
   assert(world.units.filter((unit) => unit.type === "TransportShip").every((unit) =>
     !world.supplyAssessment.navalStrategy.missionByShipId.has(unit.id)));
+  assert(world.units.filter((unit) => unit.domain === "naval").every((unit) =>
+    getNavalUnitOwnership(world, unit.id) !== undefined));
+  assert(world.units.filter((unit) => unit.type === "TransportShip").every((unit) =>
+    getNavalUnitOwnership(world, unit.id)?.controller === "MARITIME_LOGISTICS"));
 });
 
 test("Naval AI splits two ships between a critical escort and a worthwhile raid", () => {
@@ -92,6 +100,25 @@ test("Naval AI keeps a deterministic reserve when no strategic demand exists", (
   updateNavalStrategy(world);
   assert.equal(world.supplyAssessment.navalStrategy.missions.every((mission) => mission.type === "RESERVE"), true);
   assert.equal(world.supplyAssessment.navalStrategy.missionByShipId.size, 3);
+});
+
+test("reserve ships return to their deterministic port and do not roam after arrival", () => {
+  const world = createStrategicAllocationWorld(3);
+  world.supplyAssessment.maritimeEscorts.demands = [];
+  world.supplyAssessment.maritimeInterdiction.assessments = [];
+  const ship = world.units.find((unit) => unit.type === "CombatShip");
+  assert(ship);
+  ship.regionId = id("sea-ab");
+  ship.moveTicksPerRegion = 1;
+  updateNavalStrategy(world);
+  const ownership = getNavalUnitOwnership(world, ship.id);
+  assert.equal(ownership?.missionType, "RESERVE");
+  assert(ownership?.reservePortId);
+  updateNavalStrategyMovement(world, FAST_TICK_MS);
+  assert.equal(ship.regionId, ownership.reservePortId);
+  updateNavalStrategyMovement(world, FAST_TICK_MS);
+  assert.equal(ship.regionId, ownership.reservePortId);
+  assert.equal(ship.moveTargetId, null);
 });
 
 test("Naval AI preserves stable mission identity across unchanged evaluations", () => {
@@ -287,7 +314,7 @@ test("interdiction assessment and assignments are deterministic", () => {
   assert.deepEqual(summarize(first), summarize(second));
 });
 
-test("disabled general naval gameplay still ignores non-mission fleets", () => {
+test("reserve fleets do not start combat through co-location", () => {
   const world = createMaritimeCutoffWorld(false);
   for (const region of world.mesoRegions) {
     if (region.building === "port") region.building = null;
@@ -308,6 +335,26 @@ test("disabled general naval gameplay still ignores non-mission fleets", () => {
   assert.equal(shipA.manpower, WORLD_BALANCE.unit.types.CombatShip.manpower);
   assert.equal(shipB.manpower, WORLD_BALANCE.unit.types.CombatShip.manpower);
   assert.equal(world.battles.length, 0);
+});
+
+test("a reserve ship defends itself when an enemy raid mission attacks", () => {
+  const world = createInterdictionWorld(["sea-ab"]);
+  for (let index = 0; index < 3; index += 1) {
+    world.units.push(createUnitForType(
+      createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip",
+    ));
+  }
+  updateSupplyAssessment(world);
+  const raider = world.units.find((unit) =>
+    unit.nationId === NATION_B && unit.type === "CombatShip");
+  const reserve = world.units.find((unit) =>
+    unit.nationId === NATION_A && unit.type === "CombatShip" &&
+    getNavalUnitOwnership(world, unit.id)?.missionType === "RESERVE");
+  assert(raider && reserve);
+  reserve.regionId = raider.regionId;
+  const manpowerBefore = reserve.manpower;
+  updateBattles(world);
+  assert(reserve.manpower < manpowerBefore || !world.units.some((unit) => unit.id === reserve.id));
 });
 
 test("a physical convoy continuously travels port-to-port and returns without teleporting", () => {
@@ -749,8 +796,32 @@ test("escort-demand production creates only the required CombatShip while genera
   updateSupplyAssessment(world);
   updateProduction(world);
   assert(world.units.some((unit) => unit.type === "CombatShip"));
+  const combatShip = world.units.find((unit) => unit.type === "CombatShip");
+  assert(combatShip && getNavalUnitOwnership(world, combatShip.id));
   assert.equal(world.supplyAssessment.maritimeEscorts.combatShipsProducedForEscortDemand, 1);
   assert.equal(WORLD_BALANCE.unit.naval?.enabled, false);
+});
+
+test("enabling general naval gameplay does not trigger demand-free naval production", () => {
+  const setting = WORLD_BALANCE.unit.naval as { enabled: boolean };
+  const previous = setting.enabled;
+  setting.enabled = true;
+  try {
+    const world = createMaritimeWorld(true, 2);
+    const nation = world.nations[0]!;
+    nation.resources.manpower = 100_000;
+    nation.resources.weapons = 10_000;
+    nation.nextUnitProductionTick = 0;
+    updateSupplyAssessment(world);
+    const before = world.units.filter((unit) => unit.domain === "naval").length;
+    updateProduction(world);
+    assert.equal(world.units.filter((unit) => unit.domain === "naval").length, before);
+    assert.equal(world.productionDiagnostics.navalTransportRequests, 0);
+    assert.equal(world.productionDiagnostics.navalEscortRequests, 0);
+    assert.equal(world.productionDiagnostics.navalReserveRequests, 0);
+  } finally {
+    setting.enabled = previous;
+  }
 });
 
 test("Reorganization reads maritime loss and reconnection only through Supply Assessment", () => {

@@ -12,7 +12,7 @@ import {
   normalizeWarPair,
   type WarAdjacency,
 } from "./war-state";
-import { getMaritimeMissionUnitIds } from "./maritime-interdiction";
+import { getNavalMission } from "./naval-strategy";
 
 export type BattleId = string & { __brand: "BattleId" };
 
@@ -123,22 +123,16 @@ export function updateBattles(world: WorldState): void {
     );
   }
 
-  const navalEnabled = WORLD_BALANCE.unit.naval?.enabled !== false;
-  const missionUnitIds = navalEnabled ? null : getMaritimeMissionUnitIds(world);
-  if (navalEnabled || (missionUnitIds?.size ?? 0) > 0) {
-    const navalUnits = world.units.filter((unit) =>
-      unit.domain === "naval" && (navalEnabled || missionUnitIds?.has(unit.id))
+  const navalUnits = world.units.filter((unit) => unit.domain === "naval");
+  if (navalUnits.length >= 2) {
+    updateNavalBattles(
+      world,
+      navalUnits,
+      warAdjacency,
+      existingByKey,
+      removedUnitIds,
+      now,
     );
-    if (navalUnits.length >= 2) {
-      updateNavalBattles(
-        world,
-        navalUnits,
-        warAdjacency,
-        existingByKey,
-        removedUnitIds,
-        now,
-      );
-    }
   }
 
   if (removedUnitIds.size > 0) {
@@ -296,11 +290,19 @@ function updateNavalBattles(
           continue;
         }
         const [attackerNationId, defenderNationId] = normalizeWarPair(nationA, nationB);
-        const attackers = unitsByNation.get(attackerNationId);
-        const defenders = unitsByNation.get(defenderNationId);
-        if (!attackers || !defenders) {
+        const attackerUnits = unitsByNation.get(attackerNationId);
+        const defenderUnits = unitsByNation.get(defenderNationId);
+        if (!attackerUnits || !defenderUnits) {
           continue;
         }
+        const activeAttackers = attackerUnits.filter((unit) => isActiveMissionCombatShip(world, unit));
+        const activeDefenders = defenderUnits.filter((unit) => isActiveMissionCombatShip(world, unit));
+        if (activeAttackers.length === 0 && activeDefenders.length === 0) continue;
+        // A reserve or transport joins only to defend itself from an enemy
+        // mission. It never enlarges a friendly mission's attacking force.
+        const attackers = activeDefenders.length > 0 ? attackerUnits : activeAttackers;
+        const defenders = activeAttackers.length > 0 ? defenderUnits : activeDefenders;
+        if (attackers.length === 0 || defenders.length === 0) continue;
 
         const key = battleKey(mesoId, attackerNationId, defenderNationId);
         let battle = existingByKey.get(key);
@@ -424,6 +426,12 @@ function resolveNavalBattle(
 
 function isCombatShip(unit: UnitState): boolean {
   return unit.domain === "naval" && unit.type === "CombatShip";
+}
+
+function isActiveMissionCombatShip(world: WorldState, unit: UnitState): boolean {
+  if (!isCombatShip(unit) || unit.manpower <= 0 || unit.org <= 0 || unit.combatPower <= 0) return false;
+  const mission = getNavalMission(world, unit.id);
+  return mission?.status === "ACTIVE" && mission.type !== "RESERVE";
 }
 
 function isTransportShip(unit: UnitState): boolean {

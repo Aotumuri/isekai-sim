@@ -7,7 +7,6 @@ import type {
   MesoRegionId,
 } from "../../worldgen/meso-region";
 import type { NationId } from "../../worldgen/nation";
-import type { SeededRng } from "../../utils/seeded-rng";
 import { buildWarAdjacency, isAtWar, type WarAdjacency } from "../war-state";
 import {
   getBorderTargetsByNation,
@@ -1092,56 +1091,6 @@ function compareUnitIds(a: UnitState, b: UnitState): number {
   return a.id.localeCompare(b.id);
 }
 
-export function repositionNavalUnits(world: WorldState, dtMs: number): void {
-  if (world.units.length === 0 || world.mesoRegions.length === 0) {
-    return;
-  }
-  const navalUnits = world.units.filter((unit) => unit.domain === "naval");
-  if (navalUnits.length === 0) {
-    return;
-  }
-
-  const mesoById = getMesoById(world);
-  const neighborsById = getNeighborsById(world);
-  const ownerByMesoId = getOwnerByMesoId(world);
-
-  for (const unit of navalUnits) {
-    const current = mesoById.get(unit.regionId);
-    if (!current || !isNavalNode(current, unit.nationId, ownerByMesoId)) {
-      resetMovement(unit);
-      continue;
-    }
-
-    if (!unit.moveTargetId || unit.regionId === unit.moveTargetId) {
-      const target = pickNavalTarget(
-        unit.regionId,
-        unit.nationId,
-        neighborsById,
-        mesoById,
-        ownerByMesoId,
-        world.simRng,
-      );
-      unit.moveTargetId = target;
-    }
-
-    if (!unit.moveTargetId) {
-      resetMovement(unit);
-      continue;
-    }
-
-    moveUnitTowardTarget(
-      unit,
-      dtMs,
-      neighborsById,
-      (id) => {
-        const meso = mesoById.get(id);
-        return !!meso && isNavalNode(meso, unit.nationId, ownerByMesoId);
-      },
-      () => false,
-    );
-  }
-}
-
 function assignNationTargets(
   nationId: NationId,
   defenseUnits: UnitState[],
@@ -1587,87 +1536,6 @@ function resolveFirstStep(
     prev = previous.get(current) ?? null;
   }
   return prev === startId ? current : null;
-}
-
-function isNavalNode(
-  meso: MesoRegion,
-  nationId: NationId,
-  ownerByMesoId: Map<MesoRegionId, NationId>,
-): boolean {
-  if (meso.type === "sea") {
-    return true;
-  }
-  if (meso.building === "port") {
-    return ownerByMesoId.get(meso.id) === nationId;
-  }
-  return false;
-}
-
-function collectCoastalSeaTiles(
-  nationId: NationId,
-  mesoById: Map<MesoRegionId, MesoRegion>,
-  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
-  ownerByMesoId: Map<MesoRegionId, NationId>,
-): MesoRegionId[] {
-  const result = new Set<MesoRegionId>();
-
-  for (const [mesoId, owner] of ownerByMesoId.entries()) {
-    if (owner !== nationId) continue;
-
-    const meso = mesoById.get(mesoId);
-    if (!meso || meso.type === "sea") continue;
-
-    const neighbors = neighborsById.get(mesoId) ?? [];
-    for (const nId of neighbors) {
-      const neighbor = mesoById.get(nId);
-      if (neighbor?.type === "sea") {
-        result.add(nId);
-      }
-    }
-  }
-
-  return [...result];
-}
-
-function pickNavalTarget(
-  startId: MesoRegionId,
-  nationId: NationId,
-  neighborsById: Map<MesoRegionId, MesoRegionId[]>,
-  mesoById: Map<MesoRegionId, MesoRegion>,
-  ownerByMesoId: Map<MesoRegionId, NationId>,
-  rng: SeededRng,
-): MesoRegionId | null {
-  // 1) Prefer seas adjacent to own land (coastal guard)
-  const coastalSeaTiles = collectCoastalSeaTiles(
-    nationId,
-    mesoById,
-    neighborsById,
-    ownerByMesoId,
-  );
-
-  if (coastalSeaTiles.length > 0) {
-    return coastalSeaTiles.length === 1
-      ? coastalSeaTiles[0]
-      : coastalSeaTiles[rng.nextInt(coastalSeaTiles.length)];
-  }
-
-  // 2) Fallback: previous local naval movement (adjacent navigable seas)
-  const neighbors = neighborsById.get(startId) ?? [];
-  const candidates: MesoRegionId[] = [];
-  for (const neighborId of neighbors) {
-    const neighbor = mesoById.get(neighborId);
-    if (!neighbor) continue;
-    if (!isNavalNode(neighbor, nationId, ownerByMesoId)) continue;
-    candidates.push(neighborId);
-  }
-
-  if (candidates.length === 0) {
-    return null;
-  }
-
-  return candidates.length === 1
-    ? candidates[0]
-    : candidates[rng.nextInt(candidates.length)];
 }
 
 function resetMovement(unit: UnitState): void {

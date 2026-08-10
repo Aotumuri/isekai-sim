@@ -350,6 +350,12 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     productionBlockedByEconomy: world.productionDiagnostics.blockedByEconomy,
     productionSuccessful: world.productionDiagnostics.successfulProductions,
     productionSupplyLookups: world.productionDiagnostics.supplyLookups,
+    navalTransportProductionRequests: world.productionDiagnostics.navalTransportRequests,
+    navalEscortProductionRequests: world.productionDiagnostics.navalEscortRequests,
+    navalReserveProductionRequests: world.productionDiagnostics.navalReserveRequests,
+    navalTransportProductionFulfilled: world.productionDiagnostics.navalTransportFulfilled,
+    navalEscortProductionFulfilled: world.productionDiagnostics.navalEscortFulfilled,
+    navalReserveProductionFulfilled: world.productionDiagnostics.navalReserveFulfilled,
     productionBlockedComponentCount:
       world.productionDiagnostics.blockedByComponentId.size,
     battlefieldEnemyComponents: world.battlefieldTopology.enemyComponentCount,

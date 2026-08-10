@@ -378,17 +378,6 @@ export function recordMaritimeInterdictionCombat(world: WorldState): void {
   updateMaritimeInterdictionState(world);
 }
 
-export function getMaritimeMissionUnitIds(world: WorldState): Set<UnitId> {
-  return new Set([
-    ...world.supplyAssessment.maritimeLogistics.assignments.map((item) => item.transportId),
-    ...world.supplyAssessment.maritimeEscorts.assignments.map((item) => item.combatShipId),
-    ...world.supplyAssessment.maritimeInterdiction.assignments.map((item) => item.combatShipId),
-    ...world.supplyAssessment.navalStrategy.missions
-      .filter((item) => item.type === "INTERCEPT")
-      .flatMap((item) => item.shipIds),
-  ]);
-}
-
 function createPriorityContext(world: WorldState, links: MaritimeSupplyLink[]) {
   const frontlineIds = new Set(world.landFronts.operationalSectors.flatMap((sector) => [
     ...sector.sideA.borderRegionIds, ...sector.sideB.borderRegionIds,
