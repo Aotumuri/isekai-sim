@@ -302,6 +302,22 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     amphibiousTransportLosses: world.amphibiousOperations.transportLosses,
     amphibiousFailedLandings: world.amphibiousOperations.failedLandings,
     amphibiousSuccessfulBeachheads: world.amphibiousOperations.successfulBeachheads,
+    amphibiousOperationsRejected: world.amphibiousOperations.operationsRejected,
+    amphibiousOperationsAccepted: world.amphibiousOperations.operationsAccepted,
+    amphibiousAverageEstimatedCompletion: world.amphibiousOperations.feasibilitySampleCount > 0
+      ? world.amphibiousOperations.totalEstimatedCompletionTicks / world.amphibiousOperations.feasibilitySampleCount : 0,
+    amphibiousAverageOpportunityWindow: world.amphibiousOperations.feasibilitySampleCount > 0
+      ? world.amphibiousOperations.totalOpportunityWindowTicks / world.amphibiousOperations.feasibilitySampleCount : 0,
+    amphibiousAverageSafetyMargin: world.amphibiousOperations.feasibilitySampleCount > 0
+      ? world.amphibiousOperations.totalSafetyMarginTicks / world.amphibiousOperations.feasibilitySampleCount : 0,
+    amphibiousFalsePositives: world.amphibiousOperations.falsePositiveCount,
+    amphibiousFalseNegatives: world.amphibiousOperations.falseNegativeCount,
+    amphibiousLaunchSuccessRate: world.amphibiousOperations.operationsAccepted > 0
+      ? world.amphibiousOperations.launchedOperations / world.amphibiousOperations.operationsAccepted * 100 : 0,
+    amphibiousCompletionSuccessRate: world.amphibiousOperations.operationsAccepted > 0
+      ? world.amphibiousOperations.completedLandings / world.amphibiousOperations.operationsAccepted * 100 : 0,
+    amphibiousAverageCancellationAge: world.amphibiousOperations.cancelledPlans > 0
+      ? world.amphibiousOperations.totalCancellationAgeTicks / world.amphibiousOperations.cancelledPlans : 0,
     amphibiousEvaluationCpuMs: world.amphibiousOperations.evaluationCpuMs,
     amphibiousMovementCpuMs: world.amphibiousOperations.movementCpuMs,
     navalAiEvaluations: world.supplyAssessment.navalStrategy.evaluations,

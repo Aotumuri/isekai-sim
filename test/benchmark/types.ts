@@ -203,6 +203,16 @@ export interface WorldSummary {
   amphibiousTransportLosses: number;
   amphibiousFailedLandings: number;
   amphibiousSuccessfulBeachheads: number;
+  amphibiousOperationsRejected: number;
+  amphibiousOperationsAccepted: number;
+  amphibiousAverageEstimatedCompletion: number;
+  amphibiousAverageOpportunityWindow: number;
+  amphibiousAverageSafetyMargin: number;
+  amphibiousFalsePositives: number;
+  amphibiousFalseNegatives: number;
+  amphibiousLaunchSuccessRate: number;
+  amphibiousCompletionSuccessRate: number;
+  amphibiousAverageCancellationAge: number;
   amphibiousEvaluationCpuMs: number;
   amphibiousMovementCpuMs: number;
   navalAiEvaluations: number;

@@ -70,6 +70,7 @@ interface OverlayVersions {
   supplyAssessment: number;
   maritimeInterdiction: number;
   navalStrategy: number;
+  amphibiousOperations: number;
   convoys: number;
   isolationEffects: number;
   productionDiagnostics: number;
@@ -146,6 +147,7 @@ export function attachFrontDebugOverlay(
     drawSupplyReliefMarkers(layer, world);
     drawMaritimeSupplyLinks(layer, world);
     drawNavalMissions(layer, world);
+    drawAmphibiousOperations(layer, world);
     if (selectedSectorId && !world.landFronts.operationalSectorsById.has(selectedSectorId)) {
       selectedSectorId = null;
     }
@@ -924,6 +926,49 @@ function drawNavalMissions(layer: Container, world: WorldState): void {
   }
 }
 
+function drawAmphibiousOperations(layer: Container, world: WorldState): void {
+  for (const operation of world.amphibiousOperations.operations) {
+    if (operation.phase === "landed" || operation.phase === "cancelled") continue;
+    drawMarker(layer, world, operation.destinationPortId, "A", 0x7c4dff, "diamond");
+    const center = world.cache.mesoById.get(operation.destinationPortId)?.center;
+    if (!center) continue;
+    const label = new Text(formatAmphibiousLaunchFeasibility(operation.launchFeasibility), LABEL_STYLE);
+    label.resolution = 2;
+    label.position.set(center.x + 11, center.y + 11);
+    layer.addChild(label);
+  }
+  const latestRejectionByNation = new Map<string, WorldState["amphibiousOperations"]["launchRejections"][number]>();
+  for (const rejection of world.amphibiousOperations.launchRejections) {
+    latestRejectionByNation.set(rejection.nationId, rejection);
+  }
+  for (const rejection of latestRejectionByNation.values()) {
+    drawMarker(layer, world, rejection.destinationPortId, "X", 0xff5252, "diamond");
+    const center = world.cache.mesoById.get(rejection.destinationPortId)?.center;
+    if (!center) continue;
+    const label = new Text(formatAmphibiousLaunchFeasibility(rejection), LABEL_STYLE);
+    label.resolution = 2;
+    label.position.set(center.x + 11, center.y + 11);
+    layer.addChild(label);
+  }
+}
+
+export function formatAmphibiousLaunchFeasibility(
+  feasibility: WorldState["amphibiousOperations"]["operations"][number]["launchFeasibility"],
+): string {
+  return [
+    `AMPHIBIOUS LAUNCH ${feasibility.accepted ? "FEASIBLE" : "REJECTED"}`,
+    `assembly ${feasibility.estimatedAssemblyTicks} ticks`,
+    `transport ${feasibility.estimatedTransportDelayTicks} ticks`,
+    `escort ${feasibility.estimatedEscortDelayTicks} ticks`,
+    `voyage ${feasibility.estimatedVoyageTicks} ticks`,
+    `landing ${feasibility.estimatedLandingTicks} ticks`,
+    `ETA ${feasibility.estimatedCompletionTicks} ticks`,
+    `window ${feasibility.estimatedOpportunityWindowTicks} ticks`,
+    `margin ${feasibility.safetyMarginTicks} ticks`,
+    `reason ${feasibility.reason ?? "accepted"}`,
+  ].join("\n");
+}
+
 export function formatNavalMission(world: WorldState, shipId: string): string {
   const mission = world.supplyAssessment.navalStrategy.missions.find((item) =>
     item.shipIds.includes(shipId as never));
@@ -1117,6 +1162,7 @@ function readVersions(world: WorldState): OverlayVersions {
     supplyAssessment: world.supplyAssessment.version,
     maritimeInterdiction: world.supplyAssessment.maritimeInterdiction.version,
     navalStrategy: world.supplyAssessment.navalStrategy.version,
+    amphibiousOperations: world.amphibiousOperations.version,
     convoys: world.supplyAssessment.convoys.version,
     isolationEffects: world.isolationEffects.version,
     productionDiagnostics: world.productionDiagnostics.version,
@@ -1142,7 +1188,7 @@ function readVersions(world: WorldState): OverlayVersions {
 
 function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
   return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
-    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment && a.maritimeInterdiction === b.maritimeInterdiction && a.convoys === b.convoys && a.isolationEffects === b.isolationEffects && a.productionDiagnostics === b.productionDiagnostics && a.supplyCutoffs === b.supplyCutoffs && a.supplyDefense === b.supplyDefense && a.supplyRelief === b.supplyRelief &&
+    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment && a.maritimeInterdiction === b.maritimeInterdiction && a.navalStrategy === b.navalStrategy && a.amphibiousOperations === b.amphibiousOperations && a.convoys === b.convoys && a.isolationEffects === b.isolationEffects && a.productionDiagnostics === b.productionDiagnostics && a.supplyCutoffs === b.supplyCutoffs && a.supplyDefense === b.supplyDefense && a.supplyRelief === b.supplyRelief &&
     a.retreats === b.retreats && a.coverage === b.coverage && a.stalemate === b.stalemate &&
     a.reserveDeployments === b.reserveDeployments && a.battles === b.battles;
 }

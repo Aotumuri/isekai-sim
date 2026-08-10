@@ -98,6 +98,11 @@ test("amphibious planning creates one deterministic leased plan and reserves phy
   assert.equal(operation.manifest[0].departurePortId, id("port-a"));
   assert.equal(world.amphibiousOperations.operationByUnitId.get(operation.transportId)?.id, operation.id);
   assert.equal(world.amphibiousOperations.landingPlans, 1);
+  assert.equal(world.amphibiousOperations.operationsAccepted, 1);
+  assert.equal(world.amphibiousOperations.operationsRejected, 0);
+  assert.equal(operation.launchFeasibility.accepted, true);
+  assert(operation.launchFeasibility.estimatedCompletionTicks > 0);
+  assert(operation.launchFeasibility.safetyMarginTicks >= 0);
   for (let tick = 0; tick < 400 && operation.phase !== "landed"; tick += 1) {
     world.time.fastTick += 1;
     updateAmphibiousOperations(world);
@@ -108,6 +113,50 @@ test("amphibious planning creates one deterministic leased plan and reserves phy
   assert.equal(world.units.includes(infantry), true);
   assert.equal(world.amphibiousOperations.operationByUnitId.has(infantry.id), false);
   assert.equal(world.amphibiousOperations.successfulBeachheads, 1);
+  assert.equal(world.amphibiousOperations.launchedOperations, 1);
+});
+
+test("amphibious launch preflight rejects a landing that cannot fit its strategic window", () => {
+  const world = createMaritimeWorld(true, 3);
+  const enemyMacroIds = world.macroRegions
+    .filter((macro) => macro.mesoRegionIds.includes(id("port-b")) || macro.mesoRegionIds.includes(id("island-b")))
+    .map((macro) => { macro.nationId = NATION_B; return macro.id; });
+  const enemy = createNation(NATION_B, id("island-b"), enemyMacroIds);
+  enemy.surrenderScore = 0.99;
+  world.nations.push(enemy);
+  world.cache.ownerByMesoId.clear();
+  declareWar(world.wars, NATION_A, NATION_B, 0);
+  const infantry = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "Infantry");
+  const escort = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip");
+  world.units.push(infantry, escort);
+  world.supplyAssessment.navalStrategy.missions = [{
+    id: "reserve-test", nationId: NATION_A, type: "RESERVE", shipIds: [escort.id],
+    targetPortId: id("port-a"), priority: 10, createdTick: 0, status: "ACTIVE", reasonFlags: ["test-reserve"],
+  }];
+
+  updateAmphibiousPlanning(world);
+
+  assert.equal(world.amphibiousOperations.operations.length, 0);
+  assert.equal(world.amphibiousOperations.operationsAccepted, 0);
+  assert.equal(world.amphibiousOperations.operationsRejected, 1);
+  assert.equal(world.amphibiousOperations.landingPlans, 0);
+  assert.equal(world.amphibiousOperations.transportAssignments, 0);
+  const rejection = world.amphibiousOperations.launchRejections[0];
+  assert(rejection);
+  assert.equal(rejection.reason, "insufficient-strategic-window");
+  assert.equal(rejection.accepted, false);
+  assert.equal(rejection.estimatedAssemblyTicks, 0);
+  assert.equal(rejection.estimatedTransportDelayTicks, 0);
+  assert.equal(rejection.estimatedEscortDelayTicks, 0);
+  assert(rejection.estimatedVoyageTicks > 0);
+  assert(rejection.estimatedLandingTicks > 0);
+  assert(rejection.estimatedCompletionTicks > rejection.estimatedOpportunityWindowTicks);
+  assert(rejection.safetyMarginTicks < 0);
+  assert.equal(world.amphibiousOperations.operationByUnitId.size, 0);
+  assert.equal(infantry.moveTargetId, null);
+  world.time.fastTick = rejection.estimatedCompletionTick;
+  updateAmphibiousPlanning(world);
+  assert.equal(world.amphibiousOperations.falsePositiveCount, 1);
 });
 
 test("Naval AI gives every CombatShip exactly one mission and never assigns TransportShips", () => {

@@ -329,6 +329,46 @@ export function getMaritimeSeaComponentForPort(
   return entrance ? cache.seaComponentByRegionId.get(entrance) : undefined;
 }
 
+/**
+ * Estimates naval positioning distance from the existing connectivity forest.
+ * This is deliberately not a shortest-path search: strategic preflight callers
+ * can price positioning without adding a BFS for each candidate.
+ */
+export function getCachedMaritimePositioningSegments(
+  world: WorldState,
+  startId: MesoRegionId,
+  destinationPortId: MesoRegionId,
+): number | null {
+  if (startId === destinationPortId) return 0;
+  const cache = world.supplyAssessment.maritimeConnectivity;
+  ensureSeaConnectivity(world, cache);
+  const mesoById = getMesoById(world);
+  const startIsSea = mesoById.get(startId)?.type === "sea";
+  const startSeaId = startIsSea ? startId : getPortSeaEntrance(world, startId);
+  const destinationSeaId = getPortSeaEntrance(world, destinationPortId);
+  if (!startSeaId || !destinationSeaId) return null;
+  if (cache.seaComponentByRegionId.get(startSeaId) !==
+    cache.seaComponentByRegionId.get(destinationSeaId)) return null;
+
+  const startAncestors = new Map<MesoRegionId, number>();
+  let current: MesoRegionId | null = startSeaId;
+  let distance = 0;
+  while (current) {
+    startAncestors.set(current, distance);
+    current = cache.parentByRegionId.get(current) ?? null;
+    distance += 1;
+  }
+  current = destinationSeaId;
+  distance = 0;
+  while (current && !startAncestors.has(current)) {
+    current = cache.parentByRegionId.get(current) ?? null;
+    distance += 1;
+  }
+  if (!current) return null;
+  const seaSegments = (startAncestors.get(current) ?? 0) + distance;
+  return seaSegments + (startIsSea ? 0 : 1) + 1;
+}
+
 function portPairKey(a: MesoRegionId, b: MesoRegionId): string {
   return `${a}->${b}`;
 }

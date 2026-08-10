@@ -7,15 +7,45 @@ import { releaseUnitFromFrontAllocation } from "./nation-front-allocations";
 import { getUnitCombatStrength } from "./unit-strength";
 import type { UnitId, UnitState } from "./unit";
 import type { WorldState } from "./world-state";
-import { getCachedMaritimeRoute, isEffectivelyControlledPort, isOperationalTransport } from "./maritime-supply";
+import { getCachedMaritimePositioningSegments, getCachedMaritimeRoute, isEffectivelyControlledPort, isOperationalTransport } from "./maritime-supply";
 import { isOperationalCombatShip } from "./maritime-escort";
 import { getMesoById, getNeighborsById, getOwnerByMesoId, getPortTargetsByNation } from "./world-cache";
-import { buildWarAdjacency, isAtWar } from "./war-state";
+import { buildWarAdjacency, findWar, isAtWar } from "./war-state";
 import { moveNavalUnitToward } from "./naval-pathfinding";
 import { FAST_TICK_MS } from "./time";
+import { getStrategicProgressAssessment } from "./strategic-progress";
+import { getCapitalDefenseAssessment } from "./capital-defense";
+
+const PREPARATION_TIMEOUT_TICKS = 2400;
 
 export type AmphibiousPhase = "preparing" | "embarking" | "escort-wait" | "transporting" | "landed" | "cancelled";
 export type AmphibiousCancellationReason = "transport-lost" | "escort-lost" | "departure-port-lost" | "target-invalid" | "war-ended" | "force-lost" | "preparation-timeout";
+export type AmphibiousLaunchRejectionReason = "insufficient-strategic-window" | "positioning-unreachable";
+
+export interface AmphibiousLaunchFeasibility {
+  evaluatedAtTick: number;
+  estimatedAssemblyTicks: number;
+  estimatedTransportDelayTicks: number;
+  estimatedEscortDelayTicks: number;
+  estimatedEmbarkationTicks: number;
+  estimatedVoyageTicks: number;
+  estimatedLandingTicks: number;
+  estimatedCompletionTicks: number;
+  estimatedCompletionTick: number;
+  estimatedOpportunityWindowTicks: number;
+  safetyMarginTicks: number;
+  accepted: boolean;
+  reason: AmphibiousLaunchRejectionReason | null;
+  reasonFlags: string[];
+}
+
+export interface AmphibiousLaunchRejection extends AmphibiousLaunchFeasibility {
+  nationId: NationId;
+  enemyNationId: NationId;
+  departurePortId: MesoRegionId;
+  destinationPortId: MesoRegionId;
+  falsePositiveEvaluated: boolean;
+}
 
 export interface AmphibiousManifestAssignment {
   unitId: UnitId;
@@ -48,6 +78,8 @@ export interface AmphibiousOperation {
   completedAtTick: number | null;
   cancellationReason: AmphibiousCancellationReason | null;
   reasonFlags: string[];
+  launchFeasibility: AmphibiousLaunchFeasibility;
+  launchedAtTick: number | null;
 }
 
 export interface AmphibiousOperationState {
@@ -68,6 +100,17 @@ export interface AmphibiousOperationState {
   successfulBeachheads: number;
   evaluationCpuMs: number;
   movementCpuMs: number;
+  launchRejections: AmphibiousLaunchRejection[];
+  operationsRejected: number;
+  operationsAccepted: number;
+  feasibilitySampleCount: number;
+  totalEstimatedCompletionTicks: number;
+  totalOpportunityWindowTicks: number;
+  totalSafetyMarginTicks: number;
+  falsePositiveCount: number;
+  falseNegativeCount: number;
+  launchedOperations: number;
+  totalCancellationAgeTicks: number;
 }
 
 export function createAmphibiousOperationState(): AmphibiousOperationState {
@@ -75,7 +118,12 @@ export function createAmphibiousOperationState(): AmphibiousOperationState {
     opportunities: 0, landingPlans: 0, cancelledPlans: 0, completedLandings: 0,
     embarkationDelayTicks: 0, transportAssignments: 0, escortWaitingTicks: 0,
     convoyTravelTicks: 0, transportLosses: 0, failedLandings: 0,
-    successfulBeachheads: 0, evaluationCpuMs: 0, movementCpuMs: 0 };
+    successfulBeachheads: 0, evaluationCpuMs: 0, movementCpuMs: 0,
+    launchRejections: [], operationsRejected: 0, operationsAccepted: 0,
+    feasibilitySampleCount: 0, totalEstimatedCompletionTicks: 0,
+    totalOpportunityWindowTicks: 0, totalSafetyMarginTicks: 0,
+    falsePositiveCount: 0, falseNegativeCount: 0, launchedOperations: 0,
+    totalCancellationAgeTicks: 0 };
 }
 
 /** Slow-tick strategic evaluator. It only considers cached ports, fronts and supply data. */
@@ -83,6 +131,7 @@ export function updateAmphibiousPlanning(world: WorldState): void {
   if (!WORLD_BALANCE.unit.naval?.amphibiousEnabled) return;
   const startedAt = world.instrumentation ? performance.now() : 0;
   reconcileOperations(world);
+  evaluateRejectedOutcomes(world);
   const activeNations = new Set(world.amphibiousOperations.operations
     .filter((operation) => operation.phase !== "landed" && operation.phase !== "cancelled")
     .map((operation) => operation.nationId));
@@ -168,6 +217,8 @@ export function updateAmphibiousOperations(world: WorldState): void {
       operation.convoyId = convoy.id;
       operation.phase = "transporting";
       operation.phaseStartedAtTick = world.time.fastTick;
+      operation.launchedAtTick = world.time.fastTick;
+      world.amphibiousOperations.launchedOperations += 1;
       continue;
     }
     if (operation.phase === "transporting") {
@@ -239,6 +290,18 @@ function createOperation(world: WorldState, candidate: LandingCandidate): Amphib
   if (units.length === 0 || strength < 0.5) return null;
   const missionShipIds = new Set(world.supplyAssessment.navalStrategy.missions.filter((m) => m.nationId === candidate.nationId && m.type === "RESERVE").flatMap((m) => m.shipIds));
   const escort = world.units.filter((u) => isOperationalCombatShip(u, candidate.nationId) && missionShipIds.has(u.id) && !isAmphibiousOwnedUnit(world, u.id)).sort(compareUnits)[0];
+  const feasibility = assessLaunchFeasibility(world, candidate, units, transport, escort, distance);
+  recordFeasibilitySample(world, feasibility);
+  if (!feasibility.accepted) {
+    world.amphibiousOperations.operationsRejected += 1;
+    world.amphibiousOperations.launchRejections.push({
+      ...feasibility, nationId: candidate.nationId, enemyNationId: candidate.enemyId,
+      departurePortId: candidate.departure, destinationPortId: candidate.destination,
+      falsePositiveEvaluated: false,
+    });
+    world.amphibiousOperations.version += 1;
+    return null;
+  }
   for (const unit of units) releaseUnitFromFrontAllocation(world, unit.id);
   const operation: AmphibiousOperation = { id: `amphibious-operation-${world.amphibiousOperations.nextOperationNumber++}`,
     nationId: candidate.nationId, enemyNationId: candidate.enemyId, phase: "preparing",
@@ -250,8 +313,10 @@ function createOperation(world: WorldState, candidate: LandingCandidate): Amphib
       controlledDistance: distance.get(u.regionId) ?? 0, estimatedArrivalTick: world.time.fastTick + (distance.get(u.regionId) ?? 0) * u.moveTicksPerRegion,
       strength: getUnitCombatStrength(u), arrivedAtTick: null })), preparationLeaseStartedAtTick: world.time.fastTick,
     preparationLeaseEndedAtTick: null, phaseStartedAtTick: world.time.fastTick, completedAtTick: null,
-    cancellationReason: null, reasonFlags: candidate.reasons };
+    cancellationReason: null, reasonFlags: candidate.reasons,
+    launchFeasibility: feasibility, launchedAtTick: null };
   world.amphibiousOperations.operations.push(operation); world.amphibiousOperations.landingPlans += 1;
+  world.amphibiousOperations.operationsAccepted += 1;
   world.amphibiousOperations.transportAssignments += 1; world.amphibiousOperations.version += 1;
   world.instrumentation?.incrementCounter("amphibious.landingPlans");
   return operation;
@@ -266,7 +331,7 @@ function validateOperation(world: WorldState, op: AmphibiousOperation, units: Ma
   const liveForce = op.phase === "escort-wait" || op.phase === "transporting" ? units.get(op.transportId)?.cargoUnits ?? [] : op.assignedUnitIds.map((id) => units.get(id)).filter(Boolean);
   if (liveForce.length === 0) return "force-lost";
   if (op.phase === "preparing" || op.phase === "embarking") {
-    if (world.time.fastTick - op.preparationLeaseStartedAtTick > 2400) return "preparation-timeout";
+    if (world.time.fastTick - op.preparationLeaseStartedAtTick > PREPARATION_TIMEOUT_TICKS) return "preparation-timeout";
   }
   return null;
 }
@@ -286,6 +351,10 @@ function cancelOperation(world: WorldState, op: AmphibiousOperation, reason: Amp
   op.phase = "cancelled"; op.cancellationReason = reason; op.completedAtTick = world.time.fastTick;
   op.preparationLeaseEndedAtTick ??= world.time.fastTick;
   world.amphibiousOperations.cancelledPlans += 1; world.amphibiousOperations.failedLandings += 1;
+  world.amphibiousOperations.totalCancellationAgeTicks += Math.max(0, world.time.fastTick - op.preparationLeaseStartedAtTick);
+  if (reason === "war-ended" || reason === "target-invalid" || reason === "departure-port-lost" || reason === "preparation-timeout") {
+    world.amphibiousOperations.falseNegativeCount += 1;
+  }
   if (reason === "transport-lost") world.amphibiousOperations.transportLosses += 1;
   world.amphibiousOperations.version += 1;
 }
@@ -296,6 +365,110 @@ function completeOperation(world: WorldState, op: AmphibiousOperation): void {
   world.amphibiousOperations.completedLandings += 1; world.amphibiousOperations.successfulBeachheads += 1;
   world.amphibiousOperations.version += 1;
   world.instrumentation?.incrementCounter("amphibious.successfulBeachheads");
+}
+
+function assessLaunchFeasibility(
+  world: WorldState,
+  candidate: LandingCandidate,
+  units: readonly UnitState[],
+  transport: UnitState,
+  escort: UnitState | undefined,
+  distance: ReadonlyMap<MesoRegionId, number>,
+): AmphibiousLaunchFeasibility {
+  const estimatedAssemblyTicks = units.reduce((maximum, unit) => Math.max(maximum,
+    (distance.get(unit.regionId) ?? 0) * Math.max(1, Math.round(unit.moveTicksPerRegion))), 0);
+  const transportSegments = getCachedMaritimePositioningSegments(world, transport.regionId, candidate.departure);
+  const escortSegments = escort
+    ? getCachedMaritimePositioningSegments(world, escort.regionId, candidate.departure)
+    : null;
+  const estimatedTransportDelayTicks = positioningTicks(transport, transportSegments);
+  const estimatedEscortDelayTicks = escort ? positioningTicks(escort, escortSegments) : 0;
+  const estimatedEmbarkationTicks = 1;
+  const convoyMoveTicks = Math.max(transport.moveTicksPerRegion, escort?.moveTicksPerRegion ?? 0, 1);
+  const estimatedVoyageTicks = Math.max(0, candidate.route.length - 1) * Math.round(convoyMoveTicks);
+  const estimatedLandingTicks = 1;
+  const positioningUnreachable = transportSegments === null || (escort !== undefined && escortSegments === null);
+  const positioningTicksTotal = Math.max(estimatedAssemblyTicks, estimatedTransportDelayTicks, estimatedEscortDelayTicks);
+  const estimatedCompletionTicks = positioningTicksTotal + estimatedEmbarkationTicks +
+    estimatedVoyageTicks + estimatedLandingTicks;
+  const opportunity = estimateOpportunityWindow(world, candidate.nationId, candidate.enemyId);
+  const safetyMarginTicks = opportunity.ticks - estimatedCompletionTicks;
+  const reason: AmphibiousLaunchRejectionReason | null = positioningUnreachable
+    ? "positioning-unreachable"
+    : safetyMarginTicks < 0 ? "insufficient-strategic-window" : null;
+  return {
+    evaluatedAtTick: world.time.fastTick,
+    estimatedAssemblyTicks, estimatedTransportDelayTicks, estimatedEscortDelayTicks,
+    estimatedEmbarkationTicks, estimatedVoyageTicks, estimatedLandingTicks,
+    estimatedCompletionTicks, estimatedCompletionTick: world.time.fastTick + estimatedCompletionTicks,
+    estimatedOpportunityWindowTicks: opportunity.ticks, safetyMarginTicks,
+    accepted: reason === null, reason, reasonFlags: opportunity.reasons,
+  };
+}
+
+function positioningTicks(unit: UnitState, segments: number | null): number {
+  if (segments === null) return PREPARATION_TIMEOUT_TICKS + 1;
+  const perSegment = Math.max(1, Math.round(unit.moveTicksPerRegion));
+  const progressTicks = Math.floor(Math.max(0, unit.moveProgressMs) / FAST_TICK_MS);
+  return Math.max(0, segments * perSegment - progressTicks);
+}
+
+function estimateOpportunityWindow(
+  world: WorldState,
+  nationId: NationId,
+  enemyId: NationId,
+): { ticks: number; reasons: string[] } {
+  const reasons: string[] = [];
+  const war = findWar(world.wars, nationId, enemyId);
+  const warAge = war ? Math.max(0, world.time.fastTick - war.startedAtFastTick) : 0;
+  const enemy = world.nations.find((nation) => nation.id === enemyId);
+  const threshold = Math.max(0.001, WORLD_BALANCE.war.surrender.threshold);
+  const resistance = clamp(1 - (enemy?.surrenderScore ?? 0) / threshold, 0, 1);
+  let window = Math.round(120 + resistance * 1080);
+  reasons.push(`enemy-resistance:${resistance.toFixed(2)}`);
+  const ageWindow = Math.max(240, Math.round(1200 - Math.max(0, warAge - 800) * 0.25));
+  if (ageWindow < window) reasons.push("mature-war");
+  window = Math.min(window, ageWindow);
+
+  const progress = getStrategicProgressAssessment(world, nationId, enemyId);
+  if (progress && progress.score > 0) {
+    window = Math.round(window * (1 - Math.min(0.35, progress.score / 100 * 0.35)));
+    reasons.push("existing-strategic-progress");
+  }
+  const activeOffensives = world.offensiveOperations.operations.filter((operation) =>
+    operation.nationId === nationId && operation.enemyNationId === enemyId && operation.outcome === null).length;
+  if (activeOffensives > 0) {
+    window = Math.round(window * Math.max(0.65, 1 - activeOffensives * 0.1));
+    reasons.push("active-land-offensive");
+  }
+  const enemyCapital = getCapitalDefenseAssessment(world, enemyId)?.threatLevel;
+  if (enemyCapital === "critical") { window = Math.min(window, 180); reasons.push("enemy-capital-critical"); }
+  else if (enemyCapital === "threatened") { window = Math.min(window, 360); reasons.push("enemy-capital-threatened"); }
+  const ownCapital = getCapitalDefenseAssessment(world, nationId)?.threatLevel;
+  if (ownCapital === "critical") { window = Math.min(window, 120); reasons.push("own-capital-critical"); }
+  else if (ownCapital === "threatened") { window = Math.min(window, 300); reasons.push("own-capital-threatened"); }
+  return { ticks: Math.max(0, window), reasons };
+}
+
+function recordFeasibilitySample(world: WorldState, feasibility: AmphibiousLaunchFeasibility): void {
+  const state = world.amphibiousOperations;
+  state.feasibilitySampleCount += 1;
+  state.totalEstimatedCompletionTicks += feasibility.estimatedCompletionTicks;
+  state.totalOpportunityWindowTicks += feasibility.estimatedOpportunityWindowTicks;
+  state.totalSafetyMarginTicks += feasibility.safetyMarginTicks;
+}
+
+function evaluateRejectedOutcomes(world: WorldState): void {
+  const warAdjacency = buildWarAdjacency(world.wars);
+  for (const rejection of world.amphibiousOperations.launchRejections) {
+    if (rejection.falsePositiveEvaluated || world.time.fastTick < rejection.estimatedCompletionTick) continue;
+    rejection.falsePositiveEvaluated = true;
+    if (isAtWar(rejection.nationId, rejection.enemyNationId, warAdjacency) &&
+      isValidTargetPort(world, rejection.nationId, rejection.enemyNationId, rejection.destinationPortId) &&
+      isStrategicOpportunity(world, rejection.nationId, rejection.enemyNationId)) {
+      world.amphibiousOperations.falsePositiveCount += 1;
+    }
+  }
 }
 
 function reconcileOperations(world: WorldState): void { rebuildOwnership(world); }
@@ -321,3 +494,4 @@ function positionShipAtPort(world: WorldState, ship: UnitState, port: MesoRegion
 function resetMovement(unit: UnitState): void { unit.moveTargetId = null; unit.moveFromId = null; unit.moveToId = null; unit.moveProgressMs = 0; }
 function compareIds(a: string, b: string): number { return a < b ? -1 : a > b ? 1 : 0; }
 function compareUnits(a: UnitState, b: UnitState): number { return compareIds(a.id, b.id); }
+function clamp(value: number, min: number, max: number): number { return Math.min(max, Math.max(min, value)); }
