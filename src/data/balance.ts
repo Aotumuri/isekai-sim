@@ -282,6 +282,15 @@ export const WORLD_BALANCE = {
         historyLimit: 512,
         timelineLimit: 1024,
       },
+      isolation: {
+        // Ten seconds of simulation time at the current 100 ms fast tick gives
+        // newly cut-off formations time to reconnect before readiness decays.
+        graceTicks: 100,
+        // One tenth of normal reorganization recovery. This takes 300 slow
+        // ticks to move a full-strength tank from 0.85 organization to the floor.
+        organizationDecayPerSlowTick: 0.0025,
+        organizationFloor: 0.1,
+      },
       offensiveOperation: {
         maxActivePerNation: 1,
         minimumFrontUnits: 3,

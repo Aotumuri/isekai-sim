@@ -210,6 +210,28 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     maritimeMultiHopPropagations: world.supplyAssessment.multiHopSupplyPropagations,
     maritimeCacheRebuilds: world.supplyAssessment.maritimeConnectivity.rebuildCount,
     maritimeCacheHits: world.supplyAssessment.maritimeConnectivity.hitCount,
+    isolatedUnitsEvaluated: world.isolationEffects.isolatedUnitsEvaluated,
+    isolationGraceEvaluations: world.isolationEffects.unitsInGracePeriod,
+    strainedUnitEvaluations: world.isolationEffects.strainedUnits,
+    isolationDecayApplications: world.isolationEffects.organizationDecayApplications,
+    organizationLostToIsolation: world.isolationEffects.totalOrganizationLost,
+    unitsHittingIsolationFloor: world.isolationEffects.unitsHittingFloor,
+    averageIsolationAgeAtFloor: world.isolationEffects.unitsHittingFloor > 0
+      ? world.isolationEffects.isolationAgeAtFloorTicks /
+        world.isolationEffects.unitsHittingFloor
+      : 0,
+    averageIsolatedOrganization:
+      world.isolationEffects.currentAverageIsolatedOrganization,
+    highOrganizationIsolatedUnits:
+      world.isolationEffects.currentHighOrganizationIsolatedUnits,
+    averageIsolationOrganization0To100: bucketAverage(world, "0-100"),
+    averageIsolationOrganization100To200: bucketAverage(world, "100-200"),
+    averageIsolationOrganization200To500: bucketAverage(world, "200-500"),
+    averageIsolationOrganization500Plus: bucketAverage(world, "500+"),
+    isolationReconnections: world.isolationEffects.reconnections,
+    maritimeIsolationReconnections: world.isolationEffects.maritimeReconnections,
+    isolationDecayStoppedByReconnection:
+      world.isolationEffects.decayStoppedByReconnection,
     battlefieldEnemyComponents: world.battlefieldTopology.enemyComponentCount,
     battlefieldArticulationPoints: world.battlefieldTopology.articulationPointCount,
     battlefieldZeroExitComponents: world.battlefieldTopology.zeroExitComponentCount,
@@ -600,4 +622,12 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     occupationVersion: world.occupation.version,
     buildingVersion: world.buildingVersion,
   };
+}
+
+function bucketAverage(
+  world: WorldState,
+  bucketName: keyof WorldState["isolationEffects"]["organizationByAgeBucket"],
+): number {
+  const bucket = world.isolationEffects.organizationByAgeBucket[bucketName];
+  return bucket.unitCount > 0 ? bucket.organizationTotal / bucket.unitCount : 0;
 }

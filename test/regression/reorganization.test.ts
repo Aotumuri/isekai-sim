@@ -24,6 +24,7 @@ import {
   createSupplyAssessmentState,
   updateSupplyAssessment,
 } from "../../src/sim/supply-assessment";
+import { createIsolationEffectsState } from "../../src/sim/isolation-effects";
 import type { PocketRecord } from "../../src/sim/battlefield-topology";
 import {
   createReorganizationState,
@@ -376,7 +377,7 @@ test("a low-organization Pocket unit cannot cycle back to ready while isolated",
   assert(world.reorganization.organizationDeniedInsidePockets > 0);
 });
 
-test("isolation adds neither passive organization decay nor a direct combat modifier", () => {
+test("Reorganization itself adds neither isolation decay nor a direct combat modifier", () => {
   const { world, unit } = createDamagedPlanWorld();
   placePlanAtIsland(world, unit, false);
   unit.org = 0.9;
@@ -651,6 +652,7 @@ function createReorganizationWorld(): { world: WorldState; unit: UnitState } {
     collapseAdvances: createCollapseAdvanceState(),
     battlefieldTopology: createBattlefieldTopologyState(),
     supplyAssessment: createSupplyAssessmentState(),
+    isolationEffects: createIsolationEffectsState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

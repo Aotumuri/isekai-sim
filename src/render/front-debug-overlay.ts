@@ -24,6 +24,7 @@ import { getStalemateAssessment } from "../sim/stalemate-pressure";
 import { getStrategicProgressAssessment } from "../sim/strategic-progress";
 import { getBattlefieldTopologyAssessment } from "../sim/battlefield-topology";
 import { getNationSupplyAssessment } from "../sim/supply-assessment";
+import { getUnitIsolationEffect } from "../sim/isolation-effects";
 import {
   getUnitEquipmentFulfillment,
   getUnitManpowerRatio,
@@ -66,6 +67,7 @@ interface OverlayVersions {
   collapseAdvances: number;
   battlefieldTopology: number;
   supplyAssessment: number;
+  isolationEffects: number;
   retreats: number;
   coverage: number;
   stalemate: number;
@@ -421,12 +423,38 @@ function appendOperationalDetails(
           `  supplied ${supply.suppliedComponentCount} | isolated ${supply.isolatedComponentCount}`,
         );
         for (const component of supply.components) {
+          const isolationAge = component.isolatedSinceTick === null
+            ? 0
+            : Math.max(0, world.time.fastTick - component.isolatedSinceTick);
+          const isolationStage = component.supplied
+            ? "SUPPLIED"
+            : isolationAge > WORLD_BALANCE.war.landFront.isolation.graceTicks
+              ? "STRAINED"
+              : "ISOLATED";
           const reconnectDuration = component.reconnectedTick === null
             ? 0
             : world.time.fastTick - component.reconnectedTick;
           lines.push(
             `  component ${component.id} [${component.topologyComponentId}] ${component.supplied ? "SUPPLIED" : "ISOLATED"}`,
-            `    isolation ${component.isolatedDuration} | reconnect ${reconnectDuration} | ${component.reason}`,
+            `    isolation age ${isolationAge} | state ${isolationStage} | reconnect ${reconnectDuration}`,
+            `    passive decay ${component.supplied ? "OFF" : isolationStage === "STRAINED" ? "ACTIVE" : "OFF"} | ${component.reason}`,
+          );
+        }
+        const isolationSettings = WORLD_BALANCE.war.landFront.isolation;
+        for (const unit of [...unitById.values()]
+          .filter((candidate) =>
+            candidate.nationId === nationId && candidate.domain === "land"
+          )
+          .filter((candidate) =>
+            getUnitIsolationEffect(world, candidate).stage !== "supplied"
+          )
+          .slice(0, 6)) {
+          const effect = getUnitIsolationEffect(world, unit);
+          lines.push(
+            `ISOLATION ${unit.id} | ${effect.stage.toUpperCase()}`,
+            `  isolation age ${effect.age} ticks | passive decay ${effect.decayActive ? "ACTIVE" : "OFF"}`,
+            `  organization ${unit.org.toFixed(3)} | decay/tick -${isolationSettings.organizationDecayPerSlowTick.toFixed(4)} | floor ${isolationSettings.organizationFloor.toFixed(2)}`,
+            "  recovery BLOCKED",
           );
         }
       }
@@ -861,6 +889,7 @@ function readVersions(world: WorldState): OverlayVersions {
     collapseAdvances: world.collapseAdvances.version,
     battlefieldTopology: world.battlefieldTopology.version,
     supplyAssessment: world.supplyAssessment.version,
+    isolationEffects: world.isolationEffects.version,
     retreats: world.retreatPlans.version,
     coverage: world.frontlineCoverage.version,
     stalemate: world.stalematePressure.version,
@@ -880,7 +909,7 @@ function readVersions(world: WorldState): OverlayVersions {
 
 function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
   return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
-    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment &&
+    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment && a.isolationEffects === b.isolationEffects &&
     a.retreats === b.retreats && a.coverage === b.coverage && a.stalemate === b.stalemate &&
     a.reserveDeployments === b.reserveDeployments && a.battles === b.battles;
 }

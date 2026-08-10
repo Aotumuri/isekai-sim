@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SeededRng } from "../../src/utils/seeded-rng";
+import { WORLD_BALANCE } from "../../src/data/balance";
 import type { MacroRegion } from "../../src/worldgen/macro-region";
 import { createMacroRegionId } from "../../src/worldgen/macro-region";
 import type { MesoRegion, MesoRegionId } from "../../src/worldgen/meso-region";
 import type { MicroRegionId } from "../../src/worldgen/micro-region";
 import type { NationId } from "../../src/worldgen/nation";
 import { createBattlefieldTopologyState } from "../../src/sim/battlefield-topology";
+import { createUnitForType } from "../../src/sim/create-units";
 import { createCapitalDefenseState } from "../../src/sim/capital-defense";
 import { createCollapseAdvanceState } from "../../src/sim/collapse-advance";
 import { createFrontlineCoverageState } from "../../src/sim/frontline-coverage";
@@ -27,6 +29,11 @@ import {
   isNationRegionSupplied,
   updateSupplyAssessment,
 } from "../../src/sim/supply-assessment";
+import {
+  createIsolationEffectsState,
+  updateIsolationEffects,
+} from "../../src/sim/isolation-effects";
+import { createUnitId } from "../../src/sim/unit";
 import { createSimTime } from "../../src/sim/time";
 import type { WorldState } from "../../src/sim/world-state";
 import { createWorldCache } from "../../src/sim/world-cache";
@@ -135,6 +142,50 @@ test("cyclic directed maritime links terminate deterministically", () => {
   ));
 });
 
+test("maritime supply prevents decay, link loss starts grace and decay, and restoration stops it", () => {
+  const world = createMaritimeWorld();
+  const unit = createUnitForType(
+    createUnitId(world.unitIdCounter++),
+    NATION_A,
+    id("island-b"),
+    "Infantry",
+  );
+  world.units.push(unit);
+  const initialOrganization = unit.org;
+
+  updateSupplyAssessment(world);
+  updateIsolationEffects(world);
+  assert.equal(unit.org, initialOrganization);
+
+  world.occupation.mesoById.set(id("port-b"), NATION_B);
+  world.occupation.version += 1;
+  updateSupplyAssessment(world);
+  updateIsolationEffects(world);
+  world.time.fastTick = WORLD_BALANCE.war.landFront.isolation.graceTicks;
+  updateSupplyAssessment(world);
+  updateIsolationEffects(world);
+  assert.equal(unit.org, initialOrganization);
+
+  world.time.fastTick += 1;
+  updateSupplyAssessment(world);
+  updateIsolationEffects(world);
+  assert.equal(
+    unit.org,
+    initialOrganization -
+      WORLD_BALANCE.war.landFront.isolation.organizationDecayPerSlowTick,
+  );
+
+  const decayedOrganization = unit.org;
+  world.occupation.mesoById.delete(id("port-b"));
+  world.occupation.version += 1;
+  world.time.fastTick += 10;
+  updateSupplyAssessment(world);
+  updateIsolationEffects(world);
+  assert.equal(unit.org, decayedOrganization);
+  assert.equal(world.isolationEffects.maritimeReconnections, 1);
+  assert.equal(world.isolationEffects.decayStoppedByReconnection, 1);
+});
+
 function createMaritimeWorld(withPorts = true): WorldState {
   const specs: Array<{
     name: string;
@@ -210,6 +261,7 @@ function createMaritimeWorld(withPorts = true): WorldState {
     strategicProgress: createStrategicProgressState(),
     battlefieldTopology: createBattlefieldTopologyState(),
     supplyAssessment: createSupplyAssessmentState(),
+    isolationEffects: createIsolationEffectsState(),
     stalematePressure: createStalematePressureState(),
     collapseAdvances: createCollapseAdvanceState(),
     mapVersion: 0,

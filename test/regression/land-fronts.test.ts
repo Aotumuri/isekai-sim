@@ -7,6 +7,7 @@ import { createMacroRegionId, type MacroRegion } from "../../src/worldgen/macro-
 import { createNationId, type NationId } from "../../src/worldgen/nation";
 import { SeededRng } from "../../src/utils/seeded-rng";
 import { createUnitForType } from "../../src/sim/create-units";
+import { createIsolationEffectsState } from "../../src/sim/isolation-effects";
 import {
   createCapitalDefenseState,
   getCapitalDefenseAssessment,
@@ -4177,6 +4178,7 @@ function createFrontWorld(
     collapseAdvances: createCollapseAdvanceState(),
     battlefieldTopology: createBattlefieldTopologyState(),
     supplyAssessment: createSupplyAssessmentState(),
+    isolationEffects: createIsolationEffectsState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,
