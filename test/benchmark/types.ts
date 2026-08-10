@@ -330,6 +330,18 @@ export interface WorldSummary {
   averageManpowerStockAfterTransfer: number;
   averageWeaponsStockBeforeTransfer: number;
   averageWeaponsStockAfterTransfer: number;
+  suppliedOrganizationRecoveryEvaluations: number;
+  isolatedOrganizationRecoveryEvaluations: number;
+  organizationRecoveryBlockedByIsolation: number;
+  organizationRecoveryDeniedByIsolation: number;
+  isolatedPlansStalledByOrganization: number;
+  reconnectedPlansResumingOrganization: number;
+  averageIsolationToReconnection: number;
+  averageReconnectionToReady: number;
+  averageIsolatedReorganizationDuration: number;
+  isolatedPocketUnitsEnteringReorganization: number;
+  organizationRecoveryDeniedInsidePockets: number;
+  pocketUnitsReturningToCombat: number;
   averageReorganizationDuration: number;
   reorganizationReturnedToFront: number;
   reorganizationReturnedToReserve: number;

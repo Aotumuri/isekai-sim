@@ -531,6 +531,35 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     averageWeaponsStockAfterTransfer: reorganization.resourceTransferSamples > 0
       ? reorganization.weaponsStockAfterTransfers / reorganization.resourceTransferSamples
       : 0,
+    suppliedOrganizationRecoveryEvaluations:
+      reorganization.suppliedOrganizationRecoveryEvaluations,
+    isolatedOrganizationRecoveryEvaluations:
+      reorganization.isolatedOrganizationRecoveryEvaluations,
+    organizationRecoveryBlockedByIsolation:
+      reorganization.organizationBlockedByIsolationCount,
+    organizationRecoveryDeniedByIsolation:
+      reorganization.organizationDeniedByIsolation,
+    isolatedPlansStalledByOrganization:
+      reorganization.isolatedPlansStalledByOrganization,
+    reconnectedPlansResumingOrganization:
+      reorganization.reconnectedPlansResumingOrganization,
+    averageIsolationToReconnection:
+      reorganization.isolationToReconnectionSamples > 0
+        ? reorganization.isolationToReconnectionTicks /
+          reorganization.isolationToReconnectionSamples
+        : 0,
+    averageReconnectionToReady: reorganization.reconnectionToReadySamples > 0
+      ? reorganization.reconnectionToReadyTicks /
+        reorganization.reconnectionToReadySamples
+      : 0,
+    averageIsolatedReorganizationDuration: reorganization.plansEnteringIsolation > 0
+      ? reorganization.isolatedDurationTicks / reorganization.plansEnteringIsolation
+      : 0,
+    isolatedPocketUnitsEnteringReorganization:
+      reorganization.isolatedPocketUnitsEnteringReorganization,
+    organizationRecoveryDeniedInsidePockets:
+      reorganization.organizationDeniedInsidePockets,
+    pocketUnitsReturningToCombat: reorganization.pocketUnitsReturningToCombat,
     averageReorganizationDuration:
       reorganization.completedCount > 0
         ? reorganization.totalDurationTicks / reorganization.completedCount

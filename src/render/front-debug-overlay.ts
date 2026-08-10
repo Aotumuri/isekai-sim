@@ -438,13 +438,22 @@ function appendOperationalDetails(
           (plan.supplyStatus === "isolated" && plan.lastSupplyEvaluationTick !== null
             ? Math.max(0, world.time.fastTick - plan.lastSupplyEvaluationTick)
             : 0);
+        const readySettings = WORLD_BALANCE.war.landFront.reorganization;
+        const organizationReady = !!unit &&
+          unit.org >= readySettings.readyOrganizationRatio;
+        const ready = organizationReady && !!unit &&
+          getUnitManpowerRatio(unit) >= readySettings.readyManpowerRatio &&
+          getUnitEquipmentFulfillment(unit) >= readySettings.readyEquipmentRatio;
+        const readyReason = organizationReady ? "readiness" : "organization";
         lines.push(
           `REORGANIZATION ${plan.unitId} | ${plan.phase.toUpperCase()}`,
           `  SUPPLY ${(plan.supplyStatus ?? "not-evaluated").toUpperCase()} | isolated ${liveIsolationDuration} ticks`,
-          `  org ${((unit?.org ?? 0) * 100).toFixed(0)}% -> recovering`,
+          `  org ${((unit?.org ?? 0) * 100).toFixed(0)}% | recovery ${plan.supplyStatus === "isolated" ? "BLOCKED" : "ACTIVE"}`,
+          `  org denied +${plan.organizationDeniedByIsolation.toFixed(3)}`,
           `  manpower ${((unit ? getUnitManpowerRatio(unit) : 0) * 100).toFixed(0)}% -> ${plan.supplyStatus === "isolated" ? "BLOCKED" : "reinforcing"}`,
           `  equipment ${((unit ? getUnitEquipmentFulfillment(unit) : 0) * 100).toFixed(0)}% -> ${plan.supplyStatus === "isolated" ? "BLOCKED" : "reinforcing"}`,
           `  denied manpower ${plan.manpowerDeniedByIsolation.toFixed(1)} | weapons ${plan.equipmentDeniedByIsolation.toFixed(2)}`,
+          `  READY ${ready ? "YES" : `NO — ${readyReason} below threshold`}`,
           `  stocks manpower ${plan.lastManpowerStockBefore.toFixed(1)} -> ${plan.lastManpowerStockAfter.toFixed(1)} | weapons ${plan.lastWeaponsStockBefore.toFixed(2)} -> ${plan.lastWeaponsStockAfter.toFixed(2)}`,
         );
       }

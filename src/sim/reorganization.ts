@@ -74,6 +74,7 @@ export interface ReorganizationPlan {
   reasonFlags: ReorganizationReason[];
   equipmentTargetRatioByKey: Map<EquipmentKey, number>;
   organizationRecovered: number;
+  organizationDeniedByIsolation: number;
   manpowerReinforced: number;
   equipmentReinforced: number;
   equipmentReinforcedByKey: Map<EquipmentKey, number>;
@@ -95,6 +96,9 @@ export interface ReorganizationPlan {
   lastManpowerStockAfter: number;
   lastWeaponsStockBefore: number;
   lastWeaponsStockAfter: number;
+  isolationStartedAtTick: number | null;
+  lastReconnectedAtTick: number | null;
+  resumedOrganizationAfterReconnect: boolean;
   outcome: ReorganizationOutcome | null;
   completedAtTick: number | null;
 }
@@ -175,6 +179,19 @@ export interface ReorganizationState {
   manpowerStockAfterTransfers: number;
   weaponsStockBeforeTransfers: number;
   weaponsStockAfterTransfers: number;
+  suppliedOrganizationRecoveryEvaluations: number;
+  isolatedOrganizationRecoveryEvaluations: number;
+  organizationBlockedByIsolationCount: number;
+  organizationDeniedByIsolation: number;
+  isolatedPlansStalledByOrganization: number;
+  reconnectedPlansResumingOrganization: number;
+  isolationToReconnectionTicks: number;
+  isolationToReconnectionSamples: number;
+  reconnectionToReadyTicks: number;
+  reconnectionToReadySamples: number;
+  isolatedPocketUnitsEnteringReorganization: number;
+  organizationDeniedInsidePockets: number;
+  pocketUnitsReturningToCombat: number;
 }
 
 interface RearAreaContext {
@@ -193,6 +210,8 @@ interface RecoveryResult {
   waitingForManpower: boolean;
   waitingForEquipment: boolean;
   supplied: boolean;
+  organizationDenied: number;
+  insidePocket: boolean;
 }
 
 interface RecentSourceReasons {
@@ -262,6 +281,19 @@ export function createReorganizationState(enabled = true): ReorganizationState {
     manpowerStockAfterTransfers: 0,
     weaponsStockBeforeTransfers: 0,
     weaponsStockAfterTransfers: 0,
+    suppliedOrganizationRecoveryEvaluations: 0,
+    isolatedOrganizationRecoveryEvaluations: 0,
+    organizationBlockedByIsolationCount: 0,
+    organizationDeniedByIsolation: 0,
+    isolatedPlansStalledByOrganization: 0,
+    reconnectedPlansResumingOrganization: 0,
+    isolationToReconnectionTicks: 0,
+    isolationToReconnectionSamples: 0,
+    reconnectionToReadyTicks: 0,
+    reconnectionToReadySamples: 0,
+    isolatedPocketUnitsEnteringReorganization: 0,
+    organizationDeniedInsidePockets: 0,
+    pocketUnitsReturningToCombat: 0,
   };
 }
 
@@ -400,6 +432,24 @@ export function updateReorganization(world: WorldState): void {
     }
 
     if (isUnitReady(unit)) {
+      if (recovery.insidePocket) {
+        state.pocketUnitsReturningToCombat += 1;
+        world.instrumentation?.incrementCounter(
+          "reorganization.pocketUnitsReturningToCombat",
+        );
+      }
+      if (plan.lastReconnectedAtTick !== null) {
+        const reconnectToReady = Math.max(
+          0,
+          world.time.fastTick - plan.lastReconnectedAtTick,
+        );
+        state.reconnectionToReadyTicks += reconnectToReady;
+        state.reconnectionToReadySamples += 1;
+        world.instrumentation?.incrementCounter(
+          "reorganization.reconnectionToReadyTicks",
+          reconnectToReady,
+        );
+      }
       if (recovery.supplied) {
         state.suppliedPlansReachingReady += 1;
         world.instrumentation?.incrementCounter(
@@ -433,6 +483,11 @@ export function updateReorganization(world: WorldState): void {
   state.stalledIsolatedPlans = retained.filter(
     (plan) => plan.supplyStatus === "isolated",
   ).length;
+  state.isolatedPlansStalledByOrganization = retained.filter((plan) => {
+    const unit = unitById.get(plan.unitId);
+    return plan.supplyStatus === "isolated" && !!unit &&
+      unit.org < settings.readyOrganizationRatio;
+  }).length;
   state.isolatedReorganizationUnitsInsidePockets = retained.filter((plan) => {
     const unit = unitById.get(plan.unitId);
     return plan.supplyStatus === "isolated" && !!unit &&
@@ -445,6 +500,10 @@ export function updateReorganization(world: WorldState): void {
   world.instrumentation?.incrementCounter(
     "reorganization.isolatedUnitsInsidePockets",
     state.isolatedReorganizationUnitsInsidePockets,
+  );
+  world.instrumentation?.incrementCounter(
+    "reorganization.isolatedPlansStalledByOrganization",
+    state.isolatedPlansStalledByOrganization,
   );
   rebuildIndexes(state);
   for (const completed of completedReturns) {
@@ -654,6 +713,7 @@ export function formatReorganizationSummary(world: WorldState): string {
         `  phase: ${plan.phase}`,
         `  supply: ${plan.supplyStatus ?? "not-evaluated"}, isolated ${plan.isolatedDurationTicks} ticks`,
         `  organization: ${(plan.initialOrganizationRatio * 100).toFixed(1)}% -> ${((unit?.org ?? 0) * 100).toFixed(1)}%`,
+        `  organization recovery: ${plan.supplyStatus === "isolated" ? "BLOCKED" : "ACTIVE"}, denied +${plan.organizationDeniedByIsolation.toFixed(3)}`,
         `  manpower: ${unit?.manpower.toFixed(1) ?? "missing"} / ${unit ? getMaximumManpower(unit).toFixed(1) : "missing"}`,
         `  manpower reinforced: +${plan.manpowerReinforced.toFixed(1)}`,
         "  equipment:",
@@ -694,6 +754,7 @@ function createPlan(
     reasonFlags: [...reasonFlags].sort(compareIds),
     equipmentTargetRatioByKey: captureEquipmentMix(unit),
     organizationRecovered: 0,
+    organizationDeniedByIsolation: 0,
     manpowerReinforced: 0,
     equipmentReinforced: 0,
     equipmentReinforcedByKey: new Map(),
@@ -715,6 +776,9 @@ function createPlan(
     lastManpowerStockAfter: 0,
     lastWeaponsStockBefore: 0,
     lastWeaponsStockAfter: 0,
+    isolationStartedAtTick: null,
+    lastReconnectedAtTick: null,
+    resumedOrganizationAfterReconnect: false,
     outcome: null,
     completedAtTick: null,
   };
@@ -736,16 +800,12 @@ function recoverUnit(
       waitingForManpower: false,
       waitingForEquipment: false,
       supplied: false,
+      organizationDenied: 0,
+      insidePocket,
     };
   }
   const resourceStartedAt = world.instrumentation ? performance.now() : 0;
   const multiplier = getFacilityMultiplier(world, plan.locationRegionId);
-  const organization = Math.min(
-    Math.max(0, 1 - finiteNumber(unit.org)),
-    settings.organizationRecoveryPerSlowTick * multiplier,
-  );
-  unit.org = clamp(finiteNumber(unit.org) + organization, 0, 1);
-
   const supplyStartedAt = world.instrumentation ? performance.now() : 0;
   const supplied = isNationRegionSupplied(world, plan.nationId, unit.regionId);
   if (world.instrumentation) {
@@ -754,7 +814,20 @@ function recoverUnit(
       performance.now() - supplyStartedAt,
     );
   }
-  recordSupplyObservation(world, plan, supplied);
+  const reconnected = recordSupplyObservation(
+    world,
+    plan,
+    supplied,
+    insidePocket,
+  );
+
+  const availableOrganizationRecovery = Math.min(
+    Math.max(0, 1 - finiteNumber(unit.org)),
+    settings.organizationRecoveryPerSlowTick * multiplier,
+  );
+  const organization = supplied ? availableOrganizationRecovery : 0;
+  const organizationDenied = supplied ? 0 : availableOrganizationRecovery;
+  unit.org = clamp(finiteNumber(unit.org) + organization, 0, 1);
 
   const manpowerStockBefore = finiteNumber(nation.resources.manpower);
   const weaponsStockBefore = finiteNumber(nation.resources.weapons);
@@ -805,6 +878,7 @@ function recoverUnit(
   const equipmentDenied = supplied ? 0 : availableEquipmentReinforcement;
 
   plan.organizationRecovered += organization;
+  plan.organizationDeniedByIsolation += organizationDenied;
   plan.manpowerReinforced += manpower;
   plan.equipmentReinforced += equipment;
   plan.manpowerResourceConsumed += manpower;
@@ -822,6 +896,7 @@ function recoverUnit(
   }
   const state = world.reorganization;
   state.organizationRecovered += organization;
+  state.organizationDeniedByIsolation += organizationDenied;
   state.manpowerReinforced += manpower;
   state.equipmentReinforced += equipment;
   state.manpowerResourceConsumed += manpower;
@@ -831,6 +906,37 @@ function recoverUnit(
   state.manpowerStockAfterTransfers += plan.lastManpowerStockAfter;
   state.weaponsStockBeforeTransfers += weaponsStockBefore;
   state.weaponsStockAfterTransfers += plan.lastWeaponsStockAfter;
+  if (supplied) {
+    state.suppliedOrganizationRecoveryEvaluations += 1;
+    world.instrumentation?.incrementCounter(
+      "reorganization.suppliedOrganizationRecoveryEvaluations",
+    );
+    if (reconnected && organization > 0) {
+      state.reconnectedPlansResumingOrganization += 1;
+      plan.resumedOrganizationAfterReconnect = true;
+      world.instrumentation?.incrementCounter(
+        "reorganization.reconnectedPlansResumingOrganization",
+      );
+    }
+  } else {
+    state.isolatedOrganizationRecoveryEvaluations += 1;
+    world.instrumentation?.incrementCounter(
+      "reorganization.isolatedOrganizationRecoveryEvaluations",
+    );
+    if (availableOrganizationRecovery > 0) {
+      state.organizationBlockedByIsolationCount += 1;
+      world.instrumentation?.incrementCounter(
+        "reorganization.organizationBlockedByIsolation",
+      );
+    }
+    if (insidePocket) {
+      state.organizationDeniedInsidePockets += organizationDenied;
+      world.instrumentation?.incrementCounter(
+        "reorganization.organizationDeniedInsidePockets",
+        organizationDenied,
+      );
+    }
+  }
   if (supplied) {
     state.suppliedEvaluations += 1;
     world.instrumentation?.incrementCounter("reorganization.suppliedEvaluations");
@@ -862,6 +968,10 @@ function recoverUnit(
   world.instrumentation?.incrementCounter(
     "reorganization.organizationRecovered",
     organization,
+  );
+  world.instrumentation?.incrementCounter(
+    "reorganization.organizationDeniedByIsolation",
+    organizationDenied,
   );
   world.instrumentation?.incrementCounter(
     "reorganization.manpowerReinforced",
@@ -924,6 +1034,8 @@ function recoverUnit(
     waitingForManpower,
     waitingForEquipment,
     supplied,
+    organizationDenied,
+    insidePocket,
   };
 }
 
@@ -943,9 +1055,11 @@ function recordSupplyObservation(
   world: WorldState,
   plan: ReorganizationPlan,
   supplied: boolean,
-): void {
+  insidePocket: boolean,
+): boolean {
   const status: ReorganizationSupplyStatus = supplied ? "supplied" : "isolated";
   const now = world.time.fastTick;
+  let reconnected = false;
   if (
     plan.supplyStatus === "isolated" &&
     plan.lastSupplyEvaluationTick !== null
@@ -960,15 +1074,37 @@ function recordSupplyObservation(
   }
   if (plan.supplyStatus !== status) {
     if (status === "isolated") {
+      plan.isolationStartedAtTick = now;
       world.reorganization.plansEnteringIsolation += 1;
       world.instrumentation?.incrementCounter(
         "reorganization.plansEnteringIsolation",
       );
+      if (insidePocket) {
+        world.reorganization.isolatedPocketUnitsEnteringReorganization += 1;
+        world.instrumentation?.incrementCounter(
+          "reorganization.isolatedPocketUnitsEnteringReorganization",
+        );
+      }
     } else if (plan.supplyStatus === "isolated") {
+      reconnected = true;
+      plan.lastReconnectedAtTick = now;
       world.reorganization.plansReconnecting += 1;
       world.instrumentation?.incrementCounter(
         "reorganization.plansReconnecting",
       );
+      if (plan.isolationStartedAtTick !== null) {
+        const isolationToReconnect = Math.max(
+          0,
+          now - plan.isolationStartedAtTick,
+        );
+        world.reorganization.isolationToReconnectionTicks +=
+          isolationToReconnect;
+        world.reorganization.isolationToReconnectionSamples += 1;
+        world.instrumentation?.incrementCounter(
+          "reorganization.isolationToReconnectionTicks",
+          isolationToReconnect,
+        );
+      }
     }
     plan.supplyStatus = status;
     plan.supplyStatusChangedAtTick = now;
@@ -976,6 +1112,7 @@ function recordSupplyObservation(
   plan.lastSupplyEvaluationTick = now;
   if (supplied) plan.reachedSuppliedRearArea = true;
   else plan.reachedIsolatedRearArea = true;
+  return reconnected;
 }
 
 function collectPocketRegionKeys(world: WorldState): Set<string> {

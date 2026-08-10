@@ -38,6 +38,7 @@ import {
 } from "../../src/sim/strategic-reserves";
 import { createSimTime } from "../../src/sim/time";
 import { createUnitId, type UnitState } from "../../src/sim/unit";
+import { getUnitCombatStrength } from "../../src/sim/unit-strength";
 import { declareWar } from "../../src/sim/war-state";
 import type { WorldState } from "../../src/sim/world-state";
 import { createFrontlineCoverageState } from "../../src/sim/frontline-coverage";
@@ -200,7 +201,7 @@ test("isolated Reorganization blocks manpower and equipment without consuming na
   };
   advanceReorganization(world);
 
-  assert(unit.org > before.organization);
+  assert.equal(unit.org, before.organization);
   assert.equal(unit.manpower, before.manpower);
   assert.equal(getUnitEquipmentFulfillment(unit), before.equipment);
   assert.equal(nation.resources.manpower, before.nationalManpower);
@@ -208,11 +209,12 @@ test("isolated Reorganization blocks manpower and equipment without consuming na
   const plan = getReorganizationPlanForUnit(world, unit.id);
   assert(plan);
   assert.equal(plan.supplyStatus, "isolated");
+  assert(plan.organizationDeniedByIsolation > 0);
   assert(plan.manpowerDeniedByIsolation > 0);
   assert(plan.equipmentDeniedByIsolation > 0);
 });
 
-test("Supply does not change organization recovery at the same rear area", () => {
+test("isolated organization is frozen while supplied recovery remains unchanged", () => {
   const isolated = createDamagedPlanWorld();
   const supplied = createDamagedPlanWorld();
   placePlanAtIsland(isolated.world, isolated.unit, false);
@@ -223,10 +225,19 @@ test("Supply does not change organization recovery at the same rear area", () =>
   advanceReorganization(isolated.world);
   advanceReorganization(supplied.world);
 
-  assert.equal(
-    isolated.unit.org - isolatedBefore,
-    supplied.unit.org - suppliedBefore,
-  );
+  assert.equal(isolated.unit.org, isolatedBefore);
+  assert(Math.abs(
+    supplied.unit.org - suppliedBefore -
+    WORLD_BALANCE.war.landFront.reorganization.organizationRecoveryPerSlowTick,
+  ) < 1e-12);
+});
+
+test("an isolated city multiplier cannot bypass Supply", () => {
+  assertIsolatedFacilityDoesNotRecover("city");
+});
+
+test("an isolated capital multiplier cannot bypass Supply", () => {
+  assertIsolatedFacilityDoesNotRecover("capital");
 });
 
 test("supplied to isolated transition stops reinforcement without recreating the plan", () => {
@@ -238,6 +249,7 @@ test("supplied to isolated transition stops reinforcement without recreating the
   const planId = plan.id;
   const manpowerAfterSupplied = unit.manpower;
   const equipmentAfterSupplied = getUnitEquipmentFulfillment(unit);
+  const organizationAfterSupplied = unit.org;
   getNationA(world).capitalMesoId = id("a-island");
   advanceReorganization(world);
 
@@ -247,6 +259,7 @@ test("supplied to isolated transition stops reinforcement without recreating the
   assert.equal(isolatedPlan.supplyStatus, "isolated");
   assert.equal(unit.manpower, manpowerAfterSupplied);
   assert.equal(getUnitEquipmentFulfillment(unit), equipmentAfterSupplied);
+  assert.equal(unit.org, organizationAfterSupplied);
   assert.equal(world.reorganization.plansEnteringIsolation, 1);
 });
 
@@ -260,6 +273,7 @@ test("isolated to supplied transition resumes reinforcement on the existing plan
   const planId = plan.id;
   const manpowerWhileIsolated = unit.manpower;
   const equipmentWhileIsolated = getUnitEquipmentFulfillment(unit);
+  const organizationWhileIsolated = unit.org;
   getNationA(world).capitalMesoId = id("a-cap");
   advanceReorganization(world);
 
@@ -269,7 +283,9 @@ test("isolated to supplied transition resumes reinforcement on the existing plan
   assert.equal(reconnectedPlan.supplyStatus, "supplied");
   assert(unit.manpower > manpowerWhileIsolated);
   assert(getUnitEquipmentFulfillment(unit) > equipmentWhileIsolated);
+  assert(unit.org > organizationWhileIsolated);
   assert.equal(world.reorganization.plansReconnecting, 1);
+  assert.equal(world.reorganization.reconnectedPlansResumingOrganization, 1);
 });
 
 test("cutting and restoring a corridor stops and resumes reinforcement on one plan", () => {
@@ -281,6 +297,7 @@ test("cutting and restoring a corridor stops and resumes reinforcement on one pl
   advanceReorganization(world);
   const planId = plan.id;
   const suppliedManpower = unit.manpower;
+  const suppliedOrganization = unit.org;
 
   world.occupation.mesoById.set(id("a-mid"), NATION_B);
   world.occupation.version += 1;
@@ -289,6 +306,7 @@ test("cutting and restoring a corridor stops and resumes reinforcement on one pl
   assert.equal(getReorganizationPlanForUnit(world, unit.id)?.id, planId);
   assert.equal(getReorganizationPlanForUnit(world, unit.id)?.supplyStatus, "isolated");
   assert.equal(unit.manpower, suppliedManpower);
+  assert.equal(unit.org, suppliedOrganization);
 
   world.occupation.mesoById.delete(id("a-mid"));
   world.occupation.version += 1;
@@ -297,6 +315,7 @@ test("cutting and restoring a corridor stops and resumes reinforcement on one pl
   assert.equal(getReorganizationPlanForUnit(world, unit.id)?.id, planId);
   assert.equal(getReorganizationPlanForUnit(world, unit.id)?.supplyStatus, "supplied");
   assert(unit.manpower > suppliedManpower);
+  assert(unit.org > suppliedOrganization);
 });
 
 test("isolated ready thresholds remain unchanged and can stall a plan", () => {
@@ -309,7 +328,9 @@ test("isolated ready thresholds remain unchanged and can stall a plan", () => {
   const plan = getReorganizationPlanForUnit(world, unit.id);
   assert(plan);
   assert.equal(plan.supplyStatus, "isolated");
+  assert.equal(unit.org, 0.79);
   assert.equal(world.reorganization.stalledIsolatedPlans, 1);
+  assert.equal(world.reorganization.isolatedPlansStalledByOrganization, 1);
   assert.equal(world.reorganization.isolatedPlansReachingReady, 0);
 });
 
@@ -336,8 +357,36 @@ test("isolated Pocket diagnostics record units and denied reinforcement", () => 
 
   assert.equal(world.reorganization.isolatedReorganizationUnitsInsidePockets, 1);
   assert(world.reorganization.reinforcementDeniedInsidePockets > 0);
+  assert(world.reorganization.organizationDeniedInsidePockets > 0);
   assert((getReorganizationPlanForUnit(world, unit.id)
     ?.deniedReinforcementInsidePocket ?? 0) > 0);
+});
+
+test("a low-organization Pocket unit cannot cycle back to ready while isolated", () => {
+  const { world, unit } = createDamagedPlanWorld();
+  placePlanAtIsland(world, unit, false);
+  setReadiness(unit, 0.3, 0.8, 0.8);
+  world.battlefieldTopology.pockets = [fakePocket(NATION_A, unit.regionId)];
+  for (let index = 0; index < 5; index += 1) advanceReorganization(world);
+
+  assert.equal(unit.org, 0.3);
+  assert(getReorganizationPlanForUnit(world, unit.id));
+  assert.equal(world.reorganization.isolatedPocketUnitsEnteringReorganization, 1);
+  assert.equal(world.reorganization.pocketUnitsReturningToCombat, 0);
+  assert(world.reorganization.organizationDeniedInsidePockets > 0);
+});
+
+test("isolation adds neither passive organization decay nor a direct combat modifier", () => {
+  const { world, unit } = createDamagedPlanWorld();
+  placePlanAtIsland(world, unit, false);
+  unit.org = 0.9;
+  const organizationBefore = unit.org;
+  const strengthBefore = getUnitCombatStrength(unit);
+  advanceReorganization(world);
+
+  assert.equal(unit.org, organizationBefore);
+  assert.equal(getUnitCombatStrength(unit), strengthBefore);
+  assert(getReorganizationPlanForUnit(world, unit.id));
 });
 
 test("isolated reinforcement accounting remains finite and non-negative", () => {
@@ -460,6 +509,9 @@ test("Reorganization numeric state never contains NaN or Infinity", () => {
   assertWorldInvariants(world);
   for (const value of [
     world.reorganization.organizationRecovered,
+    world.reorganization.organizationDeniedByIsolation,
+    world.reorganization.isolationToReconnectionTicks,
+    world.reorganization.reconnectionToReadyTicks,
     world.reorganization.manpowerReinforced,
     world.reorganization.equipmentReinforced,
     world.reorganization.manpowerResourceConsumed,
@@ -709,6 +761,25 @@ function placePlanAtIsland(
   updateSupplyAssessment(world);
 }
 
+function assertIsolatedFacilityDoesNotRecover(
+  building: "city" | "capital",
+): void {
+  const { world, unit } = createDamagedPlanWorld();
+  const region = world.mesoRegions.find(
+    (candidate) => candidate.id === id("a-island"),
+  );
+  assert(region);
+  region.building = building;
+  placePlanAtIsland(world, unit, false);
+  const before = unit.org;
+  advanceReorganization(world);
+
+  assert.equal(unit.org, before);
+  assert((getReorganizationPlanForUnit(world, unit.id)
+    ?.organizationDeniedByIsolation ?? 0) >
+    WORLD_BALANCE.war.landFront.reorganization.organizationRecoveryPerSlowTick);
+}
+
 function fakePocket(nationId: NationId, regionId: MesoRegionId): PocketRecord {
   return {
     enemyNationId: nationId,
@@ -822,6 +893,7 @@ function reorganizationSignature(world: WorldState): unknown {
       phase: plan.phase,
       recovered: [
         plan.organizationRecovered,
+        plan.organizationDeniedByIsolation,
         plan.manpowerReinforced,
         plan.equipmentReinforced,
       ],
@@ -833,6 +905,14 @@ function reorganizationSignature(world: WorldState): unknown {
       ],
     })),
     resources: world.nations.map((nation) => ({ ...nation.resources })),
+    supplyMetrics: {
+      suppliedOrganizationRecoveryEvaluations:
+        world.reorganization.suppliedOrganizationRecoveryEvaluations,
+      isolatedOrganizationRecoveryEvaluations:
+        world.reorganization.isolatedOrganizationRecoveryEvaluations,
+      organizationDeniedByIsolation:
+        world.reorganization.organizationDeniedByIsolation,
+    },
     timeline: world.reorganization.timeline.map((event) => ({ ...event })),
   };
 }
