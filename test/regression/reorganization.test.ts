@@ -48,6 +48,7 @@ import { createStrategicProgressState } from "../../src/sim/strategic-progress";
 import { createWorldCache } from "../../src/sim/world-cache";
 import { createProductionDiagnosticsState } from "../../src/sim/production";
 import { createSupplyCutoffAnalysisState } from "../../src/sim/supply-cutoff";
+import { createSupplyDefenseState } from "../../src/sim/supply-defense";
 import { createMacroRegionId, type MacroRegion } from "../../src/worldgen/macro-region";
 import type { MicroRegionId } from "../../src/worldgen/micro-region";
 import type { MesoRegion, MesoRegionId } from "../../src/worldgen/meso-region";
@@ -657,6 +658,7 @@ function createReorganizationWorld(): { world: WorldState; unit: UnitState } {
     isolationEffects: createIsolationEffectsState(),
     productionDiagnostics: createProductionDiagnosticsState(),
     supplyCutoffs: createSupplyCutoffAnalysisState(),
+    supplyDefense: createSupplyDefenseState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

@@ -70,6 +70,7 @@ interface OverlayVersions {
   isolationEffects: number;
   productionDiagnostics: number;
   supplyCutoffs: number;
+  supplyDefense: number;
   retreats: number;
   coverage: number;
   stalemate: number;
@@ -136,6 +137,7 @@ export function attachFrontDebugOverlay(
     });
     drawSupplySourceMarkers(layer, world);
     drawSupplyCutoffMarkers(layer, world);
+    drawSupplyDefenseMarkers(layer, world);
     drawMaritimeSupplyLinks(layer, world);
     if (selectedSectorId && !world.landFronts.operationalSectorsById.has(selectedSectorId)) {
       selectedSectorId = null;
@@ -536,6 +538,17 @@ function appendOperationalDetails(
           `  source ${cutoff.sourceKind} | score ${cutoff.score.toFixed(1)} | reasons ${cutoff.reasonFlags.join(", ")}`,
         );
       }
+      for (const risk of world.supplyDefense.risks
+        .filter((item) => item.nationId === nationId && item.sectorId === front.id)
+        .slice(0, 3)) {
+        lines.push(
+          `SUPPLY DEFENSE ${risk.regionId} | ${risk.status.toUpperCase()}`,
+          `  at risk ${formatStrength(risk.threatenedStrength)} | ${risk.threatenedUnits} units | ${risk.threatenedRegions} regions`,
+          `  cities ${risk.threatenedCities} | ports ${risk.threatenedPorts} | source ${risk.supplySourceType}`,
+          `  defense ${formatStrength(risk.currentDefenderStrength)} / ${formatStrength(risk.requiredDefenseStrength)} | alternate routes accounted by shared cutoff analysis`,
+          `  reasons ${risk.reasonFlags.join(", ")}`,
+        );
+      }
       for (const pocket of pockets) {
         const risk = pocket.containmentActual < pocket.containmentRequired ? "HIGH"
           : pocket.containmentActual < pocket.containmentRequired * 1.25 ? "MEDIUM" : "LOW";
@@ -800,6 +813,13 @@ function drawSupplyCutoffMarkers(layer: Container, world: WorldState): void {
   }
 }
 
+function drawSupplyDefenseMarkers(layer: Container, world: WorldState): void {
+  for (const risk of world.supplyDefense.risks) {
+    if (risk.status !== "critical") continue;
+    drawMarker(layer, world, risk.regionId, "D", 0xff6b6b, "diamond");
+  }
+}
+
 function drawMaritimeSupplyLinks(layer: Container, world: WorldState): void {
   const selectedByPair = new Map<string, WorldState["supplyAssessment"]["maritimeLinks"][number]>();
   for (const link of world.supplyAssessment.maritimeLinks) {
@@ -931,6 +951,7 @@ function readVersions(world: WorldState): OverlayVersions {
     isolationEffects: world.isolationEffects.version,
     productionDiagnostics: world.productionDiagnostics.version,
     supplyCutoffs: world.supplyCutoffs.version,
+    supplyDefense: world.supplyDefense.version,
     retreats: world.retreatPlans.version,
     coverage: world.frontlineCoverage.version,
     stalemate: world.stalematePressure.version,
@@ -950,7 +971,7 @@ function readVersions(world: WorldState): OverlayVersions {
 
 function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
   return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
-    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment && a.isolationEffects === b.isolationEffects && a.productionDiagnostics === b.productionDiagnostics && a.supplyCutoffs === b.supplyCutoffs &&
+    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment && a.isolationEffects === b.isolationEffects && a.productionDiagnostics === b.productionDiagnostics && a.supplyCutoffs === b.supplyCutoffs && a.supplyDefense === b.supplyDefense &&
     a.retreats === b.retreats && a.coverage === b.coverage && a.stalemate === b.stalemate &&
     a.reserveDeployments === b.reserveDeployments && a.battles === b.battles;
 }

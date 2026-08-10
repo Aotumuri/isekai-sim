@@ -29,6 +29,7 @@ import { updateBattlefieldTopology } from "./battlefield-topology";
 import { updateSupplyAssessment } from "./supply-assessment";
 import { updateIsolationEffects } from "./isolation-effects";
 import { updateSupplyCutoffAnalysis } from "./supply-cutoff";
+import { updateSupplyDefense } from "./supply-defense";
 import {
   beginAiGeographyEvaluation,
   prepareFrontDistanceFields,
@@ -147,6 +148,11 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateIsolationEffects(world);
   updateLandFronts(world);
   prepareFrontDistanceFields(world);
+  // One topology/cutoff pass is shared by both offensive targeting and the
+  // defensive consumer below.  It deliberately precedes allocation.
+  updateBattlefieldTopology(world);
+  updateSupplyCutoffAnalysis(world);
+  updateSupplyDefense(world);
   updateCapitalDefense(world);
   updateNationFrontPlans(world);
   updateRetreatPlans(world);
@@ -157,8 +163,6 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateStalematePressure(world);
   updateNationFrontAllocations(world);
   updateFrontlineCoverage(world);
-  updateBattlefieldTopology(world);
-  updateSupplyCutoffAnalysis(world);
   updateOffensiveOperations(world);
   updateCollapseAdvances(world);
 }

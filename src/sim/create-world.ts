@@ -43,6 +43,7 @@ import type { WorldState } from "./world-state";
 import { createWorldCache } from "./world-cache";
 import { createProductionDiagnosticsState } from "./production";
 import { createSupplyCutoffAnalysisState } from "./supply-cutoff";
+import { createSupplyDefenseState } from "./supply-defense";
 
 export function createWorld(config: WorldConfig): WorldState {
   const rng = new SeededRng(config.seed);
@@ -115,6 +116,7 @@ export function createWorld(config: WorldConfig): WorldState {
   const isolationEffects = createIsolationEffectsState();
   const productionDiagnostics = createProductionDiagnosticsState();
   const supplyCutoffs = createSupplyCutoffAnalysisState();
+  const supplyDefense = createSupplyDefenseState();
   const mapVersion = 0;
   const territoryVersion = 0;
   const buildingVersion = 0;
@@ -148,6 +150,7 @@ export function createWorld(config: WorldConfig): WorldState {
     isolationEffects,
     productionDiagnostics,
     supplyCutoffs,
+    supplyDefense,
     mapVersion,
     territoryVersion,
     buildingVersion,

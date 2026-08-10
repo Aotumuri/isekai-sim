@@ -37,6 +37,7 @@ export type ReserveDeploymentReason =
   | "front-severe-deficit"
   | "retreat-fallback-threat"
   | "front-collapse"
+  | "supply-corridor-critical"
   | "schwerpunkt-concentration"
   | "reserve-reforming";
 
@@ -140,6 +141,7 @@ export function createStrategicReserveState(enabled = true): StrategicReserveSta
       "front-severe-deficit": 0,
       "retreat-fallback-threat": 0,
       "front-collapse": 0,
+      "supply-corridor-critical": 0,
       "schwerpunkt-concentration": 0,
       "reserve-reforming": 0,
     },
@@ -669,6 +671,36 @@ function findDeploymentTrigger(
     };
   }
 
+  // A retreating force is more immediately exposed than an otherwise intact
+  // corridor, so it retains precedence over Supply defense.
+  const retreat = world.retreatPlans.plans
+    .filter((plan) => plan.nationId === reserve.nationId && plan.phase === "withdrawing" &&
+      fallbackHasEnemyPressure(world, plan.nationId, plan.fallbackRegionIds))
+    .sort((a, b) => b.initialEnemyStrength - a.initialEnemyStrength || compareIds(a.id, b.id))[0];
+  if (retreat) {
+    return {
+      targetType: "retreat-support", targetFrontId: retreat.frontId,
+      targetRegionIds: retreat.fallbackRegionIds,
+      targetStrength: reserve.totalStrength * WORLD_BALANCE.war.landFront.strategicReserve.retreatDeploymentRatio,
+      initialDeficit: Math.max(0, retreat.initialEnemyStrength - retreat.currentRetreatingStrength),
+      reason: "retreat-fallback-threat", capitalEmergencyStartedAtTick: null,
+    };
+  }
+
+  const corridor = world.supplyDefense.risks
+    .filter((risk) => risk.nationId === reserve.nationId && risk.status === "critical" &&
+      risk.requiredDefenseStrength > risk.currentDefenderStrength)
+    .sort((a, b) => b.riskScore - a.riskScore || compareIds(a.regionId, b.regionId))[0];
+  if (corridor) {
+    return {
+      targetType: "front-reinforcement", targetFrontId: corridor.sectorId,
+      targetRegionIds: [corridor.regionId],
+      targetStrength: Math.max(1, corridor.requiredDefenseStrength - corridor.currentDefenderStrength),
+      initialDeficit: Math.max(0, corridor.requiredDefenseStrength - corridor.currentDefenderStrength),
+      reason: "supply-corridor-critical", capitalEmergencyStartedAtTick: null,
+    };
+  }
+
   const severe = world.frontAllocations.allocations
     .filter(
       (allocation) =>
@@ -702,34 +734,6 @@ function findDeploymentTrigger(
     }
   }
 
-  const retreat = world.retreatPlans.plans
-    .filter(
-      (plan) =>
-        plan.nationId === reserve.nationId &&
-        plan.phase === "withdrawing" &&
-        fallbackHasEnemyPressure(world, plan.nationId, plan.fallbackRegionIds),
-    )
-    .sort(
-      (a, b) =>
-        b.initialEnemyStrength - a.initialEnemyStrength ||
-        compareIds(a.id, b.id),
-    )[0];
-  if (retreat) {
-    return {
-      targetType: "retreat-support",
-      targetFrontId: retreat.frontId,
-      targetRegionIds: retreat.fallbackRegionIds,
-      targetStrength:
-        reserve.totalStrength *
-        WORLD_BALANCE.war.landFront.strategicReserve.retreatDeploymentRatio,
-      initialDeficit: Math.max(
-        0,
-        retreat.initialEnemyStrength - retreat.currentRetreatingStrength,
-      ),
-      reason: "retreat-fallback-threat",
-      capitalEmergencyStartedAtTick: null,
-    };
-  }
   if (collapseTrigger) return collapseTrigger;
 
   const focus = getNationSchwerpunkt(world, reserve.nationId);
@@ -836,6 +840,20 @@ function startDeployment(
     "strategicReserve.deployedUnits",
     selected.length,
   );
+  if (trigger.reason === "supply-corridor-critical") {
+    world.supplyDefense.reserveDeployments += 1;
+    world.instrumentation?.incrementCounter("supplyDefense.reserveDeployments");
+    const risk = world.supplyDefense.risks.find((item) =>
+      item.nationId === reserve.nationId && item.regionId === trigger.targetRegionIds[0],
+    );
+    const criticalAt = risk && world.supplyDefense.criticalStartedAtTickByKey.get(risk.key);
+    if (criticalAt !== undefined) {
+      world.instrumentation?.incrementCounter(
+        "supplyDefense.criticalToReinforcementTicks",
+        Math.max(0, world.time.fastTick - criticalAt),
+      );
+    }
+  }
   recordEvent(
     world,
     reserve.nationId,

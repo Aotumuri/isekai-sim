@@ -13,6 +13,7 @@ import {
   createSupplyCutoffAnalysisState,
   updateSupplyCutoffAnalysis,
 } from "../../src/sim/supply-cutoff";
+import { createSupplyDefenseState } from "../../src/sim/supply-defense";
 import {
   createCapitalDefenseState,
   getCapitalDefenseAssessment,
@@ -4396,6 +4397,7 @@ function createFrontWorld(
     isolationEffects: createIsolationEffectsState(),
     productionDiagnostics: createProductionDiagnosticsState(),
     supplyCutoffs: createSupplyCutoffAnalysisState(),
+    supplyDefense: createSupplyDefenseState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

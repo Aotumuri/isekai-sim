@@ -9,6 +9,7 @@ import { getUnitCombatStrength } from "./unit-strength";
 import type { WorldState } from "./world-state";
 import { isSchwerpunktSector } from "./stalemate-pressure";
 import { getMesoById, getNeighborsById } from "./world-cache";
+import { getSupplyDefenseAtRegion } from "./supply-defense";
 
 export type FrontlineCoverageLevel = "covered" | "weak" | "gap";
 export type DefensivePositionId = string & { __brand: "DefensivePositionId" };
@@ -64,6 +65,7 @@ export interface FrontlineCoverageState {
   sourceOperationVersion: number;
   sourceOccupationVersion: number;
   sourceBuildingVersion: number;
+  sourceSupplyDefenseVersion: number;
   totalAssignmentSwitches: number;
   breakthroughEvents: number;
 }
@@ -81,6 +83,7 @@ export function createFrontlineCoverageState(): FrontlineCoverageState {
     sourceOperationVersion: -1,
     sourceOccupationVersion: -1,
     sourceBuildingVersion: -1,
+    sourceSupplyDefenseVersion: -1,
     totalAssignmentSwitches: 0,
     breakthroughEvents: 0,
   };
@@ -184,6 +187,18 @@ export function updateFrontlineCoverage(world: WorldState): void {
     const targetPositions = selectDistributedPositions(positions, selectedUnits.length);
     assignDefenders(world, sector.id, selectedUnits, targetPositions, previousAssignments, nextAssignments);
     evaluatePositions(world, positions, selectedUnits, nextAssignments, minimumRequiredStrength);
+    const baselinePositionRequirement = positions.length
+      ? minimumRequiredStrength / Math.min(positions.length, Math.max(1, units.length))
+      : 0;
+    // This feeds Operations' existing surplus gate, so a critical corridor
+    // cannot be treated as spare attack strength after local coverage rises.
+    const corridorDefenseFloor = minimumRequiredStrength + positions.reduce(
+      (maximum, position) => Math.max(
+        maximum,
+        Math.max(0, position.requiredStrength - baselinePositionRequirement),
+      ),
+      0,
+    );
     const gaps = gapLengths(positions);
     const previous = previousCoverage.get(key(sector.id, allocation.nationId));
     const breakthroughs = countBreakthroughs(world, allocation.nationId, previous);
@@ -208,7 +223,7 @@ export function updateFrontlineCoverage(world: WorldState): void {
       maxGapLength: gaps.length ? Math.max(...gaps) : 0,
       defenderCount: selectedUnits.length,
       defenderStrength,
-      minimumRequiredStrength,
+      minimumRequiredStrength: corridorDefenseFloor,
       offensiveSurplusStrength: Math.max(0, allocation.allocatedStrength - defenderStrength),
       assignmentSwitches,
       breakthroughCount: breakthroughs,
@@ -228,6 +243,7 @@ export function updateFrontlineCoverage(world: WorldState): void {
   state.sourceOperationVersion = world.offensiveOperations.version;
   state.sourceOccupationVersion = world.occupation.version;
   state.sourceBuildingVersion = world.buildingVersion;
+  state.sourceSupplyDefenseVersion = world.supplyDefense.version;
   state.totalAssignmentSwitches += switches;
   state.breakthroughEvents += breakthroughs;
   if (membershipChanged) state.membershipVersion += 1;
@@ -296,13 +312,19 @@ function buildPositions(
       if (edge.regionBId === friendlyRegionId) return [edge.regionAId];
       return [];
     }).sort(compareIds);
+    const supplyRisks = getSupplyDefenseAtRegion(world, nationId, friendlyRegionId)
+      .filter((risk) => risk.status === "threatened" || risk.status === "critical");
+    const supplyThreat = supplyRisks.reduce((maximum, risk) => Math.max(
+      maximum,
+      risk.requiredDefenseStrength * (risk.status === "critical" ? 1 : 0.6),
+    ), 0);
     const threat = enemyRegionIds.reduce(
       (sum, id) => sum + (opposingNationId ? (strengthByRegionNation.get(id)?.get(opposingNationId) ?? 0) : 0),
       0,
     ) + nearbyBuildingThreat(friendlyRegionId, mesoById, neighbors) +
       (enemyRegionIds.some((id) => enemyOperationTargets.has(id))
         ? WORLD_BALANCE.war.landFront.frontlineCoverage.enemyOperationThreatBonus
-        : 0);
+        : 0) + supplyThreat;
     return {
       id: `${sectorId}::${nationId}::${friendlyRegionId}` as DefensivePositionId,
       sectorId, nationId, segmentIndex, friendlyRegionId, enemyRegionIds,
@@ -428,6 +450,7 @@ function coverageInputIsCurrent(
     state.sourceOperationVersion !== world.offensiveOperations.version ||
     state.sourceOccupationVersion !== world.occupation.version ||
     state.sourceBuildingVersion !== world.buildingVersion
+    || state.sourceSupplyDefenseVersion !== world.supplyDefense.version
   ) === false;
 }
 
@@ -443,9 +466,12 @@ function evaluatePositions(world: WorldState, positions: FrontlineDefensivePosit
   const required = positions.length ? minimumStrength / Math.min(positions.length, Math.max(1, units.length)) : 0;
   const settings = WORLD_BALANCE.war.landFront.frontlineCoverage;
   for (const position of positions) {
-    position.requiredStrength = required;
-    if (position.defenderStrength >= required * settings.coveredStrengthRatio && position.defenderStrength > 0) position.state = "covered";
-    else if (position.defenderStrength >= required * settings.weakStrengthRatio && position.defenderStrength > 0) position.state = "weak";
+    const corridorRequired = getSupplyDefenseAtRegion(world, position.nationId, position.friendlyRegionId)
+      .filter((risk) => risk.status === "threatened" || risk.status === "critical")
+      .reduce((maximum, risk) => Math.max(maximum, risk.requiredDefenseStrength), 0);
+    position.requiredStrength = Math.max(required, corridorRequired);
+    if (position.defenderStrength >= position.requiredStrength * settings.coveredStrengthRatio && position.defenderStrength > 0) position.state = "covered";
+    else if (position.defenderStrength >= position.requiredStrength * settings.weakStrengthRatio && position.defenderStrength > 0) position.state = "weak";
   }
   for (const position of positions) {
     if (position.state !== "gap") continue;

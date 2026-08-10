@@ -12,6 +12,7 @@ import {
   type PhysicalFrontSide,
 } from "./land-fronts";
 import { getFrontAllocation } from "./nation-front-allocations";
+import { getSupplyDefenseForFront } from "./supply-defense";
 import type { WorldState } from "./world-state";
 
 export type FrontPosture = "attack" | "hold" | "reinforce" | "retreat";
@@ -25,7 +26,12 @@ export type FrontPlanReason =
   | "enemy-capital-nearby"
   | "enemy-cities-nearby"
   | "low-strategic-value"
-  | "posture-maintained";
+  | "posture-maintained"
+  | "supply-corridor"
+  | "supply-articulation"
+  | "major-force-supply-risk"
+  | "frontline-supply-risk"
+  | "maritime-supply-entry-risk";
 
 /** Nation-owned intent. Objective geometry and metrics remain on PhysicalFront. */
 export interface NationFrontPlan {
@@ -53,6 +59,7 @@ export interface NationFrontPlanState {
   physicalFrontVersion: number;
   physicalFrontMetricsVersion: number;
   capitalDefenseVersion: number;
+  supplyDefenseVersion: number;
 }
 
 export function createNationFrontPlanState(): NationFrontPlanState {
@@ -64,6 +71,7 @@ export function createNationFrontPlanState(): NationFrontPlanState {
     physicalFrontVersion: -1,
     physicalFrontMetricsVersion: -1,
     capitalDefenseVersion: -1,
+    supplyDefenseVersion: -1,
   };
 }
 
@@ -72,7 +80,8 @@ export function updateNationFrontPlans(world: WorldState): void {
   if (
     state.physicalFrontVersion === world.landFronts.version &&
     state.physicalFrontMetricsVersion === world.landFronts.metricsVersion &&
-    state.capitalDefenseVersion === world.capitalDefense.version
+    state.capitalDefenseVersion === world.capitalDefense.version &&
+    state.supplyDefenseVersion === world.supplyDefense.version
   ) {
     return;
   }
@@ -112,6 +121,7 @@ export function updateNationFrontPlans(world: WorldState): void {
   state.physicalFrontVersion = world.landFronts.version;
   state.physicalFrontMetricsVersion = world.landFronts.metricsVersion;
   state.capitalDefenseVersion = world.capitalDefense.version;
+  state.supplyDefenseVersion = world.supplyDefense.version;
 
   if (world.instrumentation) {
     world.instrumentation.recordDuration(
@@ -265,6 +275,19 @@ function evaluateNationFrontPlan(
     posture !== basePosture,
     isCapitalDefenseFront,
   );
+  const supplyRisks = getSupplyDefenseForFront(world, nationId, front.id)
+    .filter((risk) => risk.status === "threatened" || risk.status === "critical");
+  for (const risk of supplyRisks) {
+    for (const reason of risk.reasonFlags) {
+      if (!reasonFlags.includes(reason)) reasonFlags.push(reason);
+    }
+  }
+  const supplyRequired = supplyRisks.reduce(
+    (maximum, risk) => Math.max(maximum, risk.requiredDefenseStrength), 0,
+  );
+  const supplyPriority = supplyRisks.reduce(
+    (maximum, risk) => Math.max(maximum, risk.status === "critical" ? 26 : 13), 0,
+  );
   const priority = calculatePriority(
     friendly,
     enemy,
@@ -272,20 +295,23 @@ function evaluateNationFrontPlan(
     posture,
     reasonFlags,
   );
+  const capitalPriority = applyCapitalPriority(priority, capitalThreatLevel);
   return {
     frontId: front.id,
     physicalFrontId: front.physicalFrontId,
     nationId,
     posture,
-    priority: applyCapitalPriority(priority, capitalThreatLevel),
-    desiredStrength: calculateDesiredStrength(
+    priority: capitalThreatLevel === "critical"
+      ? capitalPriority
+      : Math.min(100, capitalPriority + supplyPriority),
+    desiredStrength: Math.max(supplyRequired, calculateDesiredStrength(
       friendly,
       enemy,
       posture,
       capitalDefense,
       front.id,
       isCapitalDefenseFront,
-    ),
+    )),
     reasonFlags,
     evaluatedAtTick: currentTick,
   };

@@ -42,6 +42,10 @@ import {
   updateProduction,
 } from "../../src/sim/production";
 import { createSupplyCutoffAnalysisState, updateSupplyCutoffAnalysis } from "../../src/sim/supply-cutoff";
+import {
+  createSupplyDefenseState,
+  updateSupplyDefense,
+} from "../../src/sim/supply-defense";
 import { declareWar } from "../../src/sim/war-state";
 
 const NATION_A = "nation-a" as NationId;
@@ -242,6 +246,29 @@ test("Supply Cutoff recognizes a maritime destination port as the remote compone
   assert(candidate.affectedRegionIds.includes(id("island-b")));
 });
 
+test("Supply defense consumes the shared corridor prediction with force and port metadata", () => {
+  const world = createMaritimeCutoffWorld(false);
+  updateSupplyAssessment(world);
+  updateLandFronts(world);
+  updateBattlefieldTopology(world);
+  updateSupplyCutoffAnalysis(world);
+  updateSupplyDefense(world);
+  const risk = world.supplyDefense.risks.find((item) =>
+    item.nationId === NATION_A && item.regionId === id("port-b"),
+  );
+  const cutoff = world.supplyCutoffs.candidates.find((item) =>
+    item.attackerNationId === NATION_B && item.targetRegionId === id("port-b"),
+  );
+  assert(risk);
+  assert(cutoff);
+  assert.equal(risk.supplySourceType, "maritime");
+  assert.equal(risk.threatenedUnits, cutoff.affectedUnitCount);
+  assert.equal(risk.threatenedPorts, cutoff.affectedPorts);
+  assert.equal(risk.threatenedStrength, cutoff.affectedStrength);
+  assert(Number.isFinite(risk.requiredDefenseStrength));
+  assert(risk.reasonFlags.includes("maritime-supply-entry-risk"));
+});
+
 test("a second active maritime entry prevents a false port cutoff prediction", () => {
   const world = createMaritimeCutoffWorld(true);
   updateSupplyAssessment(world);
@@ -257,6 +284,8 @@ test("a second active maritime entry prevents a false port cutoff prediction", (
   assert(!world.supplyCutoffs.candidates.some((item) =>
     item.attackerNationId === NATION_B && item.targetRegionId === id("port-b")
   ));
+  updateSupplyDefense(world);
+  assert(!world.supplyDefense.risks.some((item) => item.regionId === id("port-b")));
 });
 
 function createMaritimeCutoffWorld(alternateEntry: boolean): WorldState {
@@ -383,6 +412,7 @@ function createMaritimeWorld(withPorts = true): WorldState {
     isolationEffects: createIsolationEffectsState(),
     productionDiagnostics: createProductionDiagnosticsState(),
     supplyCutoffs: createSupplyCutoffAnalysisState(),
+    supplyDefense: createSupplyDefenseState(),
     stalematePressure: createStalematePressureState(),
     collapseAdvances: createCollapseAdvanceState(),
     mapVersion: 0,
