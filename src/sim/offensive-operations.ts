@@ -13,6 +13,7 @@ import {
 } from "./land-fronts";
 import {
   getFrontAllocation,
+  releaseUnitFromFrontAllocation,
   type NationFrontAllocation,
 } from "./nation-front-allocations";
 import {
@@ -544,9 +545,8 @@ export function updateOffensiveOperations(world: WorldState): void {
     }
   }
   for (const [nationId, plans] of plansByNation) {
-    if (
-      getCapitalDefenseAssessment(world, nationId)?.threatLevel === "critical"
-    ) {
+    if (getCapitalDefenseAssessment(world, nationId)?.threatLevel === "critical" &&
+      !plans.some((plan) => !!getSupplyReliefPlanForFront(world, nationId, plan.frontId))) {
       continue;
     }
     const current = state.operationsByNationId.get(nationId) ?? [];
@@ -1135,11 +1135,7 @@ function buildOperationCandidate(
     focusPressure >= WORLD_BALANCE.war.landFront.stalemate.majorOffensiveThreshold;
   const front = world.landFronts.operationalSectorsById.get(plan.frontId);
   const allocation = getFrontAllocation(world, plan.frontId, plan.nationId);
-  if (
-    !front ||
-    !allocation ||
-    allocation.unitIds.length < settings.minimumFrontUnits
-  ) {
+  if (!front || !allocation) {
     return null;
   }
   const friendly = getFrontSide(front, plan.nationId);
@@ -1162,7 +1158,8 @@ function buildOperationCandidate(
     !world.collapseAdvances.advanceNationByUnitId.has(unit.id) &&
     !world.offensiveOperations.operationIdByUnitId.has(unit.id)
   );
-  if (allocationUnits.length < settings.minimumFrontUnits || surplusUnits.length < (relief ? 1 : 2)) {
+  const reliefForce = relief ? selectReliefForce(world, relief, allocationUnits, defensiveIds, surplusUnits) : null;
+  if (!relief && (allocationUnits.length < settings.minimumFrontUnits || surplusUnits.length < 2)) {
     return null;
   }
   const targets = relief ? selectSupplyReliefTargets(world, relief) : selectOperationTargets(world, front, plan, surplusUnits);
@@ -1173,7 +1170,7 @@ function buildOperationCandidate(
     ? WORLD_BALANCE.war.landFront.stalemate.majorOperationForceFraction
     : settings.forceFraction;
   const requiredOperationStrength = relief
-    ? Math.min(sumUnitStrength(surplusUnits), Math.max(targets.targetLocalDefenderStrength * 1.1, relief.expectedRestoredStrength * 0.2))
+    ? reliefForce!.requested
     : targets.pocketReduction
     ? Math.min(sumUnitStrength(surplusUnits), Math.max(
       targets.pocketReduction.trappedStrength * 1.15,
@@ -1184,7 +1181,7 @@ function buildOperationCandidate(
     world,
     plan.nationId,
     targets,
-    surplusUnits,
+    relief ? reliefForce!.outsideUnits : surplusUnits,
     isSchwerpunktOperation,
     requiredOperationStrength,
   );
@@ -1206,7 +1203,7 @@ function buildOperationCandidate(
       )
     : [];
   const preflightUnits = [...new Map(
-    [...surplusUnits, ...reserveUnits].map((unit) => [unit.id, unit]),
+    [...(relief ? reliefForce!.outsideUnits : surplusUnits), ...reserveUnits].map((unit) => [unit.id, unit]),
   ).values()];
   const manifestResult = buildPreflightManifest(
     world,
@@ -1221,7 +1218,8 @@ function buildOperationCandidate(
     false,
   );
   const rejectionReasons: OperationCandidateRejectionReason[] = [];
-  if (manifestResult.manifest.length < (targets.pocketReduction || relief ? 1 : 2)) {
+  const insideOnly = !!relief && reliefForce!.outsideUnits.length === 0 && reliefForce!.insideUnits.length > 0;
+  if (manifestResult.manifest.length < (targets.pocketReduction || relief ? (insideOnly ? 0 : 1) : 2)) {
     rejectionReasons.push("insufficient-units");
   }
   if (!manifestResult.feasible) {
@@ -1248,7 +1246,7 @@ function buildOperationCandidate(
     createdAtTick,
     evaluatedAtTick: world.time.fastTick,
     evaluationCount: (previous?.evaluationCount ?? 0) + 1,
-    offensiveSurplusAvailable: sumUnitStrength(surplusUnits),
+    offensiveSurplusAvailable: sumUnitStrength(relief ? reliefForce!.outsideUnits : surplusUnits),
     initialFriendlyStrength: finiteNumber(friendly.strength),
     initialEnemyStrength: finiteNumber(enemy.strength),
     initialStrengthRatio,
@@ -1259,7 +1257,7 @@ function buildOperationCandidate(
     targetSupplyScore: targets.supplyScore ?? 0,
     supplyCutoffObjective: targets.supplyCutoff
       ? cloneSupplyCutoffCandidate(targets.supplyCutoff) : null,
-    supplyReliefPlan: relief ? { ...relief, objectiveRegionIds: [...relief.objectiveRegionIds], outsideForceUnitIds: [...relief.outsideForceUnitIds], insideForceUnitIds: [...relief.insideForceUnitIds] } : null,
+    supplyReliefPlan: relief ? { ...relief, objectiveRegionIds: [...relief.objectiveRegionIds], outsideForceUnitIds: reliefForce!.outsideUnits.map((unit) => unit.id), insideForceUnitIds: reliefForce!.insideUnits.map((unit) => unit.id), forceSourceByUnitId: new Map(reliefForce!.sources), requestedForce: reliefForce!.requested, obtainedForce: reliefForce!.obtained } : null,
     pocketClosureObjective: targets.pocketClosure
       ? clonePocketClosureOpportunity(targets.pocketClosure) : null,
     pocketReductionObjective: targets.pocketReduction
@@ -1275,6 +1273,49 @@ function buildOperationCandidate(
   };
 }
 
+/** A local exception for a direct relief target; it never changes normal coverage targets. */
+function selectReliefForce(
+  world: WorldState,
+  relief: SupplyReliefPlan,
+  allocationUnits: UnitState[],
+  defensiveIds: Set<UnitId>,
+  surplusUnits: UnitState[],
+): { outsideUnits: UnitState[]; insideUnits: UnitState[]; sources: Map<UnitId, import("./supply-relief").SupplyReliefForceSource>; requested: number; obtained: number } {
+  const defender = world.units.filter((unit) => unit.domain === "land" && unit.nationId === relief.enemyNationId && unit.regionId === relief.primaryReconnectionRegion)
+    .reduce((sum, unit) => sum + getUnitCombatStrength(unit), 0);
+  const requested = Math.max(1, defender * 1.1, Math.min(relief.expectedRestoredStrength * 0.2, 2_000));
+  const sources = new Map<UnitId, import("./supply-relief").SupplyReliefForceSource>();
+  const insideUnits = relief.insideForceUnitIds.map((id) => world.units.find((unit) => unit.id === id)).filter(isOperationalLandUnit);
+  for (const unit of insideUnits) sources.set(unit.id, "inside-breakout");
+  const outsideUnits: UnitState[] = [];
+  const add = (units: UnitState[], source: import("./supply-relief").SupplyReliefForceSource) => {
+    for (const unit of units.sort((a, b) => getUnitCombatStrength(b) - getUnitCombatStrength(a) || compareIds(a.id, b.id))) {
+      if (sources.has(unit.id) || outsideUnits.some((item) => item.id === unit.id)) continue;
+      outsideUnits.push(unit); sources.set(unit.id, source);
+      if (sumUnitStrength(outsideUnits) + sumUnitStrength(insideUnits) >= requested) break;
+    }
+  };
+  add(surplusUnits, "surplus");
+  const capital = getCapitalDefenseAssessment(world, relief.nationId);
+  if (sumUnitStrength(outsideUnits) + sumUnitStrength(insideUnits) < requested && capital?.threatLevel !== "critical") {
+    add(world.units.filter((unit) => unit.domain === "land" && unit.nationId === relief.nationId && isStrategicReserveUnit(world, unit.id) && !world.retreatPlans.retreatIdByUnitId.has(unit.id) && !world.reorganization.planIdByUnitId.has(unit.id)), "reserve");
+  }
+  if (sumUnitStrength(outsideUnits) + sumUnitStrength(insideUnits) < requested) {
+    const coverage = getFrontlineCoverage(world, relief.sectorId, relief.nationId);
+    const safeStrength = Math.max(0, (coverage?.defenderStrength ?? 0) - (coverage?.minimumRequiredStrength ?? 0));
+    let released = 0;
+    const releasable = allocationUnits.filter((unit) => defensiveIds.has(unit.id) && !world.retreatPlans.retreatIdByUnitId.has(unit.id) && !world.reorganization.planIdByUnitId.has(unit.id) && !world.collapseAdvances.advanceNationByUnitId.has(unit.id));
+    for (const unit of releasable.sort((a, b) => getUnitCombatStrength(a) - getUnitCombatStrength(b) || compareIds(a.id, b.id))) {
+      const value = getUnitCombatStrength(unit); if (released + value > safeStrength) continue;
+      released += value; add([unit], "frontline-release");
+      if (sumUnitStrength(outsideUnits) + sumUnitStrength(insideUnits) >= requested) break;
+    }
+    if (released === 0 && releasable.length > 0) world.instrumentation?.incrementCounter("supplyRelief.blocked.frontlineMinimum");
+  }
+  if (capital?.threatLevel === "critical" && sumUnitStrength(outsideUnits) + sumUnitStrength(insideUnits) < requested) world.instrumentation?.incrementCounter("supplyRelief.blocked.capitalDefenseFloor");
+  return { outsideUnits, insideUnits, sources, requested, obtained: sumUnitStrength(outsideUnits) + sumUnitStrength(insideUnits) };
+}
+
 function createOperationFromCandidate(
   world: WorldState,
   candidate: OperationCandidate,
@@ -1284,6 +1325,26 @@ function createOperationFromCandidate(
     if (isStrategicReserveUnit(world, assignment.unitId)) {
       releaseStrategicReserveUnit(world, assignment.unitId);
     }
+  }
+  if (candidate.supplyReliefPlan) {
+    const liveRelief = getSupplyReliefPlan(world, candidate.supplyReliefPlan.id);
+    if (liveRelief) {
+      liveRelief.forceSourceByUnitId = new Map(candidate.supplyReliefPlan.forceSourceByUnitId);
+      liveRelief.requestedForce = candidate.supplyReliefPlan.requestedForce;
+      liveRelief.obtainedForce = candidate.supplyReliefPlan.obtainedForce;
+    }
+    for (const [unitId, source] of candidate.supplyReliefPlan.forceSourceByUnitId) {
+      if (source === "frontline-release") releaseUnitFromFrontAllocation(world, unitId);
+      const metricSource = source === "frontline-release" ? "frontlineRelease" : source === "inside-breakout" ? "insideBreakout" : source;
+      world.instrumentation?.incrementCounter(`supplyRelief.force.${metricSource}` as const,
+        getUnitCombatStrength(world.units.find((unit) => unit.id === unitId)!));
+    }
+    world.instrumentation?.incrementCounter("supplyRelief.forceRequested", candidate.supplyReliefPlan.requestedForce);
+    world.instrumentation?.incrementCounter("supplyRelief.forceObtained", candidate.supplyReliefPlan.obtainedForce);
+    const outside = candidate.supplyReliefPlan.outsideForceUnitIds.length;
+    const inside = candidate.supplyReliefPlan.insideForceUnitIds.length;
+    if (inside && !outside) world.instrumentation?.incrementCounter("supplyRelief.insideOnly");
+    if (inside && outside) world.instrumentation?.incrementCounter("supplyRelief.combined");
   }
   const insideUnitIds = candidate.supplyReliefPlan?.insideForceUnitIds.filter((unitId) =>
     !candidate.manifest.some((assignment) => assignment.unitId === unitId) &&

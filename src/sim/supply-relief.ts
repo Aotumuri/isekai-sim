@@ -14,6 +14,7 @@ export type SupplyReliefStatus = "identified" | "deferred" | "preparing" | "atta
 export type SupplyReliefReason =
   | "major-force-isolated" | "frontline-isolated" | "city-isolated" | "port-isolated"
   | "capital-isolated" | "prolonged-isolation" | "organization-decay-active";
+export type SupplyReliefForceSource = "surplus" | "reserve" | "frontline-release" | "inside-breakout";
 
 export interface SupplyReliefNeed {
   id: string;
@@ -56,6 +57,10 @@ export interface SupplyReliefPlan {
   actualRestoredStrength: number;
   actualRestoredUnits: number;
   failureReason: string | null;
+  /** Set by the operation candidate; kept on the plan for diagnosis and metrics. */
+  forceSourceByUnitId: Map<UnitId, SupplyReliefForceSource>;
+  requestedForce: number;
+  obtainedForce: number;
 }
 
 export interface SupplyReliefState {
@@ -213,7 +218,8 @@ function buildPlan(world: WorldState, need: SupplyReliefNeed): SupplyReliefPlan 
     sectorId: best.sector, isolatedRegionIds: [...need.regionIds], objectiveRegionIds: [best.target], primaryReconnectionRegion: best.target, outsideApproachRegionId: best.outer, insideApproachRegionId: best.inner,
     expectedRestoredStrength: need.isolatedStrength, expectedRestoredUnits: need.isolatedUnits,
     routeType: need.ports > 0 ? "port-reconnection" : "corridor-retake", outsideForceUnitIds: [], insideForceUnitIds, score: best.score,
-    status: "identified", createdTick: world.time.fastTick, startedTick: null, reconnectedTick: null, stableSinceTick: null, actualRestoredStrength: 0, actualRestoredUnits: 0, failureReason: null };
+    status: "identified", createdTick: world.time.fastTick, startedTick: null, reconnectedTick: null, stableSinceTick: null, actualRestoredStrength: 0, actualRestoredUnits: 0, failureReason: null,
+    forceSourceByUnitId: new Map(), requestedForce: 0, obtainedForce: 0 };
 }
 
 function eligibleInsideUnits(world: WorldState, need: SupplyReliefNeed, target: MesoRegionId): UnitId[] {
