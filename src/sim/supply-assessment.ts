@@ -128,7 +128,20 @@ export function isRegionSupplied(
   world: WorldState,
   regionId: MesoRegionId,
 ): boolean {
+  world.instrumentation?.incrementCounter("supplyAssessment.regionQueries");
   const componentId = world.supplyAssessment.componentIdByRegionId.get(regionId);
+  return componentId ? isComponentSupplied(world, componentId) : false;
+}
+
+export function isNationRegionSupplied(
+  world: WorldState,
+  nationId: NationId,
+  regionId: MesoRegionId,
+): boolean {
+  world.instrumentation?.incrementCounter("supplyAssessment.regionQueries");
+  const componentId = world.supplyAssessment.assessmentByNationId
+    .get(nationId)
+    ?.componentIdByRegionId.get(regionId);
   return componentId ? isComponentSupplied(world, componentId) : false;
 }
 

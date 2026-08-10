@@ -24,6 +24,10 @@ import { getStalemateAssessment } from "../sim/stalemate-pressure";
 import { getStrategicProgressAssessment } from "../sim/strategic-progress";
 import { getBattlefieldTopologyAssessment } from "../sim/battlefield-topology";
 import { getNationSupplyAssessment } from "../sim/supply-assessment";
+import {
+  getUnitEquipmentFulfillment,
+  getUnitManpowerRatio,
+} from "../sim/reorganization";
 import type { Vec2 } from "../utils/vector";
 import { clearLayer } from "./clear-layer";
 import { findSharedSegments, type Segment } from "./meso-border-geometry";
@@ -424,6 +428,25 @@ function appendOperationalDetails(
             `    isolation ${component.isolatedDuration} | reconnect ${reconnectDuration} | ${component.reason}`,
           );
         }
+      }
+      const reorganizationPlans = (
+        world.reorganization.plansByNationId.get(nationId) ?? []
+      ).slice(0, 4);
+      for (const plan of reorganizationPlans) {
+        const unit = unitById.get(plan.unitId);
+        const liveIsolationDuration = plan.isolatedDurationTicks +
+          (plan.supplyStatus === "isolated" && plan.lastSupplyEvaluationTick !== null
+            ? Math.max(0, world.time.fastTick - plan.lastSupplyEvaluationTick)
+            : 0);
+        lines.push(
+          `REORGANIZATION ${plan.unitId} | ${plan.phase.toUpperCase()}`,
+          `  SUPPLY ${(plan.supplyStatus ?? "not-evaluated").toUpperCase()} | isolated ${liveIsolationDuration} ticks`,
+          `  org ${((unit?.org ?? 0) * 100).toFixed(0)}% -> recovering`,
+          `  manpower ${((unit ? getUnitManpowerRatio(unit) : 0) * 100).toFixed(0)}% -> ${plan.supplyStatus === "isolated" ? "BLOCKED" : "reinforcing"}`,
+          `  equipment ${((unit ? getUnitEquipmentFulfillment(unit) : 0) * 100).toFixed(0)}% -> ${plan.supplyStatus === "isolated" ? "BLOCKED" : "reinforcing"}`,
+          `  denied manpower ${plan.manpowerDeniedByIsolation.toFixed(1)} | weapons ${plan.equipmentDeniedByIsolation.toFixed(2)}`,
+          `  stocks manpower ${plan.lastManpowerStockBefore.toFixed(1)} -> ${plan.lastManpowerStockAfter.toFixed(1)} | weapons ${plan.lastWeaponsStockBefore.toFixed(2)} -> ${plan.lastWeaponsStockAfter.toFixed(2)}`,
+        );
       }
       const enemyId = nationId === front.nationAId ? front.nationBId : front.nationAId;
       const topology = getBattlefieldTopologyAssessment(world, nationId, enemyId);

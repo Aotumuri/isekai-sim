@@ -73,6 +73,14 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     extinctNations: world.nations.length - activeNations,
     units: world.units.length,
     landUnits: world.units.filter((unit) => unit.domain === "land").length,
+    nationalManpowerStock: world.nations.reduce(
+      (sum, nation) => sum + nation.resources.manpower,
+      0,
+    ),
+    nationalWeaponsStock: world.nations.reduce(
+      (sum, nation) => sum + nation.resources.weapons,
+      0,
+    ),
     wars: world.wars.length,
     battles: world.battles.length,
     occupations: world.occupation.mesoById.size,
@@ -491,6 +499,38 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     reorganizationEquipmentReinforced: reorganization.equipmentReinforced,
     reorganizationManpowerConsumed: reorganization.manpowerResourceConsumed,
     reorganizationEquipmentConsumed: reorganization.equipmentStockConsumed,
+    suppliedReorganizationEvaluations: reorganization.suppliedEvaluations,
+    isolatedReorganizationEvaluations: reorganization.isolatedEvaluations,
+    manpowerReinforcementBlockedByIsolation:
+      reorganization.manpowerBlockedByIsolationCount,
+    equipmentReinforcementBlockedByIsolation:
+      reorganization.equipmentBlockedByIsolationCount,
+    manpowerReinforcementDeniedByIsolation:
+      reorganization.manpowerDeniedByIsolation,
+    equipmentReinforcementDeniedByIsolation:
+      reorganization.equipmentDeniedByIsolation,
+    reorganizationPlansEnteringIsolation: reorganization.plansEnteringIsolation,
+    reorganizationPlansReconnecting: reorganization.plansReconnecting,
+    isolatedReorganizationDuration: reorganization.isolatedDurationTicks,
+    stalledIsolatedReorganizationPlans: reorganization.stalledIsolatedPlans,
+    isolatedReorganizationPlansReady: reorganization.isolatedPlansReachingReady,
+    suppliedReorganizationPlansReady: reorganization.suppliedPlansReachingReady,
+    isolatedReorganizationUnitsInsidePockets:
+      reorganization.isolatedReorganizationUnitsInsidePockets,
+    reinforcementDeniedInsidePockets:
+      reorganization.reinforcementDeniedInsidePockets,
+    averageManpowerStockBeforeTransfer: reorganization.resourceTransferSamples > 0
+      ? reorganization.manpowerStockBeforeTransfers / reorganization.resourceTransferSamples
+      : 0,
+    averageManpowerStockAfterTransfer: reorganization.resourceTransferSamples > 0
+      ? reorganization.manpowerStockAfterTransfers / reorganization.resourceTransferSamples
+      : 0,
+    averageWeaponsStockBeforeTransfer: reorganization.resourceTransferSamples > 0
+      ? reorganization.weaponsStockBeforeTransfers / reorganization.resourceTransferSamples
+      : 0,
+    averageWeaponsStockAfterTransfer: reorganization.resourceTransferSamples > 0
+      ? reorganization.weaponsStockAfterTransfers / reorganization.resourceTransferSamples
+      : 0,
     averageReorganizationDuration:
       reorganization.completedCount > 0
         ? reorganization.totalDurationTicks / reorganization.completedCount
