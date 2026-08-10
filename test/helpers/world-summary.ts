@@ -1,6 +1,12 @@
 import { isNationActive } from "../../src/sim/nation-active";
 import type { WorldState } from "../../src/sim/world-state";
+import type { NavalMissionType } from "../../src/sim/naval-strategy";
 import type { WorldSummary } from "../benchmark/types";
+
+function missionShipCount(world: WorldState, type: NavalMissionType): number {
+  return world.supplyAssessment.navalStrategy.missions.filter((mission) => mission.type === type)
+    .reduce((sum, mission) => sum + mission.shipIds.length, 0);
+}
 
 export function summarizeWorld(world: WorldState): WorldSummary {
   const activeNations = world.nations.filter(isNationActive).length;
@@ -285,6 +291,36 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     maritimeConvoyReplacementEscorts: world.supplyAssessment.convoys.replacementEscorts,
     maritimeConvoyReplacementTransports: world.supplyAssessment.convoys.replacementTransports,
     maritimeConvoyMovementCpuMs: world.supplyAssessment.convoys.movementCpuMs,
+    navalAiEvaluations: world.supplyAssessment.navalStrategy.evaluations,
+    navalEscortShips: missionShipCount(world, "ESCORT"),
+    navalRaidShips: missionShipCount(world, "RAID"),
+    navalInterceptShips: missionShipCount(world, "INTERCEPT"),
+    navalBlockadeShips: missionShipCount(world, "BLOCKADE"),
+    navalReserveShips: missionShipCount(world, "RESERVE"),
+    navalUnassignedCombatShips: world.units.filter((unit) =>
+      unit.domain === "naval" && unit.type === "CombatShip" && unit.manpower > 0 && unit.org > 0
+    ).length - world.supplyAssessment.navalStrategy.missionByShipId.size,
+    navalMissionCreations: world.supplyAssessment.navalStrategy.missionCreations,
+    navalMissionSwitches: world.supplyAssessment.navalStrategy.missionSwitches,
+    navalEmergencyOverrides: world.supplyAssessment.navalStrategy.emergencyOverrides,
+    navalAssignmentChurn: world.supplyAssessment.navalStrategy.assignmentChurn,
+    navalAverageMissionDuration: world.supplyAssessment.navalStrategy.missions.length > 0
+      ? world.supplyAssessment.navalStrategy.missions.reduce((sum, mission) =>
+        sum + Math.max(0, world.time.fastTick - mission.createdTick), 0) /
+        world.supplyAssessment.navalStrategy.missions.length : 0,
+    navalInterceptedRaids: world.supplyAssessment.navalStrategy.interceptedRaids,
+    navalDefendedConvoys: world.supplyAssessment.navalStrategy.defendedConvoys,
+    navalEnemyTransportsDestroyed: world.supplyAssessment.navalStrategy.enemyTransportsDestroyed,
+    navalTransportLossesDespiteEscort:
+      world.supplyAssessment.navalStrategy.transportLossesDespiteEscort,
+    navalSuccessfulBlockadeInterceptions:
+      world.supplyAssessment.navalStrategy.successfulBlockadeInterceptions,
+    navalMissionDrivenBattles: world.supplyAssessment.navalStrategy.missionDrivenNavalBattles,
+    navalFuelConstrainedMissions: world.supplyAssessment.navalStrategy.fuelConstrainedMissions,
+    navalStrategicCpuMs: world.supplyAssessment.navalStrategy.evaluationCpuMs,
+    navalAssignmentCpuMs: world.supplyAssessment.navalStrategy.assignmentCpuMs,
+    navalMovementCpuMs: world.supplyAssessment.navalStrategy.movementCpuMs,
+    navalPathfindingCpuMs: world.supplyAssessment.navalStrategy.pathfindingCpuMs,
     isolatedUnitsEvaluated: world.isolationEffects.isolatedUnitsEvaluated,
     isolationGraceEvaluations: world.isolationEffects.unitsInGracePeriod,
     strainedUnitEvaluations: world.isolationEffects.strainedUnits,

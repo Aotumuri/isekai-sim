@@ -20,12 +20,14 @@ import type { UnitId, UnitState } from "./unit";
 import { getMesoById, getNeighborsById, getOwnerByMesoId } from "./world-cache";
 import {
   createMaritimeEscortState,
+  updateMaritimeEscortDemands,
   updateMaritimeEscortAssignments,
   type MaritimeEscortState,
 } from "./maritime-escort";
 import { buildNavalPositioningRoute } from "./naval-pathfinding";
 import {
   createRaidState,
+  assessMaritimeInterdiction,
   updateMaritimeInterdictionAssignments,
   type RaidState,
 } from "./maritime-interdiction";
@@ -34,6 +36,11 @@ import {
   updateConvoyAssignments,
   type ConvoySystemState,
 } from "./convoy-system";
+import {
+  createNavalStrategyState,
+  updateNavalStrategy,
+  type NavalStrategyState,
+} from "./naval-strategy";
 
 export type SupplyComponentId = string & { __brand: "SupplyComponentId" };
 
@@ -97,6 +104,7 @@ export interface SupplyAssessmentState {
   maritimeEscorts: MaritimeEscortState;
   maritimeInterdiction: RaidState;
   convoys: ConvoySystemState;
+  navalStrategy: NavalStrategyState;
   maritimeLinksEvaluated: number;
   activeMaritimeLinkCount: number;
   inactiveMaritimeLinkCount: number;
@@ -133,6 +141,7 @@ export function createSupplyAssessmentState(): SupplyAssessmentState {
     maritimeEscorts: createMaritimeEscortState(),
     maritimeInterdiction: createRaidState(),
     convoys: createConvoySystemState(),
+    navalStrategy: createNavalStrategyState(),
     maritimeLinksEvaluated: 0,
     activeMaritimeLinkCount: 0,
     inactiveMaritimeLinkCount: 0,
@@ -669,6 +678,9 @@ function propagateMaritimeSupply(
   state.multiHopSupplyPropagations += multiHop;
   state.remoteStrengthSupplied = remoteStrengthSupplied;
   state.remoteStrengthIsolatedDueToMissingTransport = remoteStrengthIsolatedDueToMissingTransport;
+  updateMaritimeEscortDemands(world, links);
+  assessMaritimeInterdiction(world, links);
+  updateNavalStrategy(world);
   updateMaritimeEscortAssignments(world, links);
   updateConvoyAssignments(world, links);
   updateMaritimeInterdictionAssignments(world, links);

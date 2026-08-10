@@ -53,6 +53,14 @@ export const WORLD_BALANCE = {
   unit: {
     naval: {
       enabled: false,
+      strategy: {
+        reserveFraction: 0.25,
+        reserveMinimumFleetSize: 3,
+        minimumCommitmentTicks: 120,
+        switchingThreshold: 15,
+        localInterceptRouteSteps: 6,
+        blockadeMinimumTargetScore: 75,
+      },
     },
     tankShare: 0.2,
     navalTransportShare: 0.4,

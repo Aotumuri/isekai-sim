@@ -149,11 +149,7 @@ export function updateMaritimeEscortAssignments(
     else previousByLinkId.set(assignment.maritimeLinkId, [assignment]);
   }
   const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
-  const demandContext = createEscortDemandContext(world, links);
-  const demands = links
-    .map((link) => buildEscortDemand(world, link, demandContext))
-    .filter((demand): demand is EscortDemand => !!demand)
-    .sort(compareEscortDemand);
+  const demands = state.demands;
   const combatShips = world.units
     .filter((unit) => isOperationalCombatShip(unit))
     .sort((a, b) => compareIds(a.id, b.id));
@@ -167,7 +163,14 @@ export function updateMaritimeEscortAssignments(
     if (regionShips) regionShips.push(ship);
     else combatShipsByRegion.set(ship.regionId, [ship]);
   }
-  const availableIds = new Set(combatShips.map((unit) => unit.id));
+  const strategicEscortMissions = world.supplyAssessment.navalStrategy.missions
+    .filter((mission) => mission.type === "ESCORT" && mission.targetLinkId);
+  const strategicShipIdsByLink = new Map<string, UnitId[]>();
+  for (const mission of strategicEscortMissions) {
+    const ids = strategicShipIdsByLink.get(mission.targetLinkId!);
+    if (ids) ids.push(...mission.shipIds); else strategicShipIdsByLink.set(mission.targetLinkId!, [...mission.shipIds]);
+  }
+  const availableIds = new Set(strategicEscortMissions.flatMap((mission) => mission.shipIds));
   const next: EscortAssignment[] = [];
   const linkById = new Map(links.map((link) => [link.id, link]));
   const neighborsById = getNeighborsById(world);
@@ -176,11 +179,10 @@ export function updateMaritimeEscortAssignments(
     const link = linkById.get(demand.maritimeLinkId);
     if (!link) continue;
     const oldAssignments = previousByLinkId.get(link.id) ?? [];
-    for (let escortIndex = 0; escortIndex < demand.requiredEscortCount; escortIndex += 1) {
+    const strategicIds = strategicShipIdsByLink.get(link.id) ?? [];
+    for (let escortIndex = 0; escortIndex < strategicIds.length; escortIndex += 1) {
       const old = oldAssignments[escortIndex];
-      let ship = old && availableIds.has(old.combatShipId)
-        ? unitById.get(old.combatShipId)
-        : undefined;
+      let ship = unitById.get(strategicIds[escortIndex]);
       if (!isOperationalCombatShip(ship, link.nationId)) {
         const atDistance = (regionIds: Iterable<MesoRegionId>): UnitState | undefined =>
           [...new Set(regionIds)].flatMap((regionId) => combatShipsByRegion.get(regionId) ?? [])
@@ -210,6 +212,15 @@ export function updateMaritimeEscortAssignments(
   if (world.instrumentation) {
     world.instrumentation.recordDuration("maritimeEscort.evaluation", performance.now() - startedAt);
   }
+}
+
+/** Produces demand objects for the strategic owner without claiming ships. */
+export function updateMaritimeEscortDemands(world: WorldState, links: MaritimeSupplyLink[]): void {
+  const context = createEscortDemandContext(world, links);
+  world.supplyAssessment.maritimeEscorts.demands = links
+    .map((link) => buildEscortDemand(world, link, context))
+    .filter((demand): demand is EscortDemand => !!demand)
+    .sort(compareEscortDemand);
 }
 
 /** Escort-only movement. It never chooses roaming or offensive naval targets. */

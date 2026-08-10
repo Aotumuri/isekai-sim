@@ -112,40 +112,20 @@ export function updateMaritimeInterdictionAssignments(
   const startedAt = world.instrumentation ? performance.now() : 0;
   const state = world.supplyAssessment.maritimeInterdiction;
   updateInterruptionHistory(world, links);
-  const warAdjacency = buildWarAdjacency(world.wars);
   const previous = state.assignments;
   const previousByShipId = new Map(previous.map((assignment) => [assignment.combatShipId, assignment]));
-  const previousRaidLinkIds = new Set(previous.map((assignment) => assignment.maritimeLinkId));
   const linkById = new Map(links.map((link) => [link.id, link]));
   const escortIds = new Set(world.supplyAssessment.maritimeEscorts.assignments.map((item) => item.combatShipId));
+  const strategicMissionByShip = world.supplyAssessment.navalStrategy.missionByShipId;
   const ships = world.units
-    .filter((unit) => isOperationalCombatShip(unit) && !escortIds.has(unit.id))
+    .filter((unit) => isOperationalCombatShip(unit) && !escortIds.has(unit.id) &&
+      ["RAID", "BLOCKADE"].includes(strategicMissionByShip.get(unit.id)?.type ?? ""))
     .sort((a, b) => compareIds(a.id, b.id));
-  const contexts = createPriorityContext(world, links);
-  const assessments: InterdictionAssessment[] = [];
+  const assessments = state.assessments;
   const assessmentsByAttacker = new Map<NationId, InterdictionAssessment[]>();
-
-  for (const ship of ships) {
-    if (assessmentsByAttacker.has(ship.nationId)) continue;
-    const nationAssessments = links
-      .filter((link) =>
-        link.routeRegionIds.some((regionId) => getMesoById(world).get(regionId)?.type === "sea") &&
-        link.reason !== "port-lost" && link.reason !== "route-invalid" &&
-        isAtWar(ship.nationId, link.nationId, warAdjacency) &&
-        (link.active || previousRaidLinkIds.has(link.id))
-      )
-      .map((link): InterdictionAssessment => ({
-        attackerNationId: ship.nationId,
-        maritimeLinkId: link.id,
-        defenderNationId: link.nationId,
-        targetPriority: scoreTarget(world, link, contexts),
-        routeRegionIds: [...link.routeRegionIds],
-        interdicted: state.interdictedLinkIds.has(link.id),
-        evaluatedAtTick: world.time.fastTick,
-      }))
-      .sort((a, b) => b.targetPriority.total - a.targetPriority.total || compareIds(a.maritimeLinkId, b.maritimeLinkId));
-    assessmentsByAttacker.set(ship.nationId, nationAssessments);
-    assessments.push(...nationAssessments);
+  for (const assessment of assessments) {
+    const current = assessmentsByAttacker.get(assessment.attackerNationId);
+    if (current) current.push(assessment); else assessmentsByAttacker.set(assessment.attackerNationId, [assessment]);
   }
 
   const next: RaidAssignment[] = [];
@@ -153,7 +133,8 @@ export function updateMaritimeInterdictionAssignments(
     const candidates = assessmentsByAttacker.get(ship.nationId) ?? [];
     const old = previousByShipId.get(ship.id);
     const existing = old && candidates.find((item) => item.maritimeLinkId === old.maritimeLinkId);
-    const selected = existing ?? [...candidates].sort((a, b) =>
+    const targetLinkId = strategicMissionByShip.get(ship.id)?.targetLinkId;
+    const selected = candidates.find((item) => item.maritimeLinkId === targetLinkId) ?? existing ?? [...candidates].sort((a, b) =>
       distanceToRouteSquared(world, ship, a.routeRegionIds) - distanceToRouteSquared(world, ship, b.routeRegionIds) ||
       b.targetPriority.total - a.targetPriority.total ||
       compareIds(a.maritimeLinkId, b.maritimeLinkId)
@@ -174,7 +155,6 @@ export function updateMaritimeInterdictionAssignments(
     if (ship && !escortIds.has(ship.id)) resetMovement(ship);
   }
 
-  state.assessments = assessments;
   state.assignments = next;
   state.assignmentByCombatShipId = new Map(next.map((assignment) => [assignment.combatShipId, assignment]));
   state.assignmentsByLinkId = groupAssignmentsByLink(next);
@@ -193,6 +173,26 @@ export function updateMaritimeInterdictionAssignments(
   }
 }
 
+/** Refreshes strategic raid opportunities before ships are allocated. */
+export function assessMaritimeInterdiction(world: WorldState, links: MaritimeSupplyLink[]): void {
+  const state = world.supplyAssessment.maritimeInterdiction;
+  const warAdjacency = buildWarAdjacency(world.wars);
+  const contexts = createPriorityContext(world, links);
+  const previousRaidLinkIds = new Set(state.assignments.map((assignment) => assignment.maritimeLinkId));
+  const nations = [...new Set(world.units.filter((unit) => isOperationalCombatShip(unit)).map((unit) => unit.nationId))]
+    .sort(compareIds);
+  state.assessments = nations.flatMap((nationId) => links.filter((link) =>
+    link.routeRegionIds.some((regionId) => getMesoById(world).get(regionId)?.type === "sea") &&
+    link.reason !== "port-lost" && link.reason !== "route-invalid" &&
+    isAtWar(nationId, link.nationId, warAdjacency) && (link.active || previousRaidLinkIds.has(link.id))
+  ).map((link): InterdictionAssessment => ({
+    attackerNationId: nationId, maritimeLinkId: link.id, defenderNationId: link.nationId,
+    targetPriority: scoreTarget(world, link, contexts), routeRegionIds: [...link.routeRegionIds],
+    interdicted: state.interdictedLinkIds.has(link.id), evaluatedAtTick: world.time.fastTick,
+  }))).sort((a, b) => compareIds(a.attackerNationId, b.attackerNationId) ||
+    b.targetPriority.total - a.targetPriority.total || compareIds(a.maritimeLinkId, b.maritimeLinkId));
+}
+
 /** Raid-only movement toward the assigned route. No fallback roaming is permitted. */
 export function updateMaritimeInterdictionMovement(world: WorldState, dtMs: number): void {
   const state = world.supplyAssessment.maritimeInterdiction;
@@ -202,6 +202,25 @@ export function updateMaritimeInterdictionMovement(world: WorldState, dtMs: numb
   for (const assignment of state.assignments) {
     const unit = unitById.get(assignment.combatShipId);
     if (!isOperationalCombatShip(unit, assignment.attackerNationId)) continue;
+    const strategicMission = world.supplyAssessment.navalStrategy.missionByShipId.get(unit.id);
+    if (strategicMission?.type === "BLOCKADE" && strategicMission.targetPortId) {
+      const blockadeEntry = getBlockadeEntry(world, assignment.routeRegionIds, strategicMission.targetPortId);
+      if (blockadeEntry && unit.regionId === blockadeEntry) {
+        assignment.status = "intercepting";
+        resetMovement(unit);
+        continue;
+      }
+      const blockadeIndex = assignment.positioningRouteIds.indexOf(unit.regionId);
+      const blockadeNext = blockadeIndex >= 0 ? assignment.positioningRouteIds[blockadeIndex + 1] : undefined;
+      if (!blockadeNext || !(neighborsById.get(unit.regionId) ?? []).includes(blockadeNext)) {
+        assignment.status = "unavailable";
+        resetMovement(unit);
+        continue;
+      }
+      assignment.status = "moving-to-route";
+      moveRaiderOneStep(world, unit, blockadeNext, dtMs);
+      continue;
+    }
     const convoy = world.supplyAssessment.convoys.convoyByLinkId.get(assignment.maritimeLinkId);
     const transport = convoy?.transportId ? unitById.get(convoy.transportId) : undefined;
     if (transport && unit.regionId === transport.regionId) {
@@ -289,6 +308,19 @@ export function recordMaritimeInterdictionCombat(world: WorldState): void {
     if (!state.interdictedLinkIds.has(linkId) && !state.assignmentsByLinkId.has(linkId)) continue;
     state.destroyedTransportIds.add(transportId);
     state.transportsDestroyed += 1;
+    const strategy = world.supplyAssessment.navalStrategy;
+    strategy.enemyTransportsDestroyed += 1;
+    world.instrumentation?.incrementCounter("navalStrategy.enemyTransportsDestroyed");
+    const attackingMissions = (state.assignmentsByLinkId.get(linkId) ?? [])
+      .map((raid) => strategy.missionByShipId.get(raid.combatShipId));
+    if (attackingMissions.some((mission) => mission?.type === "BLOCKADE")) {
+      strategy.successfulBlockadeInterceptions += 1;
+      world.instrumentation?.incrementCounter("navalStrategy.successfulBlockadeInterceptions");
+    }
+    if (world.supplyAssessment.maritimeEscorts.assignmentByLinkId.has(linkId)) {
+      strategy.transportLossesDespiteEscort += 1;
+      world.instrumentation?.incrementCounter("navalStrategy.transportLossesDespiteEscort");
+    }
     world.instrumentation?.incrementCounter("maritimeInterdiction.transportsDestroyed");
   }
 
@@ -304,6 +336,10 @@ export function recordMaritimeInterdictionCombat(world: WorldState): void {
     engagementKeys.add(key);
     if (!state.activeEscortEngagementKeys.has(key)) {
       state.escortEngagements += 1;
+      world.supplyAssessment.navalStrategy.defendedConvoys += 1;
+      world.supplyAssessment.navalStrategy.missionDrivenNavalBattles += 1;
+      world.instrumentation?.incrementCounter("navalStrategy.defendedConvoys");
+      world.instrumentation?.incrementCounter("navalStrategy.missionDrivenBattles");
       world.instrumentation?.incrementCounter("maritimeInterdiction.escortEngagements");
     }
   }
@@ -321,6 +357,24 @@ export function recordMaritimeInterdictionCombat(world: WorldState): void {
     }
   }
   world.supplyAssessment.convoys.activeInterceptionKeys = interceptionKeys;
+  const strategicEngagementKeys = new Set<string>();
+  for (const mission of world.supplyAssessment.navalStrategy.missions.filter((item) => item.type === "INTERCEPT")) {
+    const target = mission.targetShipId ? unitById.get(mission.targetShipId) : undefined;
+    if (!target) continue;
+    for (const shipId of mission.shipIds) {
+      const ship = unitById.get(shipId);
+      if (!ship || ship.regionId !== target.regionId) continue;
+      const key = `${ship.id}:${target.id}`;
+      strategicEngagementKeys.add(key);
+      if (!world.supplyAssessment.navalStrategy.activeEngagementKeys.has(key)) {
+        world.supplyAssessment.navalStrategy.interceptedRaids += 1;
+        world.supplyAssessment.navalStrategy.missionDrivenNavalBattles += 1;
+        world.instrumentation?.incrementCounter("navalStrategy.interceptedRaids");
+        world.instrumentation?.incrementCounter("navalStrategy.missionDrivenBattles");
+      }
+    }
+  }
+  world.supplyAssessment.navalStrategy.activeEngagementKeys = strategicEngagementKeys;
   updateMaritimeInterdictionState(world);
 }
 
@@ -329,6 +383,9 @@ export function getMaritimeMissionUnitIds(world: WorldState): Set<UnitId> {
     ...world.supplyAssessment.maritimeLogistics.assignments.map((item) => item.transportId),
     ...world.supplyAssessment.maritimeEscorts.assignments.map((item) => item.combatShipId),
     ...world.supplyAssessment.maritimeInterdiction.assignments.map((item) => item.combatShipId),
+    ...world.supplyAssessment.navalStrategy.missions
+      .filter((item) => item.type === "INTERCEPT")
+      .flatMap((item) => item.shipIds),
   ]);
 }
 
@@ -393,16 +450,21 @@ function createOrRefreshRaidAssignment(
   old: RaidAssignment | undefined,
 ): RaidAssignment {
   const same = old?.maritimeLinkId === assessment.maritimeLinkId;
+  const strategicMission = world.supplyAssessment.navalStrategy.missionByShipId.get(ship.id);
   const convoy = world.supplyAssessment.convoys.convoyByLinkId.get(assessment.maritimeLinkId);
   const transport = convoy?.transportId
     ? world.units.find((unit) => unit.id === convoy.transportId)
     : undefined;
-  const onRoute = isOnSeaRoute(world, ship.regionId, assessment.routeRegionIds);
+  const blockadeEntry = strategicMission?.type === "BLOCKADE" && strategicMission.targetPortId
+    ? getBlockadeEntry(world, assessment.routeRegionIds, strategicMission.targetPortId) : undefined;
+  const onRoute = blockadeEntry ? ship.regionId === blockadeEntry
+    : isOnSeaRoute(world, ship.regionId, assessment.routeRegionIds);
   const intercepting = !!transport && ship.regionId === transport.regionId;
   let positioningRouteIds = same ? old.positioningRouteIds : [];
   if (!onRoute && (!same || positioningRouteIds.length === 0 || !positioningRouteIds.includes(ship.regionId))) {
     const startedAt = world.instrumentation ? performance.now() : 0;
-    positioningRouteIds = buildNavalPositioningRoute(world, ship.regionId, assessment.routeRegionIds, true);
+    positioningRouteIds = buildNavalPositioningRoute(world, ship.regionId,
+      blockadeEntry ? [blockadeEntry] : assessment.routeRegionIds, true);
     world.instrumentation?.incrementCounter("maritimeInterdiction.pathfindingRequests");
     if (world.instrumentation) {
       const elapsed = performance.now() - startedAt;
@@ -422,6 +484,17 @@ function createOrRefreshRaidAssignment(
     status: intercepting ? "raiding" : onRoute ? "intercepting" : positioningRouteIds.length > 1 ? "moving-to-route" : "unavailable",
     assignedTick: same ? old.assignedTick : world.time.fastTick,
   };
+}
+
+function getBlockadeEntry(
+  world: WorldState,
+  route: readonly MesoRegionId[],
+  portId: MesoRegionId,
+): MesoRegionId | undefined {
+  const portIndex = route.indexOf(portId);
+  if (portIndex < 0) return undefined;
+  return [route[portIndex + 1], route[portIndex - 1]].find((regionId) =>
+    !!regionId && getMesoById(world).get(regionId)?.type === "sea");
 }
 
 function updateInterruptionHistory(world: WorldState, links: MaritimeSupplyLink[]): void {

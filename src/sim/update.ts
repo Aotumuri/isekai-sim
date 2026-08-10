@@ -34,6 +34,7 @@ import {
   recordMaritimeInterdictionCombat,
   updateMaritimeInterdictionMovement,
 } from "./maritime-interdiction";
+import { updateNavalStrategyMovement } from "./naval-strategy";
 import { updateSupplyCutoffAnalysis } from "./supply-cutoff";
 import { updateSupplyDefense } from "./supply-defense";
 import { updateSupplyRelief } from "./supply-relief";
@@ -109,6 +110,7 @@ export function stepFastTick(world: WorldState, dtMs: number): void {
   updateMaritimeEscortMovement(world, dtMs);
   updateConvoyMovement(world, dtMs);
   updateMaritimeInterdictionMovement(world, dtMs);
+  updateNavalStrategyMovement(world, dtMs);
   recordMaritimeInterdictionCombat(world);
   startedAt = instrumentation ? performance.now() : 0;
   updateBattles(world);

@@ -69,6 +69,7 @@ interface OverlayVersions {
   battlefieldTopology: number;
   supplyAssessment: number;
   maritimeInterdiction: number;
+  navalStrategy: number;
   convoys: number;
   isolationEffects: number;
   productionDiagnostics: number;
@@ -144,6 +145,7 @@ export function attachFrontDebugOverlay(
     drawSupplyDefenseMarkers(layer, world);
     drawSupplyReliefMarkers(layer, world);
     drawMaritimeSupplyLinks(layer, world);
+    drawNavalMissions(layer, world);
     if (selectedSectorId && !world.landFronts.operationalSectorsById.has(selectedSectorId)) {
       selectedSectorId = null;
     }
@@ -903,6 +905,48 @@ function drawMaritimeSupplyLinks(layer: Container, world: WorldState): void {
   }
 }
 
+function drawNavalMissions(layer: Container, world: WorldState): void {
+  const markers = { ESCORT: "E", RAID: "R", INTERCEPT: "I", BLOCKADE: "B", RESERVE: "N" } as const;
+  const colors = { ESCORT: 0x40c4ff, RAID: 0xff3d81, INTERCEPT: 0xffd740,
+    BLOCKADE: 0xff7043, RESERVE: 0x82b1ff } as const;
+  for (const mission of world.supplyAssessment.navalStrategy.missions) {
+    for (const shipId of mission.shipIds) {
+      const ship = world.units.find((unit) => unit.id === shipId);
+      if (!ship) continue;
+      drawMarker(layer, world, ship.regionId, markers[mission.type], colors[mission.type], "diamond");
+      const center = world.cache.mesoById.get(ship.regionId)?.center;
+      if (!center) continue;
+      const label = new Text(formatNavalMission(world, shipId), LABEL_STYLE);
+      label.resolution = 2;
+      label.position.set(center.x + 11, center.y + 11);
+      layer.addChild(label);
+    }
+  }
+}
+
+export function formatNavalMission(world: WorldState, shipId: string): string {
+  const mission = world.supplyAssessment.navalStrategy.missions.find((item) =>
+    item.shipIds.includes(shipId as never));
+  if (!mission) return `NAVAL MISSION\nship ${shipId}\nmission UNASSIGNED`;
+  const target = mission.targetConvoyId ? `convoy ${mission.targetConvoyId}`
+    : mission.targetLinkId ? `link ${mission.targetLinkId}`
+      : mission.targetPortId ? `port ${mission.targetPortId}`
+        : mission.targetShipId ? `ship ${mission.targetShipId}` : "none";
+  return ["NAVAL MISSION", `ship ${shipId}`, `mission ${mission.type}`, `mission id ${mission.id}`,
+    `priority ${mission.priority.toFixed(1)}`, `target ${target}`,
+    `reason ${mission.reasonFlags.join(", ") || "none"}`,
+    `commitment ${Math.max(0, world.time.fastTick - mission.createdTick)} ticks`].join("\n");
+}
+
+export function formatNavalStrategySummary(world: WorldState, nationId: string): string {
+  const missions = world.supplyAssessment.navalStrategy.missions.filter((item) => item.nationId === nationId);
+  const count = (type: typeof missions[number]["type"]): number => missions
+    .filter((mission) => mission.type === type).reduce((sum, mission) => sum + mission.shipIds.length, 0);
+  return ["NAVAL AI", `CombatShips ${missions.reduce((sum, mission) => sum + mission.shipIds.length, 0)}`,
+    `Escort ${count("ESCORT")}`, `Raid ${count("RAID")}`, `Intercept ${count("INTERCEPT")}`,
+    `Blockade ${count("BLOCKADE")}`, `Reserve ${count("RESERVE")}`].join("\n");
+}
+
 function createMaritimeSupplyLabel(
   world: WorldState,
   link: WorldState["supplyAssessment"]["maritimeLinks"][number],
@@ -1067,6 +1111,7 @@ function readVersions(world: WorldState): OverlayVersions {
     battlefieldTopology: world.battlefieldTopology.version,
     supplyAssessment: world.supplyAssessment.version,
     maritimeInterdiction: world.supplyAssessment.maritimeInterdiction.version,
+    navalStrategy: world.supplyAssessment.navalStrategy.version,
     convoys: world.supplyAssessment.convoys.version,
     isolationEffects: world.isolationEffects.version,
     productionDiagnostics: world.productionDiagnostics.version,

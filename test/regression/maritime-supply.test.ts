@@ -64,9 +64,81 @@ import {
   updateMaritimeInterdictionMovement,
 } from "../../src/sim/maritime-interdiction";
 import { updateConvoyMovement } from "../../src/sim/convoy-system";
+import { updateNavalStrategy } from "../../src/sim/naval-strategy";
 
 const NATION_A = "nation-a" as NationId;
 const NATION_B = "nation-b" as NationId;
+
+test("Naval AI gives every CombatShip exactly one mission and never assigns TransportShips", () => {
+  const world = createStrategicAllocationWorld(2);
+  updateNavalStrategy(world);
+  assert.equal(world.supplyAssessment.navalStrategy.missionByShipId.size, 2);
+  assert.equal(new Set(world.supplyAssessment.navalStrategy.missions.flatMap((mission) => mission.shipIds)).size, 2);
+  assert(world.units.filter((unit) => unit.type === "TransportShip").every((unit) =>
+    !world.supplyAssessment.navalStrategy.missionByShipId.has(unit.id)));
+});
+
+test("Naval AI splits two ships between a critical escort and a worthwhile raid", () => {
+  const world = createStrategicAllocationWorld(2);
+  updateNavalStrategy(world);
+  const types = [...world.supplyAssessment.navalStrategy.missionByShipId.values()].map((mission) => mission.type).sort();
+  assert.deepEqual(types, ["ESCORT", "RAID"]);
+});
+
+test("Naval AI keeps a deterministic reserve when no strategic demand exists", () => {
+  const world = createStrategicAllocationWorld(3);
+  world.supplyAssessment.maritimeEscorts.demands = [];
+  world.supplyAssessment.maritimeInterdiction.assessments = [];
+  updateNavalStrategy(world);
+  assert.equal(world.supplyAssessment.navalStrategy.missions.every((mission) => mission.type === "RESERVE"), true);
+  assert.equal(world.supplyAssessment.navalStrategy.missionByShipId.size, 3);
+});
+
+test("Naval AI preserves stable mission identity across unchanged evaluations", () => {
+  const world = createStrategicAllocationWorld(1);
+  updateNavalStrategy(world);
+  const first = world.supplyAssessment.navalStrategy.missions[0];
+  world.time.fastTick += 1;
+  updateNavalStrategy(world);
+  assert.equal(world.supplyAssessment.navalStrategy.missions[0]?.id, first?.id);
+  assert.equal(world.supplyAssessment.navalStrategy.missionSwitches, 0);
+});
+
+test("Naval AI locally overrides a lower mission for an immediate convoy interception", () => {
+  const world = createStrategicAllocationWorld(1);
+  updateNavalStrategy(world);
+  const defender = world.units.find((unit) => unit.type === "CombatShip");
+  const linkId = world.supplyAssessment.maritimeEscorts.demands[0]?.maritimeLinkId;
+  assert(defender && linkId);
+  defender.regionId = id("port-b");
+  const raider = createUnitForType(createUnitId(world.unitIdCounter++), NATION_B, id("sea-ab"), "CombatShip");
+  world.units.push(raider);
+  const raid = {
+    combatShipId: raider.id, attackerNationId: NATION_B, maritimeLinkId: linkId,
+    defenderNationId: NATION_A, targetScore: 90, targetReason: "critical convoy",
+    routeRegionIds: [id("port-a"), id("sea-ab"), id("port-b")],
+    positioningRouteIds: [id("sea-ab")], status: "intercepting" as const,
+    assignedTick: world.time.fastTick,
+  };
+  world.supplyAssessment.maritimeInterdiction.assignments = [raid];
+  world.supplyAssessment.maritimeInterdiction.assignmentsByLinkId = new Map([[linkId, [raid]]]);
+  world.time.fastTick += 1;
+  updateNavalStrategy(world);
+  assert.equal(world.supplyAssessment.navalStrategy.missionByShipId.get(defender.id)?.type, "INTERCEPT");
+  assert.equal(world.supplyAssessment.navalStrategy.emergencyOverrides, 1);
+});
+
+test("Naval AI creates a real-port blockade mission only as surplus commitment", () => {
+  const world = createStrategicAllocationWorld(2);
+  const assessment = world.supplyAssessment.maritimeInterdiction.assessments[0];
+  assert(assessment);
+  assessment.targetPriority.total = 100;
+  world.supplyAssessment.maritimeEscorts.demands = [];
+  updateNavalStrategy(world);
+  const blockade = world.supplyAssessment.navalStrategy.missions.find((mission) => mission.type === "BLOCKADE");
+  assert(blockade?.targetPortId);
+  assert.equal(blockade.targetLinkId, assessment.maritimeLinkId);
+});
 
 test("CombatShips deliberately select moving enemy convoys without interdicting static routes", () => {
   const world = createInterdictionWorld(["sea-ab", "sea-cd"]);
@@ -992,6 +1064,33 @@ function createInterdictionWorld(raiderRegions: string[]): WorldState {
     raider.moveTicksPerRegion = 1;
     world.units.push(raider);
   }
+  return world;
+}
+
+function createStrategicAllocationWorld(combatShipCount: number): WorldState {
+  const world = createMaritimeWorld(true, 1);
+  updateSupplyAssessment(world);
+  const link = world.supplyAssessment.maritimeLinks.find((candidate) => candidate.active);
+  assert(link);
+  for (let index = 0; index < combatShipCount; index += 1) {
+    world.units.push(createUnitForType(
+      createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip",
+    ));
+  }
+  world.supplyAssessment.maritimeEscorts.demands = [{
+    maritimeLinkId: link.id, nationId: NATION_A, requiredEscortCount: 1,
+    remoteUnitCount: 1, remoteStrength: 1_000,
+    priority: [1, 1_000, 0, 0, 0, 0, 0], reasons: ["critical-maritime-supply"],
+  }];
+  world.supplyAssessment.maritimeInterdiction.assessments = [{
+    attackerNationId: NATION_A, maritimeLinkId: link.id, defenderNationId: NATION_B,
+    targetPriority: { remoteSuppliedStrength: 0, frontlineUnits: 0, cities: 0,
+      capitalRelevance: 0, activeOperations: 0, reorganization: 0,
+      supplyCutoffImportance: 1, routeLength: 2, protectionState: 2,
+      total: 40, reasons: ["weak-enemy-convoy"] },
+    routeRegionIds: [...link.routeRegionIds], interdicted: false,
+    evaluatedAtTick: world.time.fastTick,
+  }];
   return world;
 }
 
