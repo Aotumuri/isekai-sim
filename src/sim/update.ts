@@ -139,10 +139,10 @@ export function stepFastTick(world: WorldState, dtMs: number): void {
 
 export function stepSlowTick(world: WorldState, _dtMs: number): void {
   world.time.slowTick += 1;
-  updateProduction(world);
   updateWarDeclarations(world);
   beginAiGeographyEvaluation(world);
   updateSupplyAssessment(world);
+  updateProduction(world);
   updateIsolationEffects(world);
   updateLandFronts(world);
   prepareFrontDistanceFields(world);

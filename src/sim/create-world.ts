@@ -41,6 +41,7 @@ import type { UnitState } from "./unit";
 import type { WarState } from "./war-state";
 import type { WorldState } from "./world-state";
 import { createWorldCache } from "./world-cache";
+import { createProductionDiagnosticsState } from "./production";
 
 export function createWorld(config: WorldConfig): WorldState {
   const rng = new SeededRng(config.seed);
@@ -111,6 +112,7 @@ export function createWorld(config: WorldConfig): WorldState {
   const battlefieldTopology = createBattlefieldTopologyState();
   const supplyAssessment = createSupplyAssessmentState();
   const isolationEffects = createIsolationEffectsState();
+  const productionDiagnostics = createProductionDiagnosticsState();
   const mapVersion = 0;
   const territoryVersion = 0;
   const buildingVersion = 0;
@@ -142,6 +144,7 @@ export function createWorld(config: WorldConfig): WorldState {
     battlefieldTopology,
     supplyAssessment,
     isolationEffects,
+    productionDiagnostics,
     mapVersion,
     territoryVersion,
     buildingVersion,

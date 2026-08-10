@@ -8,6 +8,7 @@ import { createNationId, type NationId } from "../../src/worldgen/nation";
 import { SeededRng } from "../../src/utils/seeded-rng";
 import { createUnitForType } from "../../src/sim/create-units";
 import { createIsolationEffectsState } from "../../src/sim/isolation-effects";
+import { createProductionDiagnosticsState } from "../../src/sim/production";
 import {
   createCapitalDefenseState,
   getCapitalDefenseAssessment,
@@ -4179,6 +4180,7 @@ function createFrontWorld(
     battlefieldTopology: createBattlefieldTopologyState(),
     supplyAssessment: createSupplyAssessmentState(),
     isolationEffects: createIsolationEffectsState(),
+    productionDiagnostics: createProductionDiagnosticsState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

@@ -68,6 +68,7 @@ interface OverlayVersions {
   battlefieldTopology: number;
   supplyAssessment: number;
   isolationEffects: number;
+  productionDiagnostics: number;
   retreats: number;
   coverage: number;
   stalemate: number;
@@ -455,6 +456,17 @@ function appendOperationalDetails(
             `  isolation age ${effect.age} ticks | passive decay ${effect.decayActive ? "ACTIVE" : "OFF"}`,
             `  organization ${unit.org.toFixed(3)} | decay/tick -${isolationSettings.organizationDecayPerSlowTick.toFixed(4)} | floor ${isolationSettings.organizationFloor.toFixed(2)}`,
             "  recovery BLOCKED",
+          );
+        }
+        for (const diagnostic of [...world.productionDiagnostics.locationByRegionId.values()]
+          .filter((candidate) => candidate.nationId === nationId)
+          .slice(0, 8)) {
+          lines.push(
+            `PRODUCTION ${diagnostic.regionId}`,
+            diagnostic.supplyStatus === "supplied"
+              ? "  SUPPLIED"
+              : "  BLOCKED (Isolation)",
+            `  component ${diagnostic.componentId ?? "none"}`,
           );
         }
       }
@@ -890,6 +902,7 @@ function readVersions(world: WorldState): OverlayVersions {
     battlefieldTopology: world.battlefieldTopology.version,
     supplyAssessment: world.supplyAssessment.version,
     isolationEffects: world.isolationEffects.version,
+    productionDiagnostics: world.productionDiagnostics.version,
     retreats: world.retreatPlans.version,
     coverage: world.frontlineCoverage.version,
     stalemate: world.stalematePressure.version,
@@ -909,7 +922,7 @@ function readVersions(world: WorldState): OverlayVersions {
 
 function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
   return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
-    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment && a.isolationEffects === b.isolationEffects &&
+    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment && a.isolationEffects === b.isolationEffects && a.productionDiagnostics === b.productionDiagnostics &&
     a.retreats === b.retreats && a.coverage === b.coverage && a.stalemate === b.stalemate &&
     a.reserveDeployments === b.reserveDeployments && a.battles === b.battles;
 }

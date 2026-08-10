@@ -37,6 +37,10 @@ import { createUnitId } from "../../src/sim/unit";
 import { createSimTime } from "../../src/sim/time";
 import type { WorldState } from "../../src/sim/world-state";
 import { createWorldCache } from "../../src/sim/world-cache";
+import {
+  createProductionDiagnosticsState,
+  updateProduction,
+} from "../../src/sim/production";
 
 const NATION_A = "nation-a" as NationId;
 const NATION_B = "nation-b" as NationId;
@@ -186,6 +190,40 @@ test("maritime supply prevents decay, link loss starts grace and decay, and rest
   assert.equal(world.isolationEffects.decayStoppedByReconnection, 1);
 });
 
+test("maritime-supplied island production succeeds and stops when its route is destroyed", () => {
+  const world = createMaritimeWorld();
+  const island = world.mesoRegions.find((region) => region.id === id("island-b"));
+  assert(island);
+  island.building = "city";
+  world.buildingVersion += 1;
+  const nation = world.nations[0]!;
+  nation.resources.manpower = 100_000;
+  nation.resources.weapons = 1_000;
+  nation.resources.steel = 100;
+  nation.nextUnitProductionTick = 0;
+
+  updateSupplyAssessment(world);
+  updateProduction(world);
+  assert.equal(
+    world.units.filter((unit) => unit.regionId === id("island-b")).length,
+    1,
+  );
+
+  disconnect(world, "port-a", "sea-ab");
+  world.mapVersion += 1;
+  world.time.slowTick += 1;
+  world.time.fastTick += 10;
+  nation.nextUnitProductionTick = world.time.slowTick;
+  updateSupplyAssessment(world);
+  updateProduction(world);
+
+  assert.equal(
+    world.units.filter((unit) => unit.regionId === id("island-b")).length,
+    1,
+  );
+  assert.equal(world.productionDiagnostics.blockedByIsolation, 1);
+});
+
 function createMaritimeWorld(withPorts = true): WorldState {
   const specs: Array<{
     name: string;
@@ -262,6 +300,7 @@ function createMaritimeWorld(withPorts = true): WorldState {
     battlefieldTopology: createBattlefieldTopologyState(),
     supplyAssessment: createSupplyAssessmentState(),
     isolationEffects: createIsolationEffectsState(),
+    productionDiagnostics: createProductionDiagnosticsState(),
     stalematePressure: createStalematePressureState(),
     collapseAdvances: createCollapseAdvanceState(),
     mapVersion: 0,

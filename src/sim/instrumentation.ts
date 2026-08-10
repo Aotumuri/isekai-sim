@@ -1,4 +1,7 @@
 export type SimulationMetricName =
+  | "production.evaluation"
+  | "production.supplyLookup"
+  | "production.supplyIntegration"
   | "repositionUnits"
   | "assignment.rebuild"
   | "assignment.defense"
@@ -49,6 +52,13 @@ export type SimulationMetricName =
   | "surrender";
 
 export type SimulationCounterName =
+  | "production.attempted"
+  | "production.blocked"
+  | "production.blocked.isolation"
+  | "production.blocked.noManpower"
+  | "production.blocked.economy"
+  | "production.successful"
+  | "production.supplyLookups"
   | "pathfinding.bfs"
   | "pathfinding.bfsFound"
   | "pathfinding.bfsUnreachable"

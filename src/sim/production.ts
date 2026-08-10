@@ -6,11 +6,64 @@ import { createUnitForType } from "./create-units";
 import { isNationActive } from "./nation-active";
 import type { NationResourceFlow, NationResources } from "./nation-runtime";
 import { nextScheduledTickRange } from "./schedule";
+import {
+  isNationRegionSupplied,
+  type SupplyComponentId,
+} from "./supply-assessment";
 import { createUnitId, type NavalUnitType, type UnitState, type UnitType } from "./unit";
 import type { WorldState } from "./world-state";
 import { getCityTargetsByNation, getOwnerByMesoId, getPortTargetsByNation } from "./world-cache";
 
+export type ProductionSupplyStatus = "supplied" | "blocked-isolation";
+
+export interface ProductionLocationDiagnostic {
+  nationId: NationId;
+  regionId: MesoRegionId;
+  supplyStatus: ProductionSupplyStatus;
+  componentId: SupplyComponentId | null;
+  evaluatedAtSlowTick: number;
+}
+
+export interface ProductionDiagnosticsState {
+  attemptedProductions: number;
+  blockedProductions: number;
+  blockedByIsolation: number;
+  blockedByNoManpower: number;
+  blockedByEconomy: number;
+  successfulProductions: number;
+  supplyLookups: number;
+  blockedByComponentId: Map<string, number>;
+  locationByRegionId: Map<MesoRegionId, ProductionLocationDiagnostic>;
+  version: number;
+}
+
+export function createProductionDiagnosticsState(): ProductionDiagnosticsState {
+  return {
+    attemptedProductions: 0,
+    blockedProductions: 0,
+    blockedByIsolation: 0,
+    blockedByNoManpower: 0,
+    blockedByEconomy: 0,
+    successfulProductions: 0,
+    supplyLookups: 0,
+    blockedByComponentId: new Map(),
+    locationByRegionId: new Map(),
+    version: 0,
+  };
+}
+
 export function updateProduction(world: WorldState): void {
+  const startedAt = world.instrumentation ? performance.now() : 0;
+  updateProductionInternal(world);
+  if (world.instrumentation) {
+    world.instrumentation.recordDuration(
+      "production.evaluation",
+      performance.now() - startedAt,
+    );
+  }
+}
+
+function updateProductionInternal(world: WorldState): void {
   if (world.nations.length === 0) {
     return;
   }
@@ -87,16 +140,68 @@ export function updateProduction(world: WorldState): void {
       if (currentCount >= capacity) {
         return false;
       }
+      const diagnostics = world.productionDiagnostics;
+      diagnostics.attemptedProductions += 1;
+      world.instrumentation?.incrementCounter("production.attempted");
+      const supplyStartedAt = world.instrumentation ? performance.now() : 0;
+      const supplied = isNationRegionSupplied(world, nation.id, regionId);
+      diagnostics.supplyLookups += 1;
+      world.instrumentation?.incrementCounter("production.supplyLookups");
+      if (world.instrumentation) {
+        world.instrumentation.recordDuration(
+          "production.supplyLookup",
+          performance.now() - supplyStartedAt,
+        );
+      }
+      const componentId = world.supplyAssessment.assessmentByNationId
+        .get(nation.id)
+        ?.componentIdByRegionId.get(regionId) ?? null;
+      diagnostics.locationByRegionId.set(regionId, {
+        nationId: nation.id,
+        regionId,
+        supplyStatus: supplied ? "supplied" : "blocked-isolation",
+        componentId,
+        evaluatedAtSlowTick: world.time.slowTick,
+      });
+      diagnostics.version += 1;
+      if (!supplied) {
+        diagnostics.blockedProductions += 1;
+        diagnostics.blockedByIsolation += 1;
+        const componentKey = componentId ?? "none";
+        diagnostics.blockedByComponentId.set(
+          componentKey,
+          (diagnostics.blockedByComponentId.get(componentKey) ?? 0) + 1,
+        );
+        world.instrumentation?.incrementCounter("production.blocked");
+        world.instrumentation?.incrementCounter("production.blocked.isolation");
+        if (world.instrumentation) {
+          world.instrumentation.recordDuration(
+            "production.supplyIntegration",
+            performance.now() - supplyStartedAt,
+          );
+        }
+        return false;
+      }
+      if (world.instrumentation) {
+        world.instrumentation.recordDuration(
+          "production.supplyIntegration",
+          performance.now() - supplyStartedAt,
+        );
+      }
       const unitType = pickAffordableUnitType(nation.resources, world.simRng);
       if (!unitType) {
+        recordResourceBlock(world, nation.resources);
         return false;
       }
       const flow = flowByNation.get(nation.id);
       if (!consumeResourcesForUnit(nation.resources, unitType, flow?.usage)) {
+        recordResourceBlock(world, nation.resources);
         return false;
       }
       newUnits.push(createUnitForWorld(world, nation.id, regionId, unitType));
       currentCount += 1;
+      diagnostics.successfulProductions += 1;
+      world.instrumentation?.incrementCounter("production.successful");
       return true;
     };
 
@@ -104,16 +209,23 @@ export function updateProduction(world: WorldState): void {
       if (currentCount >= capacity) {
         return false;
       }
+      const diagnostics = world.productionDiagnostics;
+      diagnostics.attemptedProductions += 1;
+      world.instrumentation?.incrementCounter("production.attempted");
       const unitType = pickNavalUnitType(nation.resources, world.simRng);
       if (!unitType) {
+        recordResourceBlock(world, nation.resources, "naval");
         return false;
       }
       const flow = flowByNation.get(nation.id);
       if (!consumeResourcesForUnit(nation.resources, unitType, flow?.usage)) {
+        recordResourceBlock(world, nation.resources, "naval");
         return false;
       }
       newUnits.push(createUnitForWorld(world, nation.id, regionId, unitType));
       currentCount += 1;
+      diagnostics.successfulProductions += 1;
+      world.instrumentation?.incrementCounter("production.successful");
       return true;
     };
 
@@ -179,6 +291,29 @@ export function updateProduction(world: WorldState): void {
   }
   finalizeResourceFlows(world, flowByNation, previousResources);
   applyFuelStatus(world.units, fuelAvailableByNation);
+}
+
+function recordResourceBlock(
+  world: WorldState,
+  resources: NationResources,
+  domain: "land" | "naval" = "land",
+): void {
+  const diagnostics = world.productionDiagnostics;
+  diagnostics.blockedProductions += 1;
+  world.instrumentation?.incrementCounter("production.blocked");
+  const minimumManpower = domain === "land"
+    ? Math.min(getUnitManpowerCost("Infantry"), getUnitManpowerCost("Tank"))
+    : Math.min(
+        getUnitManpowerCost("TransportShip"),
+        getUnitManpowerCost("CombatShip"),
+      );
+  if (resources.manpower < minimumManpower) {
+    diagnostics.blockedByNoManpower += 1;
+    world.instrumentation?.incrementCounter("production.blocked.noManpower");
+    return;
+  }
+  diagnostics.blockedByEconomy += 1;
+  world.instrumentation?.incrementCounter("production.blocked.economy");
 }
 
 function createUnitForWorld(

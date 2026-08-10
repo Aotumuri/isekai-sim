@@ -34,6 +34,11 @@ export function runBenchmark(options: BenchmarkOptions): BenchmarkResult {
       endWorld: summarizeWorld(world),
       metrics: run.metrics.getMetricSummaries(),
       counters: run.metrics.getCounters(),
+      productionBlockedByComponentId: Object.fromEntries(
+        [...world.productionDiagnostics.blockedByComponentId.entries()].sort(
+          ([a], [b]) => a.localeCompare(b),
+        ),
+      ),
     };
   } finally {
     console.info = originalInfo;

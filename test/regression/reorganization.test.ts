@@ -46,6 +46,7 @@ import { createFrontlineCoverageState } from "../../src/sim/frontline-coverage";
 import { createStalematePressureState } from "../../src/sim/stalemate-pressure";
 import { createStrategicProgressState } from "../../src/sim/strategic-progress";
 import { createWorldCache } from "../../src/sim/world-cache";
+import { createProductionDiagnosticsState } from "../../src/sim/production";
 import { createMacroRegionId, type MacroRegion } from "../../src/worldgen/macro-region";
 import type { MicroRegionId } from "../../src/worldgen/micro-region";
 import type { MesoRegion, MesoRegionId } from "../../src/worldgen/meso-region";
@@ -653,6 +654,7 @@ function createReorganizationWorld(): { world: WorldState; unit: UnitState } {
     battlefieldTopology: createBattlefieldTopologyState(),
     supplyAssessment: createSupplyAssessmentState(),
     isolationEffects: createIsolationEffectsState(),
+    productionDiagnostics: createProductionDiagnosticsState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

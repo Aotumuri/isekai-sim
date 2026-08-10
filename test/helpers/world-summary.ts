@@ -232,6 +232,15 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     maritimeIsolationReconnections: world.isolationEffects.maritimeReconnections,
     isolationDecayStoppedByReconnection:
       world.isolationEffects.decayStoppedByReconnection,
+    productionAttempts: world.productionDiagnostics.attemptedProductions,
+    productionBlocked: world.productionDiagnostics.blockedProductions,
+    productionBlockedByIsolation: world.productionDiagnostics.blockedByIsolation,
+    productionBlockedByNoManpower: world.productionDiagnostics.blockedByNoManpower,
+    productionBlockedByEconomy: world.productionDiagnostics.blockedByEconomy,
+    productionSuccessful: world.productionDiagnostics.successfulProductions,
+    productionSupplyLookups: world.productionDiagnostics.supplyLookups,
+    productionBlockedComponentCount:
+      world.productionDiagnostics.blockedByComponentId.size,
     battlefieldEnemyComponents: world.battlefieldTopology.enemyComponentCount,
     battlefieldArticulationPoints: world.battlefieldTopology.articulationPointCount,
     battlefieldZeroExitComponents: world.battlefieldTopology.zeroExitComponentCount,

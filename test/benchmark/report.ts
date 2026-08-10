@@ -31,6 +31,15 @@ export function formatBenchmarkReport(result: BenchmarkResult): string {
   for (const [name, value] of Object.entries(result.counters)) {
     lines.push(`${name.padEnd(29)} ${formatNumber(value)}`);
   }
+  const blockedComponents = Object.entries(
+    result.productionBlockedByComponentId ?? {},
+  );
+  if (blockedComponents.length > 0) {
+    lines.push("", "Production blocks by component", "------------------------------");
+    for (const [componentId, count] of blockedComponents) {
+      lines.push(`${componentId.padEnd(29)} ${formatNumber(count)}`);
+    }
+  }
   const requests = result.counters["pathfinding.shared.requests"] ?? 0;
   const hits = result.counters["pathfinding.shared.hits"] ?? 0;
   if (requests > 0) {
@@ -152,6 +161,14 @@ function formatWorld(start: WorldSummary, end: WorldSummary): string[] {
     ["isolation reconnections", "isolationReconnections"],
     ["maritime isolation reconnects", "maritimeIsolationReconnections"],
     ["decay stopped by reconnect", "isolationDecayStoppedByReconnection"],
+    ["production attempts", "productionAttempts"],
+    ["production blocked", "productionBlocked"],
+    ["production blocked isolation", "productionBlockedByIsolation"],
+    ["production blocked manpower", "productionBlockedByNoManpower"],
+    ["production blocked economy", "productionBlockedByEconomy"],
+    ["production successful", "productionSuccessful"],
+    ["production supply lookups", "productionSupplyLookups"],
+    ["blocked supply components", "productionBlockedComponentCount"],
     ["active meaningful pockets", "activeMeaningfulPockets"],
     ["closure opportunities detected", "pocketClosureOpportunitiesDetected"],
     ["high-value closure opportunities", "highValuePocketClosureOpportunities"],

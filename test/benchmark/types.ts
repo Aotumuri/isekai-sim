@@ -168,6 +168,14 @@ export interface WorldSummary {
   isolationReconnections: number;
   maritimeIsolationReconnections: number;
   isolationDecayStoppedByReconnection: number;
+  productionAttempts: number;
+  productionBlocked: number;
+  productionBlockedByIsolation: number;
+  productionBlockedByNoManpower: number;
+  productionBlockedByEconomy: number;
+  productionSuccessful: number;
+  productionSupplyLookups: number;
+  productionBlockedComponentCount: number;
   battlefieldEnemyComponents: number;
   battlefieldArticulationPoints: number;
   battlefieldZeroExitComponents: number;
@@ -414,4 +422,5 @@ export interface BenchmarkResult {
   endWorld: WorldSummary;
   metrics: Record<string, MetricSummary>;
   counters: Record<string, number>;
+  productionBlockedByComponentId: Record<string, number>;
 }
