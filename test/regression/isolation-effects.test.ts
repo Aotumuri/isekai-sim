@@ -43,6 +43,7 @@ import { createProductionDiagnosticsState } from "../../src/sim/production";
 import { createSupplyCutoffAnalysisState } from "../../src/sim/supply-cutoff";
 import { createSupplyDefenseState } from "../../src/sim/supply-defense";
 import { createSupplyReliefState } from "../../src/sim/supply-relief";
+import { createAmphibiousOperationState } from "../../src/sim/amphibious";
 
 const NATION = "nation-a" as NationId;
 
@@ -181,6 +182,7 @@ function createIsolationWorld(withUnit = true): { world: WorldState; unit: UnitS
     supplyCutoffs: createSupplyCutoffAnalysisState(),
     supplyDefense: createSupplyDefenseState(),
     supplyRelief: createSupplyReliefState(),
+    amphibiousOperations: createAmphibiousOperationState(),
     stalematePressure: createStalematePressureState(),
     collapseAdvances: createCollapseAdvanceState(),
     mapVersion: 0,

@@ -30,6 +30,7 @@ import type { ProductionDiagnosticsState } from "./production";
 import type { SupplyCutoffAnalysisState } from "./supply-cutoff";
 import type { SupplyDefenseState } from "./supply-defense";
 import type { SupplyReliefState } from "./supply-relief";
+import type { AmphibiousOperationState } from "./amphibious";
 
 export interface WorldState {
   width: number;
@@ -59,6 +60,7 @@ export interface WorldState {
   supplyCutoffs: SupplyCutoffAnalysisState;
   supplyDefense: SupplyDefenseState;
   supplyRelief: SupplyReliefState;
+  amphibiousOperations: AmphibiousOperationState;
   stalematePressure: StalematePressureState;
   collapseAdvances: CollapseAdvanceState;
   mapVersion: number;

@@ -45,6 +45,7 @@ import { createProductionDiagnosticsState } from "./production";
 import { createSupplyCutoffAnalysisState } from "./supply-cutoff";
 import { createSupplyDefenseState } from "./supply-defense";
 import { createSupplyReliefState } from "./supply-relief";
+import { createAmphibiousOperationState } from "./amphibious";
 
 export function createWorld(config: WorldConfig): WorldState {
   const rng = new SeededRng(config.seed);
@@ -119,6 +120,7 @@ export function createWorld(config: WorldConfig): WorldState {
   const supplyCutoffs = createSupplyCutoffAnalysisState();
   const supplyDefense = createSupplyDefenseState();
   const supplyRelief = createSupplyReliefState();
+  const amphibiousOperations = createAmphibiousOperationState();
   const mapVersion = 0;
   const territoryVersion = 0;
   const buildingVersion = 0;
@@ -154,6 +156,7 @@ export function createWorld(config: WorldConfig): WorldState {
     supplyCutoffs,
     supplyDefense,
     supplyRelief,
+    amphibiousOperations,
     mapVersion,
     territoryVersion,
     buildingVersion,

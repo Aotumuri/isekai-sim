@@ -9,6 +9,7 @@ import type { WorldState } from "./world-state";
 import { getMesoById, getNeighborsById, getOwnerByMesoId, getPortTargetsByNation } from "./world-cache";
 import { isNationActive } from "./nation-active";
 import { buildWarAdjacency, isAtWar } from "./war-state";
+import { isAmphibiousOwnedUnit } from "./amphibious";
 
 export type NavalMissionType = "ESCORT" | "RAID" | "INTERCEPT" | "BLOCKADE" | "RESERVE";
 export type NavalMissionStatus = "ACTIVE" | "UNAVAILABLE";
@@ -102,6 +103,11 @@ export interface NavalStrategyState {
 
 export type NavalUnitOwnership =
   | {
+      controller: "AMPHIBIOUS_OPERATION";
+      missionType: "TRANSPORT" | "ESCORT";
+      operationId: string;
+    }
+  | {
       controller: "NAVAL_STRATEGY";
       missionType: NavalMissionType;
       missionId: string;
@@ -173,7 +179,8 @@ export function updateNavalStrategy(world: WorldState): void {
   const desiredStartedAt = world.instrumentation ? performance.now() : 0;
   for (const nationId of assessedNationIds) {
     const ships = shipsByNation.get(nationId) ?? [];
-    const operationalShips = ships.filter((ship) => isOperationalCombatShip(ship));
+    const operationalShips = ships.filter((ship) =>
+      isOperationalCombatShip(ship) && !isAmphibiousOwnedUnit(world, ship.id));
     const candidates = buildCandidates(world, nationId);
     const desiredForce = assessDesiredNavalForce(world, nationId, ships,
       (portsByNation.get(nationId)?.length ?? 0) > 0);
@@ -543,6 +550,7 @@ export function updateNavalStrategyMovement(world: WorldState, dtMs: number): vo
     if (!target) continue;
     for (const shipId of mission.shipIds) {
       const ship = unitById.get(shipId);
+      if (ship && isAmphibiousOwnedUnit(world, ship.id)) continue;
       if (!isOperationalCombatShip(ship, mission.nationId) || ship.regionId === target) {
         if (ship) resetMovement(ship);
         continue;
@@ -625,6 +633,12 @@ export function getNavalUnitOwnership(
 ): NavalUnitOwnership | undefined {
   const unit = world.units.find((candidate) => candidate.id === unitId);
   if (!unit || unit.domain !== "naval" || unit.manpower <= 0) return undefined;
+  const amphibious = world.amphibiousOperations.operationByUnitId.get(unitId);
+  if (amphibious) return {
+    controller: "AMPHIBIOUS_OPERATION",
+    missionType: unit.id === amphibious.transportId ? "TRANSPORT" : "ESCORT",
+    operationId: amphibious.id,
+  };
   if (unit.type === "CombatShip") {
     const mission = getNavalMission(world, unit.id);
     return mission ? {

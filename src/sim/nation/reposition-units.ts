@@ -457,11 +457,19 @@ function rebuildLandAssignments(
     );
     const collapseAdvance = world.collapseAdvances.advanceByNationId.get(nationId);
     const collapseUnitIds = new Set(collapseAdvance?.unitIds ?? []);
+    const amphibiousUnits = units.filter((unit) =>
+      world.amphibiousOperations.operationByUnitId.get(unit.id)?.phase === "embarking" ||
+      world.amphibiousOperations.operationByUnitId.get(unit.id)?.phase === "preparing"
+    );
+    if (amphibiousUnits.length > 0) {
+      movementGroups.push({ nationId, units: amphibiousUnits, controlledOnly: true });
+    }
     const normalNationUnits = units.filter(
       (unit) =>
         !retreatUnitIds.has(unit.id) &&
         !reserveUnitIds.has(unit.id) &&
-        !reorganizationUnitIds.has(unit.id),
+        !reorganizationUnitIds.has(unit.id) &&
+        !world.amphibiousOperations.operationByUnitId.has(unit.id),
         // Collapse units are assigned as one concentrated movement group below.
     );
     for (const plan of reorganizationPlans) {
@@ -672,7 +680,8 @@ function rebuildLandAssignments(
           unit.nationId === nationId &&
           !retreatUnitIds.has(unit.id) &&
           !reserveUnitIds.has(unit.id) &&
-          !reorganizationUnitIds.has(unit.id),
+          !reorganizationUnitIds.has(unit.id) &&
+          !world.amphibiousOperations.operationByUnitId.has(unit.id),
       );
     clearUnitMovement(unassignedUnits);
   }

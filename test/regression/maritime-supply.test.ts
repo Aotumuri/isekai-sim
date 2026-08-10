@@ -57,6 +57,7 @@ import {
   updateSupplyDefense,
 } from "../../src/sim/supply-defense";
 import { createSupplyReliefState } from "../../src/sim/supply-relief";
+import { createAmphibiousOperationState, updateAmphibiousOperations, updateAmphibiousPlanning } from "../../src/sim/amphibious";
 import { declareWar } from "../../src/sim/war-state";
 import { updateBattles } from "../../src/sim/battles";
 import {
@@ -72,6 +73,42 @@ import {
 
 const NATION_A = "nation-a" as NationId;
 const NATION_B = "nation-b" as NationId;
+
+test("amphibious planning creates one deterministic leased plan and reserves physical ships", () => {
+  const world = createMaritimeWorld(true, 3);
+  const enemyMacroIds = world.macroRegions
+    .filter((macro) => macro.mesoRegionIds.includes(id("port-b")) || macro.mesoRegionIds.includes(id("island-b")))
+    .map((macro) => { macro.nationId = NATION_B; return macro.id; });
+  world.nations.push(createNation(NATION_B, id("island-b"), enemyMacroIds));
+  world.cache.ownerByMesoId.clear();
+  declareWar(world.wars, NATION_A, NATION_B, 0);
+  const infantry = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "Infantry");
+  const escort = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip");
+  world.units.push(infantry, escort);
+  world.supplyAssessment.navalStrategy.missions = [{
+    id: "reserve-test", nationId: NATION_A, type: "RESERVE", shipIds: [escort.id],
+    targetPortId: id("port-a"), priority: 10, createdTick: 0, status: "ACTIVE", reasonFlags: ["test-reserve"],
+  }];
+  updateAmphibiousPlanning(world);
+  const operation = world.amphibiousOperations.operations[0];
+  assert(operation);
+  assert.equal(operation.destinationPortId, id("port-b"));
+  assert.deepEqual(operation.assignedUnitIds, [infantry.id]);
+  assert.deepEqual(operation.escortIds, [escort.id]);
+  assert.equal(operation.manifest[0].departurePortId, id("port-a"));
+  assert.equal(world.amphibiousOperations.operationByUnitId.get(operation.transportId)?.id, operation.id);
+  assert.equal(world.amphibiousOperations.landingPlans, 1);
+  for (let tick = 0; tick < 400 && operation.phase !== "landed"; tick += 1) {
+    world.time.fastTick += 1;
+    updateAmphibiousOperations(world);
+    updateConvoyMovement(world, FAST_TICK_MS);
+  }
+  assert.equal(operation.phase, "landed");
+  assert.equal(infantry.regionId, id("port-b"));
+  assert.equal(world.units.includes(infantry), true);
+  assert.equal(world.amphibiousOperations.operationByUnitId.has(infantry.id), false);
+  assert.equal(world.amphibiousOperations.successfulBeachheads, 1);
+});
 
 test("Naval AI gives every CombatShip exactly one mission and never assigns TransportShips", () => {
   const world = createStrategicAllocationWorld(2);
@@ -1375,6 +1412,7 @@ function createMaritimeWorld(withPorts = true, transportCount = 2): WorldState {
     supplyCutoffs: createSupplyCutoffAnalysisState(),
     supplyDefense: createSupplyDefenseState(),
     supplyRelief: createSupplyReliefState(),
+    amphibiousOperations: createAmphibiousOperationState(),
     stalematePressure: createStalematePressureState(),
     collapseAdvances: createCollapseAdvanceState(),
     mapVersion: 0,

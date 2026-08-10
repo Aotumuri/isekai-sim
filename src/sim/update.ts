@@ -3,7 +3,7 @@ import type { WorldState } from "./world-state";
 import { updateBattles } from "./battles";
 import { updateCapitals } from "./capitals";
 import { updateCivilWar } from "./civil-war";
-import { updateAmphibiousOperations } from "./amphibious";
+import { updateAmphibiousOperations, updateAmphibiousPlanning } from "./amphibious";
 import { repositionUnits } from "./nation/reposition-units";
 import { updateOccupation } from "./occupation";
 import { updateProduction } from "./production";
@@ -177,5 +177,6 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateNationFrontAllocations(world);
   updateFrontlineCoverage(world);
   updateOffensiveOperations(world);
+  updateAmphibiousPlanning(world);
   updateCollapseAdvances(world);
 }

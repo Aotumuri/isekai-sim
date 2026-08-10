@@ -39,6 +39,7 @@ import { createWorldCache } from "../../src/sim/world-cache";
 import { createSupplyCutoffAnalysisState } from "../../src/sim/supply-cutoff";
 import { createSupplyDefenseState } from "../../src/sim/supply-defense";
 import { createSupplyReliefState } from "../../src/sim/supply-relief";
+import { createAmphibiousOperationState } from "../../src/sim/amphibious";
 
 const NATION = "nation-a" as NationId;
 
@@ -225,6 +226,7 @@ function createProductionWorld(options: ProductionWorldOptions): WorldState {
     supplyCutoffs: createSupplyCutoffAnalysisState(),
     supplyDefense: createSupplyDefenseState(),
     supplyRelief: createSupplyReliefState(),
+    amphibiousOperations: createAmphibiousOperationState(),
     stalematePressure: createStalematePressureState(),
     collapseAdvances: createCollapseAdvanceState(),
     mapVersion: 0,

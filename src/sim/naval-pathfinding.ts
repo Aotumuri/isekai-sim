@@ -1,6 +1,8 @@
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { WorldState } from "./world-state";
 import { getMesoById, getNeighborsById } from "./world-cache";
+import type { UnitState } from "./unit";
+import { getMoveMsPerRegion } from "./movement";
 
 /** Deterministic port/sea positioning path shared by logistics and escort missions. */
 export function buildNavalPositioningRoute(
@@ -35,6 +37,25 @@ export function buildNavalPositioningRoute(
   for (let current = found; current; current = previous.get(current) ?? null) path.push(current);
   path.reverse();
   return path;
+}
+
+/** Shared deterministic naval positioning used by mission owners before formation. */
+export function moveNavalUnitToward(world: WorldState, unit: UnitState, target: MesoRegionId, dtMs: number): void {
+  if (unit.regionId === target) { resetMovement(unit); return; }
+  const route = buildNavalPositioningRoute(world, unit.regionId, [target]);
+  const nextId = route[1];
+  if (!nextId || !(getNeighborsById(world).get(unit.regionId) ?? []).includes(nextId)) { resetMovement(unit); return; }
+  if (unit.moveToId !== nextId) {
+    unit.moveFromId = unit.regionId; unit.moveToId = nextId; unit.moveTargetId = target; unit.moveProgressMs = 0;
+  }
+  unit.moveProgressMs += Math.max(0, dtMs);
+  if (unit.moveProgressMs < getMoveMsPerRegion(unit)) return;
+  unit.regionId = nextId; unit.moveFromId = null; unit.moveToId = null; unit.moveProgressMs = 0;
+  if (unit.regionId === target) unit.moveTargetId = null;
+}
+
+function resetMovement(unit: UnitState): void {
+  unit.moveTargetId = null; unit.moveFromId = null; unit.moveToId = null; unit.moveProgressMs = 0;
 }
 
 function compareIds(a: string, b: string): number {

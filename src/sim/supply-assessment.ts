@@ -17,6 +17,7 @@ import {
   type TransportAssignment,
 } from "./maritime-supply";
 import type { UnitId, UnitState } from "./unit";
+import { isAmphibiousOwnedUnit } from "./amphibious";
 import { getMesoById, getNeighborsById, getOwnerByMesoId } from "./world-cache";
 import {
   createMaritimeEscortState,
@@ -523,7 +524,7 @@ function propagateMaritimeSupply(
   );
   const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
   const availableTransports = world.units
-    .filter((unit) => isOperationalTransport(unit))
+    .filter((unit) => isOperationalTransport(unit) && !isAmphibiousOwnedUnit(world, unit.id))
     .sort((a, b) => compareIds(a.id, b.id));
   const availableTransportIds = new Set(availableTransports.map((unit) => unit.id));
   const nextAssignments: TransportAssignment[] = [];

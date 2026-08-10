@@ -53,7 +53,7 @@ export const WORLD_BALANCE = {
   unit: {
     naval: {
       enabled: true,
-      amphibiousEnabled: false,
+      amphibiousEnabled: true,
       strategy: {
         reserveFraction: 0.25,
         reserveMinimumFleetSize: 3,

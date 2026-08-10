@@ -40,7 +40,7 @@ export interface Convoy {
   progress: number;
   direction: 1 | -1;
   state: ConvoyState;
-  mission: "maritime-supply";
+  mission: "maritime-supply" | "amphibious";
   createdAtFastTick: number;
   cycleStartedAtFastTick: number;
   completedCycles: number;
@@ -95,7 +95,8 @@ export function updateConvoyAssignments(world: WorldState, links: MaritimeSupply
   const system = world.supplyAssessment.convoys;
   const previousByLinkId = system.convoyByLinkId;
   const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
-  const next: Convoy[] = [];
+  // Amphibious operations share this movement system but own their lifecycle.
+  const next: Convoy[] = system.convoys.filter((convoy) => convoy.mission === "amphibious");
 
   for (const link of links) {
     const previous = previousByLinkId.get(link.id);
@@ -188,6 +189,43 @@ export function updateConvoyAssignments(world: WorldState, links: MaritimeSupply
   system.version += 1;
 }
 
+export function createAmphibiousConvoy(
+  world: WorldState,
+  operationId: string,
+  transportId: UnitId,
+  escortIds: UnitId[],
+  route: MesoRegionId[],
+  sourcePortId: MesoRegionId,
+  destinationPortId: MesoRegionId,
+): Convoy {
+  const system = world.supplyAssessment.convoys;
+  const id = `convoy:${operationId}`;
+  const existing = system.convoyById.get(id);
+  if (existing) return existing;
+  const convoy: Convoy = {
+    id, maritimeLinkId: operationId, transportId, lastTransportId: transportId,
+    escortIds: [...escortIds].sort(compareIds), lastEscortIds: [...escortIds].sort(compareIds),
+    members: [{ unitId: transportId, role: "transport" }, ...escortIds.map((unitId) => ({ unitId, role: "escort" as const }))],
+    route: { waypointIds: [...route], sourcePortId, destinationPortId }, currentWaypoint: 0,
+    currentDestinationId: route[1] ?? destinationPortId, progress: 0, direction: 1,
+    state: "loading", mission: "amphibious", createdAtFastTick: world.time.fastTick,
+    cycleStartedAtFastTick: world.time.fastTick, completedCycles: 0,
+  };
+  system.convoys.push(convoy); system.convoys.sort((a, b) => compareIds(a.id, b.id));
+  system.convoyById.set(id, convoy); system.convoyByLinkId.set(operationId, convoy);
+  system.convoysCreated += 1; system.version += 1;
+  return convoy;
+}
+
+export function removeAmphibiousConvoy(world: WorldState, convoyId: string): void {
+  const system = world.supplyAssessment.convoys;
+  const convoy = system.convoyById.get(convoyId);
+  if (!convoy || convoy.mission !== "amphibious") return;
+  system.convoys = system.convoys.filter((item) => item.id !== convoyId);
+  system.convoyById.delete(convoyId); system.convoyByLinkId.delete(convoy.maritimeLinkId);
+  system.version += 1;
+}
+
 /** Moves a transport leader and its formed escorts as one logistics-only formation. */
 export function updateConvoyMovement(world: WorldState, dtMs: number): void {
   const system = world.supplyAssessment.convoys;
@@ -242,6 +280,12 @@ export function updateConvoyMovement(world: WorldState, dtMs: number): void {
     convoy.currentWaypoint = currentIndex;
     if (currentIndex === route.length - 1 && convoy.direction === 1) {
       convoy.state = "unloading";
+      if (convoy.mission === "amphibious") {
+        convoy.currentDestinationId = route[currentIndex];
+        convoy.progress = 0;
+        resetFormation(convoy, unitById);
+        continue;
+      }
       convoy.direction = -1;
       convoy.currentDestinationId = route[currentIndex - 1];
       convoy.progress = 0;

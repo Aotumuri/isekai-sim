@@ -15,6 +15,7 @@ import {
 } from "../../src/sim/supply-cutoff";
 import { createSupplyDefenseState } from "../../src/sim/supply-defense";
 import { createSupplyReliefState, updateSupplyRelief } from "../../src/sim/supply-relief";
+import { createAmphibiousOperationState } from "../../src/sim/amphibious";
 import {
   createCapitalDefenseState,
   getCapitalDefenseAssessment,
@@ -4432,6 +4433,7 @@ function createFrontWorld(
     supplyCutoffs: createSupplyCutoffAnalysisState(),
     supplyDefense: createSupplyDefenseState(),
     supplyRelief: createSupplyReliefState(),
+    amphibiousOperations: createAmphibiousOperationState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,
