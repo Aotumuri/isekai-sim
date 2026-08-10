@@ -40,6 +40,11 @@ import {
 import { createUnitId } from "../../src/sim/unit";
 import { createSimTime, FAST_TICK_MS } from "../../src/sim/time";
 import { updateMaritimeLogisticsMovement } from "../../src/sim/maritime-supply";
+import {
+  getEscortAssignment,
+  getMaritimeLinkProtection,
+  updateMaritimeEscortMovement,
+} from "../../src/sim/maritime-escort";
 import type { WorldState } from "../../src/sim/world-state";
 import { createWorldCache } from "../../src/sim/world-cache";
 import {
@@ -63,6 +68,8 @@ test("land supply remains capital-component based without ports", () => {
   assert.equal(isNationRegionSupplied(world, NATION_A, id("capital")), true);
   assert.equal(isNationRegionSupplied(world, NATION_A, id("land")), true);
   assert.equal(world.supplyAssessment.maritimeLinks.length, 0);
+  assert.equal(world.supplyAssessment.maritimeEscorts.demands.length, 0);
+  assert.equal(world.supplyAssessment.maritimeEscorts.assignments.length, 0);
 });
 
 test("disabled naval gameplay does not provide abstract shipping", () => {
@@ -195,6 +202,200 @@ test("disabled general naval production allows only demanded logistics transport
   updateProduction(world);
   assert(world.units.some((unit) => unit.type === "TransportShip"));
   assert(!world.units.some((unit) => unit.type === "CombatShip"));
+});
+
+test("a real CombatShip reaches and protects a physical maritime logistics link", () => {
+  const world = createMaritimeWorld(true, 1);
+  world.units.push(createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, id("island-b"), "Infantry",
+  ));
+  const escort = createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip",
+  );
+  escort.moveTicksPerRegion = 1;
+  world.units.push(escort);
+  updateSupplyAssessment(world);
+  const link = world.supplyAssessment.maritimeLinks.find((candidate) => candidate.active);
+  assert(link);
+  assert.equal(getEscortAssignment(world, escort.id)?.maritimeLinkId, link.id);
+  assert.equal(getMaritimeLinkProtection(world, link.id).protectionState, "UNPROTECTED");
+  world.time.fastTick += 1;
+  updateMaritimeEscortMovement(world, FAST_TICK_MS);
+  assert.equal(getEscortAssignment(world, escort.id)?.status, "escorting");
+  assert.equal(getMaritimeLinkProtection(world, link.id).protectionState, "PROTECTED");
+  assert.equal(WORLD_BALANCE.unit.naval?.enabled, false);
+});
+
+test("TransportShips cannot escort and absent escorts do not disable Supply", () => {
+  const world = createMaritimeWorld(true, 1);
+  world.units.push(createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, id("island-b"), "Infantry",
+  ));
+  updateSupplyAssessment(world);
+  const link = world.supplyAssessment.maritimeLinks.find((candidate) => candidate.active);
+  assert(link);
+  assert.equal(link.active, true);
+  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-b")), true);
+  assert.equal(world.supplyAssessment.maritimeEscorts.assignments.length, 0);
+  assert.equal(getMaritimeLinkProtection(world, link.id).protectionState, "UNPROTECTED");
+});
+
+test("one CombatShip cannot escort two links and scarce escort favors the stronger remote army", () => {
+  const first = createMaritimeWorld(true, 2);
+  const second = createMaritimeWorld(true, 2);
+  for (const world of [first, second]) {
+    world.units.push(createUnitForType(
+      createUnitId(world.unitIdCounter++), NATION_A, id("island-b"), "Infantry",
+    ));
+    for (let index = 0; index < 3; index += 1) {
+      world.units.push(createUnitForType(
+        createUnitId(world.unitIdCounter++), NATION_A, id("island-c"), "Infantry",
+      ));
+    }
+    world.units.push(createUnitForType(
+      createUnitId(world.unitIdCounter++), NATION_A, id("sea-cd"), "CombatShip",
+    ));
+    updateSupplyAssessment(world);
+  }
+  const summarize = (world: WorldState) => world.supplyAssessment.maritimeEscorts.assignments
+    .map((assignment) => assignment.maritimeLinkId);
+  assert.deepEqual(summarize(first), summarize(second));
+  assert.equal(first.supplyAssessment.maritimeEscorts.assignments.length, 1);
+  const assignment = first.supplyAssessment.maritimeEscorts.assignments[0];
+  const assignedLink = first.supplyAssessment.maritimeLinks.find((link) =>
+    link.id === assignment?.maritimeLinkId
+  );
+  assert.equal(assignedLink?.destinationPortId, id("port-d"));
+  assert.equal(new Set(summarize(first)).size, 1);
+  const protection = first.supplyAssessment.maritimeLinks
+    .filter((link) => link.active)
+    .map((link) => getMaritimeLinkProtection(first, link.id).protectionState)
+    .sort();
+  assert.deepEqual(protection, ["PROTECTED", "UNPROTECTED"]);
+  for (const demand of first.supplyAssessment.maritimeEscorts.demands) {
+    assert(Number.isFinite(demand.remoteStrength));
+    assert(demand.priority.every(Number.isFinite));
+  }
+  const validUnitIds = new Set(first.units.map((unit) => unit.id));
+  assert(first.supplyAssessment.maritimeEscorts.assignments.every((item) =>
+    validUnitIds.has(item.combatShipId)
+  ));
+});
+
+test("two CombatShips independently protect two multi-hop maritime links", () => {
+  const world = createMaritimeWorld(true, 2);
+  world.units.push(
+    createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("island-b"), "Infantry"),
+    createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("island-c"), "Infantry"),
+    createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("sea-ab"), "CombatShip"),
+    createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("sea-cd"), "CombatShip"),
+  );
+  updateSupplyAssessment(world);
+  const activeLinks = world.supplyAssessment.maritimeLinks.filter((link) => link.active);
+  assert.equal(activeLinks.length, 2);
+  assert.equal(world.supplyAssessment.maritimeEscorts.assignments.length, 2);
+  assert.equal(new Set(world.supplyAssessment.maritimeEscorts.assignments
+    .map((assignment) => assignment.combatShipId)).size, 2);
+  assert(activeLinks.every((link) =>
+    getMaritimeLinkProtection(world, link.id).protectionState === "PROTECTED"
+  ));
+});
+
+test("escort loss leaves Supply active and allows deterministic replacement", () => {
+  const world = createMaritimeWorld(true, 1);
+  world.units.push(
+    createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("island-b"), "Infantry"),
+    createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("sea-ab"), "CombatShip"),
+  );
+  updateSupplyAssessment(world);
+  const link = world.supplyAssessment.maritimeLinks.find((candidate) => candidate.active);
+  assert(link);
+  const lostEscortId = world.supplyAssessment.maritimeEscorts.assignments[0]?.combatShipId;
+  assert(lostEscortId);
+  world.units = world.units.filter((unit) => unit.id !== lostEscortId);
+  updateSupplyAssessment(world);
+  assert.equal(link.destinationLandComponentId
+    ? world.supplyAssessment.componentById.get(link.destinationLandComponentId)?.supplied
+    : false, true);
+  assert.equal(getMaritimeLinkProtection(world, link.id).protectionState, "UNPROTECTED");
+  assert.equal(world.supplyAssessment.maritimeEscorts.escortLosses, 1);
+
+  const replacement = createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, id("sea-ab"), "CombatShip",
+  );
+  world.units.push(replacement);
+  updateSupplyAssessment(world);
+  assert.equal(getEscortAssignment(world, replacement.id)?.maritimeLinkId, link.id);
+  assert.equal(getMaritimeLinkProtection(world, link.id).protectionState, "PROTECTED");
+});
+
+test("transport loss still disables Supply without being masked by escort state", () => {
+  const world = createMaritimeWorld(true, 1);
+  world.units.push(
+    createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("island-b"), "Infantry"),
+    createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("sea-ab"), "CombatShip"),
+  );
+  updateSupplyAssessment(world);
+  const transportId = world.supplyAssessment.maritimeLogistics.assignments[0]?.transportId;
+  assert(transportId);
+  world.units = world.units.filter((unit) => unit.id !== transportId);
+  updateSupplyAssessment(world);
+  assert.equal(isNationRegionSupplied(world, NATION_A, id("island-b")), false);
+  assert.equal(world.supplyAssessment.maritimeEscorts.assignments.length, 1);
+});
+
+test("escort assignment persists without churn across unchanged evaluations", () => {
+  const world = createMaritimeWorld(true, 1);
+  world.units.push(
+    createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("island-b"), "Infantry"),
+    createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("sea-ab"), "CombatShip"),
+  );
+  updateSupplyAssessment(world);
+  const first = world.supplyAssessment.maritimeEscorts.assignments[0];
+  const changes = world.supplyAssessment.maritimeEscorts.assignmentChanges;
+  updateSupplyAssessment(world);
+  const second = world.supplyAssessment.maritimeEscorts.assignments[0];
+  assert.equal(second?.combatShipId, first?.combatShipId);
+  assert.equal(second?.maritimeLinkId, first?.maritimeLinkId);
+  assert.equal(second?.assignedTick, first?.assignedTick);
+  assert.equal(world.supplyAssessment.maritimeEscorts.assignmentChanges, changes);
+});
+
+test("port capture releases an escort and route restoration permits reassignment", () => {
+  const world = createMaritimeWorld(true, 1);
+  const escort = createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, id("sea-ab"), "CombatShip",
+  );
+  world.units.push(
+    createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("island-b"), "Infantry"),
+    escort,
+  );
+  updateSupplyAssessment(world);
+  assert(getEscortAssignment(world, escort.id));
+  world.occupation.mesoById.set(id("port-b"), NATION_B);
+  world.occupation.version += 1;
+  updateSupplyAssessment(world);
+  assert.equal(getEscortAssignment(world, escort.id), undefined);
+  world.occupation.mesoById.delete(id("port-b"));
+  world.occupation.version += 1;
+  updateSupplyAssessment(world);
+  assert(getEscortAssignment(world, escort.id));
+});
+
+test("escort-demand production creates only the required CombatShip while general naval production is disabled", () => {
+  const world = createMaritimeWorld(true, 1);
+  world.units.push(createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, id("island-b"), "Infantry",
+  ));
+  const nation = world.nations[0]!;
+  nation.resources.manpower = 100_000;
+  nation.resources.weapons = 10_000;
+  nation.nextUnitProductionTick = 0;
+  updateSupplyAssessment(world);
+  updateProduction(world);
+  assert(world.units.some((unit) => unit.type === "CombatShip"));
+  assert.equal(world.supplyAssessment.maritimeEscorts.combatShipsProducedForEscortDemand, 1);
+  assert.equal(WORLD_BALANCE.unit.naval?.enabled, false);
 });
 
 test("Reorganization reads maritime loss and reconnection only through Supply Assessment", () => {

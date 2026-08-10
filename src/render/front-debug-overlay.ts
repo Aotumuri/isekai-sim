@@ -34,6 +34,7 @@ import { clearLayer } from "./clear-layer";
 import { findSharedSegments, type Segment } from "./meso-border-geometry";
 import { getMicroRegionByIdMap } from "./region-index";
 import type { Renderer } from "./renderer";
+import { getMaritimeLinkProtection } from "../sim/maritime-escort";
 
 /** Change this one value to change the development overlay's initial state. */
 export const DEFAULT_FRONT_DEBUG_OVERLAY = true;
@@ -847,7 +848,12 @@ function drawMaritimeSupplyLinks(layer: Container, world: WorldState): void {
     if (!current || (!current.active && link.active)) selectedByPair.set(pair, link);
   }
   for (const link of selectedByPair.values()) {
-    const color = link.active ? 0x5be7c4 : 0xff6b6b;
+    const protection = getMaritimeLinkProtection(world, link.id);
+    const color = !link.active
+      ? 0xff6b6b
+      : protection.protectionState === "PROTECTED"
+        ? 0x40c4ff
+        : protection.requiredEscortCount > 0 ? 0xffd740 : 0x5be7c4;
     if (link.routeRegionIds.length > 1) {
       const geometry = new Graphics();
       geometry.name = `MaritimeSupplyRoute:${link.id}`;
@@ -866,6 +872,10 @@ function drawMaritimeSupplyLinks(layer: Container, world: WorldState): void {
     for (const transportId of link.assignedTransportIds) {
       const transport = world.units.find((unit) => unit.id === transportId);
       if (transport) drawMarker(layer, world, transport.regionId, "T", color, "diamond");
+    }
+    for (const escortId of protection.assignedEscortIds) {
+      const escort = world.units.find((unit) => unit.id === escortId);
+      if (escort) drawMarker(layer, world, escort.regionId, "E", color, "diamond");
     }
     const source = world.cache.mesoById.get(link.sourcePortId)?.center;
     const destination = world.cache.mesoById.get(link.destinationPortId)?.center;
@@ -911,18 +921,33 @@ export function formatMaritimeSupplyLink(
   const assignments = link.assignedTransportIds.map((transportId) =>
     world.supplyAssessment.maritimeLogistics.assignmentByTransportId.get(transportId)
   );
+  const protection = getMaritimeLinkProtection(world, link.id);
+  const escortAssignments = protection.assignedEscortIds.map((escortId) =>
+    world.supplyAssessment.maritimeEscorts.assignmentByCombatShipId.get(escortId)
+  );
+  const demand = world.supplyAssessment.maritimeEscorts.demands.find((item) =>
+    item.maritimeLinkId === link.id
+  );
   return [
-    "NAVAL LOGISTICS",
+    "NAVAL ESCORT",
+    `link ${link.id}`,
     `${link.sourcePortId} -> ${link.destinationPortId}`,
-    link.active ? "ACTIVE" : "INACTIVE",
-    `transport: ${link.assignedTransportIds.join(", ") || "none"}`,
-    `ship: ${assignments.map((assignment) => assignment?.status ?? "unavailable").join(", ") || "unavailable"}`,
-    `support: ${link.assignedTransportIds.length}/${link.requiredTransportCount}`,
+    "TRANSPORT",
+    `  ${link.assignedTransportIds.join(", ") || "none"}`,
+    `  ${link.active ? "ACTIVE" : "INACTIVE"} (${assignments.map((assignment) => assignment?.status ?? "unavailable").join(", ") || "unavailable"})`,
+    "ESCORT",
+    `  ${protection.assignedEscortIds.join(", ") || "none"}`,
+    `  ${escortAssignments.map((assignment) => assignment?.status.toUpperCase() ?? "UNAVAILABLE").join(", ") || "UNAVAILABLE"}`,
+    "PROTECTION",
+    `  ${protection.protectionState}`,
+    `  support ${protection.assignedEscortIds.length}/${protection.requiredEscortCount}`,
     `source component: ${source?.supplied ? "SUPPLIED" : "ISOLATED"}`,
     `destination component: ${destination?.supplied ? "SUPPLIED" : "ISOLATED"}`,
-    `remote: strength ${(destination?.strength ?? 0).toFixed(1)}`,
+    `remote: units ${demand?.remoteUnitCount ?? 0}`,
+    `  strength ${(demand?.remoteStrength ?? destination?.strength ?? 0).toFixed(1)}`,
     `route length: ${Math.max(0, link.routeRegionIds.length - 1)}`,
     `SUPPLY: ${destination?.supplied ? "CONNECTED" : "ISOLATED"}`,
+    ...(protection.skippedReason ? [`escort reason: ${protection.skippedReason}`] : []),
     ...(!link.active ? [`reason: ${link.reason ?? "route-invalid"}`] : []),
   ].join("\n");
 }

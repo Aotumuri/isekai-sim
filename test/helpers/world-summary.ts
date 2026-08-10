@@ -210,6 +210,41 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     maritimeMultiHopPropagations: world.supplyAssessment.multiHopSupplyPropagations,
     maritimeCacheRebuilds: world.supplyAssessment.maritimeConnectivity.rebuildCount,
     maritimeCacheHits: world.supplyAssessment.maritimeConnectivity.hitCount,
+    maritimeEscortDemands: world.supplyAssessment.maritimeEscorts.demands.length,
+    maritimeEscortAssignments: world.supplyAssessment.maritimeEscorts.assignments.length,
+    maritimeIdleCombatShips: world.units.filter((unit) =>
+      unit.domain === "naval" && unit.type === "CombatShip" && unit.manpower > 0 && unit.org > 0
+    ).length - world.supplyAssessment.maritimeEscorts.assignments.length,
+    maritimeAssignedCombatShips: world.supplyAssessment.maritimeEscorts.assignments.length,
+    maritimeProtectedLinks: [...world.supplyAssessment.maritimeEscorts.protectionByLinkId.values()]
+      .filter((item) => item.protectionState === "PROTECTED").length,
+    maritimeUnprotectedLinks: [...world.supplyAssessment.maritimeEscorts.protectionByLinkId.values()]
+      .filter((item) => item.requiredEscortCount > 0 && item.protectionState === "UNPROTECTED").length,
+    maritimePartiallyProtectedLinks: [...world.supplyAssessment.maritimeEscorts.protectionByLinkId.values()]
+      .filter((item) => item.protectionState === "PARTIALLY_PROTECTED").length,
+    maritimeEscortAssignmentChanges: world.supplyAssessment.maritimeEscorts.assignmentChanges,
+    maritimeEscortMovementRequests: world.supplyAssessment.maritimeEscorts.movementRequests,
+    maritimeEscortAverageArrivalLatency: world.supplyAssessment.maritimeEscorts.completedArrivals > 0
+      ? world.supplyAssessment.maritimeEscorts.totalArrivalLatencyTicks /
+        world.supplyAssessment.maritimeEscorts.completedArrivals
+      : 0,
+    maritimeEscortLosses: world.supplyAssessment.maritimeEscorts.escortLosses,
+    maritimeEscortAssignmentsReleased:
+      world.supplyAssessment.maritimeEscorts.assignmentsReleasedAfterLinkRemoval,
+    maritimeProtectedRemoteStrength: world.supplyAssessment.maritimeEscorts.demands.reduce(
+      (sum, demand) => world.supplyAssessment.maritimeEscorts.protectionByLinkId
+        .get(demand.maritimeLinkId)?.protectionState === "PROTECTED"
+        ? sum + demand.remoteStrength : sum,
+      0,
+    ),
+    maritimeUnprotectedRemoteStrength: world.supplyAssessment.maritimeEscorts.demands.reduce(
+      (sum, demand) => world.supplyAssessment.maritimeEscorts.protectionByLinkId
+        .get(demand.maritimeLinkId)?.protectionState !== "PROTECTED"
+        ? sum + demand.remoteStrength : sum,
+      0,
+    ),
+    maritimeEscortCombatShipsProduced:
+      world.supplyAssessment.maritimeEscorts.combatShipsProducedForEscortDemand,
     isolatedUnitsEvaluated: world.isolationEffects.isolatedUnitsEvaluated,
     isolationGraceEvaluations: world.isolationEffects.unitsInGracePeriod,
     strainedUnitEvaluations: world.isolationEffects.strainedUnits,

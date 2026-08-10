@@ -18,6 +18,12 @@ import {
 } from "./maritime-supply";
 import type { UnitId, UnitState } from "./unit";
 import { getMesoById, getNeighborsById, getOwnerByMesoId } from "./world-cache";
+import {
+  createMaritimeEscortState,
+  updateMaritimeEscortAssignments,
+  type MaritimeEscortState,
+} from "./maritime-escort";
+import { buildNavalPositioningRoute } from "./naval-pathfinding";
 
 export type SupplyComponentId = string & { __brand: "SupplyComponentId" };
 
@@ -78,6 +84,7 @@ export interface SupplyAssessmentState {
   maritimeLinks: MaritimeSupplyLink[];
   maritimeConnectivity: MaritimeConnectivityCache;
   maritimeLogistics: MaritimeLogisticsState;
+  maritimeEscorts: MaritimeEscortState;
   maritimeLinksEvaluated: number;
   activeMaritimeLinkCount: number;
   inactiveMaritimeLinkCount: number;
@@ -111,6 +118,7 @@ export function createSupplyAssessmentState(): SupplyAssessmentState {
     maritimeLinks: [],
     maritimeConnectivity: createMaritimeConnectivityCache(),
     maritimeLogistics: createMaritimeLogisticsState(),
+    maritimeEscorts: createMaritimeEscortState(),
     maritimeLinksEvaluated: 0,
     activeMaritimeLinkCount: 0,
     inactiveMaritimeLinkCount: 0,
@@ -647,6 +655,7 @@ function propagateMaritimeSupply(
   state.multiHopSupplyPropagations += multiHop;
   state.remoteStrengthSupplied = remoteStrengthSupplied;
   state.remoteStrengthIsolatedDueToMissingTransport = remoteStrengthIsolatedDueToMissingTransport;
+  updateMaritimeEscortAssignments(world, links);
   const transportCount = availableTransports.length;
   const assignedCount = state.maritimeLogistics.assignments.length;
   world.instrumentation?.incrementCounter("maritimeLogistics.availableTransports", transportCount);
@@ -777,29 +786,7 @@ function buildTransportPositioningRoute(
   targetRouteIds: MesoRegionId[],
 ): MesoRegionId[] {
   const startedAt = world.instrumentation ? performance.now() : 0;
-  const targets = new Set(targetRouteIds);
-  const mesoById = getMesoById(world);
-  const neighborsById = getNeighborsById(world);
-  const queue = [startId];
-  const previous = new Map<MesoRegionId, MesoRegionId | null>([[startId, null]]);
-  let found: MesoRegionId | null = targets.has(startId) ? startId : null;
-  for (let index = 0; index < queue.length && !found; index += 1) {
-    const current = queue[index];
-    for (const neighbor of [...(neighborsById.get(current) ?? [])].sort(compareIds)) {
-      if (previous.has(neighbor)) continue;
-      const region = mesoById.get(neighbor);
-      if (!region || (region.type !== "sea" && region.building !== "port")) continue;
-      previous.set(neighbor, current);
-      queue.push(neighbor);
-      if (targets.has(neighbor)) {
-        found = neighbor;
-        break;
-      }
-    }
-  }
-  const path: MesoRegionId[] = [];
-  for (let current = found; current; current = previous.get(current) ?? null) path.push(current);
-  path.reverse();
+  const path = buildNavalPositioningRoute(world, startId, targetRouteIds);
   world.instrumentation?.incrementCounter("maritimeLogistics.pathfindingRequests");
   if (world.instrumentation) {
     world.instrumentation.recordDuration(

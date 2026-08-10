@@ -5,6 +5,7 @@ import type { UnitId, UnitState } from "./unit";
 import { getMoveMsPerRegion } from "./movement";
 import type { WorldState } from "./world-state";
 import { getMesoById, getNeighborsById, getOwnerByMesoId } from "./world-cache";
+import { getMaritimeLinkProtection } from "./maritime-escort";
 
 export type MaritimeSupplyInactiveReason =
   | "no-transport"
@@ -124,10 +125,10 @@ export function getTransportsForLink(
 }
 
 export function getMaritimeLinkProtectionState(
-  _world: WorldState,
-  _linkId: string,
-): "unprotected" {
-  return "unprotected";
+  world: WorldState,
+  linkId: string,
+): ReturnType<typeof getMaritimeLinkProtection> {
+  return getMaritimeLinkProtection(world, linkId);
 }
 
 /** Logistics-only movement. General naval roaming, combat, and amphibious AI stay disabled. */

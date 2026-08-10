@@ -118,6 +118,27 @@ function updateProductionInternal(world: WorldState): void {
       (logisticsTransportDemandByNation.get(link.nationId) ?? 0) + 1,
     );
   }
+  const escortDemandByNation = new Map<NationId, number>();
+  const usableEscortCountByNation = new Map<NationId, number>();
+  for (const assignment of world.supplyAssessment.maritimeEscorts.assignments) {
+    if (assignment.status === "unavailable") continue;
+    usableEscortCountByNation.set(
+      assignment.nationId,
+      (usableEscortCountByNation.get(assignment.nationId) ?? 0) + 1,
+    );
+  }
+  for (const demand of world.supplyAssessment.maritimeEscorts.demands) {
+    escortDemandByNation.set(
+      demand.nationId,
+      (escortDemandByNation.get(demand.nationId) ?? 0) + demand.requiredEscortCount,
+    );
+  }
+  for (const [nationId, demandCount] of escortDemandByNation) {
+    escortDemandByNation.set(
+      nationId,
+      Math.max(0, demandCount - (usableEscortCountByNation.get(nationId) ?? 0)),
+    );
+  }
   const portNavalUnitsPerCycle = Math.max(
     0,
     Math.round(production.portNavalUnitsPerCycle ?? 0),
@@ -213,7 +234,10 @@ function updateProductionInternal(world: WorldState): void {
       return true;
     };
 
-    const addNavalUnit = (regionId: MesoRegionId): boolean => {
+    const addNavalUnit = (
+      regionId: MesoRegionId,
+      forcedType: NavalUnitType | null = null,
+    ): boolean => {
       if (currentCount >= capacity) {
         return false;
       }
@@ -223,7 +247,7 @@ function updateProductionInternal(world: WorldState): void {
       const unitType = pickNavalUnitType(
         nation.resources,
         world.simRng,
-        !navalEnabled,
+        forcedType,
       );
       if (!unitType) {
         recordResourceBlock(world, nation.resources, "naval");
@@ -238,6 +262,10 @@ function updateProductionInternal(world: WorldState): void {
       currentCount += 1;
       diagnostics.successfulProductions += 1;
       world.instrumentation?.incrementCounter("production.successful");
+      if (!navalEnabled && unitType === "CombatShip") {
+        world.supplyAssessment.maritimeEscorts.combatShipsProducedForEscortDemand += 1;
+        world.instrumentation?.incrementCounter("maritimeEscort.production.combatShips");
+      }
       return true;
     };
 
@@ -277,18 +305,25 @@ function updateProductionInternal(world: WorldState): void {
 
     const portTargets = portTargetsByNation.get(nation.id) ?? [];
     if (
-      (navalEnabled || logisticsTransportDemandByNation.has(nation.id)) &&
+      (navalEnabled ||
+        (logisticsTransportDemandByNation.get(nation.id) ?? 0) > 0 ||
+        (escortDemandByNation.get(nation.id) ?? 0) > 0) &&
       portNavalUnitsPerCycle > 0 &&
       portTargets.length > 0
     ) {
       let logisticsRemaining = logisticsTransportDemandByNation.get(nation.id) ?? 0;
+      let escortRemaining = escortDemandByNation.get(nation.id) ?? 0;
       for (const portId of portTargets) {
         for (let i = 0; i < portNavalUnitsPerCycle; i += 1) {
-          if (!navalEnabled && logisticsRemaining <= 0) break;
-          if (!addNavalUnit(portId)) {
+          if (!navalEnabled && logisticsRemaining <= 0 && escortRemaining <= 0) break;
+          const forcedType = navalEnabled
+            ? null
+            : logisticsRemaining > 0 ? "TransportShip" : "CombatShip";
+          if (!addNavalUnit(portId, forcedType)) {
             break;
           }
-          if (!navalEnabled) logisticsRemaining -= 1;
+          if (!navalEnabled && forcedType === "TransportShip") logisticsRemaining -= 1;
+          if (!navalEnabled && forcedType === "CombatShip") escortRemaining -= 1;
         }
         if (currentCount >= capacity) {
           break;
@@ -590,14 +625,14 @@ function pickAffordableUnitType(
 function pickNavalUnitType(
   resources: NationResources,
   rng: WorldState["simRng"],
-  logisticsOnly = false,
+  forcedType: NavalUnitType | null = null,
 ): NavalUnitType | null {
   const navalEnabled = WORLD_BALANCE.unit.naval?.enabled !== false;
-  if (!navalEnabled && !logisticsOnly) {
+  if (!navalEnabled && !forcedType) {
     return null;
   }
+  if (forcedType) return canAffordUnit(resources, forcedType) ? forcedType : null;
   const canTransport = canAffordUnit(resources, "TransportShip");
-  if (logisticsOnly) return canTransport ? "TransportShip" : null;
   const canCombat = canAffordUnit(resources, "CombatShip");
   if (canTransport && canCombat) {
     const transportShare = clamp(WORLD_BALANCE.unit.navalTransportShare ?? 0.5, 0, 1);
