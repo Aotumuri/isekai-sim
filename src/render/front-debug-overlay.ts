@@ -866,11 +866,32 @@ function drawMaritimeSupplyLinks(layer: Container, world: WorldState): void {
     const source = world.cache.mesoById.get(link.sourcePortId)?.center;
     const destination = world.cache.mesoById.get(link.destinationPortId)?.center;
     if (!source || !destination) continue;
-    const text = new Text(formatMaritimeSupplyLink(world, link), LABEL_STYLE);
-    text.resolution = 2;
-    text.position.set((source.x + destination.x) / 2 + 6, (source.y + destination.y) / 2 + 6);
-    layer.addChild(text);
+    const label = createMaritimeSupplyLabel(world, link, color);
+    label.position.set((source.x + destination.x) / 2 + 6, (source.y + destination.y) / 2 + 6);
+    layer.addChild(label);
   }
+}
+
+function createMaritimeSupplyLabel(
+  world: WorldState,
+  link: WorldState["supplyAssessment"]["maritimeLinks"][number],
+  color: number,
+): Container {
+  const container = new Container();
+  container.name = `MaritimeSupplyLabel:${link.id}`;
+  container.eventMode = "none";
+  const text = new Text(formatMaritimeSupplyLink(world, link), LABEL_STYLE);
+  text.resolution = 2;
+  const bounds = text.getLocalBounds();
+  const padding = 5;
+  const background = new Graphics();
+  background.beginFill(0x081018, 0.88);
+  background.lineStyle(1.5, color, 0.95);
+  background.drawRoundedRect(0, 0, bounds.width + padding * 2, bounds.height + padding * 2, 4);
+  background.endFill();
+  text.position.set(padding, padding);
+  container.addChild(background, text);
+  return container;
 }
 
 export function formatMaritimeSupplyLink(
