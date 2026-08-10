@@ -131,7 +131,7 @@ export function getMaritimeLinkProtectionState(
   return getMaritimeLinkProtection(world, linkId);
 }
 
-/** Logistics-only movement. General naval roaming, combat, and amphibious AI stay disabled. */
+/** Logistics-only movement. It never owns general naval combat or amphibious AI. */
 export function updateMaritimeLogisticsMovement(world: WorldState, dtMs: number): void {
   const logistics = world.supplyAssessment.maritimeLogistics;
   if (logistics.assignments.length === 0) return;

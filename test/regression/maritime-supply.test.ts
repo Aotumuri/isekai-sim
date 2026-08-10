@@ -177,7 +177,7 @@ test("CombatShips deliberately select moving enemy convoys without interdicting 
   assert(raids.every((raid) => Number.isFinite(raid.targetScore) && raid.targetReason.length > 0));
   assert(raids.every((raid) => raid.status === "intercepting"));
   assert.equal(world.supplyAssessment.maritimeInterdiction.interdictedLinkIds.size, 0);
-  assert.equal(WORLD_BALANCE.unit.naval?.enabled, false);
+  assert.equal(WORLD_BALANCE.unit.naval?.enabled, true);
 });
 
 test("an unprotected raider destroys a transport and isolates a multi-hop overseas army", () => {
@@ -472,7 +472,7 @@ test("land supply remains capital-component based without ports", () => {
   assert.equal(world.supplyAssessment.maritimeEscorts.assignments.length, 0);
 });
 
-test("disabled naval gameplay does not provide abstract shipping", () => {
+test("naval gameplay does not provide abstract shipping without a physical transport", () => {
   const world = createMaritimeWorld(true, 0);
   assert.equal(world.units.length, 0);
   updateSupplyAssessment(world);
@@ -561,10 +561,10 @@ test("CombatShips never satisfy maritime transport demand", () => {
   updateSupplyAssessment(world);
   assert.equal(isNationRegionSupplied(world, NATION_A, id("island-b")), false);
   assert.equal(world.supplyAssessment.maritimeLogistics.assignments.length, 0);
-  assert.equal(WORLD_BALANCE.unit.naval?.enabled, false);
+  assert.equal(WORLD_BALANCE.unit.naval?.enabled, true);
 });
 
-test("logistics-only movement stations an assigned transport while naval gameplay stays disabled", () => {
+test("logistics-only movement stations an assigned transport with naval gameplay enabled", () => {
   const world = createMaritimeWorld(true, 0);
   connect(world, "sea-ab", "sea-cd");
   world.mapVersion += 1;
@@ -589,10 +589,10 @@ test("logistics-only movement stations an assigned transport while naval gamepla
     world.supplyAssessment.maritimeLogistics.assignmentByTransportId.get(transport.id)?.status,
     "stationed",
   );
-  assert.equal(WORLD_BALANCE.unit.naval?.enabled, false);
+  assert.equal(WORLD_BALANCE.unit.naval?.enabled, true);
 });
 
-test("disabled general naval production allows only demanded logistics transports", () => {
+test("demand-driven naval production allows only requested logistics transports", () => {
   const world = createMaritimeWorld(true, 0);
   const nation = world.nations[0]!;
   nation.resources.manpower = 100_000;
@@ -623,7 +623,7 @@ test("a real CombatShip reaches and protects a physical maritime logistics link"
   updateMaritimeEscortMovement(world, FAST_TICK_MS);
   assert.equal(getEscortAssignment(world, escort.id)?.status, "escorting");
   assert.equal(getMaritimeLinkProtection(world, link.id).protectionState, "PROTECTED");
-  assert.equal(WORLD_BALANCE.unit.naval?.enabled, false);
+  assert.equal(WORLD_BALANCE.unit.naval?.enabled, true);
 });
 
 test("TransportShips cannot escort and absent escorts do not disable Supply", () => {
@@ -784,7 +784,7 @@ test("port capture releases an escort and route restoration permits reassignment
   assert(getEscortAssignment(world, escort.id));
 });
 
-test("escort-demand production creates only the required CombatShip while general naval production is disabled", () => {
+test("escort-demand production creates only the required CombatShip while general naval gameplay is enabled", () => {
   const world = createMaritimeWorld(true, 1);
   world.units.push(createUnitForType(
     createUnitId(world.unitIdCounter++), NATION_A, id("island-b"), "Infantry",
@@ -799,29 +799,23 @@ test("escort-demand production creates only the required CombatShip while genera
   const combatShip = world.units.find((unit) => unit.type === "CombatShip");
   assert(combatShip && getNavalUnitOwnership(world, combatShip.id));
   assert.equal(world.supplyAssessment.maritimeEscorts.combatShipsProducedForEscortDemand, 1);
-  assert.equal(WORLD_BALANCE.unit.naval?.enabled, false);
+  assert.equal(WORLD_BALANCE.unit.naval?.enabled, true);
 });
 
 test("enabling general naval gameplay does not trigger demand-free naval production", () => {
-  const setting = WORLD_BALANCE.unit.naval as { enabled: boolean };
-  const previous = setting.enabled;
-  setting.enabled = true;
-  try {
-    const world = createMaritimeWorld(true, 2);
-    const nation = world.nations[0]!;
-    nation.resources.manpower = 100_000;
-    nation.resources.weapons = 10_000;
-    nation.nextUnitProductionTick = 0;
-    updateSupplyAssessment(world);
-    const before = world.units.filter((unit) => unit.domain === "naval").length;
-    updateProduction(world);
-    assert.equal(world.units.filter((unit) => unit.domain === "naval").length, before);
-    assert.equal(world.productionDiagnostics.navalTransportRequests, 0);
-    assert.equal(world.productionDiagnostics.navalEscortRequests, 0);
-    assert.equal(world.productionDiagnostics.navalReserveRequests, 0);
-  } finally {
-    setting.enabled = previous;
-  }
+  assert.equal(WORLD_BALANCE.unit.naval?.enabled, true);
+  const world = createMaritimeWorld(true, 2);
+  const nation = world.nations[0]!;
+  nation.resources.manpower = 100_000;
+  nation.resources.weapons = 10_000;
+  nation.nextUnitProductionTick = 0;
+  updateSupplyAssessment(world);
+  const before = world.units.filter((unit) => unit.domain === "naval").length;
+  updateProduction(world);
+  assert.equal(world.units.filter((unit) => unit.domain === "naval").length, before);
+  assert.equal(world.productionDiagnostics.navalTransportRequests, 0);
+  assert.equal(world.productionDiagnostics.navalEscortRequests, 0);
+  assert.equal(world.productionDiagnostics.navalReserveRequests, 0);
 });
 
 test("Reorganization reads maritime loss and reconnection only through Supply Assessment", () => {
