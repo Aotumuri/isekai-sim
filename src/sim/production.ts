@@ -6,7 +6,7 @@ import { createUnitForType } from "./create-units";
 import { isNationActive } from "./nation-active";
 import type { NationResourceFlow, NationResources } from "./nation-runtime";
 import { nextScheduledTickRange } from "./schedule";
-import { registerNewCombatShipsAsReserve } from "./naval-strategy";
+import { registerNewCombatShipsAsReserve, type DesiredNavalForce } from "./naval-strategy";
 import {
   isNationRegionSupplied,
   type SupplyComponentId,
@@ -39,9 +39,49 @@ export interface ProductionDiagnosticsState {
   navalTransportFulfilled: number;
   navalEscortFulfilled: number;
   navalReserveFulfilled: number;
+  navalCombatRequestsByReason: Record<CombatShipProductionReason, number>;
+  navalCombatFulfilledByReason: Record<CombatShipProductionReason, number>;
+  navalCombatObsoleteRequests: number;
+  navalCombatWeaponsCost: number;
+  navalCombatManpowerCost: number;
   blockedByComponentId: Map<string, number>;
   locationByRegionId: Map<MesoRegionId, ProductionLocationDiagnostic>;
   version: number;
+}
+
+export type CombatShipProductionReason =
+  | "baseline-fleet"
+  | "offensive-bootstrap"
+  | "naval-threat"
+  | "escort-deficit"
+  | "reserve-restoration";
+
+function emptyCombatShipReasonCounts(): Record<CombatShipProductionReason, number> {
+  return { "baseline-fleet": 0, "offensive-bootstrap": 0, "naval-threat": 0,
+    "escort-deficit": 0, "reserve-restoration": 0 };
+}
+
+function selectCombatShipProductionReason(
+  force: DesiredNavalForce,
+): CombatShipProductionReason | undefined {
+  if (force.deficit <= 0) return undefined;
+  if (force.currentCombatShips === 0 && force.offensiveOpportunityDemand > 0) {
+    return "offensive-bootstrap";
+  }
+  if (force.currentCombatShips === 0 && force.enemyNavalThreatDemand > 0) {
+    return "naval-threat";
+  }
+  if (force.currentCombatShips < force.escortDemand) return "escort-deficit";
+  if (force.currentCombatShips < force.baselineCombatShips + force.escortDemand) {
+    return "baseline-fleet";
+  }
+  const threatCeiling = force.baselineCombatShips + force.escortDemand +
+    Math.max(force.interceptionDemand, force.enemyNavalThreatDemand);
+  if (force.currentCombatShips < threatCeiling) return "naval-threat";
+  if (force.currentCombatShips < threatCeiling + force.offensiveOpportunityDemand) {
+    return "offensive-bootstrap";
+  }
+  return force.reserveTarget > 0 ? "reserve-restoration" : "baseline-fleet";
 }
 
 export function createProductionDiagnosticsState(): ProductionDiagnosticsState {
@@ -59,6 +99,11 @@ export function createProductionDiagnosticsState(): ProductionDiagnosticsState {
     navalTransportFulfilled: 0,
     navalEscortFulfilled: 0,
     navalReserveFulfilled: 0,
+    navalCombatRequestsByReason: emptyCombatShipReasonCounts(),
+    navalCombatFulfilledByReason: emptyCombatShipReasonCounts(),
+    navalCombatObsoleteRequests: 0,
+    navalCombatWeaponsCost: 0,
+    navalCombatManpowerCost: 0,
     blockedByComponentId: new Map(),
     locationByRegionId: new Map(),
     version: 0,
@@ -131,42 +176,19 @@ function updateProductionInternal(world: WorldState): void {
         Math.max(0, link.requiredTransportCount - link.assignedTransportIds.length),
     );
   }
-  const escortDemandByNation = new Map<NationId, number>();
-  const usableEscortCountByNation = new Map<NationId, number>();
-  for (const assignment of world.supplyAssessment.maritimeEscorts.assignments) {
-    if (assignment.status === "unavailable") continue;
-    usableEscortCountByNation.set(
-      assignment.nationId,
-      (usableEscortCountByNation.get(assignment.nationId) ?? 0) + 1,
-    );
-  }
-  for (const demand of world.supplyAssessment.maritimeEscorts.demands) {
-    escortDemandByNation.set(
-      demand.nationId,
-      (escortDemandByNation.get(demand.nationId) ?? 0) + demand.requiredEscortCount,
-    );
-  }
-  for (const [nationId, demandCount] of escortDemandByNation) {
-    escortDemandByNation.set(
-      nationId,
-      Math.max(0, demandCount - (usableEscortCountByNation.get(nationId) ?? 0)),
-    );
-  }
-  const reserveShipCountByNation = new Map<NationId, number>();
-  for (const mission of world.supplyAssessment.navalStrategy.missions) {
-    if (mission.type !== "RESERVE") continue;
-    reserveShipCountByNation.set(
-      mission.nationId,
-      (reserveShipCountByNation.get(mission.nationId) ?? 0) + mission.shipIds.length,
-    );
-  }
-  const reserveDemandByNation = new Map<NationId, number>();
+  const combatShipReasonsByNation = new Map<NationId, CombatShipProductionReason[]>();
   for (const assessment of world.supplyAssessment.navalStrategy.assessments) {
-    reserveDemandByNation.set(
-      assessment.nationId,
-      Math.max(0, assessment.reserveRequirement -
-        (reserveShipCountByNation.get(assessment.nationId) ?? 0)),
-    );
+    const force = assessment.desiredForce;
+    const reasons: CombatShipProductionReason[] = [];
+    for (let index = 0; index < force.deficit; index += 1) {
+      const reason = selectCombatShipProductionReason({
+        ...force,
+        currentCombatShips: force.currentCombatShips + index,
+        deficit: force.deficit - index,
+      });
+      if (reason) reasons.push(reason);
+    }
+    combatShipReasonsByNation.set(force.nationId, reasons);
   }
   const portNavalUnitsPerCycle = Math.max(
     0,
@@ -194,14 +216,16 @@ function updateProductionInternal(world: WorldState): void {
       continue;
     }
     const requestedTransports = logisticsTransportDemandByNation.get(nation.id) ?? 0;
-    const requestedEscorts = escortDemandByNation.get(nation.id) ?? 0;
-    const requestedReserves = reserveDemandByNation.get(nation.id) ?? 0;
+    const combatShipReasons = combatShipReasonsByNation.get(nation.id) ?? [];
+    const requestedEscorts = combatShipReasons.filter((reason) => reason === "escort-deficit").length;
+    const requestedReserves = combatShipReasons.filter((reason) => reason === "reserve-restoration").length;
     world.productionDiagnostics.navalTransportRequests += requestedTransports;
     world.productionDiagnostics.navalEscortRequests += requestedEscorts;
     world.productionDiagnostics.navalReserveRequests += requestedReserves;
     world.instrumentation?.incrementCounter("production.naval.requests.transport", requestedTransports);
     world.instrumentation?.incrementCounter("production.naval.requests.escort", requestedEscorts);
     world.instrumentation?.incrementCounter("production.naval.requests.reserve", requestedReserves);
+    for (const reason of combatShipReasons) recordCombatShipRequest(world, reason);
 
     const addUnit = (regionId: MesoRegionId): boolean => {
       if (currentCount >= capacity) {
@@ -275,7 +299,7 @@ function updateProductionInternal(world: WorldState): void {
     const addNavalUnit = (
       regionId: MesoRegionId,
       forcedType: NavalUnitType,
-      reason: "transport" | "escort" | "reserve",
+      reason: "transport" | CombatShipProductionReason,
     ): boolean => {
       if (currentCount >= capacity) {
         return false;
@@ -300,15 +324,18 @@ function updateProductionInternal(world: WorldState): void {
       if (reason === "transport") {
         diagnostics.navalTransportFulfilled += 1;
         world.instrumentation?.incrementCounter("production.naval.fulfilled.transport");
-      } else if (reason === "escort") {
+      } else if (reason === "escort-deficit") {
         diagnostics.navalEscortFulfilled += 1;
         world.supplyAssessment.maritimeEscorts.combatShipsProducedForEscortDemand += 1;
         world.instrumentation?.incrementCounter("maritimeEscort.production.combatShips");
         world.instrumentation?.incrementCounter("production.naval.fulfilled.escort");
       } else {
-        diagnostics.navalReserveFulfilled += 1;
-        world.instrumentation?.incrementCounter("production.naval.fulfilled.reserve");
+        if (reason === "reserve-restoration") {
+          diagnostics.navalReserveFulfilled += 1;
+          world.instrumentation?.incrementCounter("production.naval.fulfilled.reserve");
+        }
       }
+      if (reason !== "transport") recordCombatShipFulfilled(world, reason);
       return true;
     };
 
@@ -348,26 +375,24 @@ function updateProductionInternal(world: WorldState): void {
 
     const portTargets = portTargetsByNation.get(nation.id) ?? [];
     if (
-      (requestedTransports > 0 || requestedEscorts > 0 || requestedReserves > 0) &&
+      (requestedTransports > 0 || combatShipReasons.length > 0) &&
       portNavalUnitsPerCycle > 0 &&
       portTargets.length > 0
     ) {
       let logisticsRemaining = requestedTransports;
-      let escortRemaining = requestedEscorts;
-      let reserveRemaining = requestedReserves;
+      const combatReasonsRemaining = [...combatShipReasons];
       for (const portId of portTargets) {
         for (let i = 0; i < portNavalUnitsPerCycle; i += 1) {
-          if (logisticsRemaining <= 0 && escortRemaining <= 0 && reserveRemaining <= 0) break;
+          if (logisticsRemaining <= 0 && combatReasonsRemaining.length === 0) break;
           const reason = logisticsRemaining > 0
             ? "transport" as const
-            : escortRemaining > 0 ? "escort" as const : "reserve" as const;
+            : combatReasonsRemaining[0]!;
           const forcedType: NavalUnitType = reason === "transport" ? "TransportShip" : "CombatShip";
           if (!addNavalUnit(portId, forcedType, reason)) {
             break;
           }
           if (reason === "transport") logisticsRemaining -= 1;
-          if (reason === "escort") escortRemaining -= 1;
-          if (reason === "reserve") reserveRemaining -= 1;
+          if (reason !== "transport") combatReasonsRemaining.shift();
         }
         if (currentCount >= capacity) {
           break;
@@ -413,6 +438,32 @@ function recordResourceBlock(
   }
   diagnostics.blockedByEconomy += 1;
   world.instrumentation?.incrementCounter("production.blocked.economy");
+}
+
+function reasonCounterSuffix(reason: CombatShipProductionReason):
+  "baseline" | "offensiveBootstrap" | "threat" | "escort" | "reserveRestoration" {
+  if (reason === "baseline-fleet") return "baseline";
+  if (reason === "offensive-bootstrap") return "offensiveBootstrap";
+  if (reason === "naval-threat") return "threat";
+  if (reason === "escort-deficit") return "escort";
+  return "reserveRestoration";
+}
+
+function recordCombatShipRequest(world: WorldState, reason: CombatShipProductionReason): void {
+  world.productionDiagnostics.navalCombatRequestsByReason[reason] += 1;
+  if (reason !== "escort-deficit") {
+    world.instrumentation?.incrementCounter(`production.naval.requests.${reasonCounterSuffix(reason)}`);
+  }
+}
+
+function recordCombatShipFulfilled(world: WorldState, reason: CombatShipProductionReason): void {
+  const diagnostics = world.productionDiagnostics;
+  diagnostics.navalCombatFulfilledByReason[reason] += 1;
+  diagnostics.navalCombatWeaponsCost += getUnitWeaponCost("CombatShip");
+  diagnostics.navalCombatManpowerCost += getUnitManpowerCost("CombatShip");
+  if (reason !== "escort-deficit") {
+    world.instrumentation?.incrementCounter(`production.naval.fulfilled.${reasonCounterSuffix(reason)}`);
+  }
 }
 
 function createUnitForWorld(

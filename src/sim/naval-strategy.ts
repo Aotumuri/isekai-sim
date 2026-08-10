@@ -6,7 +6,9 @@ import { buildNavalPositioningRoute } from "./naval-pathfinding";
 import { isOperationalCombatShip } from "./maritime-escort";
 import type { UnitId, UnitState } from "./unit";
 import type { WorldState } from "./world-state";
-import { getMesoById, getNeighborsById, getOwnerByMesoId } from "./world-cache";
+import { getMesoById, getNeighborsById, getOwnerByMesoId, getPortTargetsByNation } from "./world-cache";
+import { isNationActive } from "./nation-active";
+import { buildWarAdjacency, isAtWar } from "./war-state";
 
 export type NavalMissionType = "ESCORT" | "RAID" | "INTERCEPT" | "BLOCKADE" | "RESERVE";
 export type NavalMissionStatus = "ACTIVE" | "UNAVAILABLE";
@@ -36,8 +38,24 @@ export interface NavalStrategicAssessment {
   interceptionThreats: number;
   blockadeOpportunities: number;
   reserveRequirement: number;
+  desiredForce: DesiredNavalForce;
   missionPriorities: Partial<Record<NavalMissionType, number>>;
   version: number;
+}
+
+export interface DesiredNavalForce {
+  nationId: NationId;
+  baselineCombatShips: number;
+  escortDemand: number;
+  interceptionDemand: number;
+  offensiveOpportunityDemand: number;
+  enemyNavalThreatDemand: number;
+  reserveTarget: number;
+  desiredCombatShips: number;
+  currentCombatShips: number;
+  deficit: number;
+  reasons: string[];
+  hasUsablePort: boolean;
 }
 
 export interface NavalStrategyState {
@@ -65,6 +83,21 @@ export interface NavalStrategyState {
   assignmentCpuMs: number;
   movementCpuMs: number;
   pathfindingCpuMs: number;
+  desiredFleetEvaluationCpuMs: number;
+  bootstrapTriggers: number;
+  baselineTriggers: number;
+  offensiveOpportunityTriggers: number;
+  threatTriggers: number;
+  fleetsRebuiltAfterLosses: number;
+  maximumFleetSize: number;
+  zeroFleetSinceTickByNationId: Map<NationId, number>;
+  firstCombatShipTickByNationId: Map<NationId, number>;
+  firstOffensiveMissionTickByNationId: Map<NationId, number>;
+  rebuildPendingNationIds: Set<NationId>;
+  zeroFleetToFirstCombatShipTicks: number;
+  zeroFleetToFirstCombatShipSamples: number;
+  firstCombatShipToOffensiveMissionTicks: number;
+  firstCombatShipToOffensiveMissionSamples: number;
 }
 
 export type NavalUnitOwnership =
@@ -96,6 +129,8 @@ interface MissionCandidate {
   slotIndex?: number;
 }
 
+const OFFENSIVE_BOOTSTRAP_MINIMUM_SCORE = 40;
+
 export function createNavalStrategyState(): NavalStrategyState {
   return {
     version: 0, nextMissionNumber: 0, assessments: [], missions: [],
@@ -108,6 +143,13 @@ export function createNavalStrategyState(): NavalStrategyState {
     fuelConstrainedMissions: 0,
     activeEngagementKeys: new Set(),
     evaluationCpuMs: 0, assignmentCpuMs: 0, movementCpuMs: 0, pathfindingCpuMs: 0,
+    desiredFleetEvaluationCpuMs: 0, bootstrapTriggers: 0, baselineTriggers: 0,
+    offensiveOpportunityTriggers: 0, threatTriggers: 0, fleetsRebuiltAfterLosses: 0,
+    maximumFleetSize: 0, zeroFleetSinceTickByNationId: new Map(),
+    firstCombatShipTickByNationId: new Map(), firstOffensiveMissionTickByNationId: new Map(),
+    rebuildPendingNationIds: new Set(),
+    zeroFleetToFirstCombatShipTicks: 0, zeroFleetToFirstCombatShipSamples: 0,
+    firstCombatShipToOffensiveMissionTicks: 0, firstCombatShipToOffensiveMissionSamples: 0,
   };
 }
 
@@ -124,9 +166,17 @@ export function updateNavalStrategy(world: WorldState): void {
   }
   const nextMissions: NavalMission[] = [];
   const assessments: NavalStrategicAssessment[] = [];
-  for (const [nationId, ships] of [...shipsByNation].sort(([a], [b]) => compareIds(a, b))) {
+  const portsByNation = getPortTargetsByNation(world);
+  const activePortNations = world.nations.filter(isNationActive)
+    .map((nation) => nation.id).filter((nationId) => (portsByNation.get(nationId)?.length ?? 0) > 0);
+  const assessedNationIds = [...new Set([...activePortNations, ...shipsByNation.keys()])].sort(compareIds);
+  const desiredStartedAt = world.instrumentation ? performance.now() : 0;
+  for (const nationId of assessedNationIds) {
+    const ships = shipsByNation.get(nationId) ?? [];
     const operationalShips = ships.filter((ship) => isOperationalCombatShip(ship));
     const candidates = buildCandidates(world, nationId);
+    const desiredForce = assessDesiredNavalForce(world, nationId, ships,
+      (portsByNation.get(nationId)?.length ?? 0) > 0);
     const bestRaid = candidates.find((candidate) => candidate.type === "RAID");
     const concentrateRaid = new Set(operationalShips.map((ship) => ship.regionId)).size === 1 &&
       !candidates.some((candidate) => candidate.type === "BLOCKADE");
@@ -138,8 +188,9 @@ export function updateNavalStrategy(world: WorldState): void {
     candidates.sort((a, b) => b.priority - a.priority || compareIds(a.key, b.key));
     const emergencyCount = candidates.filter((candidate) => candidate.emergency).length;
     const config = WORLD_BALANCE.unit.naval.strategy;
-    const reserveRequirement = operationalShips.length >= config.reserveMinimumFleetSize && emergencyCount === 0
-      ? Math.max(1, Math.floor(operationalShips.length * config.reserveFraction)) : 0;
+    const reserveRequirement = operationalShips.length >= desiredForce.desiredCombatShips &&
+      desiredForce.desiredCombatShips >= config.reserveMinimumFleetSize && emergencyCount === 0
+      ? desiredForce.reserveTarget : 0;
     const committedCapacity = Math.max(emergencyCount, operationalShips.length - reserveRequirement);
     const selected = candidates.slice(0, committedCapacity);
     if (emergencyCount === 0 && selected.length > 0) {
@@ -226,10 +277,16 @@ export function updateNavalStrategy(world: WorldState): void {
       raidOpportunities: world.supplyAssessment.maritimeInterdiction.assessments.filter((a) => a.attackerNationId === nationId).length,
       interceptionThreats: candidates.filter((c) => c.type === "INTERCEPT").length,
       blockadeOpportunities: candidates.filter((c) => c.type === "BLOCKADE").length,
-      reserveRequirement, version: state.version + 1,
+      reserveRequirement, desiredForce, version: state.version + 1,
       missionPriorities: Object.fromEntries(nextMissions.filter((m) => m.nationId === nationId)
         .map((m) => [m.type, Math.max(m.priority, 0)])),
     });
+    recordDesiredForceMetrics(world, desiredForce);
+  }
+  if (world.instrumentation) {
+    const elapsed = performance.now() - desiredStartedAt;
+    state.desiredFleetEvaluationCpuMs += elapsed;
+    world.instrumentation.recordDuration("navalStrategy.desiredFleet", elapsed);
   }
   const nextByShip = new Map<UnitId, NavalMission>();
   for (const mission of nextMissions) for (const shipId of mission.shipIds) nextByShip.set(shipId, mission);
@@ -257,6 +314,7 @@ export function updateNavalStrategy(world: WorldState): void {
     mission.status === "UNAVAILABLE" && mission.reasonFlags.includes("fuel-unavailable")).length;
   state.version += 1;
   state.evaluations += 1;
+  updateFleetLifecycleMetrics(world, assessments, nextMissions);
   recordMetrics(world);
   if (world.instrumentation) {
     const elapsed = performance.now() - startedAt;
@@ -321,6 +379,116 @@ function buildCandidates(world: WorldState, nationId: NationId): MissionCandidat
       targetPortId: link.sourcePortId, reasonFlags: ["important-enemy-port", "persistent-interdiction"] });
   }
   return result.sort((a, b) => b.priority - a.priority || compareIds(a.key, b.key));
+}
+
+function assessDesiredNavalForce(
+  world: WorldState,
+  nationId: NationId,
+  ships: UnitState[],
+  hasUsablePort: boolean,
+): DesiredNavalForce {
+  const ownLinks = world.supplyAssessment.maritimeLinks.filter((link) => link.nationId === nationId);
+  const meaningfulOwnLinks = ownLinks.filter((link) => {
+    const destination = link.destinationLandComponentId
+      ? world.supplyAssessment.componentById.get(link.destinationLandComponentId) : undefined;
+    return (destination?.strength ?? 0) > 0;
+  });
+  const escortDemand = Math.min(2, world.supplyAssessment.maritimeEscorts.demands
+    .filter((demand) => demand.nationId === nationId)
+    .reduce((sum, demand) => sum + demand.requiredEscortCount, 0));
+  const offensiveOpportunityDemand = world.supplyAssessment.maritimeInterdiction.assessments
+    .some((assessment) => assessment.attackerNationId === nationId &&
+      assessment.targetPriority.total >= OFFENSIVE_BOOTSTRAP_MINIMUM_SCORE) ? 1 : 0;
+  const warAdjacency = buildWarAdjacency(world.wars);
+  const hostileCombatShipsExist = world.units.some((unit) =>
+    isOperationalCombatShip(unit) && isAtWar(nationId, unit.nationId, warAdjacency));
+  const enemyNavalThreatDemand = hostileCombatShipsExist && (meaningfulOwnLinks.length > 0 || hasUsablePort) ? 1 : 0;
+  const interceptionDemand = hostileCombatShipsExist && meaningfulOwnLinks.some((link) => link.active) ? 1 : 0;
+  const meaningfulInterest = meaningfulOwnLinks.length > 0 || escortDemand > 0 || offensiveOpportunityDemand > 0 ||
+    enemyNavalThreatDemand > 0;
+  const baselineCombatShips = hasUsablePort && meaningfulInterest ? 1 : 0;
+  const strategicDemand = baselineCombatShips + escortDemand +
+    Math.max(interceptionDemand, enemyNavalThreatDemand) + offensiveOpportunityDemand;
+  const reserveTarget = strategicDemand >= 3 ? 1 : 0;
+  const desiredCombatShips = hasUsablePort ? Math.min(4, strategicDemand + reserveTarget) : 0;
+  const currentCombatShips = ships.length;
+  const reasons = [
+    ...(baselineCombatShips ? ["baseline-fleet"] : []),
+    ...(meaningfulOwnLinks.length ? ["own-maritime-supply"] : []),
+    ...(escortDemand ? ["escort-deficit"] : []),
+    ...(offensiveOpportunityDemand ? ["offensive-bootstrap", "enemy-maritime-supply"] : []),
+    ...(interceptionDemand ? ["interception-threat"] : []),
+    ...(enemyNavalThreatDemand ? ["naval-threat"] : []),
+    ...(reserveTarget ? ["reserve-restoration"] : []),
+  ];
+  return {
+    nationId, baselineCombatShips, escortDemand, interceptionDemand,
+    offensiveOpportunityDemand, enemyNavalThreatDemand, reserveTarget,
+    desiredCombatShips, currentCombatShips,
+    deficit: Math.max(0, desiredCombatShips - currentCombatShips),
+    reasons, hasUsablePort,
+  };
+}
+
+function recordDesiredForceMetrics(world: WorldState, force: DesiredNavalForce): void {
+  world.instrumentation?.incrementCounter("navalStrategy.desiredCombatShips", force.desiredCombatShips);
+  world.instrumentation?.incrementCounter("navalStrategy.combatShipDeficits", force.deficit);
+  if (force.baselineCombatShips) world.instrumentation?.incrementCounter("navalStrategy.triggers.baseline");
+  if (force.offensiveOpportunityDemand) {
+    world.instrumentation?.incrementCounter("navalStrategy.triggers.offensiveOpportunity");
+  }
+  if (force.enemyNavalThreatDemand) world.instrumentation?.incrementCounter("navalStrategy.triggers.threat");
+}
+
+function updateFleetLifecycleMetrics(
+  world: WorldState,
+  assessments: NavalStrategicAssessment[],
+  missions: NavalMission[],
+): void {
+  const state = world.supplyAssessment.navalStrategy;
+  for (const assessment of assessments) {
+    const force = assessment.desiredForce;
+    state.maximumFleetSize = Math.max(state.maximumFleetSize, force.currentCombatShips);
+    if (force.currentCombatShips === 0 && force.desiredCombatShips > 0) {
+      if (!state.zeroFleetSinceTickByNationId.has(force.nationId)) {
+        state.zeroFleetSinceTickByNationId.set(force.nationId, world.time.fastTick);
+        state.bootstrapTriggers += 1;
+        if (force.baselineCombatShips) state.baselineTriggers += 1;
+        if (force.offensiveOpportunityDemand) state.offensiveOpportunityTriggers += 1;
+        if (force.enemyNavalThreatDemand) state.threatTriggers += 1;
+        if (state.firstCombatShipTickByNationId.has(force.nationId)) {
+          state.rebuildPendingNationIds.add(force.nationId);
+        }
+        world.instrumentation?.incrementCounter("navalStrategy.triggers.bootstrap");
+      }
+      continue;
+    }
+    if (force.currentCombatShips > 0) {
+      const zeroSince = state.zeroFleetSinceTickByNationId.get(force.nationId);
+      if (!state.firstCombatShipTickByNationId.has(force.nationId)) {
+        state.firstCombatShipTickByNationId.set(force.nationId, world.time.fastTick);
+        if (zeroSince !== undefined) {
+          state.zeroFleetToFirstCombatShipTicks += Math.max(0, world.time.fastTick - zeroSince);
+          state.zeroFleetToFirstCombatShipSamples += 1;
+        }
+      }
+      if (state.rebuildPendingNationIds.delete(force.nationId)) {
+        state.fleetsRebuiltAfterLosses += 1;
+        world.instrumentation?.incrementCounter("navalStrategy.fleetsRebuilt");
+      }
+      state.zeroFleetSinceTickByNationId.delete(force.nationId);
+    }
+    const hasOffensiveMission = missions.some((mission) => mission.nationId === force.nationId &&
+      (mission.type === "RAID" || mission.type === "BLOCKADE"));
+    if (hasOffensiveMission && !state.firstOffensiveMissionTickByNationId.has(force.nationId)) {
+      state.firstOffensiveMissionTickByNationId.set(force.nationId, world.time.fastTick);
+      const firstShipTick = state.firstCombatShipTickByNationId.get(force.nationId);
+      if (firstShipTick !== undefined) {
+        state.firstCombatShipToOffensiveMissionTicks += Math.max(0, world.time.fastTick - firstShipTick);
+        state.firstCombatShipToOffensiveMissionSamples += 1;
+      }
+    }
+  }
 }
 
 function chooseShip(

@@ -818,6 +818,120 @@ test("enabling general naval gameplay does not trigger demand-free naval product
   assert.equal(world.productionDiagnostics.navalReserveRequests, 0);
 });
 
+test("zero fleet deliberately bootstraps from a reachable enemy maritime opportunity", () => {
+  const world = createMaritimeCutoffWorld(false);
+  addEnemyPort(world);
+  const nation = world.nations.find((item) => item.id === NATION_B)!;
+  nation.resources.manpower = 100_000;
+  nation.resources.weapons = 10_000;
+  nation.nextUnitProductionTick = 0;
+  updateSupplyAssessment(world);
+  const force = world.supplyAssessment.navalStrategy.assessments
+    .find((assessment) => assessment.nationId === NATION_B)?.desiredForce;
+  assert(force);
+  assert.equal(force.currentCombatShips, 0);
+  assert.equal(force.offensiveOpportunityDemand, 1);
+  assert.equal(force.desiredCombatShips, 2);
+  updateProduction(world);
+  const ship = world.units.find((unit) => unit.nationId === NATION_B && unit.type === "CombatShip");
+  assert(ship);
+  assert.equal(getNavalUnitOwnership(world, ship.id)?.missionType, "RESERVE");
+  assert.equal(world.productionDiagnostics.navalCombatFulfilledByReason["offensive-bootstrap"], 1);
+  updateSupplyAssessment(world);
+  assert(["RAID", "BLOCKADE"].includes(getNavalUnitOwnership(world, ship.id)?.missionType ?? ""));
+});
+
+test("landlocked zero-fleet nation cannot request CombatShip production", () => {
+  const world = createMaritimeCutoffWorld(false);
+  const nation = world.nations.find((item) => item.id === NATION_B)!;
+  nation.resources.manpower = 100_000;
+  nation.resources.weapons = 10_000;
+  nation.nextUnitProductionTick = 0;
+  updateSupplyAssessment(world);
+  updateProduction(world);
+  assert(!world.units.some((unit) => unit.nationId === NATION_B && unit.type === "CombatShip"));
+  assert.equal(world.productionDiagnostics.navalCombatRequestsByReason["offensive-bootstrap"], 0);
+});
+
+test("multiple enemy maritime links create one bounded offensive force target", () => {
+  const world = createMaritimeCutoffWorld(false);
+  addEnemyPort(world);
+  connect(world, "sea-ab", "sea-cd");
+  world.mapVersion += 1;
+  updateSupplyAssessment(world);
+  const assessment = world.supplyAssessment.navalStrategy.assessments
+    .find((item) => item.nationId === NATION_B);
+  assert(assessment);
+  assert(assessment.raidOpportunities >= 2);
+  assert.equal(assessment.desiredForce.offensiveOpportunityDemand, 1);
+  assert(assessment.desiredForce.desiredCombatShips <= 4);
+});
+
+test("offensive bootstrap obeys scarce-economy production failure", () => {
+  const world = createMaritimeCutoffWorld(false);
+  addEnemyPort(world);
+  const nation = world.nations.find((item) => item.id === NATION_B)!;
+  nation.resources.manpower = 0;
+  nation.resources.weapons = 0;
+  nation.nextUnitProductionTick = 0;
+  updateSupplyAssessment(world);
+  updateProduction(world);
+  assert(!world.units.some((unit) => unit.nationId === NATION_B && unit.type === "CombatShip"));
+  assert(world.productionDiagnostics.blockedProductions > 0);
+});
+
+test("lost final port suppresses otherwise valid offensive production", () => {
+  const world = createMaritimeCutoffWorld(false);
+  addEnemyPort(world);
+  const nation = world.nations.find((item) => item.id === NATION_B)!;
+  nation.resources.manpower = 100_000;
+  nation.resources.weapons = 10_000;
+  nation.nextUnitProductionTick = 0;
+  world.occupation.mesoById.set(id("enemy-port"), NATION_A);
+  world.occupation.version += 1;
+  updateSupplyAssessment(world);
+  updateProduction(world);
+  assert(!world.units.some((unit) => unit.nationId === NATION_B && unit.type === "CombatShip"));
+});
+
+test("an opportunity disappearing before production leaves no stale request", () => {
+  const world = createMaritimeCutoffWorld(false);
+  addEnemyPort(world);
+  const nation = world.nations.find((item) => item.id === NATION_B)!;
+  nation.resources.manpower = 100_000;
+  nation.resources.weapons = 10_000;
+  nation.nextUnitProductionTick = 0;
+  updateSupplyAssessment(world);
+  assert(world.supplyAssessment.navalStrategy.assessments
+    .find((assessment) => assessment.nationId === NATION_B)?.desiredForce.deficit);
+  world.wars = [];
+  updateSupplyAssessment(world);
+  updateProduction(world);
+  assert(!world.units.some((unit) => unit.nationId === NATION_B && unit.type === "CombatShip"));
+});
+
+test("a destroyed navy rebuilds toward its persistent strategic target", () => {
+  const world = createMaritimeCutoffWorld(false);
+  addEnemyPort(world);
+  const nation = world.nations.find((item) => item.id === NATION_B)!;
+  nation.resources.manpower = 100_000;
+  nation.resources.weapons = 10_000;
+  nation.nextUnitProductionTick = 0;
+  updateSupplyAssessment(world);
+  updateProduction(world);
+  const first = world.units.find((unit) => unit.nationId === NATION_B && unit.type === "CombatShip");
+  assert(first);
+  updateSupplyAssessment(world);
+  world.units = world.units.filter((unit) => unit.id !== first.id);
+  updateSupplyAssessment(world);
+  const force = world.supplyAssessment.navalStrategy.assessments
+    .find((assessment) => assessment.nationId === NATION_B)?.desiredForce;
+  assert(force && force.deficit > 0);
+  nation.nextUnitProductionTick = 0;
+  updateProduction(world);
+  assert(world.units.some((unit) => unit.nationId === NATION_B && unit.type === "CombatShip"));
+});
+
 test("Reorganization reads maritime loss and reconnection only through Supply Assessment", () => {
   const world = createMaritimeWorld(true, 1);
   const unit = createUnitForType(
@@ -1130,6 +1244,28 @@ function createInterdictionWorld(raiderRegions: string[]): WorldState {
     world.units.push(raider);
   }
   return world;
+}
+
+function addEnemyPort(world: WorldState): void {
+  const portId = id("enemy-port");
+  const seaId = id("sea-ab");
+  world.mesoRegions.push({
+    id: portId, type: "land", centerId: "micro-enemy-port" as MicroRegionId,
+    center: { x: 35, y: 15 }, microRegionIds: [],
+    neighbors: [{ id: seaId, hasRiver: false }], building: "port", resource: null,
+  });
+  world.mesoRegions.find((region) => region.id === seaId)?.neighbors.push({ id: portId, hasRiver: false });
+  const macro: MacroRegion = {
+    id: createMacroRegionId(world.macroRegions.length), nationId: NATION_B,
+    mesoRegionIds: [portId], isCore: true,
+  };
+  world.macroRegions.push(macro);
+  world.nations.find((nation) => nation.id === NATION_B)?.macroRegionIds.push(macro.id);
+  world.cache.mesoById.clear();
+  world.cache.neighborsById.clear();
+  world.mapVersion += 1;
+  world.territoryVersion += 1;
+  world.buildingVersion += 1;
 }
 
 function createStrategicAllocationWorld(combatShipCount: number): WorldState {

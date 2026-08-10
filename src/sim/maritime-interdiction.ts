@@ -6,8 +6,10 @@ import { isOperationalCombatShip } from "./maritime-escort";
 import { buildNavalPositioningRoute } from "./naval-pathfinding";
 import type { UnitId, UnitState } from "./unit";
 import type { WorldState } from "./world-state";
-import { getMesoById, getNeighborsById } from "./world-cache";
+import { getMesoById, getNeighborsById, getPortTargetsByNation } from "./world-cache";
 import { buildWarAdjacency, isAtWar } from "./war-state";
+import { isNationActive } from "./nation-active";
+import { getMaritimeSeaComponentForPort } from "./maritime-supply";
 
 export interface TargetPriority {
   remoteSuppliedStrength: number;
@@ -179,10 +181,27 @@ export function assessMaritimeInterdiction(world: WorldState, links: MaritimeSup
   const warAdjacency = buildWarAdjacency(world.wars);
   const contexts = createPriorityContext(world, links);
   const previousRaidLinkIds = new Set(state.assignments.map((assignment) => assignment.maritimeLinkId));
-  const nations = [...new Set(world.units.filter((unit) => isOperationalCombatShip(unit)).map((unit) => unit.nationId))]
-    .sort(compareIds);
+  const portsByNation = getPortTargetsByNation(world);
+  const reachableSeaComponentsByNation = new Map<NationId, Set<number>>();
+  const nations = [...new Set([
+    ...world.nations.filter(isNationActive).map((nation) => nation.id)
+      .filter((nationId) => (portsByNation.get(nationId)?.length ?? 0) > 0),
+    ...world.units.filter((unit) => isOperationalCombatShip(unit)).map((unit) => unit.nationId),
+  ])].sort(compareIds);
+  for (const nationId of nations) {
+    reachableSeaComponentsByNation.set(nationId, new Set([
+      ...(portsByNation.get(nationId) ?? []).map((portId) => getMaritimeSeaComponentForPort(world, portId)),
+      ...world.units.filter((unit) => isOperationalCombatShip(unit, nationId))
+        .map((unit) => world.supplyAssessment.maritimeConnectivity.seaComponentByRegionId.get(unit.regionId) ??
+          getMaritimeSeaComponentForPort(world, unit.regionId)),
+    ].filter((id): id is number => id !== undefined)));
+  }
   state.assessments = nations.flatMap((nationId) => links.filter((link) =>
     link.routeRegionIds.some((regionId) => getMesoById(world).get(regionId)?.type === "sea") &&
+    link.routeRegionIds.some((regionId) => {
+      const componentId = world.supplyAssessment.maritimeConnectivity.seaComponentByRegionId.get(regionId);
+      return componentId !== undefined && reachableSeaComponentsByNation.get(nationId)?.has(componentId);
+    }) &&
     link.reason !== "port-lost" && link.reason !== "route-invalid" &&
     isAtWar(nationId, link.nationId, warAdjacency) && (link.active || previousRaidLinkIds.has(link.id))
   ).map((link): InterdictionAssessment => ({

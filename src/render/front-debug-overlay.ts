@@ -940,9 +940,14 @@ export function formatNavalMission(world: WorldState, shipId: string): string {
 
 export function formatNavalStrategySummary(world: WorldState, nationId: string): string {
   const missions = world.supplyAssessment.navalStrategy.missions.filter((item) => item.nationId === nationId);
+  const force = world.supplyAssessment.navalStrategy.assessments
+    .find((assessment) => assessment.nationId === nationId)?.desiredForce;
   const count = (type: typeof missions[number]["type"]): number => missions
     .filter((mission) => mission.type === type).reduce((sum, mission) => sum + mission.shipIds.length, 0);
-  return ["NAVAL AI", `CombatShips ${missions.reduce((sum, mission) => sum + mission.shipIds.length, 0)}`,
+  return ["NAVAL AI", `CombatShips ${force?.currentCombatShips ?? missions.reduce((sum, mission) => sum + mission.shipIds.length, 0)} / desired ${force?.desiredCombatShips ?? 0}`,
+    `Deficit ${force?.deficit ?? 0}`,
+    `Reasons ${force?.reasons.join(", ") || "none"}`,
+    `Production ${force && force.deficit > 0 && force.hasUsablePort ? "CombatShip requested" : "none"}`,
     `Escort ${count("ESCORT")}`, `Raid ${count("RAID")}`, `Intercept ${count("INTERCEPT")}`,
     `Blockade ${count("BLOCKADE")}`, `Reserve ${count("RESERVE")}`].join("\n");
 }

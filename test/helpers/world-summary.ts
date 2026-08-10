@@ -297,6 +297,24 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     navalInterceptShips: missionShipCount(world, "INTERCEPT"),
     navalBlockadeShips: missionShipCount(world, "BLOCKADE"),
     navalReserveShips: missionShipCount(world, "RESERVE"),
+    navalDesiredCombatShips: world.supplyAssessment.navalStrategy.assessments.reduce(
+      (sum, assessment) => sum + assessment.desiredForce.desiredCombatShips, 0),
+    navalCombatShipDeficit: world.supplyAssessment.navalStrategy.assessments.reduce(
+      (sum, assessment) => sum + assessment.desiredForce.deficit, 0),
+    navalBootstrapTriggers: world.supplyAssessment.navalStrategy.bootstrapTriggers,
+    navalBaselineTriggers: world.supplyAssessment.navalStrategy.baselineTriggers,
+    navalOffensiveOpportunityTriggers: world.supplyAssessment.navalStrategy.offensiveOpportunityTriggers,
+    navalThreatTriggers: world.supplyAssessment.navalStrategy.threatTriggers,
+    navalFleetsRebuiltAfterLosses: world.supplyAssessment.navalStrategy.fleetsRebuiltAfterLosses,
+    navalMaximumFleetSize: world.supplyAssessment.navalStrategy.maximumFleetSize,
+    navalAverageZeroFleetToFirstShip: world.supplyAssessment.navalStrategy.zeroFleetToFirstCombatShipSamples > 0
+      ? world.supplyAssessment.navalStrategy.zeroFleetToFirstCombatShipTicks /
+        world.supplyAssessment.navalStrategy.zeroFleetToFirstCombatShipSamples : 0,
+    navalAverageFirstShipToOffensiveMission:
+      world.supplyAssessment.navalStrategy.firstCombatShipToOffensiveMissionSamples > 0
+        ? world.supplyAssessment.navalStrategy.firstCombatShipToOffensiveMissionTicks /
+          world.supplyAssessment.navalStrategy.firstCombatShipToOffensiveMissionSamples : 0,
+    navalDesiredFleetCpuMs: world.supplyAssessment.navalStrategy.desiredFleetEvaluationCpuMs,
     navalUnassignedCombatShips: world.units.filter((unit) =>
       unit.domain === "naval" && unit.type === "CombatShip" && unit.manpower > 0 && unit.org > 0
     ).length - world.supplyAssessment.navalStrategy.missionByShipId.size,
@@ -356,6 +374,21 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     navalTransportProductionFulfilled: world.productionDiagnostics.navalTransportFulfilled,
     navalEscortProductionFulfilled: world.productionDiagnostics.navalEscortFulfilled,
     navalReserveProductionFulfilled: world.productionDiagnostics.navalReserveFulfilled,
+    navalBaselineProductionRequests:
+      world.productionDiagnostics.navalCombatRequestsByReason["baseline-fleet"],
+    navalOffensiveProductionRequests:
+      world.productionDiagnostics.navalCombatRequestsByReason["offensive-bootstrap"],
+    navalThreatProductionRequests:
+      world.productionDiagnostics.navalCombatRequestsByReason["naval-threat"],
+    navalBaselineProductionFulfilled:
+      world.productionDiagnostics.navalCombatFulfilledByReason["baseline-fleet"],
+    navalOffensiveProductionFulfilled:
+      world.productionDiagnostics.navalCombatFulfilledByReason["offensive-bootstrap"],
+    navalThreatProductionFulfilled:
+      world.productionDiagnostics.navalCombatFulfilledByReason["naval-threat"],
+    navalObsoleteProductionRequests: world.productionDiagnostics.navalCombatObsoleteRequests,
+    navalCombatProductionWeaponsCost: world.productionDiagnostics.navalCombatWeaponsCost,
+    navalCombatProductionManpowerCost: world.productionDiagnostics.navalCombatManpowerCost,
     productionBlockedComponentCount:
       world.productionDiagnostics.blockedByComponentId.size,
     battlefieldEnemyComponents: world.battlefieldTopology.enemyComponentCount,

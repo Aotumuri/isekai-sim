@@ -318,6 +318,17 @@ function getPortSeaEntrance(
     .sort(compareIds)[0] ?? null;
 }
 
+/** Cheap reachability query backed by the existing maritime connectivity cache. */
+export function getMaritimeSeaComponentForPort(
+  world: WorldState,
+  portId: MesoRegionId,
+): number | undefined {
+  const cache = world.supplyAssessment.maritimeConnectivity;
+  ensureSeaConnectivity(world, cache);
+  const entrance = getPortSeaEntrance(world, portId);
+  return entrance ? cache.seaComponentByRegionId.get(entrance) : undefined;
+}
+
 function portPairKey(a: MesoRegionId, b: MesoRegionId): string {
   return `${a}->${b}`;
 }
