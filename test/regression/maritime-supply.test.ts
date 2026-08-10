@@ -46,6 +46,7 @@ import {
   createSupplyDefenseState,
   updateSupplyDefense,
 } from "../../src/sim/supply-defense";
+import { createSupplyReliefState } from "../../src/sim/supply-relief";
 import { declareWar } from "../../src/sim/war-state";
 
 const NATION_A = "nation-a" as NationId;
@@ -413,6 +414,7 @@ function createMaritimeWorld(withPorts = true): WorldState {
     productionDiagnostics: createProductionDiagnosticsState(),
     supplyCutoffs: createSupplyCutoffAnalysisState(),
     supplyDefense: createSupplyDefenseState(),
+    supplyRelief: createSupplyReliefState(),
     stalematePressure: createStalematePressureState(),
     collapseAdvances: createCollapseAdvanceState(),
     mapVersion: 0,

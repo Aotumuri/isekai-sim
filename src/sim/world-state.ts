@@ -29,6 +29,7 @@ import type { IsolationEffectsState } from "./isolation-effects";
 import type { ProductionDiagnosticsState } from "./production";
 import type { SupplyCutoffAnalysisState } from "./supply-cutoff";
 import type { SupplyDefenseState } from "./supply-defense";
+import type { SupplyReliefState } from "./supply-relief";
 
 export interface WorldState {
   width: number;
@@ -57,6 +58,7 @@ export interface WorldState {
   productionDiagnostics: ProductionDiagnosticsState;
   supplyCutoffs: SupplyCutoffAnalysisState;
   supplyDefense: SupplyDefenseState;
+  supplyRelief: SupplyReliefState;
   stalematePressure: StalematePressureState;
   collapseAdvances: CollapseAdvanceState;
   mapVersion: number;

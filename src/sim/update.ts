@@ -30,6 +30,7 @@ import { updateSupplyAssessment } from "./supply-assessment";
 import { updateIsolationEffects } from "./isolation-effects";
 import { updateSupplyCutoffAnalysis } from "./supply-cutoff";
 import { updateSupplyDefense } from "./supply-defense";
+import { updateSupplyRelief } from "./supply-relief";
 import {
   beginAiGeographyEvaluation,
   prepareFrontDistanceFields,
@@ -153,6 +154,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateBattlefieldTopology(world);
   updateSupplyCutoffAnalysis(world);
   updateSupplyDefense(world);
+  updateSupplyRelief(world);
   updateCapitalDefense(world);
   updateNationFrontPlans(world);
   updateRetreatPlans(world);

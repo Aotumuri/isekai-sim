@@ -14,6 +14,7 @@ import {
   updateSupplyCutoffAnalysis,
 } from "../../src/sim/supply-cutoff";
 import { createSupplyDefenseState } from "../../src/sim/supply-defense";
+import { createSupplyReliefState, updateSupplyRelief } from "../../src/sim/supply-relief";
 import {
   createCapitalDefenseState,
   getCapitalDefenseAssessment,
@@ -1486,6 +1487,38 @@ test("Supply Cutoff detects one supplied corridor with exact affected force meta
   assert.equal(candidate.affectedPorts, 0);
   assert.equal(candidate.currentlySupplied, true);
   assert.equal(candidate.predictedIsolated, true);
+});
+
+test("Supply Relief creates one deterministic corridor-retake plan for a meaningful isolated force", () => {
+  const world = createSupplyTestWorld();
+  setTestCapital(world, NATION_A, "capital");
+  startWar(world, NATION_A, NATION_B);
+  setUnitStrength(addLandUnit(world, NATION_A, "island-2", "Infantry"), 1_000);
+  occupyForSupplyTest(world, "corridor", NATION_B);
+  updateLandFronts(world);
+  assert(world.landFronts.operationalSectors.length > 0);
+  updateSupplyAssessment(world);
+  updateSupplyRelief(world);
+
+  assert.equal(world.supplyRelief.needs.length, 1);
+  const [plan] = world.supplyRelief.plans;
+  assert(plan);
+  assert.equal(plan.primaryReconnectionRegion, id("corridor"));
+  assert.equal(plan.routeType, "corridor-retake");
+  assert.equal(plan.expectedRestoredUnits, 1);
+  assert(plan.expectedRestoredStrength >= 1_000);
+});
+
+test("Supply Relief ignores a trivial empty isolated component", () => {
+  const world = createSupplyTestWorld();
+  setTestCapital(world, NATION_A, "capital");
+  startWar(world, NATION_A, NATION_B);
+  occupyForSupplyTest(world, "corridor", NATION_B);
+  updateLandFronts(world);
+  updateSupplyAssessment(world);
+  updateSupplyRelief(world);
+  assert.equal(world.supplyRelief.needs.length, 0);
+  assert.equal(world.supplyRelief.plans.length, 0);
 });
 
 test("Supply Cutoff does not falsely isolate a component with two land routes", () => {
@@ -4398,6 +4431,7 @@ function createFrontWorld(
     productionDiagnostics: createProductionDiagnosticsState(),
     supplyCutoffs: createSupplyCutoffAnalysisState(),
     supplyDefense: createSupplyDefenseState(),
+    supplyRelief: createSupplyReliefState(),
     mapVersion: 0,
     territoryVersion: 0,
     buildingVersion: 0,

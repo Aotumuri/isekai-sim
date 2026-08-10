@@ -38,6 +38,7 @@ export type ReserveDeploymentReason =
   | "retreat-fallback-threat"
   | "front-collapse"
   | "supply-corridor-critical"
+  | "supply-relief-critical"
   | "schwerpunkt-concentration"
   | "reserve-reforming";
 
@@ -142,6 +143,7 @@ export function createStrategicReserveState(enabled = true): StrategicReserveSta
       "retreat-fallback-threat": 0,
       "front-collapse": 0,
       "supply-corridor-critical": 0,
+      "supply-relief-critical": 0,
       "schwerpunkt-concentration": 0,
       "reserve-reforming": 0,
     },
@@ -698,6 +700,22 @@ function findDeploymentTrigger(
       targetStrength: Math.max(1, corridor.requiredDefenseStrength - corridor.currentDefenderStrength),
       initialDeficit: Math.max(0, corridor.requiredDefenseStrength - corridor.currentDefenderStrength),
       reason: "supply-corridor-critical", capitalEmergencyStartedAtTick: null,
+    };
+  }
+
+  // A live, critical encirclement comes after preventing a corridor loss, but
+  // ahead of ordinary front reinforcement.  The relief operation will claim
+  // the deployment through its normal preflight manifest when it is ready.
+  const relief = world.supplyRelief.plans
+    .filter((plan) => plan.nationId === reserve.nationId && plan.status === "identified" && plan.score >= 45)
+    .sort((a, b) => b.score - a.score || compareIds(a.id, b.id))[0];
+  if (relief) {
+    return {
+      targetType: "front-reinforcement", targetFrontId: relief.sectorId,
+      targetRegionIds: [relief.outsideApproachRegionId],
+      targetStrength: Math.min(reserve.totalStrength * 0.65, Math.max(1, relief.expectedRestoredStrength * 0.35)),
+      initialDeficit: Math.max(0, relief.expectedRestoredStrength * 0.35),
+      reason: "supply-relief-critical", capitalEmergencyStartedAtTick: null,
     };
   }
 

@@ -71,6 +71,7 @@ interface OverlayVersions {
   productionDiagnostics: number;
   supplyCutoffs: number;
   supplyDefense: number;
+  supplyRelief: number;
   retreats: number;
   coverage: number;
   stalemate: number;
@@ -138,6 +139,7 @@ export function attachFrontDebugOverlay(
     drawSupplySourceMarkers(layer, world);
     drawSupplyCutoffMarkers(layer, world);
     drawSupplyDefenseMarkers(layer, world);
+    drawSupplyReliefMarkers(layer, world);
     drawMaritimeSupplyLinks(layer, world);
     if (selectedSectorId && !world.landFronts.operationalSectorsById.has(selectedSectorId)) {
       selectedSectorId = null;
@@ -549,6 +551,16 @@ function appendOperationalDetails(
           `  reasons ${risk.reasonFlags.join(", ")}`,
         );
       }
+      for (const relief of world.supplyRelief.plans
+        .filter((item) => item.nationId === nationId && item.sectorId === front.id)
+        .slice(0, 2)) {
+        lines.push(
+          `SUPPLY RELIEF ${relief.isolatedComponentId} | ${relief.status.toUpperCase()}`,
+          `  route ${relief.routeType} | target ${relief.primaryReconnectionRegion} | score ${relief.score.toFixed(1)}`,
+          `  expected ${formatStrength(relief.expectedRestoredStrength)} / ${relief.expectedRestoredUnits} units | outside ${relief.outsideForceUnitIds.length} | inside ${relief.insideForceUnitIds.length}`,
+          `  restored ${formatStrength(relief.actualRestoredStrength)} / ${relief.actualRestoredUnits} units | stable ${relief.stableSinceTick === null ? "pending" : Math.max(0, world.time.fastTick - relief.stableSinceTick)}`,
+        );
+      }
       for (const pocket of pockets) {
         const risk = pocket.containmentActual < pocket.containmentRequired ? "HIGH"
           : pocket.containmentActual < pocket.containmentRequired * 1.25 ? "MEDIUM" : "LOW";
@@ -820,6 +832,13 @@ function drawSupplyDefenseMarkers(layer: Container, world: WorldState): void {
   }
 }
 
+function drawSupplyReliefMarkers(layer: Container, world: WorldState): void {
+  for (const plan of world.supplyRelief.plans) {
+    if (plan.status === "success" || plan.status === "abandoned" || plan.status === "cancelled") continue;
+    drawMarker(layer, world, plan.primaryReconnectionRegion, "L", 0x7cfc00, "diamond");
+  }
+}
+
 function drawMaritimeSupplyLinks(layer: Container, world: WorldState): void {
   const selectedByPair = new Map<string, WorldState["supplyAssessment"]["maritimeLinks"][number]>();
   for (const link of world.supplyAssessment.maritimeLinks) {
@@ -952,6 +971,7 @@ function readVersions(world: WorldState): OverlayVersions {
     productionDiagnostics: world.productionDiagnostics.version,
     supplyCutoffs: world.supplyCutoffs.version,
     supplyDefense: world.supplyDefense.version,
+    supplyRelief: world.supplyRelief.version,
     retreats: world.retreatPlans.version,
     coverage: world.frontlineCoverage.version,
     stalemate: world.stalematePressure.version,
@@ -971,7 +991,7 @@ function readVersions(world: WorldState): OverlayVersions {
 
 function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
   return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
-    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment && a.isolationEffects === b.isolationEffects && a.productionDiagnostics === b.productionDiagnostics && a.supplyCutoffs === b.supplyCutoffs && a.supplyDefense === b.supplyDefense &&
+    a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment && a.isolationEffects === b.isolationEffects && a.productionDiagnostics === b.productionDiagnostics && a.supplyCutoffs === b.supplyCutoffs && a.supplyDefense === b.supplyDefense && a.supplyRelief === b.supplyRelief &&
     a.retreats === b.retreats && a.coverage === b.coverage && a.stalemate === b.stalemate &&
     a.reserveDeployments === b.reserveDeployments && a.battles === b.battles;
 }

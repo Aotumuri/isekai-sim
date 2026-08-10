@@ -51,6 +51,13 @@ import {
   type SupplyCutoffCandidate,
   type SupplyCutoffConfirmation,
 } from "./supply-cutoff";
+import {
+  getSupplyReliefPlan,
+  getSupplyReliefPlanForFront,
+  isSupplyReliefStillNeeded,
+  markSupplyReliefOperation,
+  type SupplyReliefPlan,
+} from "./supply-relief";
 
 export type OperationId = string & { __brand: "OperationId" };
 
@@ -94,6 +101,7 @@ export type OffensiveOperationReason =
   | "frontline-supply-cutoff"
   | "port-supply-cutoff"
   | "pocket-and-supply-cutoff"
+  | "supply-relief"
   | "high-front-priority"
   | "weak-enemy-presence";
 
@@ -176,6 +184,7 @@ export interface OperationCandidate {
   targetTopologyScore: number;
   targetSupplyScore: number;
   supplyCutoffObjective: SupplyCutoffCandidate | null;
+  supplyReliefPlan: SupplyReliefPlan | null;
   pocketClosureObjective: PocketClosureOpportunity | null;
   pocketReductionObjective: PocketReductionObjective | null;
   reasonFlags: OffensiveOperationReason[];
@@ -234,6 +243,9 @@ export interface OffensiveOperation {
   targetSupplyScore: number;
   supplyCutoffObjective: SupplyCutoffCandidate | null;
   supplyCutoffConfirmation: SupplyCutoffConfirmation | null;
+  /** Relief is a normal operation with a Supply Assessment verified completion. */
+  supplyReliefPlanId: string | null;
+  reliefInsideUnitIds: UnitId[];
   pocketClosureObjective: PocketClosureOpportunity | null;
   pocketReductionObjective: PocketReductionObjective | null;
   pocketClosureConfirmation: PocketClosureConfirmation | null;
@@ -616,6 +628,7 @@ export function updateOffensiveOperations(world: WorldState): void {
         operation.assignedUnitIds.length,
       );
       recordEvent(world, operation, "created", "attack-front-selected");
+      if (operation.supplyReliefPlanId) markSupplyReliefOperation(world, operation.supplyReliefPlanId, "preparing", operation.assignedUnitIds);
       if (operation.pocketClosureObjective) {
         state.pocketClosureCreatedCount += 1;
       }
@@ -842,6 +855,17 @@ function advanceOperation(
     return { keep: false, changed: true };
   }
 
+  const relief = getSupplyReliefPlan(world, operation.supplyReliefPlanId);
+  const reliefStable = relief?.status === "stable" && relief.stableSinceTick !== null &&
+    world.time.fastTick - relief.stableSinceTick >= WORLD_BALANCE.war.landFront.supplyCutoff.sustainedTicks;
+  if (operation.supplyReliefPlanId && (!relief || relief?.status === "success" || reliefStable ||
+      (!isSupplyReliefStillNeeded(world, operation.supplyReliefPlanId) && relief?.status !== "stable"))) {
+    // Supply Assessment, not occupation of the selected region, is authoritative.
+    const outcome: OffensiveOperationOutcome = relief?.status === "success" || relief?.status === "stable" ? "success" : "cancelled";
+    finishOperation(world, operation, outcome, outcome === "success" ? "primary-target-occupied" : "target-invalid");
+    return { keep: true, changed: true };
+  }
+
   if (operation.phase === "exploiting") {
     return advanceExploitation(world, operation);
   }
@@ -851,6 +875,11 @@ function advanceOperation(
     isRegionControlledBy(world, operation.primaryTargetRegionId, operation.nationId)
   ) {
     recordOperationCaptures(world, operation);
+    if (operation.supplyReliefPlanId) {
+      // Hold the reopened corridor while the relief state observes the required
+      // stable Supply Assessment window.
+      return { keep: true, changed: true };
+    }
     confirmPocketClosure(world, operation);
     confirmSupplyCutoff(world, operation);
     if (!tryStartExploitation(world, operation, "primary-target-occupied")) {
@@ -906,7 +935,7 @@ function advanceOperation(
     );
   }
   const plan = getFrontPlan(world, operation.frontId, operation.nationId);
-  if (!plan || (plan.posture !== "attack" && !operation.isMajorOffensive && !operation.pocketClosureObjective && !operation.pocketReductionObjective && !operation.supplyCutoffObjective)) {
+  if (!plan || (plan.posture !== "attack" && !operation.isMajorOffensive && !operation.pocketClosureObjective && !operation.pocketReductionObjective && !operation.supplyCutoffObjective && !operation.supplyReliefPlanId)) {
     finishOperation(world, operation, "cancelled", "posture-changed");
     return { keep: true, changed: true };
   }
@@ -1118,6 +1147,7 @@ function buildOperationCandidate(
   if (!friendly || !enemy) {
     return null;
   }
+  const relief = getSupplyReliefPlanForFront(world, plan.nationId, plan.frontId);
   const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
   const allocationUnits = allocation.unitIds
     .map((unitId) => unitById.get(unitId))
@@ -1132,17 +1162,19 @@ function buildOperationCandidate(
     !world.collapseAdvances.advanceNationByUnitId.has(unit.id) &&
     !world.offensiveOperations.operationIdByUnitId.has(unit.id)
   );
-  if (allocationUnits.length < settings.minimumFrontUnits || surplusUnits.length < 2) {
+  if (allocationUnits.length < settings.minimumFrontUnits || surplusUnits.length < (relief ? 1 : 2)) {
     return null;
   }
-  const targets = selectOperationTargets(world, front, plan, surplusUnits);
+  const targets = relief ? selectSupplyReliefTargets(world, relief) : selectOperationTargets(world, front, plan, surplusUnits);
   if (!targets) {
     return null;
   }
   const forceFraction = isSchwerpunktOperation
     ? WORLD_BALANCE.war.landFront.stalemate.majorOperationForceFraction
     : settings.forceFraction;
-  const requiredOperationStrength = targets.pocketReduction
+  const requiredOperationStrength = relief
+    ? Math.min(sumUnitStrength(surplusUnits), Math.max(targets.targetLocalDefenderStrength * 1.1, relief.expectedRestoredStrength * 0.2))
+    : targets.pocketReduction
     ? Math.min(sumUnitStrength(surplusUnits), Math.max(
       targets.pocketReduction.trappedStrength * 1.15,
       targets.pocketReduction.regionIds.length * 300,
@@ -1189,7 +1221,7 @@ function buildOperationCandidate(
     false,
   );
   const rejectionReasons: OperationCandidateRejectionReason[] = [];
-  if (manifestResult.manifest.length < (targets.pocketReduction ? 1 : 2)) {
+  if (manifestResult.manifest.length < (targets.pocketReduction || relief ? 1 : 2)) {
     rejectionReasons.push("insufficient-units");
   }
   if (!manifestResult.feasible) {
@@ -1227,6 +1259,7 @@ function buildOperationCandidate(
     targetSupplyScore: targets.supplyScore ?? 0,
     supplyCutoffObjective: targets.supplyCutoff
       ? cloneSupplyCutoffCandidate(targets.supplyCutoff) : null,
+    supplyReliefPlan: relief ? { ...relief, objectiveRegionIds: [...relief.objectiveRegionIds], outsideForceUnitIds: [...relief.outsideForceUnitIds], insideForceUnitIds: [...relief.insideForceUnitIds] } : null,
     pocketClosureObjective: targets.pocketClosure
       ? clonePocketClosureOpportunity(targets.pocketClosure) : null,
     pocketReductionObjective: targets.pocketReduction
@@ -1252,19 +1285,22 @@ function createOperationFromCandidate(
       releaseStrategicReserveUnit(world, assignment.unitId);
     }
   }
-  const assignedUnitIds = candidate.manifest
-    .map((assignment) => assignment.unitId)
-    .sort(compareIds);
-  const assignedStrength = candidate.manifest.reduce(
-    (sum, assignment) => sum + assignment.strength,
-    0,
-  );
+  const insideUnitIds = candidate.supplyReliefPlan?.insideForceUnitIds.filter((unitId) =>
+    !candidate.manifest.some((assignment) => assignment.unitId === unitId) &&
+    world.units.some((unit) => unit.id === unitId && unit.nationId === candidate.nationId && unit.domain === "land")
+  ) ?? [];
+  const assignedUnitIds = [...candidate.manifest.map((assignment) => assignment.unitId), ...insideUnitIds].sort(compareIds);
+  const assignedStrength = sumUnitStrength(world.units.filter((unit) => assignedUnitIds.includes(unit.id)));
   const approachRegionByUnitId = new Map(
     candidate.manifest.map((assignment) => [
       assignment.unitId,
       assignment.approachRegionId,
     ]),
   );
+  for (const unitId of insideUnitIds) {
+    const unit = world.units.find((item) => item.id === unitId);
+    if (unit) approachRegionByUnitId.set(unitId, unit.regionId);
+  }
   const operation: OffensiveOperation = {
     id: createOperationId(world.offensiveOperations.nextOperationNumber),
     nationId: candidate.nationId,
@@ -1352,6 +1388,8 @@ function createOperationFromCandidate(
     supplyCutoffObjective: candidate.supplyCutoffObjective
       ? cloneSupplyCutoffCandidate(candidate.supplyCutoffObjective) : null,
     supplyCutoffConfirmation: null,
+    supplyReliefPlanId: candidate.supplyReliefPlan?.id ?? null,
+    reliefInsideUnitIds: insideUnitIds,
     pocketClosureObjective: candidate.pocketClosureObjective
       ? clonePocketClosureOpportunity(candidate.pocketClosureObjective) : null,
     pocketReductionObjective: candidate.pocketReductionObjective
@@ -1394,6 +1432,24 @@ function createOperationFromCandidate(
     world.instrumentation?.incrementCounter("offensiveOperation.singleApproachFallbacks");
   }
   return operation;
+}
+
+function selectSupplyReliefTargets(world: WorldState, relief: SupplyReliefPlan): OperationTargetSelection {
+  const defender = world.units
+    .filter((unit) => unit.domain === "land" && unit.nationId === relief.enemyNationId && unit.regionId === relief.primaryReconnectionRegion)
+    .reduce((sum, unit) => sum + getUnitCombatStrength(unit), 0);
+  return {
+    primaryTargetRegionId: relief.primaryReconnectionRegion,
+    supportingTargetRegionIds: [],
+    stagingRegionId: relief.outsideApproachRegionId,
+    nearbyEnemyStrength: defender,
+    targetCoverageState: null,
+    targetLocalDefenderStrength: defender,
+    tacticalScore: relief.score,
+    topologyScore: 0,
+    supplyScore: relief.score,
+    tacticalReasons: ["supply-relief"],
+  };
 }
 
 function selectOperationTargets(
@@ -1969,7 +2025,7 @@ function recruitApproachGroups(
     const group = [...operation.approachGroups]
       .filter((item) =>
         item.feasibleStrength < item.committedStrengthTarget ||
-        (operation.approachGroups.length === 1 && claimed.size < 2)
+        (operation.approachGroups.length === 1 && claimed.size < (operation.supplyReliefPlanId ? 1 : 2))
       )
       .sort((a, b) =>
         (a.requiredStrength > 0 ? a.feasibleStrength / a.requiredStrength : 1) -
@@ -2027,7 +2083,14 @@ function recruitApproachGroups(
     claimed.add(item.unit.id);
   }
 
-  const nextIds = [...claimed].sort(compareIds);
+  // Units already inside the pocket are deliberately not preflight-routed
+  // through the supplied component.  They retain the same operation lease and
+  // join the attack only after the outside approach has staged.
+  const insideIds = operation.reliefInsideUnitIds.filter((unitId) => {
+    const unit = unitById.get(unitId);
+    return !!unit && !isUnavailable(unit);
+  });
+  const nextIds = [...new Set([...claimed, ...insideIds])].sort(compareIds);
   const changed = !arraysEqual(operation.assignedUnitIds, nextIds);
   const addedCount = nextIds.filter((unitId) => !previouslyAssignedIds.has(unitId)).length;
   if (addedCount > 0 && operation.initialAssignedUnitCount > 0) {
@@ -2121,6 +2184,7 @@ function transitionToAttacking(
     world.supplyCutoffs.attacksLaunched += 1;
     world.instrumentation?.incrementCounter("supplyCutoff.attacksLaunched");
   }
+  if (operation.supplyReliefPlanId) markSupplyReliefOperation(world, operation.supplyReliefPlanId, "attacking");
   world.offensiveOperations.achievedApproachCountTotal += operation.actualActiveApproachCount;
   world.offensiveOperations.synchronizationWaitTicks += operation.synchronizationWaitTicks;
   world.instrumentation?.incrementCounter(
@@ -3585,6 +3649,7 @@ function isOperationPlanEligible(
   nationId: NationId,
   plan: NationFrontPlan,
 ): boolean {
+  if (getSupplyReliefPlanForFront(world, nationId, plan.frontId)) return true;
   if (plan.posture === "attack") return true;
   const closure = bestPocketClosure(world, nationId, plan.frontId);
   if (closure?.tacticallyFeasible &&
