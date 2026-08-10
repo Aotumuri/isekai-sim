@@ -1,0 +1,208 @@
+import { WORLD_BALANCE } from "../data/balance";
+import type { MesoRegionId } from "../worldgen/meso-region";
+import type { NationId } from "../worldgen/nation";
+import type { SupplyComponentId } from "./supply-assessment";
+import type { WorldState } from "./world-state";
+import { getMesoById, getNeighborsById, getOwnerByMesoId } from "./world-cache";
+
+export type MaritimeSupplyInactiveReason =
+  | "no-transport"
+  | "port-lost"
+  | "route-invalid"
+  | "source-unsupplied";
+
+export interface MaritimeSupplyLink {
+  id: string;
+  nationId: NationId;
+  sourcePortId: MesoRegionId;
+  destinationPortId: MesoRegionId;
+  sourceLandComponentId: SupplyComponentId | null;
+  destinationLandComponentId: SupplyComponentId | null;
+  transportSupport: string[];
+  routeRegionIds: MesoRegionId[];
+  active: boolean;
+  reason: MaritimeSupplyInactiveReason | null;
+}
+
+export interface MaritimeConnectivityCache {
+  mapVersion: number;
+  seaComponentByRegionId: Map<MesoRegionId, number>;
+  parentByRegionId: Map<MesoRegionId, MesoRegionId | null>;
+  depthByRegionId: Map<MesoRegionId, number>;
+  routeByPortPair: Map<string, MesoRegionId[] | null>;
+  rebuildCount: number;
+  hitCount: number;
+}
+
+export interface MaritimeTransportPolicyResult {
+  satisfied: boolean;
+  support: string[];
+  reason: "no-transport" | null;
+}
+
+export function createMaritimeConnectivityCache(): MaritimeConnectivityCache {
+  return {
+    mapVersion: -1,
+    seaComponentByRegionId: new Map(),
+    parentByRegionId: new Map(),
+    depthByRegionId: new Map(),
+    routeByPortPair: new Map(),
+    rebuildCount: 0,
+    hitCount: 0,
+  };
+}
+
+/**
+ * The transport decision is deliberately isolated here. Disabled naval gameplay
+ * currently represents abstract civilian/military shipping. A later convoy
+ * system can replace this policy without changing Supply Assessment.
+ */
+export function evaluateMaritimeTransportPolicy(
+  _world: WorldState,
+  _nationId: NationId,
+  _sourcePortId: MesoRegionId,
+  _destinationPortId: MesoRegionId,
+): MaritimeTransportPolicyResult {
+  if (WORLD_BALANCE.unit.naval?.enabled === false) {
+    return {
+      satisfied: true,
+      support: ["abstract-shipping"],
+      reason: null,
+    };
+  }
+  return { satisfied: false, support: [], reason: "no-transport" };
+}
+
+export function getCachedMaritimeRoute(
+  world: WorldState,
+  cache: MaritimeConnectivityCache,
+  sourcePortId: MesoRegionId,
+  destinationPortId: MesoRegionId,
+): MesoRegionId[] | null {
+  ensureSeaConnectivity(world, cache);
+  const key = portPairKey(sourcePortId, destinationPortId);
+  if (cache.routeByPortPair.has(key)) {
+    cache.hitCount += 1;
+    world.instrumentation?.incrementCounter("maritimeSupply.cacheHits");
+    return cache.routeByPortPair.get(key) ?? null;
+  }
+
+  const route = buildRouteFromSeaForest(world, cache, sourcePortId, destinationPortId);
+  cache.routeByPortPair.set(key, route);
+  return route;
+}
+
+function ensureSeaConnectivity(
+  world: WorldState,
+  cache: MaritimeConnectivityCache,
+): void {
+  if (cache.mapVersion === world.mapVersion) return;
+  const mesoById = getMesoById(world);
+  const neighborsById = getNeighborsById(world);
+  const seaIds = [...mesoById.values()]
+    .filter((region) => region.type === "sea")
+    .map((region) => region.id)
+    .sort(compareIds);
+  const seaComponentByRegionId = new Map<MesoRegionId, number>();
+  const parentByRegionId = new Map<MesoRegionId, MesoRegionId | null>();
+  const depthByRegionId = new Map<MesoRegionId, number>();
+  let componentId = 0;
+
+  for (const root of seaIds) {
+    if (seaComponentByRegionId.has(root)) continue;
+    seaComponentByRegionId.set(root, componentId);
+    parentByRegionId.set(root, null);
+    depthByRegionId.set(root, 0);
+    const queue = [root];
+    for (let index = 0; index < queue.length; index += 1) {
+      const current = queue[index];
+      const depth = depthByRegionId.get(current) ?? 0;
+      const neighbors = [...(neighborsById.get(current) ?? [])].sort(compareIds);
+      for (const neighborId of neighbors) {
+        if (mesoById.get(neighborId)?.type !== "sea") continue;
+        if (seaComponentByRegionId.has(neighborId)) continue;
+        seaComponentByRegionId.set(neighborId, componentId);
+        parentByRegionId.set(neighborId, current);
+        depthByRegionId.set(neighborId, depth + 1);
+        queue.push(neighborId);
+      }
+    }
+    componentId += 1;
+  }
+
+  cache.mapVersion = world.mapVersion;
+  cache.seaComponentByRegionId = seaComponentByRegionId;
+  cache.parentByRegionId = parentByRegionId;
+  cache.depthByRegionId = depthByRegionId;
+  cache.routeByPortPair.clear();
+  cache.rebuildCount += 1;
+  world.instrumentation?.incrementCounter("maritimeSupply.cacheRebuilds");
+}
+
+function buildRouteFromSeaForest(
+  world: WorldState,
+  cache: MaritimeConnectivityCache,
+  sourcePortId: MesoRegionId,
+  destinationPortId: MesoRegionId,
+): MesoRegionId[] | null {
+  const sourceSeaId = getPortSeaEntrance(world, sourcePortId);
+  const destinationSeaId = getPortSeaEntrance(world, destinationPortId);
+  if (!sourceSeaId || !destinationSeaId) return null;
+  if (
+    cache.seaComponentByRegionId.get(sourceSeaId) !==
+    cache.seaComponentByRegionId.get(destinationSeaId)
+  ) return null;
+
+  const sourceAncestors = new Map<MesoRegionId, number>();
+  const sourcePath: MesoRegionId[] = [];
+  let current: MesoRegionId | null = sourceSeaId;
+  while (current) {
+    sourceAncestors.set(current, sourcePath.length);
+    sourcePath.push(current);
+    current = cache.parentByRegionId.get(current) ?? null;
+  }
+  const destinationPath: MesoRegionId[] = [];
+  current = destinationSeaId;
+  while (current && !sourceAncestors.has(current)) {
+    destinationPath.push(current);
+    current = cache.parentByRegionId.get(current) ?? null;
+  }
+  if (!current) return null;
+  const commonIndex = sourceAncestors.get(current);
+  if (commonIndex === undefined) return null;
+  const seaRoute = [
+    ...sourcePath.slice(0, commonIndex + 1),
+    ...destinationPath.reverse(),
+  ];
+  return [sourcePortId, ...seaRoute, destinationPortId];
+}
+
+function getPortSeaEntrance(
+  world: WorldState,
+  portId: MesoRegionId,
+): MesoRegionId | null {
+  const mesoById = getMesoById(world);
+  return [...(getNeighborsById(world).get(portId) ?? [])]
+    .filter((id) => mesoById.get(id)?.type === "sea")
+    .sort(compareIds)[0] ?? null;
+}
+
+function portPairKey(a: MesoRegionId, b: MesoRegionId): string {
+  return `${a}->${b}`;
+}
+
+function compareIds(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+export function isEffectivelyControlledPort(
+  world: WorldState,
+  nationId: NationId,
+  portId: MesoRegionId,
+): boolean {
+  const region = getMesoById(world).get(portId);
+  if (!region || region.type === "sea" || region.building !== "port") return false;
+  if (getOwnerByMesoId(world).get(portId) !== nationId) return false;
+  const occupier = world.occupation.mesoById.get(portId);
+  return !occupier || occupier === nationId;
+}

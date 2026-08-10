@@ -141,6 +141,17 @@ export interface WorldSummary {
   isolatedComponents: number;
   largestIsolatedStrength: number;
   longestIsolationDuration: number;
+  maritimeLinksEvaluated: number;
+  activeMaritimeLinks: number;
+  inactiveMaritimeLinks: number;
+  maritimeRemoteComponentsSupplied: number;
+  maritimeRemoteComponentsIsolated: number;
+  maritimeSupplyLossesDueToTransport: number;
+  maritimeSupplyLossesDueToPortCapture: number;
+  maritimeReconnections: number;
+  maritimeMultiHopPropagations: number;
+  maritimeCacheRebuilds: number;
+  maritimeCacheHits: number;
   battlefieldEnemyComponents: number;
   battlefieldArticulationPoints: number;
   battlefieldZeroExitComponents: number;

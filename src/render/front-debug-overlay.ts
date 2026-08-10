@@ -131,6 +131,7 @@ export function attachFrontDebugOverlay(
       layer.addChild(label);
     });
     drawSupplySourceMarkers(layer, world);
+    drawMaritimeSupplyLinks(layer, world);
     if (selectedSectorId && !world.landFronts.operationalSectorsById.has(selectedSectorId)) {
       selectedSectorId = null;
     }
@@ -730,6 +731,62 @@ function drawSupplySourceMarkers(layer: Container, world: WorldState): void {
       drawMarker(layer, world, regionId, "S", 0x5be7c4, "diamond");
     }
   }
+}
+
+function drawMaritimeSupplyLinks(layer: Container, world: WorldState): void {
+  const selectedByPair = new Map<string, WorldState["supplyAssessment"]["maritimeLinks"][number]>();
+  for (const link of world.supplyAssessment.maritimeLinks) {
+    const pair = [link.sourcePortId, link.destinationPortId].sort().join("<->");
+    const current = selectedByPair.get(pair);
+    if (!current || (!current.active && link.active)) selectedByPair.set(pair, link);
+  }
+  for (const link of selectedByPair.values()) {
+    const color = link.active ? 0x5be7c4 : 0xff6b6b;
+    if (link.routeRegionIds.length > 1) {
+      const geometry = new Graphics();
+      geometry.name = `MaritimeSupplyRoute:${link.id}`;
+      geometry.lineStyle({ width: 2, color, alpha: 0.72, cap: "round", join: "round" });
+      for (let index = 1; index < link.routeRegionIds.length; index += 1) {
+        const from = world.cache.mesoById.get(link.routeRegionIds[index - 1])?.center;
+        const to = world.cache.mesoById.get(link.routeRegionIds[index])?.center;
+        if (!from || !to) continue;
+        geometry.moveTo(from.x, from.y);
+        geometry.lineTo(to.x, to.y);
+      }
+      layer.addChild(geometry);
+    }
+    drawMarker(layer, world, link.sourcePortId, "M", color, "circle");
+    drawMarker(layer, world, link.destinationPortId, "M", color, "circle");
+    const source = world.cache.mesoById.get(link.sourcePortId)?.center;
+    const destination = world.cache.mesoById.get(link.destinationPortId)?.center;
+    if (!source || !destination) continue;
+    const text = new Text(formatMaritimeSupplyLink(world, link), LABEL_STYLE);
+    text.resolution = 2;
+    text.position.set((source.x + destination.x) / 2 + 6, (source.y + destination.y) / 2 + 6);
+    layer.addChild(text);
+  }
+}
+
+export function formatMaritimeSupplyLink(
+  world: WorldState,
+  link: WorldState["supplyAssessment"]["maritimeLinks"][number],
+): string {
+  const source = link.sourceLandComponentId
+    ? world.supplyAssessment.componentById.get(link.sourceLandComponentId)
+    : undefined;
+  const destination = link.destinationLandComponentId
+    ? world.supplyAssessment.componentById.get(link.destinationLandComponentId)
+    : undefined;
+  return [
+    "MARITIME SUPPLY",
+    `${link.sourcePortId} -> ${link.destinationPortId}`,
+    link.active ? "ACTIVE" : "INACTIVE",
+    `transport: ${link.transportSupport.join(", ") || "none"}`,
+    `source component: ${source?.supplied ? "SUPPLIED" : "ISOLATED"}`,
+    `destination component: ${destination?.supplied ? "SUPPLIED" : "ISOLATED"}`,
+    `route length: ${Math.max(0, link.routeRegionIds.length - 1)}`,
+    ...(!link.active ? [`reason: ${link.reason ?? "route-invalid"}`] : []),
+  ].join("\n");
 }
 
 function drawMarker(
