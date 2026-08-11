@@ -82,6 +82,7 @@ interface OverlayVersions {
   coverage: number;
   stalemate: number;
   strategicThreat: number;
+  coalitions: number;
   reserveDeployments: string;
   battles: string;
 }
@@ -1023,8 +1024,15 @@ function drawStrategicThreatSummary(layer: Container, world: WorldState): void {
 export function formatStrategicThreatSummary(world: WorldState): string {
   const lines = ["STRATEGIC THREAT"];
   for (const observation of world.strategicThreatObservation.observations) {
-    lines.push(formatStrategicThreatNationLine(observation));
+    const largestThreat = world.commonThreatCoalitions.largestThreatByNationId
+      .get(observation.nationId) ?? "-";
+    const coalition = world.commonThreatCoalitions.coalitionByMemberNationId
+      .get(observation.nationId);
+    lines.push(`${formatStrategicThreatNationLine(observation)} | LT ${largestThreat}`);
+    if (coalition) lines.push(`  COAL ${coalition.memberNationIds.join("+")} → ${coalition.targetNationId} | age ${coalition.age} | ${coalition.formationReason}${coalition.pendingDissolutionReason ? ` | pending ${coalition.pendingDissolutionReason}` : ""}`);
   }
+  const dissolution = world.commonThreatCoalitions.lastDissolutions[0];
+  if (dissolution) lines.push(`LAST DISSOLVE ${dissolution.memberNationIds.join("+")} → ${dissolution.targetNationId} | age ${dissolution.duration} | ${dissolution.reason}`);
   const intents = world.warIntent.assessments.slice(0, 6);
   if (intents.length > 0) lines.push("", "WAR INTENT");
   for (const intent of intents) {
@@ -1222,6 +1230,7 @@ function readVersions(world: WorldState): OverlayVersions {
     coverage: world.frontlineCoverage.version,
     stalemate: world.stalematePressure.version,
     strategicThreat: world.strategicThreatObservation.version,
+    coalitions: world.commonThreatCoalitions.version,
     reserveDeployments: world.strategicReserves.reserves
       .map((reserve) => {
         const deployment = reserve.deployment;
@@ -1240,7 +1249,7 @@ function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
   return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
     a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment && a.maritimeInterdiction === b.maritimeInterdiction && a.navalStrategy === b.navalStrategy && a.amphibiousOperations === b.amphibiousOperations && a.convoys === b.convoys && a.isolationEffects === b.isolationEffects && a.productionDiagnostics === b.productionDiagnostics && a.supplyCutoffs === b.supplyCutoffs && a.supplyDefense === b.supplyDefense && a.supplyRelief === b.supplyRelief &&
     a.retreats === b.retreats && a.coverage === b.coverage && a.stalemate === b.stalemate &&
-    a.strategicThreat === b.strategicThreat &&
+    a.strategicThreat === b.strategicThreat && a.coalitions === b.coalitions &&
     a.reserveDeployments === b.reserveDeployments && a.battles === b.battles;
 }
 

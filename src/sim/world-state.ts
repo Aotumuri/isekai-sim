@@ -33,6 +33,7 @@ import type { SupplyReliefState } from "./supply-relief";
 import type { AmphibiousOperationState } from "./amphibious";
 import type { StrategicThreatObservationState } from "./strategic-threat-observation";
 import type { WarIntentState } from "./war-intent";
+import type { CommonThreatCoalitionState } from "./common-threat-coalitions";
 
 export interface WorldState {
   width: number;
@@ -58,6 +59,7 @@ export interface WorldState {
   /** Completed strategic snapshot consumed on the following slow tick. */
   strategicThreatObservation: StrategicThreatObservationState;
   warIntent: WarIntentState;
+  commonThreatCoalitions: CommonThreatCoalitionState;
   battlefieldTopology: BattlefieldTopologyState;
   supplyAssessment: SupplyAssessmentState;
   isolationEffects: IsolationEffectsState;

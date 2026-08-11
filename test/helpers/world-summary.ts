@@ -160,6 +160,16 @@ export function summarizeWorld(world: WorldState): WorldSummary {
       world.strategicThreatObservation.evaluationCpuMs,
     strategicThreatMemoryBytes:
       world.strategicThreatObservation.estimatedMemoryBytes,
+    coalitionsFormed: world.commonThreatCoalitions.coalitionsFormed,
+    coalitionsDissolved: world.commonThreatCoalitions.coalitionsDissolved,
+    coalitionAverageDuration: world.commonThreatCoalitions.coalitionsDissolved > 0
+      ? world.commonThreatCoalitions.totalCoalitionDuration /
+        world.commonThreatCoalitions.coalitionsDissolved : 0,
+    coalitionSuppressedDeclarations:
+      world.commonThreatCoalitions.suppressedDeclarations,
+    coalitionThreatDrivenDeclarations:
+      world.commonThreatCoalitions.threatDrivenDeclarations,
+    coalitionMembers: world.commonThreatCoalitions.coalitionByMemberNationId.size,
     warIntentCandidateEvaluations: world.warIntent.candidateEvaluations,
     warIntentLandCandidates: world.warIntent.landCandidates,
     warIntentMaritimeCandidates: world.warIntent.maritimeCandidates,

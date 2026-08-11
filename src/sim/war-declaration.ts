@@ -9,6 +9,7 @@ import type {
 import { buildWarAdjacency, declareWar, isAtWar } from "./war-state";
 import type { WorldState } from "./world-state";
 import { getMesoById, getPortTargetsByNation } from "./world-cache";
+import { areCoalitionMembers } from "./common-threat-coalitions";
 
 const EPSILON = 0.000_001;
 
@@ -106,8 +107,12 @@ export function assessWarIntent(world: WorldState, candidate: WarIntentCandidate
   const opportunity = clamp((strengthRatio - 0.65) * 32 +
     target.vulnerability.score * 0.22 + target.existingWars * 7 -
     Math.max(0, target.momentum.score) * 0.08, 0, 50);
-  const threatResponse = clamp(target.threatScore * 0.22 +
+  let threatResponse = clamp(target.threatScore * 0.22 +
     Math.max(0, target.momentum.score) * 0.1 + target.intent.score * 0.06, 0, 32);
+  const coalition = world.commonThreatCoalitions.coalitionByMemberNationId
+    .get(candidate.aggressorId);
+  const targetsCommonThreat = coalition?.targetNationId === candidate.targetNationId;
+  if (targetsCommonThreat) threatResponse = clamp(threatResponse + 10, 0, 42);
   const ports = getPortTargetsByNation(world).get(candidate.targetNationId)?.length ?? 0;
   const capitalValue = world.nations.find((nation) =>
     nation.id === candidate.targetNationId)?.capitalMesoId ? 7 : 0;
@@ -157,8 +162,12 @@ export function assessWarIntent(world: WorldState, candidate: WarIntentCandidate
   }
   if (capitalEmergency) rejection.add("capital-emergency");
 
-  const externalExposure = calculateExternalExposure(world, attacker, target);
+  const rawExternalExposure = calculateExternalExposure(world, attacker, target);
+  const externalExposure = targetsCommonThreat ? rawExternalExposure * 0.85 : rawExternalExposure;
   if (externalExposure >= 18) rejection.add("external-threat");
+  const coalitionMemberTarget = areCoalitionMembers(world, candidate.aggressorId,
+    candidate.targetNationId);
+  if (coalitionMemberTarget) rejection.add("common-threat-coalition");
   if (strategicValue < 8) rejection.add("strategic-value-low");
   const score = opportunity + threatResponse + strategicValue - expectedCost -
     existingCommitment - externalExposure;
@@ -167,7 +176,7 @@ export function assessWarIntent(world: WorldState, candidate: WarIntentCandidate
   // Maritime readiness already pays a substantial transport, escort, and
   // distance premium, so its confidence threshold can be slightly lower.
   const threshold = settings.intentThreshold - (candidate.route === "maritime" ? 10 : 0);
-  const aboveThreshold = !hardRejected && score + EPSILON >= threshold;
+  const aboveThreshold = !hardRejected && !coalitionMemberTarget && score + EPSILON >= threshold;
   if (!aboveThreshold && rejection.size === 0) rejection.add("below-threshold");
   const dominantReason = chooseDominantReason(candidate.route, opportunity,
     threatResponse, strategicValue, target, ports, externalExposure);
@@ -237,6 +246,10 @@ function publishAssessments(world: WorldState, assessments: WarIntentAssessment[
     if (assessment.aboveThreshold) state.intentsAboveThreshold += 1;
     else {
       state.suppressedDeclarations += 1;
+      if (assessment.rejectedReasons.includes("common-threat-coalition")) {
+        world.commonThreatCoalitions.suppressedDeclarations += 1;
+        world.instrumentation?.incrementCounter("coalitions.suppressedDeclarations");
+      }
       if (assessment.rejectedReasons.includes("external-threat")) state.suppressionByExternalThreat += 1;
       if (assessment.rejectedReasons.includes("overextended")) state.suppressionByExistingWars += 1;
       if (assessment.rejectedReasons.includes("capital-emergency")) state.suppressionByCapitalEmergency += 1;
@@ -256,6 +269,11 @@ function recordDeclaration(world: WorldState, intent: WarIntentAssessment,
   const state = world.warIntent;
   state.declarations += 1;
   state.declarationsByReason[intent.dominantReason] += 1;
+  if (world.commonThreatCoalitions.coalitionByMemberNationId
+    .get(intent.aggressorId)?.targetNationId === intent.targetNationId) {
+    world.commonThreatCoalitions.threatDrivenDeclarations += 1;
+    world.instrumentation?.incrementCounter("coalitions.threatDrivenDeclarations");
+  }
   if (intent.route === "maritime") state.maritimeDeclarations += 1;
   if (targetWars > 0) {
     state.warsAgainstAlreadyFightingNations += 1;

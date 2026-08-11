@@ -25,6 +25,7 @@ import { updateFrontlineCoverage } from "./frontline-coverage";
 import { updateStalematePressure } from "./stalemate-pressure";
 import { updateStrategicProgress } from "./strategic-progress";
 import { updateStrategicThreatObservation } from "./strategic-threat-observation";
+import { updateCommonThreatCoalitions } from "./common-threat-coalitions";
 import { updateCollapseAdvances } from "./collapse-advance";
 import { updateBattlefieldTopology } from "./battlefield-topology";
 import { updateSupplyAssessment } from "./supply-assessment";
@@ -182,4 +183,5 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateCollapseAdvances(world);
   // Phase A observer runs after all strategic producers and has no consumers.
   updateStrategicThreatObservation(world);
+  updateCommonThreatCoalitions(world);
 }

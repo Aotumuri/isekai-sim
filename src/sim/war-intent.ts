@@ -10,6 +10,7 @@ export type WarIntentReason =
   | "weakened-enemy";
 export type WarIntentRejectionReason =
   | "external-threat"
+  | "common-threat-coalition"
   | "overextended"
   | "insufficient-strength"
   | "maritime-infeasible"

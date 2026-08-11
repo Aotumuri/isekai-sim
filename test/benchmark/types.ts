@@ -101,6 +101,12 @@ export interface WorldSummary {
   strategicThreatExposureEdges: number;
   strategicThreatCpuMs: number;
   strategicThreatMemoryBytes: number;
+  coalitionsFormed: number;
+  coalitionsDissolved: number;
+  coalitionAverageDuration: number;
+  coalitionSuppressedDeclarations: number;
+  coalitionThreatDrivenDeclarations: number;
+  coalitionMembers: number;
   warIntentCandidateEvaluations: number;
   warIntentLandCandidates: number;
   warIntentMaritimeCandidates: number;
