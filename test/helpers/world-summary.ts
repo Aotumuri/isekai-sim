@@ -405,6 +405,21 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     amphibiousAverageLandingSurvivalTime: world.amphibiousOperations.beachheadSurvivalSamples > 0
       ? world.amphibiousOperations.totalBeachheadSurvivalTicks /
         world.amphibiousOperations.beachheadSurvivalSamples : 0,
+    amphibiousAverageLandingScore: world.amphibiousOperations.landingSiteSamples > 0
+      ? world.amphibiousOperations.totalLandingScore / world.amphibiousOperations.landingSiteSamples : 0,
+    amphibiousAverageStrategicValue: world.amphibiousOperations.landingSiteSamples > 0
+      ? world.amphibiousOperations.totalStrategicValue / world.amphibiousOperations.landingSiteSamples : 0,
+    amphibiousAverageDefenderEstimate: world.amphibiousOperations.landingSiteSamples > 0
+      ? world.amphibiousOperations.totalImmediateDefenderStrength / world.amphibiousOperations.landingSiteSamples : 0,
+    amphibiousAverageReactionEstimate: world.amphibiousOperations.landingSiteSamples > 0
+      ? world.amphibiousOperations.totalReactionStrength / world.amphibiousOperations.landingSiteSamples : 0,
+    amphibiousLandingSiteChanges: world.amphibiousOperations.landingSiteChanges,
+    amphibiousCapitalTargets: world.amphibiousOperations.capitalTargets,
+    amphibiousPortTargets: world.amphibiousOperations.portTargets,
+    amphibiousStrategicCityTargets: world.amphibiousOperations.strategicCityTargets,
+    amphibiousSuccessfulCapitalBeachheads: world.amphibiousOperations.successfulCapitalBeachheads,
+    amphibiousSuccessfulPortBeachheads: world.amphibiousOperations.successfulPortBeachheads,
+    amphibiousSuccessfulStrategicCityBeachheads: world.amphibiousOperations.successfulStrategicCityBeachheads,
     amphibiousPlanningFailures: world.amphibiousOperations.planningFailures,
     amphibiousAssemblyFailures: world.amphibiousOperations.assemblyFailures,
     amphibiousReadyFailures: world.amphibiousOperations.readyFailures,

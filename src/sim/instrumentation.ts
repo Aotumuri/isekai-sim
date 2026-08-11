@@ -338,6 +338,7 @@ export type SimulationCounterName =
   | "amphibious.assemblySuccess"
   | "amphibious.fleetReady"
   | "amphibious.landingPlans"
+  | "amphibious.landingSiteChanges"
   | "amphibious.successfulBeachheads"
   | "amphibious.validationFailure.planning"
   | "amphibious.validationFailure.assembly"

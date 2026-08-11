@@ -19,6 +19,8 @@ export interface WorldCache {
   cityTargetsKey: string;
   portTargetsByNation: Map<NationId, MesoRegionId[]>;
   portTargetsKey: string;
+  averageRegionSpan: number;
+  averageRegionSpanMapVersion: number;
   aiGeography?: AiGeographyCacheState;
 }
 
@@ -38,6 +40,8 @@ export function createWorldCache(): WorldCache {
     cityTargetsKey: "",
     portTargetsByNation: new Map(),
     portTargetsKey: "",
+    averageRegionSpan: 1,
+    averageRegionSpanMapVersion: -1,
   };
 }
 

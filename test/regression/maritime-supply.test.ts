@@ -127,7 +127,69 @@ test("amphibious planning creates one deterministic leased plan and reserves phy
     updateAmphibiousOperations(world);
   }
   assert.equal(world.amphibiousOperations.successfulBeachheads, 1);
+  assert.equal(world.amphibiousOperations.portTargets, 1);
+  assert.equal(world.amphibiousOperations.successfulPortBeachheads, 1);
+  assert.equal(world.amphibiousOperations.landingSiteSamples, 1);
   assert.equal(world.amphibiousOperations.launchedOperations, 1);
+});
+
+test("amphibious landing strength includes speed-based reaction forces", () => {
+  const world = createMaritimeWorld(true, 3);
+  const enemyMacroIds = world.macroRegions
+    .filter((macro) => macro.mesoRegionIds.includes(id("port-b")) || macro.mesoRegionIds.includes(id("island-b")))
+    .map((macro) => { macro.nationId = NATION_B; return macro.id; });
+  world.nations.push(createNation(NATION_B, id("island-b"), enemyMacroIds));
+  world.cache.ownerByMesoId.clear();
+  declareWar(world.wars, NATION_A, NATION_B, 0);
+  const reactionUnit = createUnitForType(createUnitId(world.unitIdCounter++), NATION_B, id("island-b"), "Infantry");
+  const infantry = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "Infantry");
+  const escort = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip");
+  world.units.push(reactionUnit, infantry, escort);
+  world.supplyAssessment.navalStrategy.missions = [{
+    id: "reaction-reserve", nationId: NATION_A, type: "RESERVE", shipIds: [escort.id],
+    targetPortId: id("port-a"), priority: 10, createdTick: 0, status: "ACTIVE", reasonFlags: ["test-reserve"],
+  }];
+
+  updateAmphibiousPlanning(world);
+
+  const demand = world.amphibiousOperations.capabilityDemands[0]!;
+  assert.equal(demand.immediateDefenderStrength, 0);
+  assert(demand.shortReactionStrength > 0);
+  assert(demand.reactionStrength > 0);
+  assert(demand.requiredLandingStrength > 0.5);
+  assert(Number.isFinite(demand.landingScore));
+  assert(demand.strategicValue > 0);
+  assert(demand.selectedReason.length > 0);
+});
+
+test("landing-site scoring rejects a valuable capital coast when reaction risk is worse", () => {
+  const world = createMaritimeWorld(true, 3);
+  const enemyMacroIds = world.macroRegions
+    .filter((macro) => macro.mesoRegionIds.includes(id("port-b")) || macro.mesoRegionIds.includes(id("island-b")))
+    .map((macro) => { macro.nationId = NATION_B; return macro.id; });
+  world.mesoRegions.find((region) => region.id === id("island-b"))!.building = "capital";
+  world.nations.push(createNation(NATION_B, id("island-b"), enemyMacroIds));
+  world.cache.ownerByMesoId.clear();
+  addEnemyPort(world);
+  declareWar(world.wars, NATION_A, NATION_B, 0);
+  for (let index = 0; index < 8; index += 1) {
+    world.units.push(createUnitForType(createUnitId(world.unitIdCounter++), NATION_B, id("port-b"), "Infantry"));
+  }
+  const infantry = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "Infantry");
+  const escort = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip");
+  world.units.push(infantry, escort);
+  world.supplyAssessment.navalStrategy.missions = [{
+    id: "site-selection-reserve", nationId: NATION_A, type: "RESERVE", shipIds: [escort.id],
+    targetPortId: id("port-a"), priority: 10, createdTick: 0, status: "ACTIVE", reasonFlags: ["test-reserve"],
+  }];
+
+  updateAmphibiousPlanning(world);
+
+  const demand = world.amphibiousOperations.capabilityDemands[0]!;
+  assert.equal(demand.destinationPortId, id("enemy-port"));
+  assert.equal(demand.targetTypes.includes("capital"), false);
+  assert.equal(demand.immediateDefenderStrength, 0);
+  assert(demand.reasonFlags.includes("weak-coastal-defense"));
 });
 
 test("amphibious planning delays for combat power then launches multiple transports together", () => {

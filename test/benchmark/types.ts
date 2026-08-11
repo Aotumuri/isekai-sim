@@ -259,6 +259,17 @@ export interface WorldSummary {
   amphibiousEscortUtilization: number;
   amphibiousLaunchesDelayedForForceAssembly: number;
   amphibiousAverageLandingSurvivalTime: number;
+  amphibiousAverageLandingScore: number;
+  amphibiousAverageStrategicValue: number;
+  amphibiousAverageDefenderEstimate: number;
+  amphibiousAverageReactionEstimate: number;
+  amphibiousLandingSiteChanges: number;
+  amphibiousCapitalTargets: number;
+  amphibiousPortTargets: number;
+  amphibiousStrategicCityTargets: number;
+  amphibiousSuccessfulCapitalBeachheads: number;
+  amphibiousSuccessfulPortBeachheads: number;
+  amphibiousSuccessfulStrategicCityBeachheads: number;
   amphibiousPlanningFailures: number;
   amphibiousAssemblyFailures: number;
   amphibiousReadyFailures: number;

@@ -46,6 +46,14 @@ export interface AmphibiousCapabilityDemand {
   requiredLandingStrength: number;
   observedCoastalStrength: number;
   observedReserveStrength: number;
+  landingScore: number;
+  strategicValue: number;
+  immediateDefenderStrength: number;
+  reactionStrength: number;
+  shortReactionStrength: number;
+  mediumReactionStrength: number;
+  selectedReason: string;
+  targetTypes: AmphibiousTargetType[];
   assaultRatio: number;
   launchReady: boolean;
   waitingReason: string | null;
@@ -131,6 +139,12 @@ export interface AmphibiousOperation {
   completedAtTick: number | null;
   cancellationReason: AmphibiousCancellationReason | null;
   reasonFlags: string[];
+  landingScore: number;
+  strategicValue: number;
+  immediateDefenderStrength: number;
+  reactionStrength: number;
+  selectedReason: string;
+  targetTypes: AmphibiousTargetType[];
   launchFeasibility: AmphibiousLaunchFeasibility;
   launchedAtTick: number | null;
   beachheadOutcome: "pending" | "success" | "failure";
@@ -212,7 +226,21 @@ export interface AmphibiousOperationState {
   voyageFailures: number;
   landingFailures: number;
   departurePortCancellations: number;
+  landingSiteSamples: number;
+  totalLandingScore: number;
+  totalStrategicValue: number;
+  totalImmediateDefenderStrength: number;
+  totalReactionStrength: number;
+  landingSiteChanges: number;
+  capitalTargets: number;
+  portTargets: number;
+  strategicCityTargets: number;
+  successfulCapitalBeachheads: number;
+  successfulPortBeachheads: number;
+  successfulStrategicCityBeachheads: number;
 }
+
+export type AmphibiousTargetType = "capital" | "port" | "strategic-city";
 
 export function createAmphibiousOperationState(): AmphibiousOperationState {
   return { version: 0, nextOperationNumber: 0, nextCapabilityDemandNumber: 0,
@@ -246,7 +274,12 @@ export function createAmphibiousOperationState(): AmphibiousOperationState {
     totalReadyToLaunchLatencyTicks: 0, positioningTicksRemovedSamples: 0,
     totalPositioningTicksRemoved: 0,
     planningFailures: 0, assemblyFailures: 0, readyFailures: 0,
-    voyageFailures: 0, landingFailures: 0, departurePortCancellations: 0 };
+    voyageFailures: 0, landingFailures: 0, departurePortCancellations: 0,
+    landingSiteSamples: 0, totalLandingScore: 0, totalStrategicValue: 0,
+    totalImmediateDefenderStrength: 0, totalReactionStrength: 0,
+    landingSiteChanges: 0, capitalTargets: 0, portTargets: 0,
+    strategicCityTargets: 0, successfulCapitalBeachheads: 0,
+    successfulPortBeachheads: 0, successfulStrategicCityBeachheads: 0 };
 }
 
 /** Slow-tick strategic evaluator. It only considers cached ports, fronts and supply data. */
@@ -269,26 +302,9 @@ export function updateAmphibiousPlanning(world: WorldState): void {
     const opportunityValid = isAtWar(demand.nationId, demand.enemyNationId, warAdjacency) &&
       ownPorts.length > 0 && enemyPorts.length > 0 &&
       isStrategicOpportunity(world, demand.nationId, demand.enemyNationId);
-    const route = opportunityValid && ownPorts.includes(demand.departurePortId) &&
-      enemyPorts.includes(demand.destinationPortId)
-      ? getCachedMaritimeRoute(world, world.supplyAssessment.maritimeConnectivity,
-        demand.departurePortId, demand.destinationPortId)
+    const candidate = opportunityValid
+      ? chooseCandidate(world, demand.nationId, demand.enemyNationId, ownPorts, enemyPorts)
       : null;
-    const updatedEstimate = route
-      ? estimateAssaultStrength(world, demand.enemyNationId, demand.destinationPortId)
-      : null;
-    const candidate: LandingCandidate | null = route && updatedEstimate ? {
-      nationId: demand.nationId,
-      enemyId: demand.enemyNationId,
-      departure: demand.departurePortId,
-      destination: demand.destinationPortId,
-      route,
-      score: demand.priority,
-      reasons: demand.reasonFlags,
-      requiredStrength: updatedEstimate.requiredStrength,
-      coastalStrength: updatedEstimate.coastalStrength,
-      reserveStrength: updatedEstimate.reserveStrength,
-    } : null;
     if (!candidate) {
       expireCapabilityDemand(world, demand);
       continue;
@@ -484,35 +500,77 @@ interface LandingCandidate {
   requiredStrength: number;
   coastalStrength: number;
   reserveStrength: number;
+  strategicValue: number;
+  immediateDefenderStrength: number;
+  reactionStrength: number;
+  shortReactionStrength: number;
+  mediumReactionStrength: number;
+  selectedReason: string;
+  targetTypes: AmphibiousTargetType[];
 }
 function chooseCandidate(world: WorldState, nationId: NationId, enemyId: NationId, departures: MesoRegionId[], destinations: MesoRegionId[]): LandingCandidate | null {
   const mesoById = getMesoById(world);
   const neighborsById = getNeighborsById(world);
-  const enemyStrength = new Map<MesoRegionId, number>();
-  for (const unit of world.units) if (unit.domain === "land" && unit.nationId === enemyId) enemyStrength.set(unit.regionId, (enemyStrength.get(unit.regionId) ?? 0) + getUnitCombatStrength(unit));
+  const enemyUnits = world.units.filter((unit) => unit.domain === "land" && unit.nationId === enemyId);
+  const averageRegionSpan = estimateAverageRegionSpan(world);
+  const activeEnemyOperationUnits = new Set(world.offensiveOperations.operations
+    .filter((operation) => operation.nationId === enemyId && operation.outcome === null)
+    .flatMap((operation) => operation.assignedUnitIds));
+  const friendlyObjectives = world.offensiveOperations.operations
+    .filter((operation) => operation.nationId === nationId && operation.enemyNationId === enemyId && operation.outcome === null)
+    .flatMap((operation) => [operation.primaryTargetRegionId, ...operation.supportingTargetRegionIds]);
   const candidates: LandingCandidate[] = [];
   for (const destination of [...destinations].sort(compareIds).slice(0, 8)) {
+    const estimate = estimateAssaultStrength(world, enemyId, destination, enemyUnits,
+      averageRegionSpan, activeEnemyOperationUnits);
+    const neighboringIds = neighborsById.get(destination) ?? [];
+    const coastalBuildings = [destination, ...neighboringIds].map((id) => mesoById.get(id)?.building);
+    const capitalCoast = coastalBuildings.includes("capital");
+    const strategicCity = coastalBuildings.includes("city");
+    const supplySource = world.supplyAssessment.maritimeLinks.some((link) =>
+      link.nationId === enemyId && link.sourcePortId === destination);
+    const nearbyFriendlyObjective = friendlyObjectives.some((id) =>
+      id === destination || neighboringIds.includes(id));
+    const expansionRegions = neighboringIds.filter((id) =>
+      mesoById.get(id)?.type === "land" && getOwnerByMesoId(world).get(id) === enemyId).length;
+    const value = WORLD_BALANCE.unit.amphibiousAssault.landingValue;
+    const strategicValue = value.port + (capitalCoast ? value.capital : 0) +
+      (strategicCity ? value.strategicCity : 0) +
+      (supplySource ? value.maritimeSupplySource : 0) +
+      (estimate.immediateDefenderStrength === 0 ? value.weakDefense : 0) +
+      expansionRegions * value.inlandExpansionPerRegion +
+      (nearbyFriendlyObjective ? value.nearbyFriendlyObjective : 0);
     for (const departure of [...departures].sort(compareIds).slice(0, 8)) {
       const route = getCachedMaritimeRoute(world, world.supplyAssessment.maritimeConnectivity, departure, destination);
       if (!route) continue;
-      const coastalBuildings = [destination, ...(neighborsById.get(destination) ?? [])]
-        .map((id) => mesoById.get(id)?.building);
-      const capitalCoast = coastalBuildings.includes("capital");
-      const strategicCity = coastalBuildings.includes("city");
-      const supplySource = world.supplyAssessment.maritimeLinks.some((link) => link.nationId === enemyId && link.sourcePortId === destination);
-      const defense = enemyStrength.get(destination) ?? 0;
-      const reserveStrength = (neighborsById.get(destination) ?? [])
-        .reduce((sum, id) => sum + (enemyStrength.get(id) ?? 0), 0);
-      const assaultBalance = WORLD_BALANCE.unit.amphibiousAssault;
-      const strategicMultiplier = (capitalCoast ? assaultBalance.capitalMultiplier : 1) *
-        (strategicCity ? assaultBalance.strategicCityMultiplier : 1);
-      const requiredStrength = Math.max(0.5,
-        (defense * assaultBalance.coastalDefenseMultiplier +
-          reserveStrength * assaultBalance.nearbyReserveWeight) * strategicMultiplier);
-      const reasons = ["enemy-port", ...(capitalCoast ? ["capital-coast"] : []), ...(strategicCity ? ["strategic-city"] : []), ...(supplySource ? ["maritime-supply-source"] : []), ...(defense === 0 ? ["weak-coastal-defense"] : [])];
+      const risk = WORLD_BALANCE.unit.amphibiousAssault.landingRisk;
+      const score = strategicValue -
+        estimate.immediateDefenderStrength * risk.immediateDefenderPerStrength -
+        estimate.reactionStrength * risk.reactionPerStrength -
+        Math.max(0, route.length - 1) * risk.travelPerRouteSegment;
+      const reasons = ["enemy-port", ...(capitalCoast ? ["capital-coast"] : []),
+        ...(strategicCity ? ["strategic-city"] : []),
+        ...(supplySource ? ["maritime-supply-source"] : []),
+        ...(estimate.immediateDefenderStrength === 0 ? ["weak-coastal-defense"] : []),
+        ...(nearbyFriendlyObjective ? ["nearby-friendly-objective"] : []),
+        ...(expansionRegions > 1 ? ["inland-expansion"] : []),
+        ...(estimate.enemyOperationStrength > 0 ? ["nearby-enemy-operation"] : []),
+        ...(estimate.reserveReactionStrength > 0 ? ["local-reserve-concentration"] : [])];
+      const selectedReason = selectLandingReason({ capitalCoast, strategicCity, supplySource,
+        weakDefense: estimate.immediateDefenderStrength === 0, nearbyFriendlyObjective,
+        expansionRegions, reactionStrength: estimate.reactionStrength });
+      const targetTypes: AmphibiousTargetType[] = ["port",
+        ...(capitalCoast ? ["capital" as const] : []),
+        ...(strategicCity ? ["strategic-city" as const] : [])];
       candidates.push({ nationId, enemyId, departure, destination, route,
-        score: (capitalCoast ? 100 : 0) + (strategicCity ? 30 : 0) + (supplySource ? 60 : 0) + (defense === 0 ? 40 : -defense * 5) - route.length,
-        reasons, requiredStrength, coastalStrength: defense, reserveStrength });
+        score, reasons, requiredStrength: estimate.requiredStrength,
+        coastalStrength: estimate.immediateDefenderStrength,
+        reserveStrength: estimate.reactionStrength, strategicValue,
+        immediateDefenderStrength: estimate.immediateDefenderStrength,
+        reactionStrength: estimate.reactionStrength,
+        shortReactionStrength: estimate.shortReactionStrength,
+        mediumReactionStrength: estimate.mediumReactionStrength,
+        selectedReason, targetTypes });
     }
   }
   return candidates.sort((a, b) => b.score - a.score || compareIds(a.destination, b.destination) || compareIds(a.departure, b.departure))[0] ?? null;
@@ -522,26 +580,49 @@ function estimateAssaultStrength(
   world: WorldState,
   enemyId: NationId,
   destination: MesoRegionId,
-): Pick<LandingCandidate, "requiredStrength" | "coastalStrength" | "reserveStrength"> {
-  const neighbors = getNeighborsById(world).get(destination) ?? [];
-  let coastalStrength = 0;
-  let reserveStrength = 0;
-  for (const unit of world.units) {
-    if (unit.domain !== "land" || unit.nationId !== enemyId) continue;
-    if (unit.regionId === destination) coastalStrength += getUnitCombatStrength(unit);
-    else if (neighbors.includes(unit.regionId)) reserveStrength += getUnitCombatStrength(unit);
-  }
-  const mesoById = getMesoById(world);
-  const coastalBuildings = [destination, ...neighbors].map((id) => mesoById.get(id)?.building);
+  providedEnemyUnits?: readonly UnitState[],
+  providedAverageRegionSpan?: number,
+  providedEnemyOperationUnits?: ReadonlySet<UnitId>,
+): { requiredStrength: number; immediateDefenderStrength: number; reactionStrength: number;
+  shortReactionStrength: number; mediumReactionStrength: number; reserveReactionStrength: number;
+  enemyOperationStrength: number } {
+  const enemyUnits = providedEnemyUnits ?? world.units.filter((unit) =>
+    unit.domain === "land" && unit.nationId === enemyId);
+  const destinationCenter = getMesoById(world).get(destination)?.center;
+  const averageRegionSpan = providedAverageRegionSpan ?? estimateAverageRegionSpan(world);
+  const enemyOperationUnits = providedEnemyOperationUnits ?? new Set(world.offensiveOperations.operations
+    .filter((operation) => operation.nationId === enemyId && operation.outcome === null)
+    .flatMap((operation) => operation.assignedUnitIds));
   const balance = WORLD_BALANCE.unit.amphibiousAssault;
-  const strategicMultiplier = (coastalBuildings.includes("capital") ? balance.capitalMultiplier : 1) *
-    (coastalBuildings.includes("city") ? balance.strategicCityMultiplier : 1);
+  const shortWindow = balance.beachheadSurvivalTicks * balance.reactionShortWindowFraction;
+  const mediumWindow = balance.beachheadSurvivalTicks * balance.reactionMediumWindowFraction;
+  let immediateDefenderStrength = 0;
+  let shortReactionStrength = 0;
+  let mediumReactionStrength = 0;
+  let reserveReactionStrength = 0;
+  let enemyOperationStrength = 0;
+  for (const unit of enemyUnits) {
+    const strength = getUnitCombatStrength(unit);
+    if (unit.regionId === destination) { immediateDefenderStrength += strength; continue; }
+    const center = getMesoById(world).get(unit.regionId)?.center;
+    if (!center || !destinationCenter || !Number.isFinite(unit.moveTicksPerRegion)) continue;
+    const directDistance = Math.hypot(center.x - destinationCenter.x, center.y - destinationCenter.y);
+    const estimatedSegments = Math.max(1, Math.ceil(directDistance / averageRegionSpan));
+    const progressTicks = Math.floor(Math.max(0, unit.moveProgressMs) / FAST_TICK_MS);
+    const arrivalTicks = Math.max(0, estimatedSegments * Math.max(1, unit.moveTicksPerRegion) - progressTicks);
+    if (arrivalTicks > mediumWindow) continue;
+    if (arrivalTicks <= shortWindow) shortReactionStrength += strength;
+    else mediumReactionStrength += strength;
+    if (world.strategicReserves.reserveNationByUnitId.get(unit.id) === enemyId) reserveReactionStrength += strength;
+    if (enemyOperationUnits.has(unit.id)) enemyOperationStrength += strength;
+  }
+  const reactionStrength = shortReactionStrength * balance.reactionShortWeight +
+    mediumReactionStrength * balance.reactionMediumWeight;
   return {
-    coastalStrength,
-    reserveStrength,
+    immediateDefenderStrength, reactionStrength, shortReactionStrength, mediumReactionStrength,
+    reserveReactionStrength, enemyOperationStrength,
     requiredStrength: Math.max(0.5,
-      (coastalStrength * balance.coastalDefenseMultiplier +
-        reserveStrength * balance.nearbyReserveWeight) * strategicMultiplier),
+      immediateDefenderStrength * balance.coastalDefenseMultiplier + reactionStrength),
   };
 }
 
@@ -561,6 +642,14 @@ function createCapabilityDemand(world: WorldState, candidate: LandingCandidate):
     requiredLandingStrength: candidate.requiredStrength,
     observedCoastalStrength: candidate.coastalStrength,
     observedReserveStrength: candidate.reserveStrength,
+    landingScore: candidate.score,
+    strategicValue: candidate.strategicValue,
+    immediateDefenderStrength: candidate.immediateDefenderStrength,
+    reactionStrength: candidate.reactionStrength,
+    shortReactionStrength: candidate.shortReactionStrength,
+    mediumReactionStrength: candidate.mediumReactionStrength,
+    selectedReason: candidate.selectedReason,
+    targetTypes: candidate.targetTypes,
     assaultRatio: 0,
     launchReady: false,
     waitingReason: "assembling combat power",
@@ -593,12 +682,29 @@ function createCapabilityDemand(world: WorldState, candidate: LandingCandidate):
 }
 
 function applyCandidateToDemand(world: WorldState, demand: AmphibiousCapabilityDemand, candidate: LandingCandidate): void {
+  const siteChanged = demand.destinationPortId !== candidate.destination;
+  const departureChanged = demand.departurePortId !== candidate.departure;
+  if (siteChanged) {
+    world.amphibiousOperations.landingSiteChanges += 1;
+    world.instrumentation?.incrementCounter("amphibious.landingSiteChanges");
+  }
+  if (departureChanged) releaseCapabilityAssignments(world, demand);
+  demand.departurePortId = candidate.departure;
+  demand.destinationPortId = candidate.destination;
   demand.routeRegionIds = candidate.route;
   demand.reasonFlags = candidate.reasons;
   demand.priority = candidate.score;
   demand.requiredLandingStrength = candidate.requiredStrength;
   demand.observedCoastalStrength = candidate.coastalStrength;
   demand.observedReserveStrength = candidate.reserveStrength;
+  demand.landingScore = candidate.score;
+  demand.strategicValue = candidate.strategicValue;
+  demand.immediateDefenderStrength = candidate.immediateDefenderStrength;
+  demand.reactionStrength = candidate.reactionStrength;
+  demand.shortReactionStrength = candidate.shortReactionStrength;
+  demand.mediumReactionStrength = candidate.mediumReactionStrength;
+  demand.selectedReason = candidate.selectedReason;
+  demand.targetTypes = candidate.targetTypes;
   const requirement = deriveForceRequirement(world, demand.nationId, demand.departurePortId,
     demand.requiredLandingStrength);
   demand.desiredLandingUnitCount = requirement.landUnitCount;
@@ -846,6 +952,10 @@ function createOperation(world: WorldState, demand: AmphibiousCapabilityDemand, 
       strength: getUnitCombatStrength(u), arrivedAtTick: world.time.fastTick })), preparationLeaseStartedAtTick: world.time.fastTick,
     preparationLeaseEndedAtTick: null, phaseStartedAtTick: world.time.fastTick, completedAtTick: null,
     cancellationReason: null, reasonFlags: candidate.reasons,
+    landingScore: candidate.score, strategicValue: candidate.strategicValue,
+    immediateDefenderStrength: candidate.immediateDefenderStrength,
+    reactionStrength: candidate.reactionStrength, selectedReason: candidate.selectedReason,
+    targetTypes: candidate.targetTypes,
     launchFeasibility: feasibility, launchedAtTick: null,
     beachheadOutcome: "pending", beachheadEvaluatedAtTick: null };
   world.amphibiousOperations.operations.push(operation); world.amphibiousOperations.landingPlans += 1;
@@ -859,6 +969,14 @@ function createOperation(world: WorldState, demand: AmphibiousCapabilityDemand, 
   state.totalTransportUtilization += units.length /
     Math.max(1, transports.length * (WORLD_BALANCE.unit.navalTransportCapacity ?? 10));
   state.totalEscortUtilization += demand.desiredEscortCount / Math.max(1, escorts.length);
+  state.landingSiteSamples += 1;
+  state.totalLandingScore += candidate.score;
+  state.totalStrategicValue += candidate.strategicValue;
+  state.totalImmediateDefenderStrength += candidate.immediateDefenderStrength;
+  state.totalReactionStrength += candidate.reactionStrength;
+  if (candidate.targetTypes.includes("capital")) state.capitalTargets += 1;
+  if (candidate.targetTypes.includes("port")) state.portTargets += 1;
+  if (candidate.targetTypes.includes("strategic-city")) state.strategicCityTargets += 1;
   world.amphibiousOperations.version += 1;
   world.instrumentation?.incrementCounter("amphibious.landingPlans");
   return operation;
@@ -987,6 +1105,9 @@ function evaluateBeachheads(world: WorldState): void {
     state.totalBeachheadSurvivalTicks += survivalTicks;
     if (held) {
       state.successfulBeachheads += 1;
+      if (operation.targetTypes.includes("capital")) state.successfulCapitalBeachheads += 1;
+      if (operation.targetTypes.includes("port")) state.successfulPortBeachheads += 1;
+      if (operation.targetTypes.includes("strategic-city")) state.successfulStrategicCityBeachheads += 1;
       world.instrumentation?.incrementCounter("amphibious.successfulBeachheads");
     } else {
       state.failedBeachheads += 1;
@@ -1292,5 +1413,38 @@ function compareIds(a: string, b: string): number { return a < b ? -1 : a > b ? 
 function compareUnits(a: UnitState, b: UnitState): number { return compareIds(a.id, b.id); }
 function compareLandingUnits(a: UnitState, b: UnitState): number {
   return getUnitCombatStrength(b) - getUnitCombatStrength(a) || compareUnits(a, b);
+}
+function estimateAverageRegionSpan(world: WorldState): number {
+  if (world.cache.averageRegionSpanMapVersion === world.mapVersion) {
+    return world.cache.averageRegionSpan;
+  }
+  const mesoById = getMesoById(world);
+  let total = 0;
+  let samples = 0;
+  for (const region of world.mesoRegions) {
+    for (const neighbor of region.neighbors) {
+      if (region.id >= neighbor.id) continue;
+      const center = mesoById.get(neighbor.id)?.center;
+      if (!center) continue;
+      total += Math.hypot(region.center.x - center.x, region.center.y - center.y);
+      samples += 1;
+    }
+  }
+  world.cache.averageRegionSpan = samples > 0
+    ? Math.max(1, total / samples)
+    : Math.max(1, Math.min(world.width, world.height) / 10);
+  world.cache.averageRegionSpanMapVersion = world.mapVersion;
+  return world.cache.averageRegionSpan;
+}
+function selectLandingReason(factors: { capitalCoast: boolean; strategicCity: boolean;
+  supplySource: boolean; weakDefense: boolean; nearbyFriendlyObjective: boolean;
+  expansionRegions: number; reactionStrength: number }): string {
+  if (factors.weakDefense && factors.reactionStrength === 0) return "isolated weak defense";
+  if (factors.supplySource) return "maritime supply source";
+  if (factors.nearbyFriendlyObjective) return "supports friendly objective";
+  if (factors.expansionRegions > 1) return "inland expansion potential";
+  if (factors.capitalCoast) return "capital access worth the risk";
+  if (factors.strategicCity) return "strategic city access";
+  return "best value-to-reaction balance";
 }
 function clamp(value: number, min: number, max: number): number { return Math.min(max, Math.max(min, value)); }
