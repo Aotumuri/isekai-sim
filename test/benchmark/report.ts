@@ -18,6 +18,10 @@ export function formatBenchmarkReport(result: BenchmarkResult): string {
     "Performance",
     "-----------",
     `wall clock              ${formatMs(result.wallClockMs)}`,
+    `CPU user                ${formatMs(result.cpuUserMs)}`,
+    `CPU system              ${formatMs(result.cpuSystemMs)}`,
+    `heap used               ${formatBytes(result.heapUsedBytes)}`,
+    `peak RSS                ${formatBytes(result.maxRssBytes)}`,
     `throughput              ${result.throughputTicksPerSecond.toFixed(1)} ticks/s`,
     `effective sim speed     x${result.effectiveSimulationSpeed.toFixed(2)}`,
   ];
@@ -68,6 +72,12 @@ function formatWorld(start: WorldSummary, end: WorldSummary): string[] {
     ["active nations", "activeNations"],
     ["extinct nations", "extinctNations"],
     ["units", "units"],
+    ["land units", "landUnits"],
+    ["naval units", "navalUnits"],
+    ["land capacity / nation", "landCapacity"],
+    ["naval capacity / nation", "navalCapacity"],
+    ["peak land units", "peakLandUnits"],
+    ["peak naval units", "peakNavalUnits"],
     ["national manpower stock", "nationalManpowerStock"],
     ["national weapons stock", "nationalWeaponsStock"],
     ["wars", "wars"],
@@ -296,6 +306,8 @@ function formatWorld(start: WorldSummary, end: WorldSummary): string[] {
     ["production blocked isolation", "productionBlockedByIsolation"],
     ["production blocked manpower", "productionBlockedByNoManpower"],
     ["production blocked economy", "productionBlockedByEconomy"],
+    ["land production capacity blocks", "landProductionBlockedByCapacity"],
+    ["naval production capacity blocks", "navalProductionBlockedByCapacity"],
     ["production successful", "productionSuccessful"],
     ["production supply lookups", "productionSupplyLookups"],
     ["naval transport production requests", "navalTransportProductionRequests"],
@@ -552,6 +564,12 @@ function formatWorld(start: WorldSummary, end: WorldSummary): string[] {
   return fields.map(([label, key]) =>
     `${label.padEnd(22)} ${formatNumber(start[key])} -> ${formatNumber(end[key])}`,
   );
+}
+
+function formatBytes(value: number): string {
+  if (value < 1_024) return `${value.toFixed(0)} B`;
+  if (value < 1_024 ** 2) return `${(value / 1_024).toFixed(1)} KiB`;
+  return `${(value / 1_024 ** 2).toFixed(1)} MiB`;
 }
 
 function preferredMetricOrder(metrics: Record<string, MetricSummary>): string[] {

@@ -1,3 +1,4 @@
+import { WORLD_BALANCE } from "../../src/data/balance";
 import { isNationActive } from "../../src/sim/nation-active";
 import type { WorldState } from "../../src/sim/world-state";
 import type { NavalMissionType } from "../../src/sim/naval-strategy";
@@ -10,6 +11,12 @@ function missionShipCount(world: WorldState, type: NavalMissionType): number {
 
 export function summarizeWorld(world: WorldState): WorldSummary {
   const activeNations = world.nations.filter(isNationActive).length;
+  let landUnits = 0;
+  let navalUnits = 0;
+  for (const unit of world.units) {
+    if (unit.domain === "naval") navalUnits += 1;
+    else landUnits += 1;
+  }
   const activeCapitalAssessments = world.capitalDefense.assessments.filter(
     (assessment) => assessment.threatLevel !== "none",
   );
@@ -78,7 +85,12 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     activeNations,
     extinctNations: world.nations.length - activeNations,
     units: world.units.length,
-    landUnits: world.units.filter((unit) => unit.domain === "land").length,
+    landUnits,
+    navalUnits,
+    landCapacity: WORLD_BALANCE.production.maxLandUnits,
+    navalCapacity: WORLD_BALANCE.production.maxNavalUnits,
+    peakLandUnits: world.productionDiagnostics.peakLandUnits,
+    peakNavalUnits: world.productionDiagnostics.peakNavalUnits,
     nationalManpowerStock: world.nations.reduce(
       (sum, nation) => sum + nation.resources.manpower,
       0,
@@ -515,6 +527,10 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     productionBlockedByIsolation: world.productionDiagnostics.blockedByIsolation,
     productionBlockedByNoManpower: world.productionDiagnostics.blockedByNoManpower,
     productionBlockedByEconomy: world.productionDiagnostics.blockedByEconomy,
+    landProductionBlockedByCapacity:
+      world.productionDiagnostics.landProductionBlockedByCapacity,
+    navalProductionBlockedByCapacity:
+      world.productionDiagnostics.navalProductionBlockedByCapacity,
     productionSuccessful: world.productionDiagnostics.successfulProductions,
     productionSupplyLookups: world.productionDiagnostics.supplyLookups,
     navalTransportProductionRequests: world.productionDiagnostics.navalTransportRequests,

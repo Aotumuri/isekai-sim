@@ -27,6 +27,12 @@ export interface ProductionLocationDiagnostic {
 }
 
 export interface ProductionDiagnosticsState {
+  currentLandUnits: number;
+  currentNavalUnits: number;
+  peakLandUnits: number;
+  peakNavalUnits: number;
+  landProductionBlockedByCapacity: number;
+  navalProductionBlockedByCapacity: number;
   attemptedProductions: number;
   blockedProductions: number;
   blockedByIsolation: number;
@@ -86,8 +92,22 @@ function selectCombatShipProductionReason(
   return force.reserveTarget > 0 ? "reserve-restoration" : "baseline-fleet";
 }
 
-export function createProductionDiagnosticsState(): ProductionDiagnosticsState {
+export function createProductionDiagnosticsState(
+  units: readonly UnitState[] = [],
+): ProductionDiagnosticsState {
+  let currentLandUnits = 0;
+  let currentNavalUnits = 0;
+  for (const unit of units) {
+    if (unit.domain === "naval") currentNavalUnits += 1;
+    else currentLandUnits += 1;
+  }
   return {
+    currentLandUnits,
+    currentNavalUnits,
+    peakLandUnits: currentLandUnits,
+    peakNavalUnits: currentNavalUnits,
+    landProductionBlockedByCapacity: 0,
+    navalProductionBlockedByCapacity: 0,
     attemptedProductions: 0,
     blockedProductions: 0,
     blockedByIsolation: 0,
@@ -165,7 +185,15 @@ function updateProductionInternal(world: WorldState): void {
   const occupiedMacroById = world.occupation.macroById;
   const cityTargetsByNation = getCityTargetsByNation(world);
   const portTargetsByNation = getPortTargetsByNation(world);
+  const capacityCountStartedAt = world.instrumentation ? performance.now() : 0;
   const unitCountsByNation = collectUnitCountsByNation(world.units);
+  updateCapacityDiagnostics(world, unitCountsByNation);
+  if (world.instrumentation) {
+    world.instrumentation.recordDuration(
+      "production.capacityCounting",
+      performance.now() - capacityCountStartedAt,
+    );
+  }
 
   const newUnits: UnitState[] = [];
   const cityUnitsPerCycle = Math.max(0, Math.round(production.cityUnitsPerCycle));
@@ -219,8 +247,10 @@ function updateProductionInternal(world: WorldState): void {
     0,
     Math.round(production.portNavalUnitsPerCycle ?? 0),
   );
-  const maxUnitsPerNation = Math.max(0, Math.round(production.maxUnitsPerNation));
-  const hasCap = maxUnitsPerNation > 0;
+  const maxLandUnits = Math.max(0, Math.round(production.maxLandUnits));
+  const maxNavalUnits = Math.max(0, Math.round(production.maxNavalUnits));
+  const landCapacity = maxLandUnits > 0 ? maxLandUnits : Number.POSITIVE_INFINITY;
+  const navalCapacity = maxNavalUnits > 0 ? maxNavalUnits : Number.POSITIVE_INFINITY;
 
   for (const nation of world.nations) {
     if (!isNationActive(nation)) {
@@ -229,17 +259,25 @@ function updateProductionInternal(world: WorldState): void {
     if (world.time.slowTick < nation.nextUnitProductionTick) {
       continue;
     }
-    let currentCount = unitCountsByNation.get(nation.id) ?? 0;
-    const capacity = hasCap ? maxUnitsPerNation : Number.POSITIVE_INFINITY;
-    if (currentCount >= capacity) {
-      nation.nextUnitProductionTick = nextScheduledTickRange(
-        world.time.slowTick,
-        minInterval,
-        maxInterval,
-        world.simRng,
-      );
-      continue;
-    }
+    const currentCounts = unitCountsByNation.get(nation.id) ?? { land: 0, naval: 0 };
+    let currentLandCount = currentCounts.land;
+    let currentNavalCount = currentCounts.naval;
+    let recordedLandCapacityBlock = false;
+    let recordedNavalCapacityBlock = false;
+    const recordCapacityBlock = (domain: "land" | "naval"): void => {
+      if (domain === "land") {
+        if (recordedLandCapacityBlock) return;
+        recordedLandCapacityBlock = true;
+        world.productionDiagnostics.landProductionBlockedByCapacity += 1;
+        world.instrumentation?.incrementCounter("production.blocked.capacity.land");
+      } else {
+        if (recordedNavalCapacityBlock) return;
+        recordedNavalCapacityBlock = true;
+        world.productionDiagnostics.navalProductionBlockedByCapacity += 1;
+        world.instrumentation?.incrementCounter("production.blocked.capacity.naval");
+      }
+      world.productionDiagnostics.version += 1;
+    };
     const amphibiousTransports = amphibiousTransportDemandByNation.get(nation.id) ?? 0;
     const amphibiousEscorts = amphibiousEscortDemandByNation.get(nation.id) ?? 0;
     const requestedTransports = (logisticsTransportDemandByNation.get(nation.id) ?? 0) +
@@ -260,7 +298,8 @@ function updateProductionInternal(world: WorldState): void {
     for (const reason of combatShipReasons) recordCombatShipRequest(world, reason);
 
     const addUnit = (regionId: MesoRegionId): boolean => {
-      if (currentCount >= capacity) {
+      if (currentLandCount >= landCapacity) {
+        recordCapacityBlock("land");
         return false;
       }
       const diagnostics = world.productionDiagnostics;
@@ -322,7 +361,7 @@ function updateProductionInternal(world: WorldState): void {
         return false;
       }
       newUnits.push(createUnitForWorld(world, nation.id, regionId, unitType));
-      currentCount += 1;
+      currentLandCount += 1;
       diagnostics.successfulProductions += 1;
       world.instrumentation?.incrementCounter("production.successful");
       return true;
@@ -333,7 +372,8 @@ function updateProductionInternal(world: WorldState): void {
       forcedType: NavalUnitType,
       reason: "transport" | CombatShipProductionReason,
     ): boolean => {
-      if (currentCount >= capacity) {
+      if (currentNavalCount >= navalCapacity) {
+        recordCapacityBlock("naval");
         return false;
       }
       const diagnostics = world.productionDiagnostics;
@@ -350,7 +390,7 @@ function updateProductionInternal(world: WorldState): void {
         return false;
       }
       newUnits.push(createUnitForWorld(world, nation.id, regionId, unitType));
-      currentCount += 1;
+      currentNavalCount += 1;
       diagnostics.successfulProductions += 1;
       world.instrumentation?.incrementCounter("production.successful");
       if (reason === "transport") {
@@ -401,7 +441,7 @@ function updateProductionInternal(world: WorldState): void {
             break;
           }
         }
-        if (currentCount >= capacity) {
+        if (currentLandCount >= landCapacity) {
           break;
         }
       }
@@ -431,13 +471,16 @@ function updateProductionInternal(world: WorldState): void {
           if (reason === "transport") logisticsRemaining -= 1;
           if (reason !== "transport") combatReasonsRemaining.shift();
         }
-        if (currentCount >= capacity) {
+        if (currentNavalCount >= navalCapacity) {
           break;
         }
       }
     }
 
-    unitCountsByNation.set(nation.id, currentCount);
+    unitCountsByNation.set(nation.id, {
+      land: currentLandCount,
+      naval: currentNavalCount,
+    });
     nation.nextUnitProductionTick = nextScheduledTickRange(
       world.time.slowTick,
       minInterval,
@@ -449,6 +492,7 @@ function updateProductionInternal(world: WorldState): void {
   if (newUnits.length > 0) {
     world.units.push(...newUnits);
     registerNewCombatShipsAsReserve(world, newUnits);
+    updateCapacityDiagnostics(world, unitCountsByNation);
   }
   finalizeResourceFlows(world, flowByNation, previousResources);
   applyFuelStatus(world.units, fuelAvailableByNation);
@@ -852,10 +896,38 @@ function isOwnedAndUnoccupied(
   return true;
 }
 
-function collectUnitCountsByNation(units: UnitState[]): Map<NationId, number> {
-  const counts = new Map<NationId, number>();
+interface DomainUnitCounts {
+  land: number;
+  naval: number;
+}
+
+function collectUnitCountsByNation(units: readonly UnitState[]): Map<NationId, DomainUnitCounts> {
+  const counts = new Map<NationId, DomainUnitCounts>();
   for (const unit of units) {
-    counts.set(unit.nationId, (counts.get(unit.nationId) ?? 0) + 1);
+    const count = counts.get(unit.nationId) ?? { land: 0, naval: 0 };
+    if (unit.domain === "naval") count.naval += 1;
+    else count.land += 1;
+    counts.set(unit.nationId, count);
   }
   return counts;
+}
+
+function updateCapacityDiagnostics(
+  world: WorldState,
+  countsByNation: ReadonlyMap<NationId, DomainUnitCounts>,
+): void {
+  let currentLandUnits = 0;
+  let currentNavalUnits = 0;
+  for (const counts of countsByNation.values()) {
+    currentLandUnits += counts.land;
+    currentNavalUnits += counts.naval;
+  }
+  const diagnostics = world.productionDiagnostics;
+  const changed = diagnostics.currentLandUnits !== currentLandUnits ||
+    diagnostics.currentNavalUnits !== currentNavalUnits;
+  diagnostics.currentLandUnits = currentLandUnits;
+  diagnostics.currentNavalUnits = currentNavalUnits;
+  diagnostics.peakLandUnits = Math.max(diagnostics.peakLandUnits, currentLandUnits);
+  diagnostics.peakNavalUnits = Math.max(diagnostics.peakNavalUnits, currentNavalUnits);
+  if (changed) diagnostics.version += 1;
 }

@@ -1119,6 +1119,40 @@ test("zero fleet deliberately bootstraps from a reachable enemy maritime opportu
   assert(["RAID", "BLOCKADE"].includes(getNavalUnitOwnership(world, ship.id)?.missionType ?? ""));
 });
 
+test("a nation at land capacity can still bootstrap naval production", () => {
+  const world = createMaritimeCutoffWorld(false);
+  addEnemyPort(world);
+  const nation = world.nations.find((item) => item.id === NATION_B)!;
+  const capital = world.mesoRegions.find((region) => region.id === nation.capitalMesoId)!;
+  capital.building = "city";
+  world.buildingVersion += 1;
+  const existingLandUnits = world.units.filter((unit) =>
+    unit.nationId === NATION_B && unit.domain === "land"
+  ).length;
+  for (let index = existingLandUnits; index < WORLD_BALANCE.production.maxLandUnits; index += 1) {
+    world.units.push(createUnitForType(
+      createUnitId(world.unitIdCounter++),
+      NATION_B,
+      nation.capitalMesoId,
+      "Infantry",
+    ));
+  }
+  nation.resources.manpower = 1_000_000;
+  nation.resources.weapons = 100_000;
+  nation.nextUnitProductionTick = 0;
+
+  updateSupplyAssessment(world);
+  updateProduction(world);
+
+  assert.equal(
+    world.units.filter((unit) => unit.nationId === NATION_B && unit.domain === "land").length,
+    WORLD_BALANCE.production.maxLandUnits,
+  );
+  assert(world.units.some((unit) => unit.nationId === NATION_B && unit.type === "CombatShip"));
+  assert.equal(world.productionDiagnostics.landProductionBlockedByCapacity, 1);
+  assert.equal(world.productionDiagnostics.navalProductionBlockedByCapacity, 0);
+});
+
 test("landlocked zero-fleet nation cannot request CombatShip production", () => {
   const world = createMaritimeCutoffWorld(false);
   const nation = world.nations.find((item) => item.id === NATION_B)!;

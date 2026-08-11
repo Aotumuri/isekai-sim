@@ -9,7 +9,10 @@ export function runBenchmark(options: BenchmarkOptions): BenchmarkResult {
   try {
     const world = createScenarioWorld(options.scenario, options);
     const startWorld = summarizeWorld(world);
+    const cpuStart = process.cpuUsage();
     const run = runSimulation(world, options);
+    const cpu = process.cpuUsage(cpuStart);
+    const memory = process.memoryUsage();
 
     return {
       schemaVersion: 1,
@@ -28,6 +31,10 @@ export function runBenchmark(options: BenchmarkOptions): BenchmarkResult {
       pocketReductionEnabled: options.pocketReductionEnabled,
       virtualElapsedMs: run.virtualElapsedMs,
       wallClockMs: run.wallClockMs,
+      cpuUserMs: cpu.user / 1_000,
+      cpuSystemMs: cpu.system / 1_000,
+      heapUsedBytes: memory.heapUsed,
+      maxRssBytes: process.resourceUsage().maxRSS * 1_024,
       effectiveSimulationSpeed: run.effectiveSimulationSpeed,
       throughputTicksPerSecond: run.throughputTicksPerSecond,
       startWorld,

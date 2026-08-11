@@ -1,5 +1,6 @@
 export type SimulationMetricName =
   | "production.evaluation"
+  | "production.capacityCounting"
   | "production.supplyLookup"
   | "production.supplyIntegration"
   | "repositionUnits"
@@ -74,6 +75,8 @@ export type SimulationCounterName =
   | "production.blocked.isolation"
   | "production.blocked.noManpower"
   | "production.blocked.economy"
+  | "production.blocked.capacity.land"
+  | "production.blocked.capacity.naval"
   | "production.successful"
   | "production.supplyLookups"
   | "production.naval.requests.transport"

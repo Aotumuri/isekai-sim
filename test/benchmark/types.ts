@@ -51,6 +51,11 @@ export interface WorldSummary {
   extinctNations: number;
   units: number;
   landUnits: number;
+  navalUnits: number;
+  landCapacity: number;
+  navalCapacity: number;
+  peakLandUnits: number;
+  peakNavalUnits: number;
   nationalManpowerStock: number;
   nationalWeaponsStock: number;
   wars: number;
@@ -341,6 +346,8 @@ export interface WorldSummary {
   productionBlockedByIsolation: number;
   productionBlockedByNoManpower: number;
   productionBlockedByEconomy: number;
+  landProductionBlockedByCapacity: number;
+  navalProductionBlockedByCapacity: number;
   productionSuccessful: number;
   productionSupplyLookups: number;
   navalTransportProductionRequests: number;
@@ -622,6 +629,10 @@ export interface BenchmarkResult {
   pocketReductionEnabled: boolean;
   virtualElapsedMs: number;
   wallClockMs: number;
+  cpuUserMs: number;
+  cpuSystemMs: number;
+  heapUsedBytes: number;
+  maxRssBytes: number;
   effectiveSimulationSpeed: number;
   throughputTicksPerSecond: number;
   startWorld: WorldSummary;

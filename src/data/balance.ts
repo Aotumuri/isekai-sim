@@ -132,7 +132,8 @@ export const WORLD_BALANCE = {
     cityUnitsPerCycle: 1,
     portNavalUnitsPerCycle: 1,
     capitalUnitsPerOwnedMacro: 0.1,
-    maxUnitsPerNation: 100,
+    maxLandUnits: 100,
+    maxNavalUnits: 20,
   },
   war: {
     combat: {

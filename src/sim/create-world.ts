@@ -122,7 +122,7 @@ export function createWorld(config: WorldConfig): WorldState {
   const battlefieldTopology = createBattlefieldTopologyState();
   const supplyAssessment = createSupplyAssessmentState();
   const isolationEffects = createIsolationEffectsState();
-  const productionDiagnostics = createProductionDiagnosticsState();
+  const productionDiagnostics = createProductionDiagnosticsState(units);
   const supplyCutoffs = createSupplyCutoffAnalysisState();
   const supplyDefense = createSupplyDefenseState();
   const supplyRelief = createSupplyReliefState();

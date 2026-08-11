@@ -1061,7 +1061,6 @@ export function formatNavalStrategySummary(world: WorldState, nationId: string):
 }
 
 function drawStrategicThreatSummary(layer: Container, world: WorldState): void {
-  if (world.strategicThreatObservation.observations.length === 0) return;
   const container = new Container();
   container.name = "StrategicThreatObservationSummary";
   container.eventMode = "none";
@@ -1081,7 +1080,15 @@ function drawStrategicThreatSummary(layer: Container, world: WorldState): void {
 }
 
 export function formatStrategicThreatSummary(world: WorldState): string {
-  const lines = ["STRATEGIC THREAT"];
+  const diagnostics = world.productionDiagnostics;
+  const lines = [
+    "UNIT CAPACITY",
+    `Land Units ${diagnostics.currentLandUnits} | Land Capacity ${WORLD_BALANCE.production.maxLandUnits}/nation`,
+    `Naval Units ${diagnostics.currentNavalUnits} | Naval Capacity ${WORLD_BALANCE.production.maxNavalUnits}/nation`,
+  ];
+  if (world.strategicThreatObservation.observations.length > 0) {
+    lines.push("", "STRATEGIC THREAT");
+  }
   for (const observation of world.strategicThreatObservation.observations) {
     const largestThreat = world.commonThreatCoalitions.largestThreatByNationId
       .get(observation.nationId) ?? "-";
