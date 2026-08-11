@@ -932,6 +932,16 @@ function drawNavalMissions(layer: Container, world: WorldState): void {
 }
 
 function drawAmphibiousOperations(layer: Container, world: WorldState): void {
+  for (const campaign of world.amphibiousOperations.bridgeheadCampaigns) {
+    drawMarker(layer, world, campaign.destinationPortId, "B",
+      campaign.status === "active" ? 0x00e676 : 0x90a4ae, "diamond");
+    const center = world.cache.mesoById.get(campaign.destinationPortId)?.center;
+    if (!center) continue;
+    const label = new Text(formatBridgeheadCampaign(world, campaign), LABEL_STYLE);
+    label.resolution = 2;
+    label.position.set(center.x + 11, center.y - 72);
+    layer.addChild(label);
+  }
   for (const demand of world.amphibiousOperations.capabilityDemands) {
     if (demand.operationId !== null || demand.state === "expired" || demand.state === "cancelled") continue;
     drawMarker(layer, world, demand.destinationPortId, "C", 0x26c6da, "diamond");
@@ -965,6 +975,20 @@ function drawAmphibiousOperations(layer: Container, world: WorldState): void {
     label.position.set(center.x + 11, center.y + 11);
     layer.addChild(label);
   }
+}
+
+export function formatBridgeheadCampaign(
+  world: WorldState,
+  campaign: WorldState["amphibiousOperations"]["bridgeheadCampaigns"][number],
+): string {
+  const age = Math.max(0, world.time.fastTick - campaign.createdAtTick);
+  return [
+    `BRIDGEHEAD ${campaign.status.toUpperCase()} | supply ${campaign.supplyStatus}`,
+    `strength ${campaign.currentStrength.toFixed(0)}/${campaign.desiredStrength.toFixed(0)} | deficit ${campaign.reinforcementDeficit.toFixed(0)}`,
+    `wave ${campaign.currentWave} (${campaign.completedWaves} complete) | age ${age}`,
+    `lift ${campaign.currentTransportCapacity} | escort cap ${campaign.currentEscortCapacity} | pending T${campaign.pendingTransportCount} E${campaign.pendingEscortCount}`,
+    `waiting ${campaign.waitingReason}`,
+  ].join("\n");
 }
 
 export function formatAmphibiousCapabilityDemand(

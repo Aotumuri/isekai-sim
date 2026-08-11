@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { MesoRegionId } from "../../src/worldgen/meso-region";
 import { createScenarioWorld } from "../scenarios";
+import { runSimulation } from "../helpers/simulation-driver";
+import { withMutedSimulationLogs } from "../helpers/muted-logs";
 
 test("two-island amphibious scenario has exactly two isolated balanced combatants", () => {
   const world = createScenarioWorld("two-island-amphibious", {
@@ -19,6 +21,30 @@ test("two-island amphibious scenario has exactly two isolated balanced combatant
   assert.deepEqual(world.nations.map((nation) => nation.resources), [world.nations[0]!.resources, world.nations[0]!.resources]);
   assert.deepEqual(world.nations.map((nation) =>
     world.units.filter((unit) => unit.nationId === nation.id).length), [21, 21]);
+});
+
+test("an established bridgehead promptly creates a reusable reinforcement wave", () => {
+  const world = createScenarioWorld("two-island-amphibious", {
+    seed: 695_919_685_365, width: 640, height: 360, quick: true,
+  });
+  withMutedSimulationLogs(() => runSimulation(world, { ticks: 710 }));
+
+  const landing = world.amphibiousOperations.operations.find((operation) =>
+    operation.kind === "landing" && operation.beachheadOutcome === "success");
+  assert.ok(landing);
+  const campaign = world.amphibiousOperations.bridgeheadCampaigns.find((item) =>
+    item.originOperationId === landing.id);
+  assert.ok(campaign);
+  assert.equal(campaign.status, "active");
+  assert.ok(campaign.desiredStrength > campaign.currentStrength);
+
+  const reinforcement = world.amphibiousOperations.operations.find((operation) =>
+    operation.bridgeheadCampaignId === campaign.id && operation.kind === "bridgehead-reinforcement");
+  assert.ok(reinforcement);
+  assert.equal(reinforcement.waveNumber, 1);
+  assert.ok(reinforcement.launchedAtTick !== null && reinforcement.launchedAtTick - landing.beachheadEvaluatedAtTick! < 200);
+  assert.deepEqual(reinforcement.transportIds, landing.transportIds);
+  assert.deepEqual(reinforcement.escortIds, landing.escortIds);
 });
 
 function countLandComponents(world: ReturnType<typeof createScenarioWorld>): number {
