@@ -180,7 +180,9 @@ function updateProductionInternal(world: WorldState): void {
   }
   const amphibiousTransportDemandByNation = new Map<NationId, number>();
   const amphibiousEscortDemandByNation = new Map<NationId, number>();
-  for (const demand of getAmphibiousNavalProductionDemands(world)) {
+  const preferredAmphibiousPortByNation = new Map<NationId, MesoRegionId>();
+  const amphibiousDemands = getAmphibiousNavalProductionDemands(world);
+  for (const demand of amphibiousDemands) {
     amphibiousTransportDemandByNation.set(
       demand.nationId,
       (amphibiousTransportDemandByNation.get(demand.nationId) ?? 0) + demand.transports,
@@ -189,6 +191,10 @@ function updateProductionInternal(world: WorldState): void {
       demand.nationId,
       (amphibiousEscortDemandByNation.get(demand.nationId) ?? 0) + demand.escorts,
     );
+    if ((demand.transports > 0 || demand.escorts > 0) &&
+      !preferredAmphibiousPortByNation.has(demand.nationId)) {
+      preferredAmphibiousPortByNation.set(demand.nationId, demand.departurePortId);
+    }
   }
   const combatShipReasonsByNation = new Map<NationId, CombatShipProductionReason[]>();
   for (const assessment of world.supplyAssessment.navalStrategy.assessments) {
@@ -401,7 +407,10 @@ function updateProductionInternal(world: WorldState): void {
       }
     }
 
-    const portTargets = portTargetsByNation.get(nation.id) ?? [];
+    const preferredAmphibiousPort = preferredAmphibiousPortByNation.get(nation.id) ?? null;
+    const portTargets = [...(portTargetsByNation.get(nation.id) ?? [])].sort((a, b) =>
+      (a === preferredAmphibiousPort ? -1 : b === preferredAmphibiousPort ? 1 : 0) ||
+      (a < b ? -1 : a > b ? 1 : 0));
     if (
       (requestedTransports > 0 || combatShipReasons.length > 0) &&
       portNavalUnitsPerCycle > 0 &&

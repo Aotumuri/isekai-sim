@@ -411,8 +411,28 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     amphibiousCapabilityTransportDemand: world.amphibiousOperations.capabilityTransportDemand,
     amphibiousCapabilityEscortDemand: world.amphibiousOperations.capabilityEscortDemand,
     amphibiousCapabilityCpuMs: world.amphibiousOperations.capabilityEvaluationCpuMs,
+    amphibiousCapabilityAssemblyCpuMs: world.amphibiousOperations.capabilityAssemblyCpuMs,
+    amphibiousFleetReachable: world.amphibiousOperations.fleetReachableCount,
+    amphibiousFleetAssembly: world.amphibiousOperations.fleetAssemblyCount,
+    amphibiousAverageAssemblyDuration: world.amphibiousOperations.assemblyDurationSamples > 0
+      ? world.amphibiousOperations.totalAssemblyDurationTicks /
+        world.amphibiousOperations.assemblyDurationSamples : 0,
+    amphibiousAverageAssemblyEta: world.amphibiousOperations.assemblyEtaSamples > 0
+      ? world.amphibiousOperations.totalAssemblyEtaTicks /
+        world.amphibiousOperations.assemblyEtaSamples : 0,
+    amphibiousAssemblySuccesses: world.amphibiousOperations.assemblySuccesses,
+    amphibiousFleetReady: world.amphibiousOperations.fleetReadyCount,
+    amphibiousAverageReadyToLaunchLatency: world.amphibiousOperations.readyToLaunchLatencySamples > 0
+      ? world.amphibiousOperations.totalReadyToLaunchLatencyTicks /
+        world.amphibiousOperations.readyToLaunchLatencySamples : 0,
+    amphibiousAveragePositioningTicksRemoved:
+      world.amphibiousOperations.positioningTicksRemovedSamples > 0
+        ? world.amphibiousOperations.totalPositioningTicksRemoved /
+          world.amphibiousOperations.positioningTicksRemovedSamples : 0,
     amphibiousCapabilityMemoryBytes: world.amphibiousOperations.capabilityDemands.reduce(
-      (bytes, demand) => bytes + 224 + demand.routeRegionIds.length * 8 +
+      (bytes, demand) => bytes + 296 + demand.routeRegionIds.length * 8 +
+        (demand.assignedTransportIds.length + demand.assignedEscortIds.length +
+          demand.assignedLandingUnitIds.length) * 8 +
         demand.reasonFlags.reduce((sum, reason) => sum + reason.length * 2, 0), 0),
     navalAiEvaluations: world.supplyAssessment.navalStrategy.evaluations,
     navalEscortShips: missionShipCount(world, "ESCORT"),

@@ -21,7 +21,14 @@ const PREPARATION_TIMEOUT_TICKS = 2400;
 export type AmphibiousPhase = "preparing" | "embarking" | "escort-wait" | "transporting" | "landed" | "cancelled";
 export type AmphibiousCancellationReason = "transport-lost" | "escort-lost" | "departure-port-lost" | "target-invalid" | "war-ended" | "force-lost" | "preparation-timeout";
 export type AmphibiousLaunchRejectionReason = "insufficient-strategic-window" | "positioning-unreachable";
-export type AmphibiousCapabilityDemandState = "waiting" | "building-fleet" | "ready" | "expired" | "cancelled";
+export type AmphibiousCapabilityDemandState =
+  | "waiting-transport"
+  | "waiting-escort"
+  | "waiting-landing-force"
+  | "assembling"
+  | "ready"
+  | "expired"
+  | "cancelled";
 
 export interface AmphibiousCapabilityDemand {
   id: string;
@@ -43,6 +50,14 @@ export interface AmphibiousCapabilityDemand {
   availableEscortCount: number;
   availableLandingUnitCount: number;
   availableLandingStrength: number;
+  assignedTransportIds: UnitId[];
+  assignedEscortIds: UnitId[];
+  assignedLandingUnitIds: UnitId[];
+  fleetReachableAtTick: number | null;
+  assemblyStartedAtTick: number | null;
+  assemblyCompletedAtTick: number | null;
+  assemblyEtaTicks: number;
+  initialAssemblyEtaTicks: number;
   readyAtTick: number | null;
   operationCreatedAtTick: number | null;
   operationId: string | null;
@@ -84,6 +99,8 @@ export interface AmphibiousManifestAssignment {
 
 export interface AmphibiousOperation {
   id: string;
+  capabilityDemandId: string;
+  fleetReadyAtTick: number;
   nationId: NationId;
   enemyNationId: NationId;
   phase: AmphibiousPhase;
@@ -115,6 +132,7 @@ export interface AmphibiousOperationState {
   operations: AmphibiousOperation[];
   capabilityDemands: AmphibiousCapabilityDemand[];
   operationByUnitId: Map<UnitId, AmphibiousOperation>;
+  capabilityDemandByUnitId: Map<UnitId, AmphibiousCapabilityDemand>;
   opportunities: number;
   landingPlans: number;
   cancelledPlans: number;
@@ -153,11 +171,25 @@ export interface AmphibiousOperationState {
   capabilityTransportDemand: number;
   capabilityEscortDemand: number;
   capabilityEvaluationCpuMs: number;
+  capabilityAssemblyCpuMs: number;
+  fleetReachableCount: number;
+  fleetAssemblyCount: number;
+  assemblyDurationSamples: number;
+  totalAssemblyDurationTicks: number;
+  assemblyEtaSamples: number;
+  totalAssemblyEtaTicks: number;
+  assemblySuccesses: number;
+  fleetReadyCount: number;
+  readyToLaunchLatencySamples: number;
+  totalReadyToLaunchLatencyTicks: number;
+  positioningTicksRemovedSamples: number;
+  totalPositioningTicksRemoved: number;
 }
 
 export function createAmphibiousOperationState(): AmphibiousOperationState {
   return { version: 0, nextOperationNumber: 0, nextCapabilityDemandNumber: 0,
     operations: [], capabilityDemands: [], operationByUnitId: new Map(),
+    capabilityDemandByUnitId: new Map(),
     opportunities: 0, landingPlans: 0, cancelledPlans: 0, completedLandings: 0,
     embarkationDelayTicks: 0, transportAssignments: 0, escortWaitingTicks: 0,
     convoyTravelTicks: 0, transportLosses: 0, failedLandings: 0,
@@ -173,7 +205,13 @@ export function createAmphibiousOperationState(): AmphibiousOperationState {
     fleetBuildLatencySamples: 0, totalFleetBuildLatencyTicks: 0,
     operationCreationLatencySamples: 0, totalOperationCreationLatencyTicks: 0,
     capabilityProductionRequests: 0, capabilityTransportDemand: 0,
-    capabilityEscortDemand: 0, capabilityEvaluationCpuMs: 0 };
+    capabilityEscortDemand: 0, capabilityEvaluationCpuMs: 0,
+    capabilityAssemblyCpuMs: 0, fleetReachableCount: 0, fleetAssemblyCount: 0,
+    assemblyDurationSamples: 0, totalAssemblyDurationTicks: 0,
+    assemblyEtaSamples: 0, totalAssemblyEtaTicks: 0, assemblySuccesses: 0,
+    fleetReadyCount: 0, readyToLaunchLatencySamples: 0,
+    totalReadyToLaunchLatencyTicks: 0, positioningTicksRemovedSamples: 0,
+    totalPositioningTicksRemoved: 0 };
 }
 
 /** Slow-tick strategic evaluator. It only considers cached ports, fronts and supply data. */
@@ -196,9 +234,20 @@ export function updateAmphibiousPlanning(world: WorldState): void {
     const opportunityValid = isAtWar(demand.nationId, demand.enemyNationId, warAdjacency) &&
       ownPorts.length > 0 && enemyPorts.length > 0 &&
       isStrategicOpportunity(world, demand.nationId, demand.enemyNationId);
-    const candidate = opportunityValid
-      ? chooseCandidate(world, demand.nationId, demand.enemyNationId, ownPorts, enemyPorts)
+    const route = opportunityValid && ownPorts.includes(demand.departurePortId) &&
+      enemyPorts.includes(demand.destinationPortId)
+      ? getCachedMaritimeRoute(world, world.supplyAssessment.maritimeConnectivity,
+        demand.departurePortId, demand.destinationPortId)
       : null;
+    const candidate: LandingCandidate | null = route ? {
+      nationId: demand.nationId,
+      enemyId: demand.enemyNationId,
+      departure: demand.departurePortId,
+      destination: demand.destinationPortId,
+      route,
+      score: demand.priority,
+      reasons: demand.reasonFlags,
+    } : null;
     if (!candidate) {
       expireCapabilityDemand(world, demand);
       continue;
@@ -296,6 +345,9 @@ export function updateAmphibiousOperations(world: WorldState): void {
       operation.phaseStartedAtTick = world.time.fastTick;
       operation.launchedAtTick = world.time.fastTick;
       world.amphibiousOperations.launchedOperations += 1;
+      world.amphibiousOperations.readyToLaunchLatencySamples += 1;
+      world.amphibiousOperations.totalReadyToLaunchLatencyTicks +=
+        Math.max(0, world.time.fastTick - operation.fleetReadyAtTick);
       continue;
     }
     if (operation.phase === "transporting") {
@@ -311,7 +363,37 @@ export function updateAmphibiousOperations(world: WorldState): void {
 }
 
 export function isAmphibiousOwnedUnit(world: WorldState, unitId: UnitId): boolean {
-  return world.amphibiousOperations.operationByUnitId.has(unitId);
+  return world.amphibiousOperations.operationByUnitId.has(unitId) ||
+    world.amphibiousOperations.capabilityDemandByUnitId.has(unitId);
+}
+
+/** Capability-owned fast-tick assembly. Land movement is progressed by the
+ * existing repositioning system; this coordinator only maintains targets and
+ * reuses the existing naval positioning movement. */
+export function updateAmphibiousCapabilityAssembly(world: WorldState, dtMs: number): void {
+  if (!WORLD_BALANCE.unit.naval?.amphibiousEnabled) return;
+  const startedAt = world.instrumentation ? performance.now() : 0;
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+  for (const demand of world.amphibiousOperations.capabilityDemands) {
+    if (!isActiveCapabilityDemand(demand) || demand.assemblyStartedAtTick === null) continue;
+    for (const id of demand.assignedLandingUnitIds) {
+      const unit = unitById.get(id);
+      if (unit && unit.regionId !== demand.departurePortId) unit.moveTargetId = demand.departurePortId;
+    }
+    for (const id of [...demand.assignedTransportIds, ...demand.assignedEscortIds]) {
+      const unit = unitById.get(id);
+      if (unit && unit.regionId !== demand.departurePortId) {
+        moveNavalUnitToward(world, unit, demand.departurePortId, dtMs);
+      }
+    }
+    demand.assemblyEtaTicks = Math.max(0, demand.initialAssemblyEtaTicks -
+      (world.time.fastTick - demand.assemblyStartedAtTick));
+    completeAssemblyIfReady(world, demand, unitById);
+  }
+  rebuildOwnership(world);
+  if (world.instrumentation) {
+    world.amphibiousOperations.capabilityAssemblyCpuMs += performance.now() - startedAt;
+  }
 }
 
 function isStrategicOpportunity(world: WorldState, nationId: NationId, enemyId: NationId): boolean {
@@ -364,11 +446,19 @@ function createCapabilityDemand(world: WorldState, candidate: LandingCandidate):
     priority: candidate.score,
     createdAtTick: world.time.fastTick,
     lastValidatedAtTick: world.time.fastTick,
-    state: "waiting",
+    state: "waiting-transport",
     availableTransportCount: 0,
     availableEscortCount: 0,
     availableLandingUnitCount: 0,
     availableLandingStrength: 0,
+    assignedTransportIds: [],
+    assignedEscortIds: [],
+    assignedLandingUnitIds: [],
+    fleetReachableAtTick: null,
+    assemblyStartedAtTick: null,
+    assemblyCompletedAtTick: null,
+    assemblyEtaTicks: 0,
+    initialAssemblyEtaTicks: 0,
     readyAtTick: null,
     operationCreatedAtTick: null,
     operationId: null,
@@ -381,41 +471,141 @@ function createCapabilityDemand(world: WorldState, candidate: LandingCandidate):
 }
 
 function applyCandidateToDemand(demand: AmphibiousCapabilityDemand, candidate: LandingCandidate): void {
-  demand.departurePortId = candidate.departure;
-  demand.destinationPortId = candidate.destination;
   demand.routeRegionIds = candidate.route;
   demand.reasonFlags = candidate.reasons;
   demand.priority = candidate.score;
 }
 
 function refreshCapabilityProgress(world: WorldState, demand: AmphibiousCapabilityDemand): void {
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+  demand.assignedTransportIds = demand.assignedTransportIds.filter((id) => {
+    const unit = unitById.get(id);
+    return isOperationalTransport(unit, demand.nationId) && Number.isFinite(unit!.moveTicksPerRegion) &&
+      getCachedMaritimePositioningSegments(world, unit!.regionId, demand.departurePortId) !== null;
+  });
+  demand.assignedEscortIds = demand.assignedEscortIds.filter((id) => {
+    const unit = unitById.get(id);
+    return isOperationalCombatShip(unit, demand.nationId) && Number.isFinite(unit!.moveTicksPerRegion) &&
+      getCachedMaritimePositioningSegments(world, unit!.regionId, demand.departurePortId) !== null;
+  });
+  demand.assignedLandingUnitIds = demand.assignedLandingUnitIds.filter((id) => {
+    const unit = unitById.get(id);
+    return !!unit && unit.domain === "land" && unit.nationId === demand.nationId &&
+      canReachControlled(world, demand.nationId, unit.regionId, demand.departurePortId);
+  });
+  rebuildOwnership(world);
   const transports = findAvailableTransports(world, demand.nationId, demand.departurePortId);
   const escorts = findAvailableEscorts(world, demand.nationId, demand.departurePortId);
   const landingForce = selectLandingForce(world, demand.nationId, demand.departurePortId);
+  demand.assignedTransportIds.push(...transports.slice(0,
+    Math.max(0, demand.desiredTransportCount - demand.assignedTransportIds.length)).map((unit) => unit.id));
+  demand.assignedEscortIds.push(...escorts.slice(0,
+    Math.max(0, demand.desiredEscortCount - demand.assignedEscortIds.length)).map((unit) => unit.id));
+  const landingById = new Map([
+    ...demand.assignedLandingUnitIds.map((id) => [id, unitById.get(id)] as const),
+    ...landingForce.units.map((unit) => [unit.id, unit] as const),
+  ]);
+  const selectedLandingUnits = [...landingById.values()].filter((unit): unit is UnitState => !!unit)
+    .sort(compareUnits).slice(0, Math.max(1, Math.min(WORLD_BALANCE.unit.navalTransportCapacity ?? 10, 3)));
+  demand.assignedLandingUnitIds = selectedLandingUnits.map((unit) => unit.id);
+  for (const unit of selectedLandingUnits) {
+    releaseUnitFromFrontAllocation(world, unit.id);
+    if (unit.regionId !== demand.departurePortId) unit.moveTargetId = demand.departurePortId;
+  }
   const previousState = demand.state;
-  demand.availableTransportCount = Math.min(demand.desiredTransportCount, transports.length);
-  demand.availableEscortCount = Math.min(demand.desiredEscortCount, escorts.length);
-  demand.availableLandingUnitCount = landingForce.units.length;
-  demand.availableLandingStrength = landingForce.strength;
+  demand.availableTransportCount = demand.assignedTransportIds.length;
+  demand.availableEscortCount = demand.assignedEscortIds.length;
+  demand.availableLandingUnitCount = selectedLandingUnits.length;
+  demand.availableLandingStrength = selectedLandingUnits.reduce((sum, unit) => sum + getUnitCombatStrength(unit), 0);
   demand.lastValidatedAtTick = world.time.fastTick;
-  const fleetReady = demand.availableTransportCount >= demand.desiredTransportCount &&
+  const fleetReachable = demand.availableTransportCount >= demand.desiredTransportCount &&
     demand.availableEscortCount >= demand.desiredEscortCount;
   const forceReady = demand.availableLandingUnitCount >= demand.desiredLandingUnitCount &&
     demand.availableLandingStrength >= demand.requiredLandingStrength;
-  demand.state = fleetReady && forceReady ? "ready"
-    : demand.availableTransportCount > 0 || demand.availableEscortCount > 0 ? "building-fleet" : "waiting";
-  if (demand.state === "ready" && demand.readyAtTick === null) {
-    demand.readyAtTick = world.time.fastTick;
-    world.amphibiousOperations.fleetBuildLatencySamples += 1;
-    world.amphibiousOperations.totalFleetBuildLatencyTicks +=
-      Math.max(0, world.time.fastTick - demand.createdAtTick);
+  if (!fleetReachable || !forceReady) {
+    demand.state = demand.availableTransportCount < demand.desiredTransportCount ? "waiting-transport"
+      : demand.availableEscortCount < demand.desiredEscortCount ? "waiting-escort" : "waiting-landing-force";
+  } else {
+    startAssembly(world, demand, unitById);
+    completeAssemblyIfReady(world, demand, unitById);
   }
+  rebuildOwnership(world);
   if (previousState !== demand.state || demand.state !== "ready") {
     world.amphibiousOperations.version += 1;
   }
 }
 
+function startAssembly(
+  world: WorldState,
+  demand: AmphibiousCapabilityDemand,
+  unitById: ReadonlyMap<UnitId, UnitState>,
+): void {
+  const currentEtaTicks = estimateAssemblyTicks(world, demand, unitById);
+  if (demand.fleetReachableAtTick === null) {
+    demand.fleetReachableAtTick = world.time.fastTick;
+    world.amphibiousOperations.fleetReachableCount += 1;
+    world.instrumentation?.incrementCounter("amphibious.fleetReachable");
+  }
+  if (demand.assemblyStartedAtTick === null) {
+    demand.assemblyStartedAtTick = world.time.fastTick;
+    demand.initialAssemblyEtaTicks = currentEtaTicks;
+    world.amphibiousOperations.fleetAssemblyCount += 1;
+    world.amphibiousOperations.assemblyEtaSamples += 1;
+    world.amphibiousOperations.totalAssemblyEtaTicks += demand.initialAssemblyEtaTicks;
+    world.amphibiousOperations.positioningTicksRemovedSamples += 1;
+    world.amphibiousOperations.totalPositioningTicksRemoved += demand.initialAssemblyEtaTicks;
+    world.instrumentation?.incrementCounter("amphibious.fleetAssembly");
+  }
+  demand.assemblyEtaTicks = currentEtaTicks;
+  demand.state = "assembling";
+}
+
+function estimateAssemblyTicks(
+  world: WorldState,
+  demand: AmphibiousCapabilityDemand,
+  unitById: ReadonlyMap<UnitId, UnitState>,
+): number {
+  const distance = getControlledDistanceField(world, demand.nationId, [demand.departurePortId]).distanceByRegionId;
+  let maximum = 0;
+  for (const id of demand.assignedLandingUnitIds) {
+    const unit = unitById.get(id);
+    if (unit) maximum = Math.max(maximum, (distance.get(unit.regionId) ?? 0) * Math.max(1, Math.round(unit.moveTicksPerRegion)));
+  }
+  for (const id of [...demand.assignedTransportIds, ...demand.assignedEscortIds]) {
+    const unit = unitById.get(id);
+    if (!unit) continue;
+    maximum = Math.max(maximum, positioningTicks(unit,
+      getCachedMaritimePositioningSegments(world, unit.regionId, demand.departurePortId)));
+  }
+  return maximum;
+}
+
+function completeAssemblyIfReady(
+  world: WorldState,
+  demand: AmphibiousCapabilityDemand,
+  unitById: ReadonlyMap<UnitId, UnitState>,
+): void {
+  const allIds = [...demand.assignedTransportIds, ...demand.assignedEscortIds, ...demand.assignedLandingUnitIds];
+  if (allIds.length === 0 || !allIds.every((id) => unitById.get(id)?.regionId === demand.departurePortId)) return;
+  demand.state = "ready";
+  demand.assemblyEtaTicks = 0;
+  if (demand.readyAtTick !== null) return;
+  demand.readyAtTick = world.time.fastTick;
+  demand.assemblyCompletedAtTick = world.time.fastTick;
+  const state = world.amphibiousOperations;
+  state.fleetBuildLatencySamples += 1;
+  state.totalFleetBuildLatencyTicks += Math.max(0, world.time.fastTick - demand.createdAtTick);
+  state.assemblyDurationSamples += 1;
+  state.totalAssemblyDurationTicks += Math.max(0, world.time.fastTick - (demand.assemblyStartedAtTick ?? world.time.fastTick));
+  state.assemblySuccesses += 1;
+  state.fleetReadyCount += 1;
+  state.version += 1;
+  world.instrumentation?.incrementCounter("amphibious.assemblySuccess");
+  world.instrumentation?.incrementCounter("amphibious.fleetReady");
+}
+
 function expireCapabilityDemand(world: WorldState, demand: AmphibiousCapabilityDemand): void {
+  releaseCapabilityAssignments(world, demand);
   demand.state = "expired";
   demand.lastValidatedAtTick = world.time.fastTick;
   world.amphibiousOperations.capabilityDemandsExpired += 1;
@@ -435,7 +625,7 @@ function createOperationForDemand(
   demand: AmphibiousCapabilityDemand,
   candidate: LandingCandidate,
 ): AmphibiousOperation | null {
-  const operation = createOperation(world, candidate);
+  const operation = createOperation(world, demand, candidate);
   if (!operation) return null;
   demand.operationId = operation.id;
   demand.operationCreatedAtTick = world.time.fastTick;
@@ -449,17 +639,19 @@ function createOperationForDemand(
   return operation;
 }
 
-function createOperation(world: WorldState, candidate: LandingCandidate): AmphibiousOperation | null {
-  const transport = findAvailableTransports(world, candidate.nationId, candidate.departure)[0];
-  if (!transport) return null;
-  const distance = getControlledDistanceField(world, candidate.nationId, [candidate.departure]).distanceByRegionId;
-  const landingForce = selectLandingForce(world, candidate.nationId, candidate.departure, distance);
-  const units = landingForce.units;
-  const strength = landingForce.strength;
+function createOperation(world: WorldState, demand: AmphibiousCapabilityDemand, candidate: LandingCandidate): AmphibiousOperation | null {
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+  const transport = unitById.get(demand.assignedTransportIds[0]!);
+  if (!isOperationalTransport(transport, candidate.nationId) || !Number.isFinite(transport.moveTicksPerRegion) ||
+    transport.regionId !== candidate.departure) return null;
+  const units = demand.assignedLandingUnitIds.map((id) => unitById.get(id)).filter((unit): unit is UnitState => !!unit);
+  const strength = units.reduce((sum, unit) => sum + getUnitCombatStrength(unit), 0);
   if (units.length === 0 || strength < 0.5) return null;
-  const escort = findAvailableEscorts(world, candidate.nationId, candidate.departure)[0];
-  if (!escort) return null;
-  const feasibility = assessLaunchFeasibility(world, candidate, units, transport, escort, distance);
+  const escort = unitById.get(demand.assignedEscortIds[0]!);
+  if (!isOperationalCombatShip(escort, candidate.nationId) || !Number.isFinite(escort.moveTicksPerRegion) ||
+    escort.regionId !== candidate.departure) return null;
+  if (units.some((unit) => unit.regionId !== candidate.departure)) return null;
+  const feasibility = assessLaunchFeasibility(world, candidate, transport, escort);
   recordFeasibilitySample(world, feasibility);
   if (!feasibility.accepted) {
     world.amphibiousOperations.operationsRejected += 1;
@@ -473,14 +665,15 @@ function createOperation(world: WorldState, candidate: LandingCandidate): Amphib
   }
   for (const unit of units) releaseUnitFromFrontAllocation(world, unit.id);
   const operation: AmphibiousOperation = { id: `amphibious-operation-${world.amphibiousOperations.nextOperationNumber++}`,
+    capabilityDemandId: demand.id, fleetReadyAtTick: demand.readyAtTick ?? world.time.fastTick,
     nationId: candidate.nationId, enemyNationId: candidate.enemyId, phase: "preparing",
     departurePortId: candidate.departure, destinationPortId: candidate.destination,
     routeRegionIds: candidate.route, assignedUnitIds: units.map((u) => u.id), transportId: transport.id,
     escortIds: escort ? [escort.id] : [], requiredEscortCount: 1,
     convoyId: null, requiredStrength: 0.5, assignedStrength: strength,
     manifest: units.map((u) => ({ unitId: u.id, departurePortId: candidate.departure,
-      controlledDistance: distance.get(u.regionId) ?? 0, estimatedArrivalTick: world.time.fastTick + (distance.get(u.regionId) ?? 0) * u.moveTicksPerRegion,
-      strength: getUnitCombatStrength(u), arrivedAtTick: null })), preparationLeaseStartedAtTick: world.time.fastTick,
+      controlledDistance: 0, estimatedArrivalTick: world.time.fastTick,
+      strength: getUnitCombatStrength(u), arrivedAtTick: world.time.fastTick })), preparationLeaseStartedAtTick: world.time.fastTick,
     preparationLeaseEndedAtTick: null, phaseStartedAtTick: world.time.fastTick, completedAtTick: null,
     cancellationReason: null, reasonFlags: candidate.reasons,
     launchFeasibility: feasibility, launchedAtTick: null };
@@ -539,32 +732,22 @@ function completeOperation(world: WorldState, op: AmphibiousOperation): void {
 function assessLaunchFeasibility(
   world: WorldState,
   candidate: LandingCandidate,
-  units: readonly UnitState[],
   transport: UnitState,
   escort: UnitState | undefined,
-  distance: ReadonlyMap<MesoRegionId, number>,
 ): AmphibiousLaunchFeasibility {
-  const estimatedAssemblyTicks = units.reduce((maximum, unit) => Math.max(maximum,
-    (distance.get(unit.regionId) ?? 0) * Math.max(1, Math.round(unit.moveTicksPerRegion))), 0);
-  const transportSegments = getCachedMaritimePositioningSegments(world, transport.regionId, candidate.departure);
-  const escortSegments = escort
-    ? getCachedMaritimePositioningSegments(world, escort.regionId, candidate.departure)
-    : null;
-  const estimatedTransportDelayTicks = positioningTicks(transport, transportSegments);
-  const estimatedEscortDelayTicks = escort ? positioningTicks(escort, escortSegments) : 0;
+  const estimatedAssemblyTicks = 0;
+  const estimatedTransportDelayTicks = 0;
+  const estimatedEscortDelayTicks = 0;
   const estimatedEmbarkationTicks = 1;
   const convoyMoveTicks = Math.max(transport.moveTicksPerRegion, escort?.moveTicksPerRegion ?? 0, 1);
   const estimatedVoyageTicks = Math.max(0, candidate.route.length - 1) * Math.round(convoyMoveTicks);
   const estimatedLandingTicks = 1;
-  const positioningUnreachable = transportSegments === null || (escort !== undefined && escortSegments === null);
-  const positioningTicksTotal = Math.max(estimatedAssemblyTicks, estimatedTransportDelayTicks, estimatedEscortDelayTicks);
-  const estimatedCompletionTicks = positioningTicksTotal + estimatedEmbarkationTicks +
+  const estimatedCompletionTicks = estimatedEmbarkationTicks +
     estimatedVoyageTicks + estimatedLandingTicks;
   const opportunity = estimateOpportunityWindow(world, candidate.nationId, candidate.enemyId);
   const safetyMarginTicks = opportunity.ticks - estimatedCompletionTicks;
-  const reason: AmphibiousLaunchRejectionReason | null = positioningUnreachable
-    ? "positioning-unreachable"
-    : safetyMarginTicks < 0 ? "insufficient-strategic-window" : null;
+  const reason: AmphibiousLaunchRejectionReason | null = safetyMarginTicks < 0
+    ? "insufficient-strategic-window" : null;
   return {
     evaluatedAtTick: world.time.fastTick,
     estimatedAssemblyTicks, estimatedTransportDelayTicks, estimatedEscortDelayTicks,
@@ -655,7 +838,8 @@ function reconcileOperations(world: WorldState): void {
 
 function isActiveCapabilityDemand(demand: AmphibiousCapabilityDemand): boolean {
   return demand.operationId === null &&
-    (demand.state === "waiting" || demand.state === "building-fleet" || demand.state === "ready");
+    (demand.state === "waiting-transport" || demand.state === "waiting-escort" ||
+      demand.state === "waiting-landing-force" || demand.state === "assembling" || demand.state === "ready");
 }
 
 function findAvailableTransports(
@@ -668,6 +852,7 @@ function findAvailableTransports(
   );
   return world.units.filter((unit) =>
     isOperationalTransport(unit, nationId) &&
+    Number.isFinite(unit.moveTicksPerRegion) &&
     !logisticsTransportIds.has(unit.id) &&
     !isAmphibiousOwnedUnit(world, unit.id) &&
     (departurePortId === undefined ||
@@ -685,6 +870,7 @@ function findAvailableEscorts(
     .flatMap((mission) => mission.shipIds));
   return world.units.filter((unit) =>
     isOperationalCombatShip(unit, nationId) &&
+    Number.isFinite(unit.moveTicksPerRegion) &&
     reserveIds.has(unit.id) &&
     !isAmphibiousOwnedUnit(world, unit.id) &&
     (departurePortId === undefined ||
@@ -721,6 +907,8 @@ function selectLandingForce(
 
 export interface AmphibiousNavalProductionDemand {
   nationId: NationId;
+  departurePortId: MesoRegionId;
+  priority: number;
   transports: number;
   escorts: number;
 }
@@ -734,10 +922,12 @@ export function getAmphibiousNavalProductionDemands(
     if (!isActiveCapabilityDemand(demand)) continue;
     demands.push({
       nationId: demand.nationId,
+      departurePortId: demand.departurePortId,
+      priority: demand.priority,
       transports: Math.max(0, demand.desiredTransportCount -
-        findAvailableTransports(world, demand.nationId, demand.departurePortId).length),
+        demand.assignedTransportIds.length - findAvailableTransports(world, demand.nationId, demand.departurePortId).length),
       escorts: Math.max(0, demand.desiredEscortCount -
-        findAvailableEscorts(world, demand.nationId, demand.departurePortId).length),
+        demand.assignedEscortIds.length - findAvailableEscorts(world, demand.nationId, demand.departurePortId).length),
     });
   }
   return demands;
@@ -751,6 +941,21 @@ function rebuildOwnership(world: WorldState): void {
   for (const op of world.amphibiousOperations.operations) if (op.phase !== "landed" && op.phase !== "cancelled")
     for (const id of [...op.assignedUnitIds, op.transportId, ...op.escortIds]) map.set(id, op);
   world.amphibiousOperations.operationByUnitId = map;
+  const capabilityMap = new Map<UnitId, AmphibiousCapabilityDemand>();
+  for (const demand of world.amphibiousOperations.capabilityDemands) {
+    if (!isActiveCapabilityDemand(demand)) continue;
+    for (const id of [...demand.assignedTransportIds, ...demand.assignedEscortIds, ...demand.assignedLandingUnitIds]) {
+      capabilityMap.set(id, demand);
+    }
+  }
+  world.amphibiousOperations.capabilityDemandByUnitId = capabilityMap;
+}
+function releaseCapabilityAssignments(world: WorldState, demand: AmphibiousCapabilityDemand): void {
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+  for (const id of [...demand.assignedTransportIds, ...demand.assignedEscortIds, ...demand.assignedLandingUnitIds]) {
+    const unit = unitById.get(id);
+    if (unit) resetMovement(unit);
+  }
 }
 function isValidTargetPort(world: WorldState, nationId: NationId, enemyId: NationId, id: MesoRegionId): boolean {
   return getMesoById(world).get(id)?.building === "port" && getOwnerByMesoId(world).get(id) === enemyId && isAtWar(nationId, enemyId, buildWarAdjacency(world.wars));

@@ -3,7 +3,11 @@ import type { WorldState } from "./world-state";
 import { updateBattles } from "./battles";
 import { updateCapitals } from "./capitals";
 import { updateCivilWar } from "./civil-war";
-import { updateAmphibiousOperations, updateAmphibiousPlanning } from "./amphibious";
+import {
+  updateAmphibiousCapabilityAssembly,
+  updateAmphibiousOperations,
+  updateAmphibiousPlanning,
+} from "./amphibious";
 import { repositionUnits } from "./nation/reposition-units";
 import { updateOccupation } from "./occupation";
 import { updateProduction } from "./production";
@@ -105,6 +109,7 @@ export function stepFastTick(world: WorldState, dtMs: number): void {
     instrumentation.recordDuration("repositionUnits", performance.now() - startedAt);
   }
   if (Boolean(WORLD_BALANCE.unit.naval?.amphibiousEnabled)) {
+    updateAmphibiousCapabilityAssembly(world, dtMs);
     updateAmphibiousOperations(world);
   }
   updateMaritimeEscortMovement(world, dtMs);

@@ -60,7 +60,13 @@ import {
   updateSupplyDefense,
 } from "../../src/sim/supply-defense";
 import { createSupplyReliefState } from "../../src/sim/supply-relief";
-import { createAmphibiousOperationState, updateAmphibiousOperations, updateAmphibiousPlanning } from "../../src/sim/amphibious";
+import {
+  createAmphibiousOperationState,
+  updateAmphibiousCapabilityAssembly,
+  updateAmphibiousOperations,
+  updateAmphibiousPlanning,
+} from "../../src/sim/amphibious";
+import { repositionUnits } from "../../src/sim/nation/reposition-units";
 import { declareWar } from "../../src/sim/war-state";
 import { updateBattles } from "../../src/sim/battles";
 import {
@@ -133,12 +139,13 @@ test("an island war bootstraps amphibious capability from zero through naval pro
   const nation = world.nations[0]!;
   nation.resources.manpower = 100_000;
   nation.resources.weapons = 10_000;
+  nation.resources.fuel = 10_000;
 
   updateAmphibiousPlanning(world);
 
   const demand = world.amphibiousOperations.capabilityDemands[0];
   assert(demand);
-  assert.equal(demand.state, "waiting");
+  assert.equal(demand.state, "waiting-transport");
   assert.equal(world.amphibiousOperations.operations.length, 0);
 
   nation.nextUnitProductionTick = 0;
@@ -147,7 +154,7 @@ test("an island war bootstraps amphibious capability from zero through naval pro
   assert.equal(world.amphibiousOperations.operations.length, 0);
   assert.equal(world.units.filter((unit) => unit.type === "CombatShip").length, 1);
   updateAmphibiousPlanning(world);
-  assert.equal(demand.state, "building-fleet");
+  assert.equal(demand.state, "waiting-escort");
   assert.equal(world.amphibiousOperations.operations.length, 0);
 
   nation.nextUnitProductionTick = 0;
@@ -160,6 +167,57 @@ test("an island war bootstraps amphibious capability from zero through naval pro
   assert.equal(world.amphibiousOperations.operations.length, 1);
   assert.equal(world.amphibiousOperations.capabilityDemandsSatisfied, 1);
   assert(world.amphibiousOperations.capabilityProductionRequests >= 2);
+});
+
+test("amphibious capability assembles reachable ships and land force before preflight", () => {
+  const world = createMaritimeWorld(true, 1);
+  const enemyMacroIds = world.macroRegions
+    .filter((macro) => macro.mesoRegionIds.includes(id("port-b")) || macro.mesoRegionIds.includes(id("island-b")))
+    .map((macro) => { macro.nationId = NATION_B; return macro.id; });
+  world.nations.push(createNation(NATION_B, id("island-b"), enemyMacroIds));
+  world.cache.ownerByMesoId.clear();
+  declareWar(world.wars, NATION_A, NATION_B, 0);
+  const transport = world.units.find((unit) => unit.type === "TransportShip")!;
+  transport.regionId = id("sea-ab");
+  const escort = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("sea-ab"), "CombatShip");
+  const infantry = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("capital"), "Infantry");
+  world.units.push(escort, infantry);
+  world.supplyAssessment.navalStrategy.missions = [{
+    id: "assembly-reserve", nationId: NATION_A, type: "RESERVE", shipIds: [escort.id],
+    targetPortId: id("port-a"), priority: 10, createdTick: 0, status: "ACTIVE", reasonFlags: ["test-reserve"],
+  }];
+
+  updateAmphibiousPlanning(world);
+  const demand = world.amphibiousOperations.capabilityDemands[0]!;
+  assert.equal(demand.state, "assembling");
+  assert.equal(demand.fleetReachableAtTick, 0);
+  assert(demand.initialAssemblyEtaTicks > 0);
+  assert.equal(world.amphibiousOperations.operations.length, 0);
+  assert.equal(world.amphibiousOperations.capabilityDemandByUnitId.get(transport.id)?.id, demand.id);
+  assert.equal(world.amphibiousOperations.capabilityDemandByUnitId.get(escort.id)?.id, demand.id);
+  assert.equal(world.amphibiousOperations.capabilityDemandByUnitId.get(infantry.id)?.id, demand.id);
+
+  for (let tick = 0; tick < 200 && (demand.state as string) !== "ready"; tick += 1) {
+    world.time.fastTick += 1;
+    repositionUnits(world, FAST_TICK_MS);
+    updateAmphibiousCapabilityAssembly(world, FAST_TICK_MS);
+  }
+  assert.equal(demand.state, "ready");
+  assert.equal(transport.regionId, id("port-a"));
+  assert.equal(escort.regionId, id("port-a"));
+  assert.equal(infantry.regionId, id("port-a"));
+  assert(demand.assemblyCompletedAtTick !== null);
+  assert.equal(world.amphibiousOperations.assemblySuccesses, 1);
+
+  updateAmphibiousPlanning(world);
+  const operation = world.amphibiousOperations.operations[0]!;
+  assert(operation);
+  assert.equal(operation.capabilityDemandId, demand.id);
+  assert.equal(operation.launchFeasibility.estimatedAssemblyTicks, 0);
+  assert.equal(operation.launchFeasibility.estimatedTransportDelayTicks, 0);
+  assert.equal(operation.launchFeasibility.estimatedEscortDelayTicks, 0);
+  assert.equal(world.amphibiousOperations.capabilityDemandByUnitId.size, 0);
+  assert.equal(world.amphibiousOperations.operationByUnitId.get(transport.id)?.id, operation.id);
 });
 
 test("amphibious capability demand expires when its strategic opportunity disappears", () => {

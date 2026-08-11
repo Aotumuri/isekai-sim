@@ -63,6 +63,7 @@ interface LandAiRuntime {
   strategicReserveVersion: number;
   reorganizationVersion: number;
   collapseAdvanceVersion: number;
+  amphibiousVersion: number;
   warAdjacency: WarAdjacency;
   movementGroups: LandMovementGroup[];
   unitsExpectedToHaveTarget: Set<UnitState["id"]>;
@@ -140,6 +141,8 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     runtime.reorganizationVersion !== world.reorganization.version;
   const collapseAdvanceChanged =
     runtime.collapseAdvanceVersion !== world.collapseAdvances.version;
+  const amphibiousChanged =
+    runtime.amphibiousVersion !== world.amphibiousOperations.version;
   const periodicReassignmentDue =
     world.time.fastTick - runtime.lastAssignmentFastTick >=
     LAND_TARGET_REASSIGN_INTERVAL_TICKS;
@@ -157,6 +160,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     strategicReserveChanged ||
     reorganizationChanged ||
     collapseAdvanceChanged ||
+    amphibiousChanged ||
     periodicReassignmentDue;
   const mesoById = getMesoById(world);
   const neighborsById = getNeighborsById(world);
@@ -265,6 +269,7 @@ function getLandAiRuntime(world: WorldState): LandAiRuntime {
     strategicReserveVersion: -1,
     reorganizationVersion: -1,
     collapseAdvanceVersion: -1,
+    amphibiousVersion: -1,
     warAdjacency: new Map(),
     movementGroups: [],
     unitsExpectedToHaveTarget: new Set(),
@@ -303,6 +308,7 @@ function updateAssignmentRuntimeSources(
   runtime.strategicReserveVersion = world.strategicReserves.version;
   runtime.reorganizationVersion = world.reorganization.version;
   runtime.collapseAdvanceVersion = world.collapseAdvances.version;
+  runtime.amphibiousVersion = world.amphibiousOperations.version;
   runtime.forceReassignment = false;
 }
 
@@ -458,6 +464,7 @@ function rebuildLandAssignments(
     const collapseAdvance = world.collapseAdvances.advanceByNationId.get(nationId);
     const collapseUnitIds = new Set(collapseAdvance?.unitIds ?? []);
     const amphibiousUnits = units.filter((unit) =>
+      world.amphibiousOperations.capabilityDemandByUnitId.has(unit.id) ||
       world.amphibiousOperations.operationByUnitId.get(unit.id)?.phase === "embarking" ||
       world.amphibiousOperations.operationByUnitId.get(unit.id)?.phase === "preparing"
     );
@@ -469,7 +476,8 @@ function rebuildLandAssignments(
         !retreatUnitIds.has(unit.id) &&
         !reserveUnitIds.has(unit.id) &&
         !reorganizationUnitIds.has(unit.id) &&
-        !world.amphibiousOperations.operationByUnitId.has(unit.id),
+        !world.amphibiousOperations.operationByUnitId.has(unit.id) &&
+        !world.amphibiousOperations.capabilityDemandByUnitId.has(unit.id),
         // Collapse units are assigned as one concentrated movement group below.
     );
     for (const plan of reorganizationPlans) {
@@ -681,7 +689,8 @@ function rebuildLandAssignments(
           !retreatUnitIds.has(unit.id) &&
           !reserveUnitIds.has(unit.id) &&
           !reorganizationUnitIds.has(unit.id) &&
-          !world.amphibiousOperations.operationByUnitId.has(unit.id),
+          !world.amphibiousOperations.operationByUnitId.has(unit.id) &&
+          !world.amphibiousOperations.capabilityDemandByUnitId.has(unit.id),
       );
     clearUnitMovement(unassignedUnits);
   }

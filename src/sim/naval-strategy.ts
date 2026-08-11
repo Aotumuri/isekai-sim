@@ -103,6 +103,11 @@ export interface NavalStrategyState {
 
 export type NavalUnitOwnership =
   | {
+      controller: "AMPHIBIOUS_CAPABILITY";
+      missionType: "TRANSPORT" | "ESCORT";
+      demandId: string;
+    }
+  | {
       controller: "AMPHIBIOUS_OPERATION";
       missionType: "TRANSPORT" | "ESCORT";
       operationId: string;
@@ -638,6 +643,12 @@ export function getNavalUnitOwnership(
     controller: "AMPHIBIOUS_OPERATION",
     missionType: unit.id === amphibious.transportId ? "TRANSPORT" : "ESCORT",
     operationId: amphibious.id,
+  };
+  const capability = world.amphibiousOperations.capabilityDemandByUnitId.get(unitId);
+  if (capability) return {
+    controller: "AMPHIBIOUS_CAPABILITY",
+    missionType: capability.assignedTransportIds.includes(unitId) ? "TRANSPORT" : "ESCORT",
+    demandId: capability.id,
   };
   if (unit.type === "CombatShip") {
     const mission = getNavalMission(world, unit.id);

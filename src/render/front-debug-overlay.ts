@@ -970,23 +970,26 @@ export function formatAmphibiousCapabilityDemand(
   world: WorldState,
   demand: WorldState["amphibiousOperations"]["capabilityDemands"][number],
 ): string {
-  const missingTransports = Math.max(0, demand.desiredTransportCount - demand.availableTransportCount);
-  const missingEscorts = Math.max(0, demand.desiredEscortCount - demand.availableEscortCount);
-  const waitingFor = missingTransports > 0 ? "transport"
-    : missingEscorts > 0 ? "escort"
-      : demand.availableLandingStrength < demand.requiredLandingStrength ? "landing force" : "none";
-  const fleetAvailable = demand.availableTransportCount + demand.availableEscortCount;
-  const fleetDesired = demand.desiredTransportCount + demand.desiredEscortCount;
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+  const atDeparture = (ids: readonly UnitId[]): number => ids.filter((id) =>
+    unitById.get(id)?.regionId === demand.departurePortId).length;
+  const transportReady = atDeparture(demand.assignedTransportIds);
+  const escortReady = atDeparture(demand.assignedEscortIds);
+  const forceReady = atDeparture(demand.assignedLandingUnitIds);
+  const assembled = transportReady + escortReady + forceReady;
+  const assigned = demand.assignedTransportIds.length + demand.assignedEscortIds.length +
+    demand.assignedLandingUnitIds.length;
   return [
     "AMPHIBIOUS CAPABILITY",
     `state ${demand.state}`,
-    `waiting for ${waitingFor}`,
-    `fleet ${fleetAvailable}/${fleetDesired} (T ${demand.availableTransportCount}/${demand.desiredTransportCount}, E ${demand.availableEscortCount}/${demand.desiredEscortCount})`,
-    `force ${demand.availableLandingUnitCount}/${demand.desiredLandingUnitCount}`,
-    `readiness ${fleetAvailable + demand.availableLandingUnitCount}/${fleetDesired + demand.desiredLandingUnitCount}`,
+    `fleet reachable ${demand.fleetReachableAtTick === null ? "no" : "yes"}`,
+    `assembly ${assembled}/${assigned} ETA ${demand.assemblyEtaTicks}`,
+    `transport ${transportReady}/${demand.desiredTransportCount} at port`,
+    `escort ${escortReady}/${demand.desiredEscortCount} at port`,
+    `landing force ${forceReady}/${demand.desiredLandingUnitCount} at port`,
+    `ready ${demand.state === "ready" ? "yes" : "no"}`,
     `age ${Math.max(0, world.time.fastTick - demand.createdAtTick)} ticks`,
     `priority ${demand.priority.toFixed(1)}`,
-    `reason ${demand.reasonFlags.join(", ") || "strategic-opportunity"}`,
   ].join("\n");
 }
 
@@ -995,9 +998,8 @@ export function formatAmphibiousLaunchFeasibility(
 ): string {
   return [
     `AMPHIBIOUS LAUNCH ${feasibility.accepted ? "FEASIBLE" : "REJECTED"}`,
-    `assembly ${feasibility.estimatedAssemblyTicks} ticks`,
-    `transport ${feasibility.estimatedTransportDelayTicks} ticks`,
-    `escort ${feasibility.estimatedEscortDelayTicks} ticks`,
+    "fleet assembled",
+    `embarkation ${feasibility.estimatedEmbarkationTicks} ticks`,
     `voyage ${feasibility.estimatedVoyageTicks} ticks`,
     `landing ${feasibility.estimatedLandingTicks} ticks`,
     `ETA ${feasibility.estimatedCompletionTicks} ticks`,

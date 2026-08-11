@@ -270,6 +270,15 @@ export interface WorldSummary {
   amphibiousCapabilityTransportDemand: number;
   amphibiousCapabilityEscortDemand: number;
   amphibiousCapabilityCpuMs: number;
+  amphibiousCapabilityAssemblyCpuMs: number;
+  amphibiousFleetReachable: number;
+  amphibiousFleetAssembly: number;
+  amphibiousAverageAssemblyDuration: number;
+  amphibiousAverageAssemblyEta: number;
+  amphibiousAssemblySuccesses: number;
+  amphibiousFleetReady: number;
+  amphibiousAverageReadyToLaunchLatency: number;
+  amphibiousAveragePositioningTicksRemoved: number;
   amphibiousCapabilityMemoryBytes: number;
   navalAiEvaluations: number;
   navalEscortShips: number;

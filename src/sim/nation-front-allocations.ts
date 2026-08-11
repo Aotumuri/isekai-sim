@@ -167,7 +167,8 @@ export function updateNationFrontAllocations(world: WorldState): void {
         !world.retreatPlans.retreatIdByUnitId.has(unit.id) &&
         !world.strategicReserves.reserveNationByUnitId.has(unit.id) &&
         !world.reorganization.planIdByUnitId.has(unit.id) &&
-        !world.amphibiousOperations.operationByUnitId.has(unit.id),
+        !world.amphibiousOperations.operationByUnitId.has(unit.id) &&
+        !world.amphibiousOperations.capabilityDemandByUnitId.has(unit.id),
     );
     const result = allocateNationUnits(
       world,
