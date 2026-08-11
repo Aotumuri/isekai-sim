@@ -442,6 +442,11 @@ export const WORLD_BALANCE = {
       evenUnitRatio: 1.1,
       evenChance: 0.02,
       maxWarsPerTick: 5,
+      intentThreshold: 48,
+      minimumLandStrength: 1_000,
+      maritimeMinimumLandStrength: 2_000,
+      maritimeMinimumTransports: 1,
+      maritimeMinimumCombatShips: 1,
     },
     surrender: {
       occupationWeight: 0.5,

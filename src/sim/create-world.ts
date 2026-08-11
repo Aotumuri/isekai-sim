@@ -47,6 +47,7 @@ import { createSupplyDefenseState } from "./supply-defense";
 import { createSupplyReliefState } from "./supply-relief";
 import { createAmphibiousOperationState } from "./amphibious";
 import { createStrategicThreatObservationState } from "./strategic-threat-observation";
+import { createWarIntentState } from "./war-intent";
 
 export function createWorld(config: WorldConfig): WorldState {
   const rng = new SeededRng(config.seed);
@@ -113,6 +114,7 @@ export function createWorld(config: WorldConfig): WorldState {
   const reorganization = createReorganizationState();
   const strategicProgress = createStrategicProgressState();
   const strategicThreatObservation = createStrategicThreatObservationState();
+  const warIntent = createWarIntentState();
   const stalematePressure = createStalematePressureState();
   const collapseAdvances = createCollapseAdvanceState();
   const battlefieldTopology = createBattlefieldTopologyState();
@@ -150,6 +152,7 @@ export function createWorld(config: WorldConfig): WorldState {
     reorganization,
     strategicProgress,
     strategicThreatObservation,
+    warIntent,
     stalematePressure,
     collapseAdvances,
     battlefieldTopology,

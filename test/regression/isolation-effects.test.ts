@@ -31,6 +31,7 @@ import { createRetreatPlanState } from "../../src/sim/retreat-plans";
 import { createStalematePressureState } from "../../src/sim/stalemate-pressure";
 import { createStrategicProgressState } from "../../src/sim/strategic-progress";
 import { createStrategicThreatObservationState } from "../../src/sim/strategic-threat-observation";
+import { createWarIntentState } from "../../src/sim/war-intent";
 import { createStrategicReserveState } from "../../src/sim/strategic-reserves";
 import {
   createSupplyAssessmentState,
@@ -177,6 +178,7 @@ function createIsolationWorld(withUnit = true): { world: WorldState; unit: UnitS
     reorganization: createReorganizationState(),
     strategicProgress: createStrategicProgressState(),
     strategicThreatObservation: createStrategicThreatObservationState(),
+    warIntent: createWarIntentState(),
     battlefieldTopology: createBattlefieldTopologyState(),
     supplyAssessment: createSupplyAssessmentState(),
     isolationEffects: createIsolationEffectsState(),

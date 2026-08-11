@@ -160,6 +160,49 @@ export function summarizeWorld(world: WorldState): WorldSummary {
       world.strategicThreatObservation.evaluationCpuMs,
     strategicThreatMemoryBytes:
       world.strategicThreatObservation.estimatedMemoryBytes,
+    warIntentCandidateEvaluations: world.warIntent.candidateEvaluations,
+    warIntentLandCandidates: world.warIntent.landCandidates,
+    warIntentMaritimeCandidates: world.warIntent.maritimeCandidates,
+    warIntentAboveThreshold: world.warIntent.intentsAboveThreshold,
+    warIntentDeclarations: world.warIntent.declarations,
+    warIntentDeclarationsOpportunistic:
+      world.warIntent.declarationsByReason["opportunistic-expansion"],
+    warIntentDeclarationsThreatResponse:
+      world.warIntent.declarationsByReason["threat-response"],
+    warIntentDeclarationsStrategicPort:
+      world.warIntent.declarationsByReason["strategic-port"],
+    warIntentDeclarationsMaritimeExpansion:
+      world.warIntent.declarationsByReason["maritime-expansion"],
+    warIntentDeclarationsBalanceOfPower:
+      world.warIntent.declarationsByReason["balance-of-power"],
+    warIntentDeclarationsWeakenedEnemy:
+      world.warIntent.declarationsByReason["weakened-enemy"],
+    warIntentSuppressed: world.warIntent.suppressedDeclarations,
+    warIntentSuppressedExternalThreat: world.warIntent.suppressionByExternalThreat,
+    warIntentSuppressedExistingWars: world.warIntent.suppressionByExistingWars,
+    warIntentSuppressedCapitalEmergency: world.warIntent.suppressionByCapitalEmergency,
+    warIntentMaritimeDeclarations: world.warIntent.maritimeDeclarations,
+    warIntentAverage: world.warIntent.candidateEvaluations > 0
+      ? world.warIntent.totalIntent / world.warIntent.candidateEvaluations : 0,
+    warIntentAverageOpportunity: world.warIntent.candidateEvaluations > 0
+      ? world.warIntent.totalOpportunity / world.warIntent.candidateEvaluations : 0,
+    warIntentAverageThreat: world.warIntent.candidateEvaluations > 0
+      ? world.warIntent.totalThreatResponse / world.warIntent.candidateEvaluations : 0,
+    warIntentAverageCost: world.warIntent.candidateEvaluations > 0
+      ? world.warIntent.totalExpectedCost / world.warIntent.candidateEvaluations : 0,
+    warIntentAverageExternalExposure: world.warIntent.candidateEvaluations > 0
+      ? world.warIntent.totalExternalExposure / world.warIntent.candidateEvaluations : 0,
+    warIntentRankingChanges: world.warIntent.rankingChanges,
+    warIntentCpuMs: world.warIntent.evaluationCpuMs,
+    warIntentThirdPartyOpportunisticInvasions:
+      world.warIntent.thirdPartyOpportunisticInvasions,
+    warIntentWarsAgainstAlreadyFighting:
+      world.warIntent.warsAgainstAlreadyFightingNations,
+    warIntentMultiWarStarts: world.warIntent.multiWarStarts,
+    warIntentDeclarationsAgainstTopThreat:
+      world.warIntent.declarationsAgainstTopThreat,
+    warIntentDeclarationsAgainstWeakerNonThreat:
+      world.warIntent.declarationsAgainstWeakerNonThreatTargets,
     schwerpunktSelections: stalemate.selections,
     schwerpunktChanges: stalemate.selectionChanges,
     activeSchwerpunkts: stalemate.assessments.filter((item) => item.schwerpunktSectorId).length,

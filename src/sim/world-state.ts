@@ -32,6 +32,7 @@ import type { SupplyDefenseState } from "./supply-defense";
 import type { SupplyReliefState } from "./supply-relief";
 import type { AmphibiousOperationState } from "./amphibious";
 import type { StrategicThreatObservationState } from "./strategic-threat-observation";
+import type { WarIntentState } from "./war-intent";
 
 export interface WorldState {
   width: number;
@@ -54,8 +55,9 @@ export interface WorldState {
   strategicReserves: StrategicReserveState;
   reorganization: ReorganizationState;
   strategicProgress: StrategicProgressState;
-  /** Observation-only strategic measurements. No AI decision consumes this. */
+  /** Completed strategic snapshot consumed on the following slow tick. */
   strategicThreatObservation: StrategicThreatObservationState;
+  warIntent: WarIntentState;
   battlefieldTopology: BattlefieldTopologyState;
   supplyAssessment: SupplyAssessmentState;
   isolationEffects: IsolationEffectsState;

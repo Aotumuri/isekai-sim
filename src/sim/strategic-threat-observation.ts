@@ -162,8 +162,8 @@ export function getStrategicExposureObservation(
 }
 
 /**
- * Observation only: this writes exclusively to strategicThreatObservation and
- * optional benchmark instrumentation. No strategic consumer reads this state.
+ * Produces the completed slow-tick snapshot. Strategic consumers intentionally
+ * read it on the following tick so this pass remains shared and single-shot.
  */
 export function updateStrategicThreatObservation(world: WorldState): void {
   const state = world.strategicThreatObservation;
@@ -456,6 +456,29 @@ function collectSparseExposures(
     else candidates.set(key, { a: war.nationAId, b: war.nationBId, landAdjacent: false, atWar: true });
   }
   const seaComponentsByNation = collectSeaComponentsByNation(world);
+  const nationsBySeaComponent = new Map<number, NationId[]>();
+  for (const [nationId, components] of seaComponentsByNation) {
+    for (const component of components) {
+      const nations = nationsBySeaComponent.get(component);
+      if (nations) nations.push(nationId);
+      else nationsBySeaComponent.set(component, [nationId]);
+    }
+  }
+  // Add only port-connected nation pairs. This is a bounded component join,
+  // not a topology scan, and makes peaceful overseas exposure observable.
+  for (const nations of nationsBySeaComponent.values()) {
+    nations.sort(compareIds);
+    for (let i = 0; i < nations.length; i += 1) {
+      for (let j = i + 1; j < nations.length; j += 1) {
+        const a = nations[i];
+        const b = nations[j];
+        const key = undirectedPairKey(a, b);
+        if (!candidates.has(key)) {
+          candidates.set(key, { a, b, landAdjacent: false, atWar: false });
+        }
+      }
+    }
+  }
   const exposures: StrategicExposureObservation[] = [];
   for (const candidate of candidates.values()) {
     exposures.push(buildExposure(world, factsByNationId, seaComponentsByNation,

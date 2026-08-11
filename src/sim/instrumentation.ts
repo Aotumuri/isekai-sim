@@ -16,6 +16,7 @@ export type SimulationMetricName =
   | "frontlineCoverage.evaluation"
   | "strategicProgress.evaluation"
   | "strategicThreat.evaluation"
+  | "warIntent.evaluation"
   | "stalemate.evaluation"
   | "offensiveOperation.evaluation"
   | "offensiveOperation.exploitationEvaluation"

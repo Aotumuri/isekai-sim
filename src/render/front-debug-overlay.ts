@@ -1021,9 +1021,15 @@ function drawStrategicThreatSummary(layer: Container, world: WorldState): void {
 }
 
 export function formatStrategicThreatSummary(world: WorldState): string {
-  const lines = ["STRATEGIC THREAT — OBSERVATION ONLY"];
+  const lines = ["STRATEGIC THREAT"];
   for (const observation of world.strategicThreatObservation.observations) {
     lines.push(formatStrategicThreatNationLine(observation));
+  }
+  const intents = world.warIntent.assessments.slice(0, 6);
+  if (intents.length > 0) lines.push("", "WAR INTENT");
+  for (const intent of intents) {
+    lines.push(`${intent.aggressorId} → ${intent.targetNationId} ${intent.route} | ${intent.score.toFixed(0)} | O +${intent.opportunity.toFixed(0)} T +${intent.threatResponse.toFixed(0)} V +${intent.strategicValue.toFixed(0)} C -${intent.expectedCost.toFixed(0)} K -${intent.existingCommitment.toFixed(0)} X -${intent.externalExposure.toFixed(0)}`);
+    lines.push(`  ${intent.dominantReason} | ${intent.declared ? "DECLARE" : `reject: ${intent.rejectedReasons.join(", ")}`}`);
   }
   return lines.join("\n");
 }
