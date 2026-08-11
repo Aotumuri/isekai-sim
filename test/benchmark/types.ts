@@ -91,6 +91,16 @@ export interface WorldSummary {
   strategicProgressOperationEvents: number;
   strategicProgressImportantCaptureEvents: number;
   strategicProgressExploitationEvents: number;
+  strategicThreatEvaluations: number;
+  strategicThreatNationEvaluations: number;
+  strategicThreatHistoryUpdates: number;
+  strategicThreatAveragePower: number;
+  strategicThreatAverageMomentum: number;
+  strategicThreatTopChanges: number;
+  strategicThreatRankingChanges: number;
+  strategicThreatExposureEdges: number;
+  strategicThreatCpuMs: number;
+  strategicThreatMemoryBytes: number;
   schwerpunktSelections: number;
   schwerpunktChanges: number;
   activeSchwerpunkts: number;

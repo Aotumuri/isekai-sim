@@ -140,6 +140,26 @@ export function summarizeWorld(world: WorldState): WorldSummary {
       strategicProgress.reasonCounts["important-capture"],
     strategicProgressExploitationEvents:
       strategicProgress.reasonCounts["successful-exploitation"],
+    strategicThreatEvaluations:
+      world.strategicThreatObservation.evaluationCount,
+    strategicThreatNationEvaluations:
+      world.strategicThreatObservation.nationEvaluationCount,
+    strategicThreatHistoryUpdates:
+      world.strategicThreatObservation.historyUpdateCount,
+    strategicThreatAveragePower:
+      world.strategicThreatObservation.averagePower,
+    strategicThreatAverageMomentum:
+      world.strategicThreatObservation.averageMomentum,
+    strategicThreatTopChanges:
+      world.strategicThreatObservation.topThreatChangeCount,
+    strategicThreatRankingChanges:
+      world.strategicThreatObservation.rankingChangeCount,
+    strategicThreatExposureEdges:
+      world.strategicThreatObservation.exposures.length,
+    strategicThreatCpuMs:
+      world.strategicThreatObservation.evaluationCpuMs,
+    strategicThreatMemoryBytes:
+      world.strategicThreatObservation.estimatedMemoryBytes,
     schwerpunktSelections: stalemate.selections,
     schwerpunktChanges: stalemate.selectionChanges,
     activeSchwerpunkts: stalemate.assessments.filter((item) => item.schwerpunktSectorId).length,

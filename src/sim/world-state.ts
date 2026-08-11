@@ -31,6 +31,7 @@ import type { SupplyCutoffAnalysisState } from "./supply-cutoff";
 import type { SupplyDefenseState } from "./supply-defense";
 import type { SupplyReliefState } from "./supply-relief";
 import type { AmphibiousOperationState } from "./amphibious";
+import type { StrategicThreatObservationState } from "./strategic-threat-observation";
 
 export interface WorldState {
   width: number;
@@ -53,6 +54,8 @@ export interface WorldState {
   strategicReserves: StrategicReserveState;
   reorganization: ReorganizationState;
   strategicProgress: StrategicProgressState;
+  /** Observation-only strategic measurements. No AI decision consumes this. */
+  strategicThreatObservation: StrategicThreatObservationState;
   battlefieldTopology: BattlefieldTopologyState;
   supplyAssessment: SupplyAssessmentState;
   isolationEffects: IsolationEffectsState;

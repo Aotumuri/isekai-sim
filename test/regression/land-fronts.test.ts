@@ -89,6 +89,7 @@ import {
   updateStrategicProgress,
 } from "../../src/sim/strategic-progress";
 import { updateBattles } from "../../src/sim/battles";
+import { createStrategicThreatObservationState } from "../../src/sim/strategic-threat-observation";
 import {
   createFrontlineCoverageState,
   getFrontlineCoverage,
@@ -4424,6 +4425,7 @@ function createFrontWorld(
     strategicReserves: createStrategicReserveState(),
     reorganization: createReorganizationState(),
     strategicProgress: createStrategicProgressState(),
+    strategicThreatObservation: createStrategicThreatObservationState(),
     stalematePressure: createStalematePressureState(),
     collapseAdvances: createCollapseAdvanceState(),
     battlefieldTopology: createBattlefieldTopologyState(),

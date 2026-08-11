@@ -45,6 +45,7 @@ import type { WorldState } from "../../src/sim/world-state";
 import { createFrontlineCoverageState } from "../../src/sim/frontline-coverage";
 import { createStalematePressureState } from "../../src/sim/stalemate-pressure";
 import { createStrategicProgressState } from "../../src/sim/strategic-progress";
+import { createStrategicThreatObservationState } from "../../src/sim/strategic-threat-observation";
 import { createWorldCache } from "../../src/sim/world-cache";
 import { createProductionDiagnosticsState } from "../../src/sim/production";
 import { createSupplyCutoffAnalysisState } from "../../src/sim/supply-cutoff";
@@ -653,6 +654,7 @@ function createReorganizationWorld(): { world: WorldState; unit: UnitState } {
     strategicReserves: createStrategicReserveState(false),
     reorganization: createReorganizationState(),
     strategicProgress: createStrategicProgressState(),
+    strategicThreatObservation: createStrategicThreatObservationState(),
     stalematePressure: createStalematePressureState(),
     collapseAdvances: createCollapseAdvanceState(),
     battlefieldTopology: createBattlefieldTopologyState(),

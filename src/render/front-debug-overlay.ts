@@ -35,6 +35,7 @@ import { findSharedSegments, type Segment } from "./meso-border-geometry";
 import { getMicroRegionByIdMap } from "./region-index";
 import type { Renderer } from "./renderer";
 import { getMaritimeLinkProtection } from "../sim/maritime-escort";
+import type { StrategicNationObservation } from "../sim/strategic-threat-observation";
 
 /** Change this one value to change the development overlay's initial state. */
 export const DEFAULT_FRONT_DEBUG_OVERLAY = true;
@@ -80,6 +81,7 @@ interface OverlayVersions {
   retreats: number;
   coverage: number;
   stalemate: number;
+  strategicThreat: number;
   reserveDeployments: string;
   battles: string;
 }
@@ -148,6 +150,7 @@ export function attachFrontDebugOverlay(
     drawMaritimeSupplyLinks(layer, world);
     drawNavalMissions(layer, world);
     drawAmphibiousOperations(layer, world);
+    drawStrategicThreatSummary(layer, world);
     if (selectedSectorId && !world.landFronts.operationalSectorsById.has(selectedSectorId)) {
       selectedSectorId = null;
     }
@@ -997,6 +1000,46 @@ export function formatNavalStrategySummary(world: WorldState, nationId: string):
     `Blockade ${count("BLOCKADE")}`, `Reserve ${count("RESERVE")}`].join("\n");
 }
 
+function drawStrategicThreatSummary(layer: Container, world: WorldState): void {
+  if (world.strategicThreatObservation.observations.length === 0) return;
+  const container = new Container();
+  container.name = "StrategicThreatObservationSummary";
+  container.eventMode = "none";
+  const text = new Text(formatStrategicThreatSummary(world), LABEL_STYLE);
+  text.resolution = 2;
+  const bounds = text.getLocalBounds();
+  const padding = 6;
+  const background = new Graphics();
+  background.beginFill(0x081018, 0.92);
+  background.lineStyle(1.5, 0xb388ff, 0.95);
+  background.drawRoundedRect(0, 0, bounds.width + padding * 2, bounds.height + padding * 2, 4);
+  background.endFill();
+  text.position.set(padding, padding);
+  container.position.set(8, 8);
+  container.addChild(background, text);
+  layer.addChild(container);
+}
+
+export function formatStrategicThreatSummary(world: WorldState): string {
+  const lines = ["STRATEGIC THREAT — OBSERVATION ONLY"];
+  for (const observation of world.strategicThreatObservation.observations) {
+    lines.push(formatStrategicThreatNationLine(observation));
+  }
+  return lines.join("\n");
+}
+
+function formatStrategicThreatNationLine(observation: StrategicNationObservation): string {
+  const momentum = observation.momentum.score;
+  const momentumText = `${momentum >= 0 ? "+" : ""}${momentum.toFixed(0)}`;
+  const trend = observation.momentum.trend === "rising" ? "↑" :
+    observation.momentum.trend === "falling" ? "↓" : "→";
+  return `#${observation.threatRank} ${observation.nationId} | P ${observation.power.score.toFixed(0)} | M ${momentumText}${trend} | T ${observation.threatScore.toFixed(0)} | G ${signed(observation.momentum.territoryGrowth)}/${signed(observation.momentum.cityGrowth)} | W ${observation.existingWars} | SP ${observation.strategicProgress.toFixed(0)} | Sea ${observation.maritimeCapability}`;
+}
+
+function signed(value: number): string {
+  return `${value >= 0 ? "+" : ""}${value}`;
+}
+
 function createMaritimeSupplyLabel(
   world: WorldState,
   link: WorldState["supplyAssessment"]["maritimeLinks"][number],
@@ -1172,6 +1215,7 @@ function readVersions(world: WorldState): OverlayVersions {
     retreats: world.retreatPlans.version,
     coverage: world.frontlineCoverage.version,
     stalemate: world.stalematePressure.version,
+    strategicThreat: world.strategicThreatObservation.version,
     reserveDeployments: world.strategicReserves.reserves
       .map((reserve) => {
         const deployment = reserve.deployment;
@@ -1190,6 +1234,7 @@ function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
   return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
     a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment && a.maritimeInterdiction === b.maritimeInterdiction && a.navalStrategy === b.navalStrategy && a.amphibiousOperations === b.amphibiousOperations && a.convoys === b.convoys && a.isolationEffects === b.isolationEffects && a.productionDiagnostics === b.productionDiagnostics && a.supplyCutoffs === b.supplyCutoffs && a.supplyDefense === b.supplyDefense && a.supplyRelief === b.supplyRelief &&
     a.retreats === b.retreats && a.coverage === b.coverage && a.stalemate === b.stalemate &&
+    a.strategicThreat === b.strategicThreat &&
     a.reserveDeployments === b.reserveDeployments && a.battles === b.battles;
 }
 
