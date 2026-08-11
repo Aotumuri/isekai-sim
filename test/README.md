@@ -54,6 +54,9 @@ well as time so an apparent speedup caused by skipped work is visible.
 - `many-units`: active wars plus 600 land units (240 in quick mode).
 - `civil-war`: triggers the production civil-war transition and adds a nation.
 - `late-game`: active/extinct nations, wars, occupation and many units together.
+- `two-island-amphibious`: exactly two balanced nations on two disconnected
+  landmasses with one sea-only war. Use `npm run diagnostic:two-island` for the
+  detailed campaign timeline, beachhead attribution and prediction validation.
 
 Scenario setup lives in `test/scenarios/`. Add a setup function, register it in
 `test/scenarios/index.ts`, and add its name to `BENCHMARK_SCENARIOS` in

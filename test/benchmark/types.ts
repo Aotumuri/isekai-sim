@@ -12,6 +12,7 @@ export const BENCHMARK_SCENARIOS = [
   "gap-exploitation",
   "stalemate-breaker",
   "collapse-advance",
+  "two-island-amphibious",
 ] as const;
 
 export type BenchmarkScenarioName = (typeof BENCHMARK_SCENARIOS)[number];

@@ -13,7 +13,8 @@
     "test:sim": "node --import tsx --test test/regression/simulation.test.ts",
     "benchmark": "node --import tsx test/benchmark/run-benchmark.ts",
     "benchmark:quick": "node --import tsx test/benchmark/run-benchmark.ts --quick",
-    "benchmark:compare": "node --import tsx test/benchmark/compare-results.ts"
+    "benchmark:compare": "node --import tsx test/benchmark/compare-results.ts",
+    "diagnostic:two-island": "node --import tsx test/diagnostics/two-island-campaign.ts"
   },
   "dependencies": {
     "d3-delaunay": "^6.0.4",

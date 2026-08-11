@@ -14,6 +14,7 @@ import { setupLongFrontline } from "./long-frontline";
 import { setupGapExploitation } from "./gap-exploitation";
 import { setupStalemateBreaker } from "./stalemate-breaker";
 import { setupCollapseAdvance } from "./collapse-advance";
+import { setupTwoIslandAmphibious } from "./two-island-amphibious";
 import type { ScenarioOptions, ScenarioSetup } from "./types";
 
 const scenarioSetups: Record<BenchmarkScenarioName, ScenarioSetup> = {
@@ -30,6 +31,7 @@ const scenarioSetups: Record<BenchmarkScenarioName, ScenarioSetup> = {
   "gap-exploitation": setupGapExploitation,
   "stalemate-breaker": setupStalemateBreaker,
   "collapse-advance": setupCollapseAdvance,
+  "two-island-amphibious": setupTwoIslandAmphibious,
 };
 
 export function createScenarioWorld(

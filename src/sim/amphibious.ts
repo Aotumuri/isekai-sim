@@ -340,6 +340,7 @@ export function updateAmphibiousPlanning(world: WorldState): void {
     world.amphibiousOperations.evaluationCpuMs += elapsed;
     world.amphibiousOperations.capabilityEvaluationCpuMs += elapsed;
     world.instrumentation.recordDuration("amphibious.evaluation", elapsed);
+    world.instrumentation.recordDuration("amphibious.planning", elapsed);
   }
 }
 
@@ -476,7 +477,9 @@ export function updateAmphibiousCapabilityAssembly(world: WorldState, dtMs: numb
   }
   rebuildOwnership(world);
   if (world.instrumentation) {
-    world.amphibiousOperations.capabilityAssemblyCpuMs += performance.now() - startedAt;
+    const elapsed = performance.now() - startedAt;
+    world.amphibiousOperations.capabilityAssemblyCpuMs += elapsed;
+    world.instrumentation.recordDuration("amphibious.fleetAssembly", elapsed);
   }
 }
 
@@ -509,6 +512,7 @@ interface LandingCandidate {
   targetTypes: AmphibiousTargetType[];
 }
 function chooseCandidate(world: WorldState, nationId: NationId, enemyId: NationId, departures: MesoRegionId[], destinations: MesoRegionId[]): LandingCandidate | null {
+  const startedAt = world.instrumentation ? performance.now() : 0;
   const mesoById = getMesoById(world);
   const neighborsById = getNeighborsById(world);
   const enemyUnits = world.units.filter((unit) => unit.domain === "land" && unit.nationId === enemyId);
@@ -573,7 +577,11 @@ function chooseCandidate(world: WorldState, nationId: NationId, enemyId: NationI
         selectedReason, targetTypes });
     }
   }
-  return candidates.sort((a, b) => b.score - a.score || compareIds(a.destination, b.destination) || compareIds(a.departure, b.departure))[0] ?? null;
+  const selected = candidates.sort((a, b) => b.score - a.score || compareIds(a.destination, b.destination) || compareIds(a.departure, b.departure))[0] ?? null;
+  if (world.instrumentation) {
+    world.instrumentation.recordDuration("amphibious.landingSiteEvaluation", performance.now() - startedAt);
+  }
+  return selected;
 }
 
 function estimateAssaultStrength(
