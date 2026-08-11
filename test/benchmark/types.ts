@@ -259,6 +259,18 @@ export interface WorldSummary {
   amphibiousAverageCancellationAge: number;
   amphibiousEvaluationCpuMs: number;
   amphibiousMovementCpuMs: number;
+  amphibiousCapabilityDemands: number;
+  amphibiousCapabilityDemandsSatisfied: number;
+  amphibiousCapabilityDemandsExpired: number;
+  amphibiousCapabilityDemandsCancelled: number;
+  amphibiousCapabilityAverageWaitingTime: number;
+  amphibiousCapabilityAverageFleetBuildLatency: number;
+  amphibiousCapabilityAverageOperationCreationLatency: number;
+  amphibiousCapabilityProductionRequests: number;
+  amphibiousCapabilityTransportDemand: number;
+  amphibiousCapabilityEscortDemand: number;
+  amphibiousCapabilityCpuMs: number;
+  amphibiousCapabilityMemoryBytes: number;
   navalAiEvaluations: number;
   navalEscortShips: number;
   navalRaidShips: number;

@@ -119,6 +119,80 @@ test("amphibious planning creates one deterministic leased plan and reserves phy
   assert.equal(world.amphibiousOperations.launchedOperations, 1);
 });
 
+test("an island war bootstraps amphibious capability from zero through naval production", () => {
+  const world = createMaritimeWorld(true, 0);
+  const enemyMacroIds = world.macroRegions
+    .filter((macro) => macro.mesoRegionIds.includes(id("port-b")) || macro.mesoRegionIds.includes(id("island-b")))
+    .map((macro) => { macro.nationId = NATION_B; return macro.id; });
+  world.nations.push(createNation(NATION_B, id("island-b"), enemyMacroIds));
+  world.cache.ownerByMesoId.clear();
+  declareWar(world.wars, NATION_A, NATION_B, 0);
+  world.units.push(createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "Infantry",
+  ));
+  const nation = world.nations[0]!;
+  nation.resources.manpower = 100_000;
+  nation.resources.weapons = 10_000;
+
+  updateAmphibiousPlanning(world);
+
+  const demand = world.amphibiousOperations.capabilityDemands[0];
+  assert(demand);
+  assert.equal(demand.state, "waiting");
+  assert.equal(world.amphibiousOperations.operations.length, 0);
+
+  nation.nextUnitProductionTick = 0;
+  updateProduction(world);
+  assert.equal(world.units.filter((unit) => unit.type === "TransportShip").length, 1);
+  assert.equal(world.amphibiousOperations.operations.length, 0);
+  assert.equal(world.units.filter((unit) => unit.type === "CombatShip").length, 1);
+  updateAmphibiousPlanning(world);
+  assert.equal(demand.state, "building-fleet");
+  assert.equal(world.amphibiousOperations.operations.length, 0);
+
+  nation.nextUnitProductionTick = 0;
+  updateProduction(world);
+  assert.equal(world.units.filter((unit) => unit.type === "CombatShip").length, 2);
+  updateAmphibiousPlanning(world);
+
+  assert.equal(demand.state, "ready");
+  assert(demand.operationId);
+  assert.equal(world.amphibiousOperations.operations.length, 1);
+  assert.equal(world.amphibiousOperations.capabilityDemandsSatisfied, 1);
+  assert(world.amphibiousOperations.capabilityProductionRequests >= 2);
+});
+
+test("amphibious capability demand expires when its strategic opportunity disappears", () => {
+  const world = createMaritimeWorld(true, 0);
+  const enemyMacroIds = world.macroRegions
+    .filter((macro) => macro.mesoRegionIds.includes(id("port-b")) || macro.mesoRegionIds.includes(id("island-b")))
+    .map((macro) => { macro.nationId = NATION_B; return macro.id; });
+  world.nations.push(createNation(NATION_B, id("island-b"), enemyMacroIds));
+  world.cache.ownerByMesoId.clear();
+  declareWar(world.wars, NATION_A, NATION_B, 0);
+  world.units.push(createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "Infantry",
+  ));
+
+  updateAmphibiousPlanning(world);
+  const demand = world.amphibiousOperations.capabilityDemands[0];
+  assert(demand);
+  world.wars = [];
+  world.time.fastTick += 1;
+  updateAmphibiousPlanning(world);
+
+  assert.equal(demand.state, "expired");
+  assert.equal(world.amphibiousOperations.capabilityDemands.every((item) => item.state === "expired"), true);
+  assert.equal(world.amphibiousOperations.capabilityDemandsExpired,
+    world.amphibiousOperations.capabilityDemands.length);
+  const nation = world.nations[0]!;
+  nation.resources.manpower = 100_000;
+  nation.resources.weapons = 10_000;
+  nation.nextUnitProductionTick = 0;
+  updateProduction(world);
+  assert.equal(world.units.some((unit) => unit.domain === "naval"), false);
+});
+
 test("amphibious launch preflight rejects a landing that cannot fit its strategic window", () => {
   const world = createMaritimeWorld(true, 3);
   const enemyMacroIds = world.macroRegions

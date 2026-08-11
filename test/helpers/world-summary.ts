@@ -393,6 +393,27 @@ export function summarizeWorld(world: WorldState): WorldSummary {
       ? world.amphibiousOperations.totalCancellationAgeTicks / world.amphibiousOperations.cancelledPlans : 0,
     amphibiousEvaluationCpuMs: world.amphibiousOperations.evaluationCpuMs,
     amphibiousMovementCpuMs: world.amphibiousOperations.movementCpuMs,
+    amphibiousCapabilityDemands: world.amphibiousOperations.capabilityDemandsCreated,
+    amphibiousCapabilityDemandsSatisfied: world.amphibiousOperations.capabilityDemandsSatisfied,
+    amphibiousCapabilityDemandsExpired: world.amphibiousOperations.capabilityDemandsExpired,
+    amphibiousCapabilityDemandsCancelled: world.amphibiousOperations.capabilityDemandsCancelled,
+    amphibiousCapabilityAverageWaitingTime: world.amphibiousOperations.capabilityDemandWaitSamples > 0
+      ? world.amphibiousOperations.totalCapabilityDemandWaitingTicks /
+        world.amphibiousOperations.capabilityDemandWaitSamples : 0,
+    amphibiousCapabilityAverageFleetBuildLatency: world.amphibiousOperations.fleetBuildLatencySamples > 0
+      ? world.amphibiousOperations.totalFleetBuildLatencyTicks /
+        world.amphibiousOperations.fleetBuildLatencySamples : 0,
+    amphibiousCapabilityAverageOperationCreationLatency:
+      world.amphibiousOperations.operationCreationLatencySamples > 0
+        ? world.amphibiousOperations.totalOperationCreationLatencyTicks /
+          world.amphibiousOperations.operationCreationLatencySamples : 0,
+    amphibiousCapabilityProductionRequests: world.amphibiousOperations.capabilityProductionRequests,
+    amphibiousCapabilityTransportDemand: world.amphibiousOperations.capabilityTransportDemand,
+    amphibiousCapabilityEscortDemand: world.amphibiousOperations.capabilityEscortDemand,
+    amphibiousCapabilityCpuMs: world.amphibiousOperations.capabilityEvaluationCpuMs,
+    amphibiousCapabilityMemoryBytes: world.amphibiousOperations.capabilityDemands.reduce(
+      (bytes, demand) => bytes + 224 + demand.routeRegionIds.length * 8 +
+        demand.reasonFlags.reduce((sum, reason) => sum + reason.length * 2, 0), 0),
     navalAiEvaluations: world.supplyAssessment.navalStrategy.evaluations,
     navalEscortShips: missionShipCount(world, "ESCORT"),
     navalRaidShips: missionShipCount(world, "RAID"),

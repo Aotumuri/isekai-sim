@@ -3,6 +3,7 @@ import type { MacroRegion } from "../worldgen/macro-region";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { createUnitForType } from "./create-units";
+import { getAmphibiousNavalProductionDemands } from "./amphibious";
 import { isNationActive } from "./nation-active";
 import type { NationResourceFlow, NationResources } from "./nation-runtime";
 import { nextScheduledTickRange } from "./schedule";
@@ -54,11 +55,12 @@ export type CombatShipProductionReason =
   | "offensive-bootstrap"
   | "naval-threat"
   | "escort-deficit"
+  | "amphibious-capability"
   | "reserve-restoration";
 
 function emptyCombatShipReasonCounts(): Record<CombatShipProductionReason, number> {
   return { "baseline-fleet": 0, "offensive-bootstrap": 0, "naval-threat": 0,
-    "escort-deficit": 0, "reserve-restoration": 0 };
+    "escort-deficit": 0, "amphibious-capability": 0, "reserve-restoration": 0 };
 }
 
 function selectCombatShipProductionReason(
@@ -176,6 +178,18 @@ function updateProductionInternal(world: WorldState): void {
         Math.max(0, link.requiredTransportCount - link.assignedTransportIds.length),
     );
   }
+  const amphibiousTransportDemandByNation = new Map<NationId, number>();
+  const amphibiousEscortDemandByNation = new Map<NationId, number>();
+  for (const demand of getAmphibiousNavalProductionDemands(world)) {
+    amphibiousTransportDemandByNation.set(
+      demand.nationId,
+      (amphibiousTransportDemandByNation.get(demand.nationId) ?? 0) + demand.transports,
+    );
+    amphibiousEscortDemandByNation.set(
+      demand.nationId,
+      (amphibiousEscortDemandByNation.get(demand.nationId) ?? 0) + demand.escorts,
+    );
+  }
   const combatShipReasonsByNation = new Map<NationId, CombatShipProductionReason[]>();
   for (const assessment of world.supplyAssessment.navalStrategy.assessments) {
     const force = assessment.desiredForce;
@@ -189,6 +203,11 @@ function updateProductionInternal(world: WorldState): void {
       if (reason) reasons.push(reason);
     }
     combatShipReasonsByNation.set(force.nationId, reasons);
+  }
+  for (const [nationId, escortCount] of amphibiousEscortDemandByNation) {
+    const reasons = combatShipReasonsByNation.get(nationId) ?? [];
+    for (let index = 0; index < escortCount; index += 1) reasons.push("amphibious-capability");
+    combatShipReasonsByNation.set(nationId, reasons);
   }
   const portNavalUnitsPerCycle = Math.max(
     0,
@@ -215,13 +234,20 @@ function updateProductionInternal(world: WorldState): void {
       );
       continue;
     }
-    const requestedTransports = logisticsTransportDemandByNation.get(nation.id) ?? 0;
+    const amphibiousTransports = amphibiousTransportDemandByNation.get(nation.id) ?? 0;
+    const amphibiousEscorts = amphibiousEscortDemandByNation.get(nation.id) ?? 0;
+    const requestedTransports = (logisticsTransportDemandByNation.get(nation.id) ?? 0) +
+      amphibiousTransports;
     const combatShipReasons = combatShipReasonsByNation.get(nation.id) ?? [];
     const requestedEscorts = combatShipReasons.filter((reason) => reason === "escort-deficit").length;
     const requestedReserves = combatShipReasons.filter((reason) => reason === "reserve-restoration").length;
     world.productionDiagnostics.navalTransportRequests += requestedTransports;
     world.productionDiagnostics.navalEscortRequests += requestedEscorts;
     world.productionDiagnostics.navalReserveRequests += requestedReserves;
+    const capabilityRequests = amphibiousTransports + amphibiousEscorts;
+    world.amphibiousOperations.capabilityProductionRequests += capabilityRequests;
+    world.amphibiousOperations.capabilityTransportDemand += amphibiousTransports;
+    world.amphibiousOperations.capabilityEscortDemand += amphibiousEscorts;
     world.instrumentation?.incrementCounter("production.naval.requests.transport", requestedTransports);
     world.instrumentation?.incrementCounter("production.naval.requests.escort", requestedEscorts);
     world.instrumentation?.incrementCounter("production.naval.requests.reserve", requestedReserves);
@@ -324,10 +350,12 @@ function updateProductionInternal(world: WorldState): void {
       if (reason === "transport") {
         diagnostics.navalTransportFulfilled += 1;
         world.instrumentation?.incrementCounter("production.naval.fulfilled.transport");
-      } else if (reason === "escort-deficit") {
+      } else if (reason === "escort-deficit" || reason === "amphibious-capability") {
         diagnostics.navalEscortFulfilled += 1;
-        world.supplyAssessment.maritimeEscorts.combatShipsProducedForEscortDemand += 1;
-        world.instrumentation?.incrementCounter("maritimeEscort.production.combatShips");
+        if (reason === "escort-deficit") {
+          world.supplyAssessment.maritimeEscorts.combatShipsProducedForEscortDemand += 1;
+          world.instrumentation?.incrementCounter("maritimeEscort.production.combatShips");
+        }
         world.instrumentation?.incrementCounter("production.naval.fulfilled.escort");
       } else {
         if (reason === "reserve-restoration") {
@@ -441,11 +469,12 @@ function recordResourceBlock(
 }
 
 function reasonCounterSuffix(reason: CombatShipProductionReason):
-  "baseline" | "offensiveBootstrap" | "threat" | "escort" | "reserveRestoration" {
+  "baseline" | "offensiveBootstrap" | "threat" | "escort" | "amphibiousCapability" | "reserveRestoration" {
   if (reason === "baseline-fleet") return "baseline";
   if (reason === "offensive-bootstrap") return "offensiveBootstrap";
   if (reason === "naval-threat") return "threat";
   if (reason === "escort-deficit") return "escort";
+  if (reason === "amphibious-capability") return "amphibiousCapability";
   return "reserveRestoration";
 }
 
