@@ -36,6 +36,7 @@ import { getMicroRegionByIdMap } from "./region-index";
 import type { Renderer } from "./renderer";
 import { getMaritimeLinkProtection } from "../sim/maritime-escort";
 import type { StrategicNationObservation } from "../sim/strategic-threat-observation";
+import { getAmphibiousOperationValidation } from "../sim/amphibious";
 
 /** Change this one value to change the development overlay's initial state. */
 export const DEFAULT_FRONT_DEBUG_OVERLAY = true;
@@ -946,7 +947,7 @@ function drawAmphibiousOperations(layer: Container, world: WorldState): void {
     drawMarker(layer, world, operation.destinationPortId, "A", 0x7c4dff, "diamond");
     const center = world.cache.mesoById.get(operation.destinationPortId)?.center;
     if (!center) continue;
-    const label = new Text(formatAmphibiousLaunchFeasibility(operation.launchFeasibility), LABEL_STYLE);
+    const label = new Text(formatAmphibiousOperationValidation(world, operation), LABEL_STYLE);
     label.resolution = 2;
     label.position.set(center.x + 11, center.y + 11);
     layer.addChild(label);
@@ -981,6 +982,11 @@ export function formatAmphibiousCapabilityDemand(
     demand.assignedLandingUnitIds.length;
   return [
     "AMPHIBIOUS CAPABILITY",
+    `phase ${demand.state === "assembling" ? "assembly" : "planning"}`,
+    `validation owner ${demand.state === "assembling" ? "fleet-assembly" : "strategic-planning"}`,
+    "validation failures none",
+    `historical departure ${demand.departurePortId}`,
+    `destination ${demand.destinationPortId}`,
     `state ${demand.state}`,
     `fleet reachable ${demand.fleetReachableAtTick === null ? "no" : "yes"}`,
     `assembly ${assembled}/${assigned} ETA ${demand.assemblyEtaTicks}`,
@@ -990,6 +996,23 @@ export function formatAmphibiousCapabilityDemand(
     `ready ${demand.state === "ready" ? "yes" : "no"}`,
     `age ${Math.max(0, world.time.fastTick - demand.createdAtTick)} ticks`,
     `priority ${demand.priority.toFixed(1)}`,
+  ].join("\n");
+}
+
+export function formatAmphibiousOperationValidation(
+  world: WorldState,
+  operation: WorldState["amphibiousOperations"]["operations"][number],
+): string {
+  const validation = getAmphibiousOperationValidation(world, operation);
+  const transport = world.units.find((unit) => unit.id === operation.transportId);
+  return [
+    "AMPHIBIOUS OPERATION",
+    `phase ${validation.phase}`,
+    `validation owner ${validation.owner}`,
+    `validation failures ${validation.failures.join(", ") || "none"}`,
+    `historical departure ${operation.departurePortId}`,
+    `convoy position ${transport?.regionId ?? "lost"}`,
+    `destination ${operation.destinationPortId}`,
   ].join("\n");
 }
 

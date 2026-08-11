@@ -375,6 +375,12 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     amphibiousTransportLosses: world.amphibiousOperations.transportLosses,
     amphibiousFailedLandings: world.amphibiousOperations.failedLandings,
     amphibiousSuccessfulBeachheads: world.amphibiousOperations.successfulBeachheads,
+    amphibiousPlanningFailures: world.amphibiousOperations.planningFailures,
+    amphibiousAssemblyFailures: world.amphibiousOperations.assemblyFailures,
+    amphibiousReadyFailures: world.amphibiousOperations.readyFailures,
+    amphibiousVoyageFailures: world.amphibiousOperations.voyageFailures,
+    amphibiousLandingFailures: world.amphibiousOperations.landingFailures,
+    amphibiousDeparturePortCancellations: world.amphibiousOperations.departurePortCancellations,
     amphibiousOperationsRejected: world.amphibiousOperations.operationsRejected,
     amphibiousOperationsAccepted: world.amphibiousOperations.operationsAccepted,
     amphibiousAverageEstimatedCompletion: world.amphibiousOperations.feasibilitySampleCount > 0

@@ -19,7 +19,9 @@ import { getCapitalDefenseAssessment } from "./capital-defense";
 const PREPARATION_TIMEOUT_TICKS = 2400;
 
 export type AmphibiousPhase = "preparing" | "embarking" | "escort-wait" | "transporting" | "landed" | "cancelled";
-export type AmphibiousCancellationReason = "transport-lost" | "escort-lost" | "departure-port-lost" | "target-invalid" | "war-ended" | "force-lost" | "preparation-timeout";
+export type AmphibiousCancellationReason = "transport-lost" | "escort-lost" | "convoy-lost" | "assets-not-assembled" | "departure-port-lost" | "target-invalid" | "route-invalid" | "war-ended" | "force-lost" | "preparation-timeout";
+export type AmphibiousValidationPhase = "planning" | "assembly" | "ready" | "voyage" | "landing";
+export type AmphibiousValidationOwner = "strategic-planning" | "fleet-assembly" | "operation-readiness" | "convoy" | "landing";
 export type AmphibiousLaunchRejectionReason = "insufficient-strategic-window" | "positioning-unreachable";
 export type AmphibiousCapabilityDemandState =
   | "waiting-transport"
@@ -184,6 +186,12 @@ export interface AmphibiousOperationState {
   totalReadyToLaunchLatencyTicks: number;
   positioningTicksRemovedSamples: number;
   totalPositioningTicksRemoved: number;
+  planningFailures: number;
+  assemblyFailures: number;
+  readyFailures: number;
+  voyageFailures: number;
+  landingFailures: number;
+  departurePortCancellations: number;
 }
 
 export function createAmphibiousOperationState(): AmphibiousOperationState {
@@ -211,7 +219,9 @@ export function createAmphibiousOperationState(): AmphibiousOperationState {
     assemblyEtaSamples: 0, totalAssemblyEtaTicks: 0, assemblySuccesses: 0,
     fleetReadyCount: 0, readyToLaunchLatencySamples: 0,
     totalReadyToLaunchLatencyTicks: 0, positioningTicksRemovedSamples: 0,
-    totalPositioningTicksRemoved: 0 };
+    totalPositioningTicksRemoved: 0,
+    planningFailures: 0, assemblyFailures: 0, readyFailures: 0,
+    voyageFailures: 0, landingFailures: 0, departurePortCancellations: 0 };
 }
 
 /** Slow-tick strategic evaluator. It only considers cached ports, fronts and supply data. */
@@ -293,8 +303,11 @@ export function updateAmphibiousOperations(world: WorldState): void {
   const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
   for (const operation of world.amphibiousOperations.operations) {
     if (operation.phase === "landed" || operation.phase === "cancelled") continue;
-    const failure = validateOperation(world, operation, unitById);
-    if (failure) { cancelOperation(world, operation, failure, unitById); continue; }
+    const validation = getAmphibiousOperationValidation(world, operation, unitById);
+    if (validation.failures.length > 0) {
+      cancelOperation(world, operation, validation.failures[0]!, validation.phase, unitById);
+      continue;
+    }
     const force = operation.assignedUnitIds.map((id) => unitById.get(id)).filter((u): u is UnitState => !!u);
     if (operation.phase === "preparing" || operation.phase === "embarking") {
       operation.phase = "embarking";
@@ -605,10 +618,16 @@ function completeAssemblyIfReady(
 }
 
 function expireCapabilityDemand(world: WorldState, demand: AmphibiousCapabilityDemand): void {
+  const validationPhase: AmphibiousValidationPhase = demand.state === "assembling" ? "assembly" : "planning";
   releaseCapabilityAssignments(world, demand);
   demand.state = "expired";
   demand.lastValidatedAtTick = world.time.fastTick;
   world.amphibiousOperations.capabilityDemandsExpired += 1;
+  if (validationPhase === "assembly") world.amphibiousOperations.assemblyFailures += 1;
+  else world.amphibiousOperations.planningFailures += 1;
+  world.instrumentation?.incrementCounter(validationPhase === "assembly"
+    ? "amphibious.validationFailure.assembly"
+    : "amphibious.validationFailure.planning");
   recordCapabilityWait(world, demand);
   world.amphibiousOperations.version += 1;
   world.instrumentation?.incrementCounter("amphibious.capabilityExpired");
@@ -684,21 +703,62 @@ function createOperation(world: WorldState, demand: AmphibiousCapabilityDemand, 
   return operation;
 }
 
-function validateOperation(world: WorldState, op: AmphibiousOperation, units: Map<UnitId, UnitState>): AmphibiousCancellationReason | null {
-  if (!isAtWar(op.nationId, op.enemyNationId, buildWarAdjacency(world.wars))) return "war-ended";
-  if (!isEffectivelyControlledPort(world, op.nationId, op.departurePortId)) return "departure-port-lost";
-  if (!isValidTargetPort(world, op.nationId, op.enemyNationId, op.destinationPortId)) return "target-invalid";
-  if (!isOperationalTransport(units.get(op.transportId), op.nationId)) return "transport-lost";
-  if (op.escortIds.some((id) => !isOperationalCombatShip(units.get(id), op.nationId))) return "escort-lost";
-  const liveForce = op.phase === "escort-wait" || op.phase === "transporting" ? units.get(op.transportId)?.cargoUnits ?? [] : op.assignedUnitIds.map((id) => units.get(id)).filter(Boolean);
-  if (liveForce.length === 0) return "force-lost";
-  if (op.phase === "preparing" || op.phase === "embarking") {
-    if (world.time.fastTick - op.preparationLeaseStartedAtTick > PREPARATION_TIMEOUT_TICKS) return "preparation-timeout";
-  }
-  return null;
+export interface AmphibiousValidationResult {
+  phase: AmphibiousValidationPhase;
+  owner: AmphibiousValidationOwner;
+  failures: AmphibiousCancellationReason[];
 }
 
-function cancelOperation(world: WorldState, op: AmphibiousOperation, reason: AmphibiousCancellationReason, units: Map<UnitId, UnitState>): void {
+export function getAmphibiousOperationValidation(
+  world: WorldState,
+  op: AmphibiousOperation,
+  providedUnits?: Map<UnitId, UnitState>,
+): AmphibiousValidationResult {
+  const units = providedUnits ?? new Map(world.units.map((unit) => [unit.id, unit]));
+  const transport = units.get(op.transportId);
+  const atDestination = op.phase === "transporting" && transport?.regionId === op.destinationPortId;
+  const phase: AmphibiousValidationPhase = op.phase === "transporting"
+    ? atDestination ? "landing" : "voyage"
+    : "ready";
+  const owner: AmphibiousValidationOwner = phase === "voyage" ? "convoy"
+    : phase === "landing" ? "landing" : "operation-readiness";
+  const failures: AmphibiousCancellationReason[] = [];
+  if (!isAtWar(op.nationId, op.enemyNationId, buildWarAdjacency(world.wars))) failures.push("war-ended");
+  if (phase === "ready" && !isEffectivelyControlledPort(world, op.nationId, op.departurePortId)) {
+    failures.push("departure-port-lost");
+  }
+  if (!isValidTargetPort(world, op.nationId, op.enemyNationId, op.destinationPortId)) failures.push("target-invalid");
+  if ((phase === "ready" || phase === "voyage") &&
+    !isStoredRouteValid(world, op.routeRegionIds, op.departurePortId, op.destinationPortId)) {
+    failures.push("route-invalid");
+  }
+  if (!isOperationalTransport(transport, op.nationId)) failures.push("transport-lost");
+  if (op.escortIds.some((id) => !isOperationalCombatShip(units.get(id), op.nationId))) failures.push("escort-lost");
+  const liveForce = op.phase === "escort-wait" || op.phase === "transporting"
+    ? transport?.cargoUnits ?? []
+    : op.assignedUnitIds.map((id) => units.get(id)).filter(Boolean);
+  if (liveForce.length === 0) failures.push("force-lost");
+  if (phase === "ready") {
+    const forceAssembled = op.phase === "escort-wait"
+      ? liveForce.length > 0
+      : op.assignedUnitIds.every((id) => units.get(id)?.regionId === op.departurePortId);
+    const fleetAssembled = transport?.regionId === op.departurePortId &&
+      op.escortIds.every((id) => units.get(id)?.regionId === op.departurePortId);
+    if (!forceAssembled || !fleetAssembled) failures.push("assets-not-assembled");
+  }
+  if (phase === "ready" && (op.phase === "preparing" || op.phase === "embarking") &&
+    world.time.fastTick - op.preparationLeaseStartedAtTick > PREPARATION_TIMEOUT_TICKS) {
+    failures.push("preparation-timeout");
+  }
+  if (phase === "voyage") {
+    const convoy = op.convoyId ? world.supplyAssessment.convoys.convoyById.get(op.convoyId) : undefined;
+    if (!convoy || convoy.mission !== "amphibious") failures.push("convoy-lost");
+    else if (!routesEqual(convoy.route.waypointIds, op.routeRegionIds)) failures.push("route-invalid");
+  }
+  return { phase, owner, failures: [...new Set(failures)] };
+}
+
+function cancelOperation(world: WorldState, op: AmphibiousOperation, reason: AmphibiousCancellationReason, phase: AmphibiousValidationPhase, units: Map<UnitId, UnitState>): void {
   const transport = units.get(op.transportId);
   if (transport?.cargoUnits.length) {
     const region = getMesoById(world).get(transport.regionId);
@@ -713,11 +773,19 @@ function cancelOperation(world: WorldState, op: AmphibiousOperation, reason: Amp
   op.phase = "cancelled"; op.cancellationReason = reason; op.completedAtTick = world.time.fastTick;
   op.preparationLeaseEndedAtTick ??= world.time.fastTick;
   world.amphibiousOperations.cancelledPlans += 1; world.amphibiousOperations.failedLandings += 1;
+  if (phase === "ready") world.amphibiousOperations.readyFailures += 1;
+  else if (phase === "voyage") world.amphibiousOperations.voyageFailures += 1;
+  else if (phase === "landing") world.amphibiousOperations.landingFailures += 1;
+  if (reason === "departure-port-lost") world.amphibiousOperations.departurePortCancellations += 1;
   world.amphibiousOperations.totalCancellationAgeTicks += Math.max(0, world.time.fastTick - op.preparationLeaseStartedAtTick);
   if (reason === "war-ended" || reason === "target-invalid" || reason === "departure-port-lost" || reason === "preparation-timeout") {
     world.amphibiousOperations.falseNegativeCount += 1;
   }
   if (reason === "transport-lost") world.amphibiousOperations.transportLosses += 1;
+  if (phase === "ready") world.instrumentation?.incrementCounter("amphibious.validationFailure.ready");
+  else if (phase === "voyage") world.instrumentation?.incrementCounter("amphibious.validationFailure.voyage");
+  else if (phase === "landing") world.instrumentation?.incrementCounter("amphibious.validationFailure.landing");
+  if (reason === "departure-port-lost") world.instrumentation?.incrementCounter("amphibious.departurePortCancellation");
   world.amphibiousOperations.version += 1;
 }
 
@@ -959,6 +1027,15 @@ function releaseCapabilityAssignments(world: WorldState, demand: AmphibiousCapab
 }
 function isValidTargetPort(world: WorldState, nationId: NationId, enemyId: NationId, id: MesoRegionId): boolean {
   return getMesoById(world).get(id)?.building === "port" && getOwnerByMesoId(world).get(id) === enemyId && isAtWar(nationId, enemyId, buildWarAdjacency(world.wars));
+}
+function isStoredRouteValid(world: WorldState, route: readonly MesoRegionId[], departure: MesoRegionId, destination: MesoRegionId): boolean {
+  if (route.length < 2 || route[0] !== departure || route.at(-1) !== destination) return false;
+  const neighbors = getNeighborsById(world);
+  return route.slice(1).every((regionId, index) =>
+    (neighbors.get(route[index]!) ?? []).includes(regionId));
+}
+function routesEqual(a: readonly MesoRegionId[], b: readonly MesoRegionId[]): boolean {
+  return a.length === b.length && a.every((id, index) => id === b[index]);
 }
 function positionShipAtPort(world: WorldState, ship: UnitState, port: MesoRegionId): void {
   moveNavalUnitToward(world, ship, port, FAST_TICK_MS);

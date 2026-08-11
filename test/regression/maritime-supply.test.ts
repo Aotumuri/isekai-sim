@@ -62,6 +62,7 @@ import {
 import { createSupplyReliefState } from "../../src/sim/supply-relief";
 import {
   createAmphibiousOperationState,
+  getAmphibiousOperationValidation,
   updateAmphibiousCapabilityAssembly,
   updateAmphibiousOperations,
   updateAmphibiousPlanning,
@@ -123,6 +124,62 @@ test("amphibious planning creates one deterministic leased plan and reserves phy
   assert.equal(world.amphibiousOperations.operationByUnitId.has(infantry.id), false);
   assert.equal(world.amphibiousOperations.successfulBeachheads, 1);
   assert.equal(world.amphibiousOperations.launchedOperations, 1);
+});
+
+test("a launched amphibious voyage survives loss of its historical departure port", () => {
+  const world = createMaritimeWorld(true, 3);
+  const enemyMacroIds = world.macroRegions
+    .filter((macro) => macro.mesoRegionIds.includes(id("port-b")) || macro.mesoRegionIds.includes(id("island-b")))
+    .map((macro) => { macro.nationId = NATION_B; return macro.id; });
+  world.nations.push(createNation(NATION_B, id("island-b"), enemyMacroIds));
+  world.cache.ownerByMesoId.clear();
+  declareWar(world.wars, NATION_A, NATION_B, 0);
+  const infantry = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "Infantry");
+  const escort = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip");
+  world.units.push(infantry, escort);
+  world.supplyAssessment.navalStrategy.missions = [{
+    id: "reserve-test", nationId: NATION_A, type: "RESERVE", shipIds: [escort.id],
+    targetPortId: id("port-a"), priority: 10, createdTick: 0, status: "ACTIVE", reasonFlags: ["test-reserve"],
+  }];
+  updateAmphibiousPlanning(world);
+  const operation = world.amphibiousOperations.operations[0]!;
+
+  const departureMacro = world.macroRegions.find((macro) => macro.mesoRegionIds.includes(id("port-a")))!;
+  departureMacro.nationId = NATION_B;
+  world.territoryVersion += 1;
+  world.cache.ownerByMesoId.clear();
+  const readyValidation = getAmphibiousOperationValidation(world, operation);
+  assert.equal(readyValidation.phase, "ready");
+  assert(readyValidation.failures.includes("departure-port-lost"));
+  departureMacro.nationId = NATION_A;
+  world.territoryVersion += 1;
+  world.cache.ownerByMesoId.clear();
+
+  for (let tick = 0; tick < 4 && operation.phase !== "transporting"; tick += 1) {
+    world.time.fastTick += 1;
+    updateAmphibiousOperations(world);
+  }
+  assert.equal(operation.phase, "transporting");
+  assert(operation.convoyId);
+
+  departureMacro.nationId = NATION_B;
+  world.territoryVersion += 1;
+  world.cache.ownerByMesoId.clear();
+  world.time.fastTick += 1;
+  updateAmphibiousOperations(world);
+
+  assert.equal(operation.phase, "transporting");
+  assert.equal(operation.cancellationReason, null);
+  assert.equal(world.amphibiousOperations.departurePortCancellations, 0);
+  assert.equal(world.amphibiousOperations.voyageFailures, 0);
+
+  for (let tick = 0; tick < 400 && (operation.phase as string) !== "landed"; tick += 1) {
+    world.time.fastTick += 1;
+    updateConvoyMovement(world, FAST_TICK_MS);
+    updateAmphibiousOperations(world);
+  }
+  assert.equal(operation.phase, "landed");
+  assert.equal(infantry.regionId, id("port-b"));
 });
 
 test("an island war bootstraps amphibious capability from zero through naval production", () => {

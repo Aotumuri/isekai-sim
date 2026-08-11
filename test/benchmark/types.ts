@@ -247,6 +247,12 @@ export interface WorldSummary {
   amphibiousTransportLosses: number;
   amphibiousFailedLandings: number;
   amphibiousSuccessfulBeachheads: number;
+  amphibiousPlanningFailures: number;
+  amphibiousAssemblyFailures: number;
+  amphibiousReadyFailures: number;
+  amphibiousVoyageFailures: number;
+  amphibiousLandingFailures: number;
+  amphibiousDeparturePortCancellations: number;
   amphibiousOperationsRejected: number;
   amphibiousOperationsAccepted: number;
   amphibiousAverageEstimatedCompletion: number;
