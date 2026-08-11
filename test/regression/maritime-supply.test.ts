@@ -335,6 +335,12 @@ test("an island war bootstraps amphibious capability from zero through naval pro
   assert.equal(world.units.filter((unit) => unit.type === "CombatShip").length, 1);
   updateAmphibiousPlanning(world);
   assert.equal(demand.state, "waiting-escort");
+  assert.deepEqual(demand.assignedTransportIds, []);
+  assert.deepEqual(demand.assignedEscortIds, []);
+  assert.equal(world.amphibiousOperations.capabilityDemandByUnitId.has(
+    world.units.find((unit) => unit.type === "TransportShip")!.id,
+  ), false);
+  assert(world.amphibiousOperations.partialFleetReservationsPrevented > 0);
   assert.equal(world.amphibiousOperations.operations.length, 0);
 
   nation.nextUnitProductionTick = 0;

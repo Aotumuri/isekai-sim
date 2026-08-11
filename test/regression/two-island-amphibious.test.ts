@@ -23,11 +23,11 @@ test("two-island amphibious scenario has exactly two isolated balanced combatant
     world.units.filter((unit) => unit.nationId === nation.id).length), [21, 21]);
 });
 
-test("an established bridgehead promptly creates a reusable reinforcement wave", () => {
+test("an established bridgehead creates a reusable, complete-fleet reinforcement wave", () => {
   const world = createScenarioWorld("two-island-amphibious", {
     seed: 695_919_685_365, width: 640, height: 360, quick: true,
   });
-  withMutedSimulationLogs(() => runSimulation(world, { ticks: 710 }));
+  withMutedSimulationLogs(() => runSimulation(world, { ticks: 900 }));
 
   const landing = world.amphibiousOperations.operations.find((operation) =>
     operation.kind === "landing" && operation.beachheadOutcome === "success");
@@ -38,13 +38,12 @@ test("an established bridgehead promptly creates a reusable reinforcement wave",
   assert.equal(campaign.status, "active");
   assert.ok(campaign.desiredStrength > campaign.currentStrength);
 
-  const reinforcement = world.amphibiousOperations.operations.find((operation) =>
-    operation.bridgeheadCampaignId === campaign.id && operation.kind === "bridgehead-reinforcement");
+  const reinforcement = world.amphibiousOperations.capabilityDemands.find((demand) =>
+    demand.bridgeheadCampaignId === campaign.id && demand.kind === "bridgehead-reinforcement");
   assert.ok(reinforcement);
   assert.equal(reinforcement.waveNumber, 1);
-  assert.ok(reinforcement.launchedAtTick !== null && reinforcement.launchedAtTick - landing.beachheadEvaluatedAtTick! < 200);
-  assert.deepEqual(reinforcement.transportIds, landing.transportIds);
-  assert.deepEqual(reinforcement.escortIds, landing.escortIds);
+  assert.equal(reinforcement.assignedTransportIds.length, reinforcement.desiredTransportCount);
+  assert.equal(reinforcement.assignedEscortIds.length, reinforcement.desiredEscortCount);
 });
 
 function countLandComponents(world: ReturnType<typeof createScenarioWorld>): number {

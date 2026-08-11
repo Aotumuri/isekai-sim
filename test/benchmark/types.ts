@@ -310,6 +310,13 @@ export interface WorldSummary {
   amphibiousAverageReadyToLaunchLatency: number;
   amphibiousAveragePositioningTicksRemoved: number;
   amphibiousCapabilityMemoryBytes: number;
+  amphibiousFleetLeaseAttempts: number;
+  amphibiousSuccessfulFleetLeases: number;
+  amphibiousFailedFleetLeaseAttempts: number;
+  amphibiousPartialFleetReservationsPrevented: number;
+  amphibiousFleetContentionEvents: number;
+  amphibiousIdleReservedTransportTicks: number;
+  amphibiousIdleReservedEscortTicks: number;
   navalAiEvaluations: number;
   navalEscortShips: number;
   navalRaidShips: number;

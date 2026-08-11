@@ -485,6 +485,13 @@ export function summarizeWorld(world: WorldState): WorldSummary {
         (demand.assignedTransportIds.length + demand.assignedEscortIds.length +
           demand.assignedLandingUnitIds.length) * 8 +
         demand.reasonFlags.reduce((sum, reason) => sum + reason.length * 2, 0), 0),
+    amphibiousFleetLeaseAttempts: world.amphibiousOperations.fleetLeaseAttempts,
+    amphibiousSuccessfulFleetLeases: world.amphibiousOperations.successfulFleetLeases,
+    amphibiousFailedFleetLeaseAttempts: world.amphibiousOperations.failedFleetLeaseAttempts,
+    amphibiousPartialFleetReservationsPrevented: world.amphibiousOperations.partialFleetReservationsPrevented,
+    amphibiousFleetContentionEvents: world.amphibiousOperations.fleetContentionEvents,
+    amphibiousIdleReservedTransportTicks: world.amphibiousOperations.idleReservedTransportTicks,
+    amphibiousIdleReservedEscortTicks: world.amphibiousOperations.idleReservedEscortTicks,
     navalAiEvaluations: world.supplyAssessment.navalStrategy.evaluations,
     navalEscortShips: missionShipCount(world, "ESCORT"),
     navalRaidShips: missionShipCount(world, "RAID"),

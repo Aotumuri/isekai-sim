@@ -1004,6 +1004,10 @@ export function formatAmphibiousCapabilityDemand(
   const assembled = transportReady + escortReady + forceReady;
   const assigned = demand.assignedTransportIds.length + demand.assignedEscortIds.length +
     demand.assignedLandingUnitIds.length;
+  const fleetComplete = demand.assignedTransportIds.length === demand.desiredTransportCount &&
+    demand.assignedEscortIds.length === demand.desiredEscortCount;
+  const leaseAge = demand.fleetLeaseStartedAtTick === null ? 0 :
+    Math.max(0, world.time.fastTick - demand.fleetLeaseStartedAtTick);
   return [
     "AMPHIBIOUS CAPABILITY",
     `state ${demand.state}`,
@@ -1011,8 +1015,10 @@ export function formatAmphibiousCapabilityDemand(
     `site score ${demand.landingScore.toFixed(1)} | value ${demand.strategicValue.toFixed(0)}`,
     `defenders ${demand.immediateDefenderStrength.toFixed(0)} | reaction ${demand.reactionStrength.toFixed(0)}`,
     `selected ${demand.selectedReason}`,
-    `transports ${demand.assignedTransportIds.length}/${demand.desiredTransportCount} (${transportReady} ready)`,
-    `escorts ${demand.assignedEscortIds.length}/${demand.desiredEscortCount} (${escortReady} ready)`,
+    `fleet ${fleetComplete ? "complete" : "incomplete"} | lease ${fleetComplete ? "active" : "waiting"} age ${leaseAge}`,
+    `owner ${fleetComplete ? demand.id : "none"}`,
+    `transports ${demand.assignedTransportIds.length}/${demand.desiredTransportCount} (${transportReady} ready; ${demand.availableTransportCount} available)`,
+    `escorts ${demand.assignedEscortIds.length}/${demand.desiredEscortCount} (${escortReady} ready; ${demand.availableEscortCount} available)`,
     `force ${demand.assignedLandingUnitIds.length}/${demand.desiredLandingUnitCount} (${forceReady} ready)`,
     `launch ${demand.launchReady && demand.state === "ready" ? "READY" : "WAIT"} ratio ${demand.assaultRatio.toFixed(2)}`,
     `assembly ${assembled}/${assigned} ETA ${demand.assemblyEtaTicks}`,

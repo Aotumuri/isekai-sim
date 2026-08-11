@@ -70,6 +70,8 @@ export interface AmphibiousCapabilityDemand {
   assignedTransportIds: UnitId[];
   assignedEscortIds: UnitId[];
   assignedLandingUnitIds: UnitId[];
+  /** Naval IDs are populated only by a complete, all-or-nothing fleet lease. */
+  fleetLeaseStartedAtTick: number | null;
   fleetReachableAtTick: number | null;
   assemblyStartedAtTick: number | null;
   assemblyCompletedAtTick: number | null;
@@ -280,6 +282,13 @@ export interface AmphibiousOperationState {
   successfulCapitalBeachheads: number;
   successfulPortBeachheads: number;
   successfulStrategicCityBeachheads: number;
+  fleetLeaseAttempts: number;
+  successfulFleetLeases: number;
+  failedFleetLeaseAttempts: number;
+  partialFleetReservationsPrevented: number;
+  fleetContentionEvents: number;
+  idleReservedTransportTicks: number;
+  idleReservedEscortTicks: number;
 }
 
 export type AmphibiousTargetType = "capital" | "port" | "strategic-city";
@@ -322,7 +331,10 @@ export function createAmphibiousOperationState(): AmphibiousOperationState {
     totalImmediateDefenderStrength: 0, totalReactionStrength: 0,
     landingSiteChanges: 0, capitalTargets: 0, portTargets: 0,
     strategicCityTargets: 0, successfulCapitalBeachheads: 0,
-    successfulPortBeachheads: 0, successfulStrategicCityBeachheads: 0 };
+    successfulPortBeachheads: 0, successfulStrategicCityBeachheads: 0,
+    fleetLeaseAttempts: 0, successfulFleetLeases: 0, failedFleetLeaseAttempts: 0,
+    partialFleetReservationsPrevented: 0, fleetContentionEvents: 0,
+    idleReservedTransportTicks: 0, idleReservedEscortTicks: 0 };
 }
 
 /** Slow-tick strategic evaluator. It only considers cached ports, fronts and supply data. */
@@ -741,6 +753,7 @@ function createCapabilityDemand(world: WorldState, candidate: LandingCandidate):
     assignedTransportIds: [],
     assignedEscortIds: [],
     assignedLandingUnitIds: [],
+    fleetLeaseStartedAtTick: null,
     fleetReachableAtTick: null,
     assemblyStartedAtTick: null,
     assemblyCompletedAtTick: null,
@@ -793,30 +806,31 @@ function applyCandidateToDemand(world: WorldState, demand: AmphibiousCapabilityD
 
 function refreshCapabilityProgress(world: WorldState, demand: AmphibiousCapabilityDemand): void {
   const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
-  demand.assignedTransportIds = demand.assignedTransportIds.filter((id) => {
+  const leaseTransports = demand.assignedTransportIds.filter((id) => {
     const unit = unitById.get(id);
     return isOperationalTransport(unit, demand.nationId) && Number.isFinite(unit!.moveTicksPerRegion) &&
       getCachedMaritimePositioningSegments(world, unit!.regionId, demand.departurePortId) !== null;
   });
-  demand.assignedEscortIds = demand.assignedEscortIds.filter((id) => {
+  const leaseEscorts = demand.assignedEscortIds.filter((id) => {
     const unit = unitById.get(id);
     return isOperationalCombatShip(unit, demand.nationId) && Number.isFinite(unit!.moveTicksPerRegion) &&
       getCachedMaritimePositioningSegments(world, unit!.regionId, demand.departurePortId) !== null;
   });
+  const leaseStillComplete = leaseTransports.length === demand.desiredTransportCount &&
+    leaseEscorts.length === demand.desiredEscortCount;
+  if (!leaseStillComplete) releaseFleetLease(world, demand);
+  else {
+    demand.assignedTransportIds = leaseTransports;
+    demand.assignedEscortIds = leaseEscorts;
+  }
   demand.assignedLandingUnitIds = demand.assignedLandingUnitIds.filter((id) => {
     const unit = unitById.get(id);
     return !!unit && unit.domain === "land" && unit.nationId === demand.nationId &&
       canReachControlled(world, demand.nationId, unit.regionId, demand.departurePortId);
   });
   rebuildOwnership(world);
-  const transports = findAvailableTransports(world, demand.nationId, demand.departurePortId);
-  const escorts = findAvailableEscorts(world, demand.nationId, demand.departurePortId);
   const landingForce = selectLandingForce(world, demand.nationId, demand.departurePortId,
     demand.requiredLandingStrength, demand.desiredLandingUnitCount);
-  demand.assignedTransportIds.push(...transports.slice(0,
-    Math.max(0, demand.desiredTransportCount - demand.assignedTransportIds.length)).map((unit) => unit.id));
-  demand.assignedEscortIds.push(...escorts.slice(0,
-    Math.max(0, demand.desiredEscortCount - demand.assignedEscortIds.length)).map((unit) => unit.id));
   const landingById = new Map([
     ...demand.assignedLandingUnitIds.map((id) => [id, unitById.get(id)] as const),
     ...landingForce.units.map((unit) => [unit.id, unit] as const),
@@ -836,18 +850,44 @@ function refreshCapabilityProgress(world: WorldState, demand: AmphibiousCapabili
   demand.assaultRatio = demand.requiredLandingStrength > 0
     ? demand.availableLandingStrength / demand.requiredLandingStrength : 0;
   demand.lastValidatedAtTick = world.time.fastTick;
-  const fleetReachable = demand.availableTransportCount >= demand.desiredTransportCount &&
-    demand.availableEscortCount >= demand.desiredEscortCount;
   const forceReady = demand.availableLandingUnitCount >= demand.desiredLandingUnitCount &&
     demand.availableLandingStrength >= demand.requiredLandingStrength;
   const opportunityWindow = estimateOpportunityWindow(world, demand.nationId, demand.enemyNationId).ticks;
-  const emergencyReady = opportunityWindow <= WORLD_BALANCE.unit.amphibiousAssault.emergencyWindowTicks &&
-    demand.assaultRatio >= WORLD_BALANCE.unit.amphibiousAssault.emergencyMinimumAssaultRatio &&
-    demand.availableTransportCount >= Math.ceil(demand.availableLandingUnitCount /
+  const emergencyForceReady = opportunityWindow <= WORLD_BALANCE.unit.amphibiousAssault.emergencyWindowTicks &&
+    demand.assaultRatio >= WORLD_BALANCE.unit.amphibiousAssault.emergencyMinimumAssaultRatio;
+  const reinforcementForceReady = demand.kind === "bridgehead-reinforcement" &&
+    demand.availableLandingUnitCount > 0 && demand.assaultRatio >= 0.35;
+  const launchForceReady = forceReady || emergencyForceReady || reinforcementForceReady;
+  // Reinforcement already permits a reduced, immediately useful wave. Size its
+  // fleet to that accepted wave, then lease that complete fleet atomically.
+  if (reinforcementForceReady && !forceReady) {
+    demand.desiredLandingUnitCount = demand.availableLandingUnitCount;
+    demand.desiredTransportCount = Math.max(1, Math.ceil(demand.availableLandingUnitCount /
+      Math.max(1, WORLD_BALANCE.unit.navalTransportCapacity ?? 10)));
+    demand.desiredEscortCount = Math.max(1, Math.ceil(demand.desiredTransportCount /
+      Math.max(1, WORLD_BALANCE.unit.amphibiousAssault.escortsPerTransports)));
+  }
+  if (hasCompleteFleetLease(demand) && !launchForceReady) {
+    // A fleet is never held while the minimum landing force is no longer viable.
+    releaseFleetLease(world, demand);
+    rebuildOwnership(world);
+  }
+  if (!hasCompleteFleetLease(demand) && launchForceReady) {
+    const transports = findAvailableTransports(world, demand.nationId, demand.departurePortId);
+    const escorts = findAvailableEscorts(world, demand.nationId, demand.departurePortId);
+    demand.availableTransportCount = transports.length;
+    demand.availableEscortCount = escorts.length;
+    attemptFleetLease(world, demand, transports, escorts);
+  } else if (!hasCompleteFleetLease(demand)) {
+    demand.availableTransportCount = findAvailableTransports(world, demand.nationId, demand.departurePortId).length;
+    demand.availableEscortCount = findAvailableEscorts(world, demand.nationId, demand.departurePortId).length;
+  }
+  const fleetReachable = hasCompleteFleetLease(demand);
+  const emergencyReady = emergencyForceReady &&
+    fleetReachable && demand.availableTransportCount >= Math.ceil(demand.availableLandingUnitCount /
       Math.max(1, WORLD_BALANCE.unit.navalTransportCapacity ?? 10)) &&
     demand.availableEscortCount >= Math.min(demand.desiredEscortCount, demand.availableTransportCount);
-  const reinforcementReady = demand.kind === "bridgehead-reinforcement" &&
-    demand.availableLandingUnitCount > 0 && demand.assaultRatio >= 0.35 &&
+  const reinforcementReady = reinforcementForceReady && fleetReachable &&
     demand.availableTransportCount >= Math.ceil(demand.availableLandingUnitCount /
       Math.max(1, WORLD_BALANCE.unit.navalTransportCapacity ?? 10)) &&
     demand.availableEscortCount >= Math.min(demand.desiredEscortCount, demand.availableTransportCount);
@@ -875,6 +915,35 @@ function refreshCapabilityProgress(world: WorldState, demand: AmphibiousCapabili
   rebuildOwnership(world);
   if (previousState !== demand.state || demand.state !== "ready") {
     world.amphibiousOperations.version += 1;
+  }
+}
+
+function hasCompleteFleetLease(demand: AmphibiousCapabilityDemand): boolean {
+  return demand.assignedTransportIds.length === demand.desiredTransportCount &&
+    demand.assignedEscortIds.length === demand.desiredEscortCount;
+}
+
+function attemptFleetLease(
+  world: WorldState,
+  demand: AmphibiousCapabilityDemand,
+  transports: readonly UnitState[],
+  escorts: readonly UnitState[],
+): void {
+  const state = world.amphibiousOperations;
+  state.fleetLeaseAttempts += 1;
+  if (transports.length >= demand.desiredTransportCount && escorts.length >= demand.desiredEscortCount) {
+    demand.assignedTransportIds = transports.slice(0, demand.desiredTransportCount).map((unit) => unit.id);
+    demand.assignedEscortIds = escorts.slice(0, demand.desiredEscortCount).map((unit) => unit.id);
+    demand.availableTransportCount = demand.assignedTransportIds.length;
+    demand.availableEscortCount = demand.assignedEscortIds.length;
+    demand.fleetLeaseStartedAtTick = world.time.fastTick;
+    state.successfulFleetLeases += 1;
+    return;
+  }
+  state.failedFleetLeaseAttempts += 1;
+  if (transports.length > 0 || escorts.length > 0) {
+    state.partialFleetReservationsPrevented += 1;
+    state.fleetContentionEvents += 1;
   }
 }
 
@@ -1747,7 +1816,10 @@ function rebuildOwnership(world: WorldState): void {
   const capabilityMap = new Map<UnitId, AmphibiousCapabilityDemand>();
   for (const demand of world.amphibiousOperations.capabilityDemands) {
     if (!isActiveCapabilityDemand(demand)) continue;
-    for (const id of [...demand.assignedTransportIds, ...demand.assignedEscortIds, ...demand.assignedLandingUnitIds]) {
+    // Land-force ownership is independent; naval ownership exists only for a full fleet lease.
+    const navalIds = hasCompleteFleetLease(demand)
+      ? [...demand.assignedTransportIds, ...demand.assignedEscortIds] : [];
+    for (const id of [...navalIds, ...demand.assignedLandingUnitIds]) {
       capabilityMap.set(id, demand);
     }
   }
@@ -1759,6 +1831,26 @@ function releaseCapabilityAssignments(world: WorldState, demand: AmphibiousCapab
     const unit = unitById.get(id);
     if (unit) resetMovement(unit);
   }
+  demand.assignedTransportIds = [];
+  demand.assignedEscortIds = [];
+  demand.assignedLandingUnitIds = [];
+  demand.fleetLeaseStartedAtTick = null;
+}
+function releaseFleetLease(world: WorldState, demand: AmphibiousCapabilityDemand): void {
+  const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+  for (const id of [...demand.assignedTransportIds, ...demand.assignedEscortIds]) {
+    const unit = unitById.get(id);
+    if (unit) resetMovement(unit);
+  }
+  demand.assignedTransportIds = [];
+  demand.assignedEscortIds = [];
+  demand.fleetLeaseStartedAtTick = null;
+  demand.fleetReachableAtTick = null;
+  demand.assemblyStartedAtTick = null;
+  demand.assemblyCompletedAtTick = null;
+  demand.assemblyEtaTicks = 0;
+  demand.initialAssemblyEtaTicks = 0;
+  demand.readyAtTick = null;
 }
 function isValidTargetPort(world: WorldState, nationId: NationId, enemyId: NationId, id: MesoRegionId): boolean {
   return getMesoById(world).get(id)?.building === "port" && getOwnerByMesoId(world).get(id) === enemyId && isAtWar(nationId, enemyId, buildWarAdjacency(world.wars));
