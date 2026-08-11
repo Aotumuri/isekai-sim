@@ -66,6 +66,16 @@ export const WORLD_BALANCE = {
     tankShare: 0.2,
     navalTransportCapacity: 10,
     amphibiousInvasionLossRatio: 0.6,
+    amphibiousAssault: {
+      coastalDefenseMultiplier: 1.5,
+      nearbyReserveWeight: 0.5,
+      capitalMultiplier: 1.2,
+      strategicCityMultiplier: 1.1,
+      escortsPerTransports: 2,
+      emergencyWindowTicks: 120,
+      emergencyMinimumAssaultRatio: 0.85,
+      beachheadSurvivalTicks: 120,
+    },
     types: {
       Infantry: {
         domain: "land",

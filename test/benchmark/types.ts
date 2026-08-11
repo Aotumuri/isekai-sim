@@ -252,6 +252,13 @@ export interface WorldSummary {
   amphibiousTransportLosses: number;
   amphibiousFailedLandings: number;
   amphibiousSuccessfulBeachheads: number;
+  amphibiousFailedBeachheads: number;
+  amphibiousAverageRequiredAssaultStrength: number;
+  amphibiousAverageAssignedAssaultStrength: number;
+  amphibiousTransportUtilization: number;
+  amphibiousEscortUtilization: number;
+  amphibiousLaunchesDelayedForForceAssembly: number;
+  amphibiousAverageLandingSurvivalTime: number;
   amphibiousPlanningFailures: number;
   amphibiousAssemblyFailures: number;
   amphibiousReadyFailures: number;

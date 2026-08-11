@@ -387,6 +387,24 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     amphibiousTransportLosses: world.amphibiousOperations.transportLosses,
     amphibiousFailedLandings: world.amphibiousOperations.failedLandings,
     amphibiousSuccessfulBeachheads: world.amphibiousOperations.successfulBeachheads,
+    amphibiousFailedBeachheads: world.amphibiousOperations.failedBeachheads,
+    amphibiousAverageRequiredAssaultStrength: world.amphibiousOperations.assaultStrengthSamples > 0
+      ? world.amphibiousOperations.totalRequiredAssaultStrength /
+        world.amphibiousOperations.assaultStrengthSamples : 0,
+    amphibiousAverageAssignedAssaultStrength: world.amphibiousOperations.assaultStrengthSamples > 0
+      ? world.amphibiousOperations.totalAssignedAssaultStrength /
+        world.amphibiousOperations.assaultStrengthSamples : 0,
+    amphibiousTransportUtilization: world.amphibiousOperations.utilizationSamples > 0
+      ? world.amphibiousOperations.totalTransportUtilization /
+        world.amphibiousOperations.utilizationSamples * 100 : 0,
+    amphibiousEscortUtilization: world.amphibiousOperations.utilizationSamples > 0
+      ? world.amphibiousOperations.totalEscortUtilization /
+        world.amphibiousOperations.utilizationSamples * 100 : 0,
+    amphibiousLaunchesDelayedForForceAssembly:
+      world.amphibiousOperations.launchesDelayedForForceAssembly,
+    amphibiousAverageLandingSurvivalTime: world.amphibiousOperations.beachheadSurvivalSamples > 0
+      ? world.amphibiousOperations.totalBeachheadSurvivalTicks /
+        world.amphibiousOperations.beachheadSurvivalSamples : 0,
     amphibiousPlanningFailures: world.amphibiousOperations.planningFailures,
     amphibiousAssemblyFailures: world.amphibiousOperations.assemblyFailures,
     amphibiousReadyFailures: world.amphibiousOperations.readyFailures,

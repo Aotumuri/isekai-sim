@@ -982,20 +982,14 @@ export function formatAmphibiousCapabilityDemand(
     demand.assignedLandingUnitIds.length;
   return [
     "AMPHIBIOUS CAPABILITY",
-    `phase ${demand.state === "assembling" ? "assembly" : "planning"}`,
-    `validation owner ${demand.state === "assembling" ? "fleet-assembly" : "strategic-planning"}`,
-    "validation failures none",
-    `historical departure ${demand.departurePortId}`,
-    `destination ${demand.destinationPortId}`,
     `state ${demand.state}`,
-    `fleet reachable ${demand.fleetReachableAtTick === null ? "no" : "yes"}`,
+    `strength ${demand.availableLandingStrength.toFixed(0)}/${demand.requiredLandingStrength.toFixed(0)}`,
+    `transports ${demand.assignedTransportIds.length}/${demand.desiredTransportCount} (${transportReady} ready)`,
+    `escorts ${demand.assignedEscortIds.length}/${demand.desiredEscortCount} (${escortReady} ready)`,
+    `force ${demand.assignedLandingUnitIds.length}/${demand.desiredLandingUnitCount} (${forceReady} ready)`,
+    `launch ${demand.launchReady && demand.state === "ready" ? "READY" : "WAIT"} ratio ${demand.assaultRatio.toFixed(2)}`,
     `assembly ${assembled}/${assigned} ETA ${demand.assemblyEtaTicks}`,
-    `transport ${transportReady}/${demand.desiredTransportCount} at port`,
-    `escort ${escortReady}/${demand.desiredEscortCount} at port`,
-    `landing force ${forceReady}/${demand.desiredLandingUnitCount} at port`,
-    `ready ${demand.state === "ready" ? "yes" : "no"}`,
-    `age ${Math.max(0, world.time.fastTick - demand.createdAtTick)} ticks`,
-    `priority ${demand.priority.toFixed(1)}`,
+    `waiting ${demand.waitingReason ?? "none"}`,
   ].join("\n");
 }
 
@@ -1004,15 +998,16 @@ export function formatAmphibiousOperationValidation(
   operation: WorldState["amphibiousOperations"]["operations"][number],
 ): string {
   const validation = getAmphibiousOperationValidation(world, operation);
-  const transport = world.units.find((unit) => unit.id === operation.transportId);
+  const transports = operation.transportIds.map((id) => world.units.find((unit) => unit.id === id));
   return [
     "AMPHIBIOUS OPERATION",
     `phase ${validation.phase}`,
-    `validation owner ${validation.owner}`,
-    `validation failures ${validation.failures.join(", ") || "none"}`,
-    `historical departure ${operation.departurePortId}`,
-    `convoy position ${transport?.regionId ?? "lost"}`,
-    `destination ${operation.destinationPortId}`,
+    `strength ${operation.assignedStrength.toFixed(0)}/${operation.requiredStrength.toFixed(0)}`,
+    `transports ${transports.filter(Boolean).length}/${operation.transportIds.length}`,
+    `escorts ${operation.escortIds.length}/${operation.requiredEscortCount}`,
+    `launch ${operation.launchedAtTick === null ? "WAIT" : "LAUNCHED"} ratio ${(operation.assignedStrength / Math.max(0.5, operation.requiredStrength)).toFixed(2)}`,
+    `convoys ${operation.convoyIds.length} positions ${transports.map((unit) => unit?.regionId ?? "lost").join(",")}`,
+    `waiting ${validation.failures.join(", ") || "none"}`,
   ].join("\n");
 }
 

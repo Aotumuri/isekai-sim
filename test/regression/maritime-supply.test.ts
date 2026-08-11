@@ -122,8 +122,69 @@ test("amphibious planning creates one deterministic leased plan and reserves phy
   assert.equal(infantry.regionId, id("port-b"));
   assert.equal(world.units.includes(infantry), true);
   assert.equal(world.amphibiousOperations.operationByUnitId.has(infantry.id), false);
+  for (let tick = 0; tick < WORLD_BALANCE.unit.amphibiousAssault.beachheadSurvivalTicks; tick += 1) {
+    world.time.fastTick += 1;
+    updateAmphibiousOperations(world);
+  }
   assert.equal(world.amphibiousOperations.successfulBeachheads, 1);
   assert.equal(world.amphibiousOperations.launchedOperations, 1);
+});
+
+test("amphibious planning delays for combat power then launches multiple transports together", () => {
+  const world = createMaritimeWorld(true, 4);
+  const enemyMacroIds = world.macroRegions
+    .filter((macro) => macro.mesoRegionIds.includes(id("port-b")) || macro.mesoRegionIds.includes(id("island-b")))
+    .map((macro) => { macro.nationId = NATION_B; return macro.id; });
+  world.nations.push(createNation(NATION_B, id("island-b"), enemyMacroIds));
+  world.cache.ownerByMesoId.clear();
+  declareWar(world.wars, NATION_A, NATION_B, 0);
+  for (let index = 0; index < 11; index += 1) {
+    world.units.push(createUnitForType(
+      createUnitId(world.unitIdCounter++), NATION_B, id("port-b"), "Infantry",
+    ));
+  }
+  for (let index = 0; index < 10; index += 1) {
+    world.units.push(createUnitForType(
+      createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "Infantry",
+    ));
+  }
+  const escort = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip");
+  world.units.push(escort);
+  world.supplyAssessment.navalStrategy.missions = [{
+    id: "multi-assault-reserve", nationId: NATION_A, type: "RESERVE", shipIds: [escort.id],
+    targetPortId: id("port-a"), priority: 10, createdTick: 0, status: "ACTIVE", reasonFlags: ["test-reserve"],
+  }];
+
+  updateAmphibiousPlanning(world);
+  const demand = world.amphibiousOperations.capabilityDemands[0]!;
+  assert(demand.requiredLandingStrength > demand.availableLandingStrength);
+  assert.equal(demand.desiredTransportCount, 2);
+  assert.equal(demand.state, "waiting-landing-force");
+  assert.equal(demand.launchReady, false);
+  assert.equal(world.amphibiousOperations.operations.length, 0);
+  assert.equal(world.amphibiousOperations.launchesDelayedForForceAssembly, 1);
+
+  for (let index = 0; index < 7; index += 1) {
+    world.units.push(createUnitForType(
+      createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "Infantry",
+    ));
+  }
+  updateAmphibiousPlanning(world);
+  const operation = world.amphibiousOperations.operations[0]!;
+  assert(operation);
+  assert.equal(operation.transportIds.length, 2);
+  assert(operation.assignedStrength >= operation.requiredStrength);
+
+  world.time.fastTick += 1;
+  updateAmphibiousOperations(world);
+  world.time.fastTick += 1;
+  updateAmphibiousOperations(world);
+  assert.equal(operation.phase, "transporting");
+  assert.equal(operation.convoyIds.length, 2);
+  assert.equal(new Set(operation.convoyIds.map((id) =>
+    world.supplyAssessment.convoys.convoyById.get(id)?.createdAtFastTick)).size, 1);
+  assert.equal(operation.transportIds.every((id) =>
+    world.units.find((unit) => unit.id === id)?.cargoUnits.length), true);
 });
 
 test("a launched amphibious voyage survives loss of its historical departure port", () => {

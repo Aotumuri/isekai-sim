@@ -641,7 +641,7 @@ export function getNavalUnitOwnership(
   const amphibious = world.amphibiousOperations.operationByUnitId.get(unitId);
   if (amphibious) return {
     controller: "AMPHIBIOUS_OPERATION",
-    missionType: unit.id === amphibious.transportId ? "TRANSPORT" : "ESCORT",
+    missionType: amphibious.transportIds.includes(unit.id) ? "TRANSPORT" : "ESCORT",
     operationId: amphibious.id,
   };
   const capability = world.amphibiousOperations.capabilityDemandByUnitId.get(unitId);
