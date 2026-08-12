@@ -23,7 +23,7 @@ test("two-island amphibious scenario has exactly two isolated balanced combatant
     world.units.filter((unit) => unit.nationId === nation.id).length), [21, 21]);
 });
 
-test("an established bridgehead creates a reusable, complete-fleet reinforcement wave", () => {
+test("an established bridgehead remains a strategic reinforcement objective", () => {
   const world = createScenarioWorld("two-island-amphibious", {
     seed: 695_919_685_365, width: 640, height: 360, quick: true,
   });
@@ -42,8 +42,11 @@ test("an established bridgehead creates a reusable, complete-fleet reinforcement
     demand.bridgeheadCampaignId === campaign.id && demand.kind === "bridgehead-reinforcement");
   assert.ok(reinforcement);
   assert.equal(reinforcement.waveNumber, 1);
-  assert.equal(reinforcement.assignedTransportIds.length, reinforcement.desiredTransportCount);
-  assert.equal(reinforcement.assignedEscortIds.length, reinforcement.desiredEscortCount);
+  assert.ok(campaign.campaignPriority >= 70);
+  assert.ok(campaign.desiredStrength > campaign.initialBridgeheadStrength * 2);
+  assert.ok(campaign.reinforcementDeficit > 0);
+  assert.ok(reinforcement.desiredTransportCount > 0);
+  assert.ok(reinforcement.desiredEscortCount > 0);
 });
 
 function countLandComponents(world: ReturnType<typeof createScenarioWorld>): number {

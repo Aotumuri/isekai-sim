@@ -182,6 +182,8 @@ export interface BridgeheadCampaign {
   destinationPortId: MesoRegionId;
   routeRegionIds: MesoRegionId[];
   operationalRegionIds: MesoRegionId[];
+  /** Territory held when the landing survived; used for campaign progress. */
+  initialOperationalRegionIds: MesoRegionId[];
   campaignUnitIds: UnitId[];
   status: BridgeheadCampaignStatus;
   completionReason: string | null;
@@ -200,6 +202,14 @@ export interface BridgeheadCampaign {
   activeOperationId: string | null;
   pendingTransportCount: number;
   pendingEscortCount: number;
+  campaignPriority: number;
+  expansionScore: number;
+  operationalObjectiveId: MesoRegionId | null;
+  maximumStrength: number;
+  regionsCaptured: number;
+  citiesCaptured: number;
+  portsCaptured: number;
+  lastWaveCompletedAtTick: number | null;
   waitingReason: string;
 }
 
@@ -300,6 +310,19 @@ export interface AmphibiousOperationState {
   fleetContentionEvents: number;
   idleReservedTransportTicks: number;
   idleReservedEscortTicks: number;
+  bridgeheadLifetimeTicks: number;
+  bridgeheadLifetimeSamples: number;
+  bridgeheadWaveTotal: number;
+  bridgeheadWaveIntervalTicks: number;
+  bridgeheadWaveIntervalSamples: number;
+  bridgeheadMaximumStrength: number;
+  bridgeheadRegionsCaptured: number;
+  bridgeheadCitiesCaptured: number;
+  bridgeheadPortsCaptured: number;
+  bridgeheadCampaignVictories: number;
+  bridgeheadCampaignFailures: number;
+  bridgeheadExpansionScoreTotal: number;
+  bridgeheadExpansionSamples: number;
 }
 
 export type AmphibiousTargetType = "capital" | "port" | "strategic-city";
@@ -345,7 +368,14 @@ export function createAmphibiousOperationState(): AmphibiousOperationState {
     successfulPortBeachheads: 0, successfulStrategicCityBeachheads: 0,
     fleetLeaseAttempts: 0, successfulFleetLeases: 0, failedFleetLeaseAttempts: 0,
     partialFleetReservationsPrevented: 0, fleetContentionEvents: 0,
-    idleReservedTransportTicks: 0, idleReservedEscortTicks: 0 };
+    idleReservedTransportTicks: 0, idleReservedEscortTicks: 0,
+    bridgeheadLifetimeTicks: 0, bridgeheadLifetimeSamples: 0,
+    bridgeheadWaveTotal: 0, bridgeheadWaveIntervalTicks: 0,
+    bridgeheadWaveIntervalSamples: 0, bridgeheadMaximumStrength: 0,
+    bridgeheadRegionsCaptured: 0, bridgeheadCitiesCaptured: 0,
+    bridgeheadPortsCaptured: 0, bridgeheadCampaignVictories: 0,
+    bridgeheadCampaignFailures: 0, bridgeheadExpansionScoreTotal: 0,
+    bridgeheadExpansionSamples: 0 };
 }
 
 /** Slow-tick strategic evaluator. It only considers cached ports, fronts and supply data. */
@@ -1332,6 +1362,7 @@ function createBridgeheadCampaign(world: WorldState, operation: AmphibiousOperat
     destinationPortId: operation.destinationPortId,
     routeRegionIds: [...operation.routeRegionIds],
     operationalRegionIds,
+    initialOperationalRegionIds: [...operationalRegionIds],
     campaignUnitIds: [...operation.assignedUnitIds],
     status: "active",
     completionReason: null,
@@ -1350,6 +1381,14 @@ function createBridgeheadCampaign(world: WorldState, operation: AmphibiousOperat
     activeOperationId: null,
     pendingTransportCount: 0,
     pendingEscortCount: 0,
+    campaignPriority: 100,
+    expansionScore: 0,
+    operationalObjectiveId: null,
+    maximumStrength: currentStrength,
+    regionsCaptured: 0,
+    citiesCaptured: 0,
+    portsCaptured: 0,
+    lastWaveCompletedAtTick: null,
     waitingReason: "creating reinforcement demand",
   });
   world.amphibiousOperations.version += 1;
@@ -1368,8 +1407,9 @@ function updateBridgeheadCampaigns(world: WorldState): void {
       campaign.destinationPortId, campaign.campaignUnitIds);
     campaign.currentStrength = getOperationalAreaStrength(world, campaign.nationId,
       campaign.operationalRegionIds);
-    campaign.reinforcementDeficit = Math.max(0, campaign.desiredStrength - campaign.currentStrength);
     campaign.supplyStatus = getBridgeheadSupplyStatus(world, campaign.destinationPortId);
+    updateBridgeheadStrategicAssessment(world, campaign);
+    campaign.reinforcementDeficit = Math.max(0, campaign.desiredStrength - campaign.currentStrength);
 
     const enemy = world.nations.find((nation) => nation.id === campaign.enemyNationId);
     if (!enemy || !isNationActive(enemy) || !isAtWar(campaign.nationId, campaign.enemyNationId, warAdjacency)) {
@@ -1387,16 +1427,18 @@ function updateBridgeheadCampaigns(world: WorldState): void {
     if (operation?.phase === "landed") {
       campaign.campaignUnitIds = [...new Set([...campaign.campaignUnitIds, ...operation.assignedUnitIds])];
       campaign.completedWaves = Math.max(campaign.completedWaves, operation.waveNumber ?? campaign.currentWave);
+      const previousWaveTick = campaign.lastWaveCompletedAtTick;
+      campaign.lastWaveCompletedAtTick = world.time.fastTick;
+      world.amphibiousOperations.bridgeheadWaveTotal += 1;
+      if (previousWaveTick !== null) {
+        world.amphibiousOperations.bridgeheadWaveIntervalSamples += 1;
+        world.amphibiousOperations.bridgeheadWaveIntervalTicks += world.time.fastTick - previousWaveTick;
+      }
       campaign.activeOperationId = null;
       campaign.activeDemandId = null;
     } else if (operation?.phase === "cancelled") {
       campaign.activeOperationId = null;
       campaign.activeDemandId = null;
-    }
-
-    if (campaign.reinforcementDeficit <= 0 && !campaign.activeOperationId) {
-      finishBridgeheadCampaign(world, campaign, "completed", "strategic strength objective achieved");
-      continue;
     }
 
     const demand = campaign.activeDemandId
@@ -1544,6 +1586,51 @@ function getBridgeheadSupplyStatus(
   return world.supplyAssessment.componentById.get(componentId)?.supplied ? "supplied" : "isolated";
 }
 
+/** Uses already-maintained ownership and local adjacencies; no campaign-local pathfinding. */
+function updateBridgeheadStrategicAssessment(world: WorldState, campaign: BridgeheadCampaign): void {
+  const ownerById = getOwnerByMesoId(world);
+  const mesoById = getMesoById(world);
+  const neighborsById = getNeighborsById(world);
+  const initial = new Set(campaign.initialOperationalRegionIds);
+  const current = new Set(campaign.operationalRegionIds);
+  const enemyNeighborIds = new Set<MesoRegionId>();
+  let enemyReactionStrength = 0;
+  for (const regionId of campaign.operationalRegionIds) {
+    for (const neighborId of neighborsById.get(regionId) ?? []) {
+      if (ownerById.get(neighborId) === campaign.enemyNationId) enemyNeighborIds.add(neighborId);
+    }
+  }
+  for (const unit of world.units) {
+    if (unit.domain === "land" && unit.nationId === campaign.enemyNationId &&
+      enemyNeighborIds.has(unit.regionId)) enemyReactionStrength += getUnitCombatStrength(unit);
+  }
+  let objective: MesoRegionId | null = null;
+  let objectiveScore = -1;
+  for (const regionId of enemyNeighborIds) {
+    const building = mesoById.get(regionId)?.building;
+    const score = building === "capital" ? 100 : building === "port" ? 60 : building === "city" ? 40 : 10;
+    if (score > objectiveScore || score === objectiveScore && (objective === null || compareIds(regionId, objective) < 0)) {
+      objective = regionId;
+      objectiveScore = score;
+    }
+  }
+  const captured = [...current].filter((id) => !initial.has(id));
+  campaign.regionsCaptured = captured.length;
+  campaign.citiesCaptured = captured.filter((id) => mesoById.get(id)?.building === "city").length;
+  campaign.portsCaptured = captured.filter((id) => mesoById.get(id)?.building === "port").length;
+  campaign.operationalObjectiveId = objective;
+  campaign.expansionScore = Math.min(100, enemyNeighborIds.size * 12 + objectiveScore + Math.min(30, campaign.regionsCaptured * 4));
+  campaign.campaignPriority = campaign.supplyStatus === "isolated" ? 70 : Math.min(100,
+    72 + Math.round(campaign.expansionScore * 0.28) + (campaign.reinforcementDeficit > 0 ? 8 : 0));
+  campaign.maximumStrength = Math.max(campaign.maximumStrength, campaign.currentStrength);
+  // A viable frontier raises the force objective in bounded increments, allowing
+  // several useful partial waves rather than treating the first lift as the end.
+  const growth = Math.min(2, campaign.completedWaves * 0.35 + campaign.expansionScore / 100);
+  const reactionNeed = enemyReactionStrength * 0.6;
+  campaign.desiredStrength = Math.max(campaign.desiredStrength,
+    campaign.initialBridgeheadStrength * (2 + growth), reactionNeed);
+}
+
 function finishBridgeheadCampaign(
   world: WorldState,
   campaign: BridgeheadCampaign,
@@ -1565,6 +1652,17 @@ function finishBridgeheadCampaign(
     demand.lastValidatedAtTick = world.time.fastTick;
   }
   world.amphibiousOperations.version += 1;
+  const state = world.amphibiousOperations;
+  state.bridgeheadLifetimeSamples += 1;
+  state.bridgeheadLifetimeTicks += Math.max(0, world.time.fastTick - campaign.createdAtTick);
+  state.bridgeheadMaximumStrength = Math.max(state.bridgeheadMaximumStrength, campaign.maximumStrength);
+  state.bridgeheadRegionsCaptured += campaign.regionsCaptured;
+  state.bridgeheadCitiesCaptured += campaign.citiesCaptured;
+  state.bridgeheadPortsCaptured += campaign.portsCaptured;
+  state.bridgeheadExpansionScoreTotal += campaign.expansionScore;
+  state.bridgeheadExpansionSamples += 1;
+  if (status === "completed") state.bridgeheadCampaignVictories += 1;
+  if (status === "destroyed") state.bridgeheadCampaignFailures += 1;
 }
 
 export function cancelBridgeheadCampaign(world: WorldState, campaignId: string): boolean {

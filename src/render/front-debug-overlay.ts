@@ -985,7 +985,8 @@ export function formatBridgeheadCampaign(
   return [
     `BRIDGEHEAD ${campaign.status.toUpperCase()} | supply ${campaign.supplyStatus}`,
     `strength ${campaign.currentStrength.toFixed(0)}/${campaign.desiredStrength.toFixed(0)} | deficit ${campaign.reinforcementDeficit.toFixed(0)}`,
-    `wave ${campaign.currentWave} (${campaign.completedWaves} complete) | age ${age}`,
+    `wave ${campaign.currentWave} (${campaign.completedWaves} complete) | priority ${campaign.campaignPriority} | expansion ${campaign.expansionScore}`,
+    `objective ${campaign.operationalObjectiveId ?? "secure bridgehead"} | captures R${campaign.regionsCaptured} C${campaign.citiesCaptured} P${campaign.portsCaptured} | age ${age}`,
     `lift ${campaign.currentTransportCapacity} | escort cap ${campaign.currentEscortCapacity} | pending T${campaign.pendingTransportCount} E${campaign.pendingEscortCount}`,
     `waiting ${campaign.waitingReason}`,
   ].join("\n");

@@ -31,7 +31,8 @@ export type FrontPlanReason =
   | "supply-articulation"
   | "major-force-supply-risk"
   | "frontline-supply-risk"
-  | "maritime-supply-entry-risk";
+  | "maritime-supply-entry-risk"
+  | "bridgehead-campaign";
 
 /** Nation-owned intent. Objective geometry and metrics remain on PhysicalFront. */
 export interface NationFrontPlan {
@@ -60,6 +61,7 @@ export interface NationFrontPlanState {
   physicalFrontMetricsVersion: number;
   capitalDefenseVersion: number;
   supplyDefenseVersion: number;
+  amphibiousOperationsVersion: number;
 }
 
 export function createNationFrontPlanState(): NationFrontPlanState {
@@ -72,6 +74,7 @@ export function createNationFrontPlanState(): NationFrontPlanState {
     physicalFrontMetricsVersion: -1,
     capitalDefenseVersion: -1,
     supplyDefenseVersion: -1,
+    amphibiousOperationsVersion: -1,
   };
 }
 
@@ -82,6 +85,7 @@ export function updateNationFrontPlans(world: WorldState): void {
     state.physicalFrontMetricsVersion === world.landFronts.metricsVersion &&
     state.capitalDefenseVersion === world.capitalDefense.version &&
     state.supplyDefenseVersion === world.supplyDefense.version
+    && state.amphibiousOperationsVersion === world.amphibiousOperations.version
   ) {
     return;
   }
@@ -122,6 +126,7 @@ export function updateNationFrontPlans(world: WorldState): void {
   state.physicalFrontMetricsVersion = world.landFronts.metricsVersion;
   state.capitalDefenseVersion = world.capitalDefense.version;
   state.supplyDefenseVersion = world.supplyDefense.version;
+  state.amphibiousOperationsVersion = world.amphibiousOperations.version;
 
   if (world.instrumentation) {
     world.instrumentation.recordDuration(
@@ -296,14 +301,18 @@ function evaluateNationFrontPlan(
     reasonFlags,
   );
   const capitalPriority = applyCapitalPriority(priority, capitalThreatLevel);
+  const bridgehead = getBridgeheadFrontPriority(world, front, nationId);
+  if (bridgehead && !reasonFlags.includes("bridgehead-campaign")) {
+    reasonFlags.push("bridgehead-campaign");
+  }
   return {
     frontId: front.id,
     physicalFrontId: front.physicalFrontId,
     nationId,
-    posture,
+    posture: bridgehead && posture !== "retreat" ? "attack" : posture,
     priority: capitalThreatLevel === "critical"
       ? capitalPriority
-      : Math.min(100, capitalPriority + supplyPriority),
+      : Math.min(100, capitalPriority + supplyPriority + (bridgehead?.priorityBoost ?? 0)),
     desiredStrength: Math.max(supplyRequired, calculateDesiredStrength(
       friendly,
       enemy,
@@ -311,10 +320,31 @@ function evaluateNationFrontPlan(
       capitalDefense,
       front.id,
       isCapitalDefenseFront,
-    )),
+    ), bridgehead?.desiredStrength ?? 0),
     reasonFlags,
     evaluatedAtTick: currentTick,
   };
+}
+
+function getBridgeheadFrontPriority(
+  world: WorldState,
+  front: OperationalSector,
+  nationId: NationId,
+): { priorityBoost: number; desiredStrength: number } | null {
+  const friendlyRegionIds = nationId === front.nationAId
+    ? front.frontline.sideARegionIds
+    : front.frontline.sideBRegionIds;
+  let priorityBoost = 0;
+  let desiredStrength = 0;
+  for (const campaign of world.amphibiousOperations.bridgeheadCampaigns) {
+    if (campaign.status !== "active" || campaign.nationId !== nationId ||
+      campaign.enemyNationId !== (nationId === front.nationAId ? front.nationBId : front.nationAId)) continue;
+    const local = new Set(campaign.operationalRegionIds);
+    if (!friendlyRegionIds.some((id) => local.has(id))) continue;
+    priorityBoost = Math.max(priorityBoost, Math.max(0, campaign.campaignPriority - 45));
+    desiredStrength = Math.max(desiredStrength, campaign.desiredStrength);
+  }
+  return priorityBoost > 0 || desiredStrength > 0 ? { priorityBoost, desiredStrength } : null;
 }
 
 function selectBasePosture(
