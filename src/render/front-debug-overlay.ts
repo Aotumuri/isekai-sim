@@ -41,6 +41,44 @@ import { getAmphibiousOperationValidation } from "../sim/amphibious";
 /** Change this one value to change the development overlay's initial state. */
 export const DEFAULT_FRONT_DEBUG_OVERLAY = true;
 export const FRONT_DEBUG_OVERLAY_SHORTCUT = "KeyF";
+export const FRONT_DEBUG_CONFIG_SHORTCUT = "KeyD";
+
+type DebugCategory =
+  | "fronts"
+  | "supplyMarkers"
+  | "maritimeSupply"
+  | "navalMissions"
+  | "bridgeheadCampaigns"
+  | "amphibiousCapabilities"
+  | "amphibiousOperations"
+  | "amphibiousRejections"
+  | "strategicSummary";
+
+type DebugVisibility = Record<DebugCategory, boolean>;
+
+const DEFAULT_DEBUG_VISIBILITY: DebugVisibility = {
+  fronts: true,
+  supplyMarkers: false,
+  maritimeSupply: false,
+  navalMissions: false,
+  bridgeheadCampaigns: false,
+  amphibiousCapabilities: false,
+  amphibiousOperations: false,
+  amphibiousRejections: false,
+  strategicSummary: false,
+};
+
+const DEBUG_CATEGORY_LABELS: ReadonlyArray<{ key: DebugCategory; label: string }> = [
+  { key: "fronts", label: "Front lines & sectors" },
+  { key: "supplyMarkers", label: "Supply markers" },
+  { key: "maritimeSupply", label: "Maritime supply links" },
+  { key: "navalMissions", label: "Naval missions" },
+  { key: "bridgeheadCampaigns", label: "Bridgehead campaigns" },
+  { key: "amphibiousCapabilities", label: "Amphibious capability" },
+  { key: "amphibiousOperations", label: "Amphibious operations" },
+  { key: "amphibiousRejections", label: "Launch rejections" },
+  { key: "strategicSummary", label: "Strategic summary" },
+];
 
 const FRONT_COLORS = [
   0x00e5ff, 0xffd740, 0xff5c8a, 0x69f0ae, 0xb388ff, 0xff8a65,
@@ -61,6 +99,16 @@ const MARKER_STYLE = new TextStyle({
   stroke: 0x000000,
   strokeThickness: 3,
 });
+const CONFIG_BG = 0x0b121d;
+const CONFIG_BORDER = 0x263a56;
+const CONFIG_TEXT = 0xe6edf3;
+const CONFIG_MUTED = 0x9aaac1;
+const CONFIG_ACCENT = 0x7aa2ff;
+const CONFIG_MARGIN = 10;
+const CONFIG_WIDTH = 236;
+const CONFIG_ROW_HEIGHT = 24;
+const CONFIG_TAB_WIDTH = 62;
+const CONFIG_TAB_HEIGHT = 28;
 
 interface OverlayVersions {
   fronts: number;
@@ -113,6 +161,7 @@ export function attachFrontDebugOverlay(
   let pointerDownPosition: Vec2 | null = null;
   let pointerMoved = false;
   let versions: OverlayVersions | null = null;
+  const visibility: DebugVisibility = { ...DEFAULT_DEBUG_VISIBILITY };
 
   const draw = (): void => {
     clearLayer(layer);
@@ -120,45 +169,51 @@ export function attachFrontDebugOverlay(
       return;
     }
 
-    world.landFronts.physicalFronts.forEach((front) => {
-      drawPhysicalFrontBoundary(layer, world, front, borderSegments);
-    });
-    const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
-    world.landFronts.operationalSectors.forEach((sector, index) => {
-      const color = FRONT_COLORS[index % FRONT_COLORS.length];
-      const label = createSectorLabel(
-        world,
-        sector,
-        color,
-        unitById,
-        sector.id === selectedSectorId,
-      );
-      label.visible = sector.id === selectedSectorId;
-      drawSector(layer, world, sector, color, borderSegments, {
-        showLabel: () => {
-          label.visible = true;
-        },
-        hideLabel: () => {
-          label.visible = selectedSectorId === sector.id;
-        },
+    if (visibility.fronts) {
+      world.landFronts.physicalFronts.forEach((front) => {
+        drawPhysicalFrontBoundary(layer, world, front, borderSegments);
       });
-      placeLabel(label, getFrontAnchor(sector, world), index, [], world.width, world.height);
-      layer.addChild(label);
-    });
-    drawSupplySourceMarkers(layer, world);
-    drawSupplyCutoffMarkers(layer, world);
-    drawSupplyDefenseMarkers(layer, world);
-    drawSupplyReliefMarkers(layer, world);
-    drawMaritimeSupplyLinks(layer, world);
-    drawNavalMissions(layer, world);
-    drawAmphibiousOperations(layer, world);
-    drawStrategicThreatSummary(layer, world);
+      const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+      world.landFronts.operationalSectors.forEach((sector, index) => {
+        const color = FRONT_COLORS[index % FRONT_COLORS.length];
+        const label = createSectorLabel(
+          world,
+          sector,
+          color,
+          unitById,
+          sector.id === selectedSectorId,
+        );
+        label.visible = sector.id === selectedSectorId;
+        drawSector(layer, world, sector, color, borderSegments, {
+          showLabel: () => {
+            label.visible = true;
+          },
+          hideLabel: () => {
+            label.visible = selectedSectorId === sector.id;
+          },
+        });
+        placeLabel(label, getFrontAnchor(sector, world), index, [], world.width, world.height);
+        layer.addChild(label);
+      });
+    }
+    if (visibility.supplyMarkers) {
+      drawSupplySourceMarkers(layer, world);
+      drawSupplyCutoffMarkers(layer, world);
+      drawSupplyDefenseMarkers(layer, world);
+      drawSupplyReliefMarkers(layer, world);
+    }
+    if (visibility.maritimeSupply) drawMaritimeSupplyLinks(layer, world);
+    if (visibility.navalMissions) drawNavalMissions(layer, world);
+    drawAmphibiousOperations(layer, world, visibility);
+    if (visibility.strategicSummary) drawStrategicThreatSummary(layer, world);
     if (selectedSectorId && !world.landFronts.operationalSectorsById.has(selectedSectorId)) {
       selectedSectorId = null;
     }
   };
 
   const update = (): void => {
+    const configPanel = renderer.uiContainer.getChildByName("FrontDebugConfig");
+    if (configPanel) positionDebugConfigPanel(renderer, configPanel);
     if (!enabled) {
       return;
     }
@@ -187,11 +242,28 @@ export function attachFrontDebugOverlay(
 
   const toggle = (): void => setEnabled(!enabled);
 
+  const setCategory = (category: DebugCategory, shown: boolean): void => {
+    if (visibility[category] === shown) return;
+    visibility[category] = shown;
+    selectedSectorId = null;
+    versions = null;
+    update();
+  };
+
+  attachDebugConfigPanel(renderer, visibility, setCategory);
+
   window.addEventListener("keydown", (event) => {
     if (event.code !== FRONT_DEBUG_OVERLAY_SHORTCUT || event.repeat || isEditableTarget(event.target)) {
       return;
     }
     toggle();
+    event.preventDefault();
+  });
+  window.addEventListener("keydown", (event) => {
+    if (event.code !== FRONT_DEBUG_CONFIG_SHORTCUT || event.repeat || isEditableTarget(event.target)) {
+      return;
+    }
+    toggleDebugConfigPanel(renderer);
     event.preventDefault();
   });
 
@@ -337,6 +409,150 @@ function createOverlayLabel(value: string, borderColor: number): Container {
   text.position.set(padding, padding);
   container.addChild(background, text);
   return container;
+}
+
+function attachDebugConfigPanel(
+  renderer: Renderer,
+  visibility: DebugVisibility,
+  setCategory: (category: DebugCategory, shown: boolean) => void,
+): void {
+  const existing = renderer.uiContainer.getChildByName("FrontDebugConfig");
+  if (existing) {
+    renderer.uiContainer.removeChild(existing);
+    existing.destroy({ children: true });
+  }
+
+  const root = new Container();
+  root.name = "FrontDebugConfig";
+  renderer.uiContainer.addChild(root);
+
+  const content = new Container();
+  content.name = "FrontDebugConfigContent";
+  content.position.set(0, CONFIG_TAB_HEIGHT + 6);
+  content.visible = false;
+  content.eventMode = "static";
+  content.cursor = "default";
+  content.on("pointerdown", (event) => event.stopPropagation());
+  content.on("pointertap", (event) => event.stopPropagation());
+  const background = new Graphics();
+  const title = new Text("DEBUG 表示設定", new TextStyle({
+    fontFamily: FONT_FAMILY, fontSize: 13, fontWeight: "600", fill: CONFIG_ACCENT,
+  }));
+  title.resolution = renderer.app.renderer.resolution;
+  title.position.set(10, 8);
+  const hint = new Text("項目をクリックして表示切替", new TextStyle({
+    fontFamily: FONT_FAMILY, fontSize: 10, fill: CONFIG_MUTED,
+  }));
+  hint.resolution = renderer.app.renderer.resolution;
+  hint.position.set(10, 26);
+  content.addChild(background, title, hint);
+
+  let rowY = 46;
+  for (const { key, label } of DEBUG_CATEGORY_LABELS) {
+    content.addChild(createDebugConfigRow(
+      renderer,
+      label,
+      () => visibility[key],
+      () => setCategory(key, !visibility[key]),
+      rowY,
+    ));
+    rowY += CONFIG_ROW_HEIGHT;
+  }
+  background.beginFill(CONFIG_BG, 0.96);
+  background.lineStyle(1, CONFIG_BORDER, 0.95);
+  background.drawRoundedRect(0, 0, CONFIG_WIDTH, rowY + 8, 6);
+  background.endFill();
+
+  const tab = new Container();
+  tab.name = "FrontDebugConfigTab";
+  tab.eventMode = "static";
+  tab.cursor = "pointer";
+  const tabBg = new Graphics();
+  tabBg.beginFill(CONFIG_BG, 0.96);
+  tabBg.lineStyle(1, CONFIG_BORDER, 0.95);
+  tabBg.drawRoundedRect(0, 0, CONFIG_TAB_WIDTH, CONFIG_TAB_HEIGHT, 5);
+  tabBg.endFill();
+  const tabText = new Text("DEBUG", new TextStyle({
+    fontFamily: FONT_FAMILY, fontSize: 10, fontWeight: "600", fill: CONFIG_TEXT,
+  }));
+  tabText.resolution = renderer.app.renderer.resolution;
+  tabText.anchor.set(0.5);
+  tabText.position.set(CONFIG_TAB_WIDTH / 2, CONFIG_TAB_HEIGHT / 2);
+  tab.addChild(tabBg, tabText);
+  tab.on("pointertap", (event) => {
+    event.stopPropagation();
+    content.visible = !content.visible;
+  });
+
+  root.addChild(content, tab);
+  positionDebugConfigPanel(renderer, root);
+  window.addEventListener("resize", () => positionDebugConfigPanel(renderer, root));
+}
+
+function createDebugConfigRow(
+  renderer: Renderer,
+  label: string,
+  isShown: () => boolean,
+  toggle: () => void,
+  y: number,
+): Container {
+  const row = new Container();
+  row.position.set(6, y);
+  row.eventMode = "static";
+  row.cursor = "pointer";
+  const hover = new Graphics();
+  const checkbox = new Graphics();
+  const text = new Text(label, new TextStyle({
+    fontFamily: FONT_FAMILY, fontSize: 11, fill: CONFIG_TEXT,
+  }));
+  text.resolution = renderer.app.renderer.resolution;
+  text.position.set(26, 4);
+  const redraw = (): void => {
+    const shown = isShown();
+    hover.clear();
+    checkbox.clear();
+    checkbox.beginFill(shown ? CONFIG_ACCENT : 0x101b2b, shown ? 1 : 0.9);
+    checkbox.lineStyle(1, shown ? 0xb9d0ff : CONFIG_BORDER, 1);
+    checkbox.drawRoundedRect(4, 5, 12, 12, 3);
+    checkbox.endFill();
+    if (shown) {
+      checkbox.lineStyle(2, 0x07101d, 1);
+      checkbox.moveTo(7, 11);
+      checkbox.lineTo(10, 14);
+      checkbox.lineTo(14, 8);
+    }
+    text.style.fill = shown ? CONFIG_TEXT : CONFIG_MUTED;
+  };
+  redraw();
+  row.addChild(hover, checkbox, text);
+  row.on("pointerover", () => {
+    hover.beginFill(0x29415f, 0.45);
+    hover.drawRoundedRect(0, 0, CONFIG_WIDTH - 12, CONFIG_ROW_HEIGHT - 1, 4);
+    hover.endFill();
+  });
+  row.on("pointerout", () => hover.clear());
+  row.on("pointertap", (event) => {
+    event.stopPropagation();
+    toggle();
+    redraw();
+  });
+  return row;
+}
+
+function toggleDebugConfigPanel(renderer: Renderer): void {
+  const root = renderer.uiContainer.getChildByName("FrontDebugConfig");
+  const content = root?.getChildByName("FrontDebugConfigContent");
+  if (content) content.visible = !content.visible;
+}
+
+function positionDebugConfigPanel(renderer: Renderer, root: Container): void {
+  const timeHud = renderer.uiContainer.getChildByName("TimeHud");
+  const hudBounds = timeHud?.getLocalBounds();
+  const x = timeHud && hudBounds
+    ? timeHud.position.x + hudBounds.width + 6
+    : CONFIG_MARGIN;
+  const y = timeHud?.position.y ?? CONFIG_MARGIN;
+  root.position.set(x, y);
 }
 
 export function formatFrontLabel(
@@ -938,8 +1154,12 @@ function drawNavalMissions(layer: Container, world: WorldState): void {
   }
 }
 
-function drawAmphibiousOperations(layer: Container, world: WorldState): void {
-  for (const campaign of world.amphibiousOperations.bridgeheadCampaigns) {
+function drawAmphibiousOperations(
+  layer: Container,
+  world: WorldState,
+  visibility: DebugVisibility,
+): void {
+  if (visibility.bridgeheadCampaigns) for (const campaign of world.amphibiousOperations.bridgeheadCampaigns) {
     drawMarker(layer, world, campaign.destinationPortId, "B",
       campaign.status === "active" ? 0x00e676 : 0x90a4ae, "diamond");
     const center = world.cache.mesoById.get(campaign.destinationPortId)?.center;
@@ -948,7 +1168,7 @@ function drawAmphibiousOperations(layer: Container, world: WorldState): void {
     label.position.set(center.x + 11, center.y - 72);
     layer.addChild(label);
   }
-  for (const demand of world.amphibiousOperations.capabilityDemands) {
+  if (visibility.amphibiousCapabilities) for (const demand of world.amphibiousOperations.capabilityDemands) {
     if (demand.operationId !== null || demand.state === "expired" || demand.state === "cancelled") continue;
     drawMarker(layer, world, demand.destinationPortId, "C", 0x26c6da, "diamond");
     const center = world.cache.mesoById.get(demand.destinationPortId)?.center;
@@ -957,7 +1177,7 @@ function drawAmphibiousOperations(layer: Container, world: WorldState): void {
     label.position.set(center.x + 11, center.y + 11);
     layer.addChild(label);
   }
-  for (const operation of world.amphibiousOperations.operations) {
+  if (visibility.amphibiousOperations) for (const operation of world.amphibiousOperations.operations) {
     if (operation.phase === "landed" || operation.phase === "cancelled") continue;
     drawMarker(layer, world, operation.destinationPortId, "A", 0x7c4dff, "diamond");
     const center = world.cache.mesoById.get(operation.destinationPortId)?.center;
@@ -966,17 +1186,19 @@ function drawAmphibiousOperations(layer: Container, world: WorldState): void {
     label.position.set(center.x + 11, center.y + 11);
     layer.addChild(label);
   }
-  const latestRejectionByNation = new Map<string, WorldState["amphibiousOperations"]["launchRejections"][number]>();
-  for (const rejection of world.amphibiousOperations.launchRejections) {
-    latestRejectionByNation.set(rejection.nationId, rejection);
-  }
-  for (const rejection of latestRejectionByNation.values()) {
-    drawMarker(layer, world, rejection.destinationPortId, "X", 0xff5252, "diamond");
-    const center = world.cache.mesoById.get(rejection.destinationPortId)?.center;
-    if (!center) continue;
-    const label = createOverlayLabel(formatAmphibiousLaunchFeasibility(rejection), 0xff5252);
-    label.position.set(center.x + 11, center.y + 11);
-    layer.addChild(label);
+  if (visibility.amphibiousRejections) {
+    const latestRejectionByNation = new Map<string, WorldState["amphibiousOperations"]["launchRejections"][number]>();
+    for (const rejection of world.amphibiousOperations.launchRejections) {
+      latestRejectionByNation.set(rejection.nationId, rejection);
+    }
+    for (const rejection of latestRejectionByNation.values()) {
+      drawMarker(layer, world, rejection.destinationPortId, "X", 0xff5252, "diamond");
+      const center = world.cache.mesoById.get(rejection.destinationPortId)?.center;
+      if (!center) continue;
+      const label = createOverlayLabel(formatAmphibiousLaunchFeasibility(rejection), 0xff5252);
+      label.position.set(center.x + 11, center.y + 11);
+      layer.addChild(label);
+    }
   }
 }
 

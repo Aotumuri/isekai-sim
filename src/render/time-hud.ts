@@ -41,7 +41,8 @@ export function attachTimeHud(renderer: Renderer): TimeHud {
       `Time ${formatClock(time.elapsedMs)}`,
       `Speed x${formatSpeed(getSpeedMultiplier(clock))}`,
       "Keys [ ] or 1-8",
-      "F: Toggle Front Debug",
+      "F: Toggle Debug",
+      "D: Debug display settings",
     ].join("\n");
     if (nextText === lastText) {
       return;
