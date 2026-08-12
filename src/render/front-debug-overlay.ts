@@ -314,16 +314,24 @@ function createSectorLabel(
   unitById: ReadonlyMap<UnitId, WorldState["units"][number]>,
   selected: boolean,
 ): Container {
-  const container = new Container();
+  const container = createOverlayLabel(
+    formatSectorLabel(world, front, unitById, selected),
+    color,
+  );
   container.name = `SectorDebugLabel:${front.id}`;
+  return container;
+}
+
+function createOverlayLabel(value: string, borderColor: number): Container {
+  const container = new Container();
   container.eventMode = "none";
-  const text = new Text(formatSectorLabel(world, front, unitById, selected), LABEL_STYLE);
+  const text = new Text(value, LABEL_STYLE);
   text.resolution = 2;
   const bounds = text.getLocalBounds();
   const padding = 5;
   const background = new Graphics();
-  background.beginFill(0x081018, 0.88);
-  background.lineStyle(1.5, color, 0.95);
+  background.beginFill(0x081018, 0.9);
+  background.lineStyle(1.5, borderColor, 0.95);
   background.drawRoundedRect(0, 0, bounds.width + padding * 2, bounds.height + padding * 2, 4);
   background.endFill();
   text.position.set(padding, padding);
@@ -923,8 +931,7 @@ function drawNavalMissions(layer: Container, world: WorldState): void {
       drawMarker(layer, world, ship.regionId, markers[mission.type], colors[mission.type], "diamond");
       const center = world.cache.mesoById.get(ship.regionId)?.center;
       if (!center) continue;
-      const label = new Text(formatNavalMission(world, shipId), LABEL_STYLE);
-      label.resolution = 2;
+      const label = createOverlayLabel(formatNavalMission(world, shipId), colors[mission.type]);
       label.position.set(center.x + 11, center.y + 11);
       layer.addChild(label);
     }
@@ -937,8 +944,7 @@ function drawAmphibiousOperations(layer: Container, world: WorldState): void {
       campaign.status === "active" ? 0x00e676 : 0x90a4ae, "diamond");
     const center = world.cache.mesoById.get(campaign.destinationPortId)?.center;
     if (!center) continue;
-    const label = new Text(formatBridgeheadCampaign(world, campaign), LABEL_STYLE);
-    label.resolution = 2;
+    const label = createOverlayLabel(formatBridgeheadCampaign(world, campaign), 0x00e676);
     label.position.set(center.x + 11, center.y - 72);
     layer.addChild(label);
   }
@@ -947,8 +953,7 @@ function drawAmphibiousOperations(layer: Container, world: WorldState): void {
     drawMarker(layer, world, demand.destinationPortId, "C", 0x26c6da, "diamond");
     const center = world.cache.mesoById.get(demand.destinationPortId)?.center;
     if (!center) continue;
-    const label = new Text(formatAmphibiousCapabilityDemand(world, demand), LABEL_STYLE);
-    label.resolution = 2;
+    const label = createOverlayLabel(formatAmphibiousCapabilityDemand(world, demand), 0x26c6da);
     label.position.set(center.x + 11, center.y + 11);
     layer.addChild(label);
   }
@@ -957,8 +962,7 @@ function drawAmphibiousOperations(layer: Container, world: WorldState): void {
     drawMarker(layer, world, operation.destinationPortId, "A", 0x7c4dff, "diamond");
     const center = world.cache.mesoById.get(operation.destinationPortId)?.center;
     if (!center) continue;
-    const label = new Text(formatAmphibiousOperationValidation(world, operation), LABEL_STYLE);
-    label.resolution = 2;
+    const label = createOverlayLabel(formatAmphibiousOperationValidation(world, operation), 0x7c4dff);
     label.position.set(center.x + 11, center.y + 11);
     layer.addChild(label);
   }
@@ -970,8 +974,7 @@ function drawAmphibiousOperations(layer: Container, world: WorldState): void {
     drawMarker(layer, world, rejection.destinationPortId, "X", 0xff5252, "diamond");
     const center = world.cache.mesoById.get(rejection.destinationPortId)?.center;
     if (!center) continue;
-    const label = new Text(formatAmphibiousLaunchFeasibility(rejection), LABEL_STYLE);
-    label.resolution = 2;
+    const label = createOverlayLabel(formatAmphibiousLaunchFeasibility(rejection), 0xff5252);
     label.position.set(center.x + 11, center.y + 11);
     layer.addChild(label);
   }
@@ -1157,20 +1160,8 @@ function createMaritimeSupplyLabel(
   link: WorldState["supplyAssessment"]["maritimeLinks"][number],
   color: number,
 ): Container {
-  const container = new Container();
+  const container = createOverlayLabel(formatMaritimeSupplyLink(world, link), color);
   container.name = `MaritimeSupplyLabel:${link.id}`;
-  container.eventMode = "none";
-  const text = new Text(formatMaritimeSupplyLink(world, link), LABEL_STYLE);
-  text.resolution = 2;
-  const bounds = text.getLocalBounds();
-  const padding = 5;
-  const background = new Graphics();
-  background.beginFill(0x081018, 0.88);
-  background.lineStyle(1.5, color, 0.95);
-  background.drawRoundedRect(0, 0, bounds.width + padding * 2, bounds.height + padding * 2, 4);
-  background.endFill();
-  text.position.set(padding, padding);
-  container.addChild(background, text);
   return container;
 }
 
