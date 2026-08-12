@@ -62,6 +62,7 @@ import {
 import { createSupplyReliefState } from "../../src/sim/supply-relief";
 import {
   createAmphibiousOperationState,
+  getAmphibiousNavalProductionDemands,
   getAmphibiousOperationValidation,
   updateAmphibiousCapabilityAssembly,
   updateAmphibiousOperations,
@@ -435,6 +436,36 @@ test("amphibious capability demand expires when its strategic opportunity disapp
   nation.nextUnitProductionTick = 0;
   updateProduction(world);
   assert.equal(world.units.some((unit) => unit.domain === "naval"), false);
+});
+
+test("an amphibious fleet target survives an individual operation demand", () => {
+  const world = createMaritimeWorld(true, 0);
+  const enemyMacroIds = world.macroRegions
+    .filter((macro) => macro.mesoRegionIds.includes(id("port-b")) || macro.mesoRegionIds.includes(id("island-b")))
+    .map((macro) => { macro.nationId = NATION_B; return macro.id; });
+  world.nations.push(createNation(NATION_B, id("island-b"), enemyMacroIds));
+  world.cache.ownerByMesoId.clear();
+  declareWar(world.wars, NATION_A, NATION_B, 0);
+  world.units.push(createUnitForType(
+    createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "Infantry",
+  ));
+  const nation = world.nations[0]!;
+  nation.resources.manpower = 100_000;
+  nation.resources.weapons = 10_000;
+
+  updateAmphibiousPlanning(world);
+  const demand = world.amphibiousOperations.capabilityDemands.find((item) => item.nationId === NATION_A)!;
+  assert(world.amphibiousOperations.fleetReadinessTargets.some((item) => item.nationId === NATION_A));
+  demand.state = "expired";
+
+  const fleetDemand = getAmphibiousNavalProductionDemands(world)
+    .find((item) => item.nationId === NATION_A);
+  assert.equal(fleetDemand?.transports, demand.desiredTransportCount);
+  assert.equal(fleetDemand?.escorts, demand.desiredEscortCount);
+  nation.nextUnitProductionTick = 0;
+  updateProduction(world);
+  assert(world.units.some((unit) => unit.type === "TransportShip"));
+  assert(world.units.some((unit) => unit.type === "CombatShip"));
 });
 
 test("amphibious launch preflight rejects a landing that cannot fit its strategic window", () => {

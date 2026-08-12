@@ -90,6 +90,10 @@ export const WORLD_BALANCE = {
         travelPerRouteSegment: 1,
       },
       escortsPerTransports: 2,
+      // Once a nation identifies an amphibious opportunity, retain the fleet
+      // requirement for the war instead of treating every operation as a
+      // disposable production request.
+      fleetReadinessRetentionTicks: 1200,
       emergencyWindowTicks: 120,
       emergencyMinimumAssaultRatio: 0.85,
       beachheadSurvivalTicks: 120,
