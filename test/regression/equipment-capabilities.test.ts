@@ -64,3 +64,34 @@ test("mixed transport designs load their real capacities atomically and stay bou
   assert.equal(new Set(loading.flatMap((entry) => entry.cargo.map((unit) => unit.id))).size, 35);
   assert.equal(planTransportLoading([modern], force), null); assert.equal(modern.cargoUnits.length, 0);
 });
+
+test("small-arms material research lowers rifle requirements without discounting tanks or shared factory output", async () => {
+  const { updateProduction } = await import("../../src/sim/production");
+  const { getDevelopedUnitWeaponCost } = await import("../../src/sim/equipment-development");
+  const { getNationalDesign } = await import("../../src/sim/research");
+  const normal = createSocietyWorld(), efficient = createSocietyWorld();
+  for (const world of [normal, efficient]) {
+    for (const nation of world.nations) nation.nextUnitProductionTick = Infinity;
+    world.nations[0]!.resources.steel = 100; world.nations[0]!.resources.weapons = 0;
+    updateSupplyAssessment(world);
+  }
+  const a = normal.nations[0]!, b = efficient.nations[0]!;
+  getResearchPortfolio(efficient, b.id).levels.materials = 8;
+  updateProduction(normal); updateProduction(efficient);
+  assert.equal(a.resourceFlow.income.weapons, b.resourceFlow.income.weapons);
+  assert.equal(a.resources.steel, b.resources.steel);
+  assert(getDevelopedUnitWeaponCost("Infantry", getNationalDesign(efficient, b.id)) < getDevelopedUnitWeaponCost("Infantry", getNationalDesign(normal, a.id)));
+  assert.equal(getDevelopedUnitWeaponCost("Tank", getNationalDesign(efficient, b.id, "Tank")), getDevelopedUnitWeaponCost("Tank", getNationalDesign(normal, a.id, "Tank")));
+});
+
+test("legacy global-generation rifles can receive new handling research even at an equal generation number", () => {
+  const world = createSocietyWorld(), nation = world.nations[0]!;
+  nation.resources.steel = nation.resources.weapons = 1000; updateSupplyAssessment(world);
+  const program = getResearchPortfolio(world, nation.id);
+  for (const branch of ["firepower", "reliability", "materials", "logistics", "production", "handling"] as const) program.levels[branch] = 10;
+  const unit = createUnitForType(createUnitId(world.unitIdCounter++), nation.id, nation.capitalMesoId, "Infantry");
+  unit.design = { ...designFromResearch(nation.id, { ...program.levels, handling: 0 }), family: undefined, generation: 60 };
+  unit.design.levels.fuel = 10;
+  world.units.push(unit);
+  assert(refitUnit(world, unit.id)); assert.equal(unit.design.family, "Infantry"); assert.equal(unit.design.handling, 1.25);
+});

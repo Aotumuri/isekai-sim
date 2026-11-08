@@ -67,7 +67,12 @@ export function getResearchPortfolio(world: WorldState, nationId: NationId, fami
     }
   }
   const program = family === "Infantry" ? root : root.programs[family] ??= newProgram();
-  for (const branch of RESEARCH_BRANCHES) { program.levels[branch] ??= 0; program.progress[branch] ??= 0; }
+  for (const branch of RESEARCH_BRANCHES) {
+    program.levels[branch] ??= 0; program.progress[branch] ??= 0;
+    if (!FAMILY_RESEARCH_BRANCHES[family].includes(branch)) { program.levels[branch] = 0; program.progress[branch] = 0; }
+  }
+  if (program.focus !== "auto" && !FAMILY_RESEARCH_BRANCHES[family].includes(program.focus)) program.focus = "auto";
+  if (!FAMILY_RESEARCH_BRANCHES[family].includes(program.primaryBranch)) program.primaryBranch = FAMILY_RESEARCH_BRANCHES[family][0]!;
   return program;
 }
 export function getResearchCost(portfolio: ResearchPortfolio, branch: ResearchBranch): number {

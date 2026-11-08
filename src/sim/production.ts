@@ -726,7 +726,7 @@ function applyResourceOutputs(
       continue;
     }
     const resources = nation.resources;
-    const steelPerWeapon = baseSteelPerWeapon * getNationalDesign(world, nation.id).steelCost;
+    const steelPerWeapon = baseSteelPerWeapon;
     const flow = getFlow(flowByNation, nation.id);
     const output = outputs.get(nation.id);
     if (output) {

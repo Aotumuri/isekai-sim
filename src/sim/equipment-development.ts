@@ -1,7 +1,7 @@
 import { getDesignUtility } from "./unit-capabilities";
 import { WORLD_BALANCE } from "../data/balance";
 import { isAmphibiousOwnedUnit } from "./amphibious";
-import { getNationalDesign, getResearchState, type WeaponDesign } from "./research";
+import { getNationalDesign, getResearchState, FAMILY_RESEARCH_BRANCHES, type WeaponDesign } from "./research";
 import { isNationActive } from "./nation-active";
 import { isNationRegionSupplied } from "./supply-assessment";
 import { recordSimulationEvent } from "./simulation-settings";
@@ -29,13 +29,16 @@ export function refitUnit(world: WorldState, unitId: UnitId): boolean {
   const unit = world.units.find((item) => item.id === unitId);
   if (!unit || !canRefitUnit(world, unit)) return false;
   const design = getNationalDesign(world, unit.nationId, unit.type);
-  if (design.generation <= (unit.design?.generation ?? 0)) return false;
+  const oldGeneration = unit.design?.generation ?? 0;
+  const addedLevels = FAMILY_RESEARCH_BRANCHES[unit.type].reduce((sum, branch) => sum + Math.max(0, design.levels[branch] - (unit.design?.levels[branch] ?? 0)), 0);
+  // Legacy global generations included inapplicable research; compare actual new branches during migration.
+  if (design.generation <= oldGeneration && (unit.design?.family || !addedLevels || getDesignUtility(design) <= getDesignUtility(unit.design) * 1.02)) return false;
   // An imported weapon is kept until the domestic design actually catches up.
   if (unit.design && getDesignUtility(design) < getDesignUtility(unit.design) * 0.95) return false;
   const nation = world.nations.find((item) => item.id === unit.nationId && isNationActive(item));
   if (!nation) return false;
   const weapons = Math.max(1, Math.ceil(getDevelopedUnitWeaponCost(unit.type, design) * 0.25));
-  const steel = Math.max(1, (design.generation - (unit.design?.generation ?? 0)) * 0.5 * design.steelCost);
+  const steel = Math.max(1, addedLevels * 0.5 * design.steelCost);
   if (nation.resources.weapons < weapons + 6 || nation.resources.steel < steel + 6) return false;
   nation.resources.weapons -= weapons; nation.resources.steel -= steel;
   nation.resourceFlow.usage.weapons += weapons; nation.resourceFlow.delta.weapons -= weapons;

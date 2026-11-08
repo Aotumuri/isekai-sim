@@ -65,3 +65,25 @@ test("branch focus is restricted to the selected equipment class", () => {
   assert.equal(getResearchPriorities(world, nation.id, "Infantry").armor, 0);
   assert.equal(getResearchPriorities(world, nation.id, "TransportShip").firepower, 0);
 });
+
+test("legacy unified technology migrates once and then separates without sharing mutable levels", () => {
+  const { world, nation } = scene();
+  const legacy = getResearchPortfolio(world, nation.id);
+  legacy.levels.firepower = 4; legacy.levels.fuel = 3; legacy.progress.reliability = 12; delete legacy.programs;
+  const tank = getResearchPortfolio(world, nation.id, "Tank"), ship = getResearchPortfolio(world, nation.id, "CombatShip");
+  assert.equal(tank.levels.firepower, 4); assert.equal(tank.levels.fuel, 3); assert.equal(ship.levels.firepower, 4);
+  assert.equal(tank.progress.reliability, 12);
+  tank.levels.firepower = 5; assert.equal(ship.levels.firepower, 4); assert.equal(legacy.levels.firepower, 4);
+  assert.equal(getResearchPortfolio(world, nation.id).levels.fuel, 0);
+});
+
+test("recognized exile governments retain separate research programs while work pauses", async () => {
+  const { createExileWorld } = await import("../helpers/exile-world");
+  const { updateSurrender } = await import("../../src/sim/surrender");
+  const { world, a } = createExileWorld();
+  const tank = getResearchPortfolio(world, a.id, "Tank"); tank.levels.armor = 5; tank.progress.mobility = 20;
+  updateSurrender(world); updateResearch(world);
+  assert.equal(getResearchPortfolio(world, a.id, "Tank"), tank);
+  assert.equal(tank.levels.armor, 5); assert.equal(tank.progress.mobility, 20);
+  assert.equal(tank.status, "government in exile"); assert.equal(tank.lastScience, 0);
+});

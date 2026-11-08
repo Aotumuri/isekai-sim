@@ -7,7 +7,7 @@ import { createSeededWorld } from "../helpers/seeded-world";
 import { runSimulation } from "../helpers/simulation-driver";
 import { withMutedSimulationLogs } from "../helpers/muted-logs";
 import { createSimulationSettings } from "../../src/sim/simulation-settings";
-import { RESEARCH_BRANCHES } from "../../src/sim/research";
+import { EQUIPMENT_FAMILIES, getResearchPortfolio, RESEARCH_BRANCHES } from "../../src/sim/research";
 import { isNationActive } from "../../src/sim/nation-active";
 import { getNationIdeology } from "../../src/sim/nation-identity";
 
@@ -73,8 +73,9 @@ for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 8227483
           ![relation.trust, relation.tension, relation.grievance].every((value) => Number.isFinite(value) && value >= 0 && value <= 100)) throw new Error("Invalid diplomatic relation");
         if (new Set(relation.treaties.map((treaty) => treaty.type)).size !== relation.treaties.length) throw new Error("Duplicate treaty");
       }
-      for (const portfolio of world.research?.byNationId.values() ?? []) for (const branch of RESEARCH_BRANCHES) {
-        if (!Number.isInteger(portfolio.levels[branch]) || portfolio.levels[branch] < 0 || portfolio.levels[branch] > 10 ||
+      for (const [id] of world.research?.byNationId ?? []) for (const family of EQUIPMENT_FAMILIES) {
+        const portfolio = getResearchPortfolio(world, id, family);
+        for (const branch of RESEARCH_BRANCHES) if (!Number.isInteger(portfolio.levels[branch]) || portfolio.levels[branch] < 0 || portfolio.levels[branch] > 10 ||
           !Number.isFinite(portfolio.progress[branch]) || portfolio.progress[branch] < 0) throw new Error("Invalid research progress");
       }
       if (world.events && world.events.length > 200) throw new Error("Unbounded event history");
@@ -95,7 +96,7 @@ for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 8227483
     }
     return last;
   });
-  for (const portfolio of world.research?.byNationId.values() ?? []) levels += RESEARCH_BRANCHES.reduce((sum, branch) => sum + portfolio.levels[branch], 0);
+  for (const [id] of world.research?.byNationId ?? []) for (const family of EQUIPMENT_FAMILIES) levels += RESEARCH_BRANCHES.reduce((sum, branch) => sum + getResearchPortfolio(world, id, family).levels[branch], 0);
   console.log(JSON.stringify({ seed, ticks: result, activeNations: world.nations.filter(isNationActive).length,
     diplomacy: world.settings.diplomacyEnabled, legacyDeclarations: world.warIntent.declarations, declarations: world.diplomacy?.declarations ?? 0,
     crises: world.diplomacy?.crisesOpened ?? 0, resolvedCrises: world.diplomacy?.crisesResolved ?? 0,
