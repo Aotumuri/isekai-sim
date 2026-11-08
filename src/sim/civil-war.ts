@@ -1,3 +1,6 @@
+import { updateDomesticUnrest, canRevolt, recordRevolution } from "./domestic-unrest";
+import { getNationName } from "./nation-identity";
+import { recordSimulationEvent } from "./simulation-settings";
 import { WORLD_BALANCE } from "../data/balance";
 import type { MacroRegion, MacroRegionId } from "../worldgen/macro-region";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
@@ -25,6 +28,7 @@ export function updateCivilWar(world: WorldState): void {
   if (!civilWarBalance.enabled) {
     return;
   }
+  updateDomesticUnrest(world);
   const mesoById = getMesoById(world);
   const mesoToMacro = buildMesoToMacroMap(world.macroRegions);
   const macroAdjacency = getMacroAdjacency(world);
@@ -34,7 +38,7 @@ export function updateCivilWar(world: WorldState): void {
   let buildingChanged = false;
 
   for (const nation of nationsSnapshot) {
-    if (nation.warCooperation > cooperationBalance.min) {
+    if (!canRevolt(world, nation.id)) {
       continue;
     }
     if (nation.macroRegionIds.length <= 1) {
@@ -147,6 +151,9 @@ export function updateCivilWar(world: WorldState): void {
         : Number.POSITIVE_INFINITY,
     };
     world.nations.push(newNation);
+    recordRevolution(world, nation.id, newNationId);
+    recordSimulationEvent(world, { category: "diplomacy", nationIds: [nation.id, newNationId],
+      message: `Revolution in ${getNationName(world, nation.id)} after sustained domestic unrest; ${getNationName(world, newNationId)} declared independence.` });
 
     const boost = Math.max(0, cooperationBalance.civilWarBoost);
     nation.warCooperationBoost = clamp(

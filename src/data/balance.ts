@@ -494,6 +494,10 @@ export const WORLD_BALANCE = {
     },
     civilWar: {
       enabled: true,
+      warningSupport: 0.35,
+      criticalSupport: 0.2,
+      minimumCrisisSeconds: 300,
+      revolutionCooldownSeconds: 600,
     },
     cooperation: {
       min: 0,

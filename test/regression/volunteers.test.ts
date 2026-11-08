@@ -92,7 +92,8 @@ test("foreign volunteers retain their mission allegiance when a recipient provin
   for (const region of world.mesoRegions) if (hostRegions.has(region.id) && region.id !== host.capitalMesoId) region.building = null;
   world.mesoRegions.find((region) => region.id === target)!.building = "city";
   const volunteer = world.units.find((unit) => unit.volunteerMissionId === mission.id)!; volunteer.regionId = target;
-  host.warCooperation = 0; const before = world.nations.length; updateCivilWar(world);
+  host.warCooperation = 0; const before = world.nations.length;
+  updateCivilWar(world); world.time.slowTick += 300; updateCivilWar(world);
   assert.equal(world.nations.length, before + 1); assert.equal(volunteer.nationId, host.id); assert.equal(volunteer.volunteerOriginId, donor.id);
 });
 
