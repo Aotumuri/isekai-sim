@@ -145,17 +145,17 @@ export function updateFactionWarCalls(world: WorldState): void {
     for (const attacker of attackers) for (const defender of defenders) {
       if (findWar(world.wars, attacker.id, defender.id) || areFactionPartners(world, attacker.id, defender.id)) continue;
       const forced = attacker.forced || defender.forced;
+      const initiator = defender.forced && !attacker.forced ? defender.id : attacker.id === war.aggressorId ? defender.id : attacker.id;
+      const target = initiator === attacker.id ? defender.id : attacker.id;
       if (forced) {
         const relation = getRelation(world, attacker.id, defender.id);
-        for (const treaty of [...relation.treaties]) if (treaty.type !== "truce") breakTreaty(world, attacker.id, defender.id, treaty.type);
+        for (const treaty of [...relation.treaties]) if (treaty.type !== "truce") breakTreaty(world, initiator, target, treaty.type);
         if (relation.treaties.some((treaty) => treaty.type === "truce")) {
           relation.treaties = relation.treaties.filter((treaty) => treaty.type !== "truce");
           relation.trust = 0; relation.grievance = Math.min(100, relation.grievance + 30);
           recordSimulationEvent(world, { category: "diplomacy", nationIds: [attacker.id, defender.id], message: "A mandatory faction call broke a prior truce." });
         }
       }
-      const initiator = attacker.id === war.aggressorId ? defender.id : attacker.id;
-      const target = initiator === attacker.id ? defender.id : attacker.id;
       if (startDiplomaticWar(world, initiator, target, "faction-obligation")) state.interventions += 1;
     }
   }

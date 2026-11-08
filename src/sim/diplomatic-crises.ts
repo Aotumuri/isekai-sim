@@ -111,7 +111,7 @@ export function updateDiplomaticCrises(world: WorldState): void {
       resolveCrisisPeacefully(world, attacker, defender, "deterrence"); continue;
     }
     const defensiveAllies = world.nations.filter((nation) => nation.id !== attacker && nation.id !== defender &&
-      isNationActive(nation) && (hasTreaty(world, nation.id, defender, "alliance") || getFactionDefenders(world, defender).includes(nation.id)));
+      isNationActive(nation) && ((!areFactionPartners(world, nation.id, defender) && hasTreaty(world, nation.id, defender, "alliance")) || getFactionDefenders(world, defender).includes(nation.id)));
     const defense = getNationalMilitaryStrength(world, defender) + defensiveAllies.reduce((sum, nation) => sum + getNationalMilitaryStrength(world, nation.id) * 0.7, 0);
     if (defense > getNationalMilitaryStrength(world, attacker) * 1.8) {
       resolveCrisisPeacefully(world, attacker, defender, "allied deterrence"); continue;
