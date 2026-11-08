@@ -1,3 +1,4 @@
+import { getSubjectOverlord } from "./subject-governments";
 import { setPoliticalMandate } from "./politics";
 import { getIdeologicalAffinity } from "./ideology-relations";
 import type { NationId } from "../worldgen/nation";
@@ -47,7 +48,7 @@ export function factionWillingness(world: WorldState, nationId: NationId, charte
     world.wars.filter((war) => war.nationAId === nationId || war.nationBId === nationId).length * 8;
 }
 export function createFaction(world: WorldState, founderId: NationId, charter: FactionCharter, requestedName = ""): Faction | null {
-  if (getWarDeclarationMode(world) !== "diplomacy" || getNationFaction(world, founderId) ||
+  if (getWarDeclarationMode(world) !== "diplomacy" || getNationFaction(world, founderId) || getSubjectOverlord(world, founderId) ||
     !world.nations.some((nation) => nation.id === founderId && isNationActive(nation))) return null;
   const allowed = [...new Set(charter.allowedIdeologyIds)];
   if (!allowed.length || allowed.some((id) => !getIdeologies(world).some((item) => item.id === id)) ||
@@ -73,6 +74,7 @@ export function getFactionAdmissionRequirements(world: WorldState, nationId: Nat
 }
 export function getFactionAdmissionIssue(world: WorldState, nationId: NationId, faction: Faction): string | null {
   if (getWarDeclarationMode(world) !== "diplomacy") return "Diplomacy is disabled.";
+  if (getSubjectOverlord(world, nationId)) return "Subject governments cannot join independent factions.";
   if (getNationFaction(world, nationId)) return "Already a faction member.";
   if (!world.nations.some((nation) => nation.id === nationId && isNationActive(nation))) return "Nation is inactive.";
   if (!faction.charter.allowedIdeologyIds.includes(getNationIdeology(world, nationId).id)) return "Ideology is outside this charter.";

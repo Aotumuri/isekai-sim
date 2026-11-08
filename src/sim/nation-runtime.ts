@@ -1,3 +1,4 @@
+import type { SubjectGovernment } from "./subject-governments";
 import type { NationalPolitics } from "./politics";
 import type { NationCharacter } from "./nation-character";
 import type { Nation } from "../worldgen/nation";
@@ -44,6 +45,7 @@ export type NationRuntime = Nation & {
   character?: NationCharacter;
   preGovernmentCharacter?: NationCharacter;
   politics?: NationalPolitics;
+  subjectGovernment?: SubjectGovernment;
   unitRoles: NationUnitRoles;
   capitalFallCount: number;
   surrenderScore: number;

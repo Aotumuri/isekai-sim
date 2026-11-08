@@ -1,3 +1,4 @@
+import { areSubjectPartners, getSubjectOverlord } from "./subject-governments";
 import { getIdeologicalAffinity } from "./ideology-relations";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import { areFactionPartners } from "./factions";
@@ -88,7 +89,7 @@ export function hasExileConflict(world: WorldState, a: NationId, b: NationId): b
   return hostile(a, b) || hostile(b, a);
 }
 export function isDiplomaticallyProtected(world: WorldState, a: NationId, b: NationId): boolean {
-  return areFactionPartners(world, a, b) || (["truce", "non-aggression", "alliance"] as const).some((type) => hasTreaty(world, a, b, type));
+  return areSubjectPartners(world, a, b) || areFactionPartners(world, a, b) || (["truce", "non-aggression", "alliance"] as const).some((type) => hasTreaty(world, a, b, type));
 }
 export function getInfluence(world: WorldState, nationId: NationId): number {
   const influence = getDiplomacyState(world).influenceByNationId;
@@ -107,6 +108,7 @@ export function proposeTreaty(world: WorldState, proposerId: NationId, partnerId
   if (getWarDeclarationMode(world) !== "diplomacy" || proposerId === partnerId) return false;
   if (![proposerId, partnerId].every((id) => world.nations.some((nation) => nation.id === id && isNationPresent(world, nation)))) return false;
   if (isAtWar(proposerId, partnerId, buildWarAdjacency(world.wars)) || hasExileConflict(world, proposerId, partnerId) || hasTreaty(world, proposerId, partnerId, type)) return false;
+  if (type === "alliance" && (getSubjectOverlord(world, proposerId) || getSubjectOverlord(world, partnerId))) return false;
   const relation = getRelation(world, proposerId, partnerId);
   const threshold = type === "alliance" ? 55 : type === "non-aggression" ? 20 : 10;
   const cost = type === "alliance" ? 20 : type === "non-aggression" ? 12 : 8;

@@ -1,3 +1,4 @@
+import { getSubjectOverlord } from "./subject-governments";
 import { getPeaceBorderIssue, getWholeProvinces, selectPeaceProvinces } from "./peace-borders";
 import { getWarNegotiation } from "./war-negotiations";
 import { prepareMilitaryAccessForWar } from "./military-access";
@@ -29,6 +30,7 @@ function canSettleTerritorialDemand(world: WorldState, from: NationId, to: Natio
 export function openDiplomaticCrisis(world: WorldState, aggressorId: NationId, targetId: NationId, requestedRegions?: MesoRegionId[]): boolean {
   if (getWarDeclarationMode(world) !== "diplomacy" || aggressorId === targetId) return false;
   if (![aggressorId, targetId].every((id) => world.nations.some((nation) => nation.id === id && isNationActive(nation)))) return false;
+  if (getSubjectOverlord(world, aggressorId)) return false;
   if (findWar(world.wars, aggressorId, targetId) || isDiplomaticallyProtected(world, aggressorId, targetId)) return false;
   const regionIds = requestedRegions ? [...requestedRegions] : undefined;
   if (regionIds) {
@@ -105,6 +107,8 @@ export function startDiplomaticWar(world: WorldState, aggressorId: NationId, tar
   if (getWarDeclarationMode(world) !== "diplomacy" || isDiplomaticallyProtected(world, aggressorId, targetId)) return false;
   if (![aggressorId, targetId].every((id) => world.nations.some((nation) => nation.id === id && isNationActive(nation)))) return false;
   if (findWar(world.wars, aggressorId, targetId)) return false;
+  const overlord = getSubjectOverlord(world, aggressorId);
+  if (overlord && !findWar(world.wars, overlord, targetId)) return false;
   prepareMilitaryAccessForWar(world, aggressorId, targetId);
   const war = declareWar(world.wars, aggressorId, targetId, world.time.fastTick);
   if (!war) return false;
@@ -167,6 +171,12 @@ export function updateDiplomaticCrises(world: WorldState): void {
       resolveCrisisPeacefully(world, attacker, defender, "overextension"); continue;
     }
     startDiplomaticWar(world, attacker, defender);
+  }
+  for (const war of [...world.wars]) {
+    const defender = world.nations.find((nation) => nation.id === war.defenderId);
+    const overlord = getSubjectOverlord(world, war.defenderId);
+    if (overlord && defender?.subjectGovernment && war.startedAtFastTick >= defender.subjectGovernment.establishedAtFastTick &&
+      startDiplomaticWar(world, overlord, war.aggressorId, "defensive-alliance")) state.defensiveInterventions += 1;
   }
   // Allies defend the directly attacked state; defensive calls do not recurse.
   for (const war of [...world.wars]) {

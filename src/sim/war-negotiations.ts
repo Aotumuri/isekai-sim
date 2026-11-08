@@ -1,3 +1,4 @@
+import { getPuppetTermsIssue, installSubjectGovernment } from "./subject-governments";
 import { getRelation } from "./diplomacy";
 import { getPeaceBorderIssue, getWholeProvinces, selectPeaceProvinces } from "./peace-borders";
 import type { NationId } from "../worldgen/nation";
@@ -20,6 +21,7 @@ import { concludePeace, getWarFatigue, warFatigueKey } from "./diplomatic-peace"
 export interface PeaceTerms {
   demandedRegionIds: MesoRegionId[]; offeredRegionIds: MesoRegionId[];
   demandedWeapons: number; offeredWeapons: number; truceSeconds: number;
+  puppetTarget?: boolean;
 }
 export interface PeaceOffer { proposerId: NationId; terms: PeaceTerms; revisedAtSlowTick: number; revision: number; source: "opening" | "automatic" | "manual" }
 export interface WarNegotiation {
@@ -70,6 +72,13 @@ export function getPeaceTermsIssue(world: WorldState, proposer: NationId, target
   }
   if (![terms.demandedWeapons, terms.offeredWeapons].every((amount) => Number.isInteger(amount) && amount >= 0 && amount <= 100) ||
     (terms.demandedWeapons > 0 && terms.offeredWeapons > 0) || !Number.isInteger(terms.truceSeconds) || terms.truceSeconds < 180 || terms.truceSeconds > 900) return "Check reparations and the truce duration.";
+  if (terms.puppetTarget) {
+    if (terms.demandedRegionIds.length || terms.offeredRegionIds.length) {
+      return "A puppet settlement preserves the target’s territory. Remove the province transfers.";
+    }
+    const puppetIssue = getPuppetTermsIssue(world, proposer, target);
+    if (puppetIssue) return puppetIssue;
+  }
   const a = world.nations.find((nation) => nation.id === proposer && nation.macroRegionIds.length);
   const b = world.nations.find((nation) => nation.id === target && nation.macroRegionIds.length);
   if (!a || !b) return "Both governments need territory to sign this settlement.";
@@ -99,7 +108,9 @@ function automaticTerms(world: WorldState, proposer: NationId, target: NationId,
     const candidates = candidateDistricts(world, proposer, target);
     if (hardline) for (const id of ownedLand(world, target)) if (id !== b.capitalMesoId && !candidates.includes(id) &&
       (!world.occupation.mesoById.has(id) || world.occupation.mesoById.get(id) === proposer)) candidates.push(id);
-    terms.demandedRegionIds = selectPeaceProvinces(world, target, proposer, candidates, 2, cap);
+    if (!opening && advantage > 0.45 && getNationCharacter(world, proposer).aggression >= 0.65 &&
+      !getPuppetTermsIssue(world, proposer, target)) terms.puppetTarget = true;
+    else terms.demandedRegionIds = selectPeaceProvinces(world, target, proposer, candidates, 2, cap);
     terms.demandedWeapons = Math.min(hardline ? 40 : 30, Math.floor(b.resources.weapons * (hardline ? 0.35 : 0.15)),
       Math.max(pursuingOpeningGoals || hardline ? 15 : 0, Math.floor(advantage * 40)));
   } else if (!opening && (advantage < -0.15 || urgency >= 0.55)) {
@@ -143,7 +154,7 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
   const paymentBenefit = Math.min(18, terms.offeredWeapons * 0.5);
   const disposition = character.doctrine === "merchant" || character.doctrine === "isolationist" ? 12 : character.doctrine === "pragmatist" ? 8 : character.cooperation * 7;
   const resolve = 45 + (isFightOnGovernment(world, recipient) ? 35 : character.aggression * 8) + Math.max(0, advantage) * 25;
-  const score = pressure + disposition + landBenefit + paymentBenefit + Math.min(6, (terms.truceSeconds - 300) / 100) - landCost - paymentCost - resolve;
+  const score = pressure + disposition + landBenefit + paymentBenefit + Math.min(6, (terms.truceSeconds - 300) / 100) - landCost - paymentCost - resolve - (terms.puppetTarget ? 25 : 0);
   return { accepts: score >= 0, score, reason: score >= 0 ? "Ending the war now is preferable to continued losses and domestic danger." : landCost + paymentCost > 25 ? "The requested concessions outweigh the current cost of continuing the war." : "The government expects a better outcome by continuing the war." };
 }
 export function proposePeaceTerms(world: WorldState, proposer: NationId, target: NationId, terms: PeaceTerms): boolean {
@@ -152,7 +163,7 @@ export function proposePeaceTerms(world: WorldState, proposer: NationId, target:
   const old = negotiation.offers.get(proposer)!;
   negotiation.offers.set(proposer, { proposerId: proposer, terms: { ...terms, demandedRegionIds: [...terms.demandedRegionIds], offeredRegionIds: [...terms.offeredRegionIds] }, revisedAtSlowTick: world.time.slowTick, revision: old.revision + 1, source: "manual" });
   negotiation.automatic.set(proposer, false);
-  recordSimulationEvent(world, { category: "diplomacy", nationIds: [proposer, target], message: `${getNationName(world, proposer)} proposed peace to ${getNationName(world, target)}: ${terms.demandedRegionIds.length} districts demanded, ${terms.offeredRegionIds.length} offered, ${terms.demandedWeapons || -terms.offeredWeapons} weapons reparations.` });
+  recordSimulationEvent(world, { category: "diplomacy", nationIds: [proposer, target], message: `${getNationName(world, proposer)} proposed peace to ${getNationName(world, target)}: ${terms.puppetTarget ? "puppet government, " : ""}${terms.demandedRegionIds.length} districts demanded, ${terms.offeredRegionIds.length} offered, ${terms.demandedWeapons || -terms.offeredWeapons} weapons reparations.` });
   return true;
 }
 export function acceptPeaceOffer(world: WorldState, recipient: NationId, proposer: NationId, expectedRevision?: number): boolean {
@@ -171,6 +182,7 @@ export function acceptPeaceOffer(world: WorldState, recipient: NationId, propose
   const relation = getRelation(world, proposer, recipient);
   const truce = relation.treaties.find((treaty) => treaty.type === "truce")!; truce.expiresAtSlowTick = world.time.slowTick + terms.truceSeconds;
   relation.cooldownUntilSlowTick = truce.expiresAtSlowTick;
+  if (terms.puppetTarget) installSubjectGovernment(world, proposer, recipient);
   const state = getWarNegotiationState(world); state.active.delete(negotiation.key);
   state.settlements.push({ a: recipient, b: proposer, proposerId: proposer, terms, atSlowTick: world.time.slowTick });
   if (state.settlements.length > 40) state.settlements.splice(0, state.settlements.length - 40);

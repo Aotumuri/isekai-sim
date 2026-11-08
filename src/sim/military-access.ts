@@ -1,3 +1,4 @@
+import { areSubjectPartners } from "./subject-governments";
 import { areFactionPartners } from "./factions";
 import { getNationCharacter } from "./nation-character";
 import type { NationId } from "../worldgen/nation";
@@ -24,6 +25,7 @@ export function hasMilitaryAccess(world: WorldState, guestId: NationId, hostId: 
   if (guestId === hostId) return true;
   if (getWarDeclarationMode(world) !== "diplomacy" || findWar(world.wars, guestId, hostId) ||
     ![guestId, hostId].every((id) => world.nations.some((nation) => nation.id === id && nation.macroRegionIds.length))) return false;
+  if (areSubjectPartners(world, guestId, hostId)) return true;
   const relation = world.diplomacy?.relations.get([guestId, hostId].sort().join(":"));
   return !!relation && relation.trust >= 50 && !relation.crisis && (world.militaryAccess?.grants.some((grant) =>
     grant.guestId === guestId && grant.hostId === hostId && grant.revokedAtSlowTick === undefined && grant.expiresAtSlowTick > world.time.slowTick) ?? false);
@@ -70,7 +72,11 @@ const routeMaps = new WeakMap<WorldState, { key: string; maps: Map<NationId, Map
 /** A navigation-only view: actual legal ownership is never changed by access. */
 export function getMilitaryRoutingOwners(world: WorldState, nationId: NationId): Map<MesoRegionId, NationId> {
   const owners = getOwnerByMesoId(world);
-  const hosts = [...new Set((world.militaryAccess?.grants ?? []).filter((grant) => grant.guestId === nationId && hasMilitaryAccess(world, nationId, grant.hostId)).map((grant) => grant.hostId))].sort();
+  const candidates = (world.militaryAccess?.grants ?? []).filter((grant) => grant.guestId === nationId).map((grant) => grant.hostId);
+  const overlord = world.nations.find((item) => item.id === nationId)?.subjectGovernment?.overlordId;
+  if (overlord) candidates.push(overlord);
+  for (const nation of world.nations) if (nation.subjectGovernment?.overlordId === nationId) candidates.push(nation.id);
+  const hosts = [...new Set(candidates)].filter((host) => hasMilitaryAccess(world, nationId, host)).sort();
   if (!hosts.length) return owners;
   const key = `${world.territoryVersion}:${world.occupation.version}:${world.militaryAccess?.version}:${world.time.slowTick}`;
   let cache = routeMaps.get(world);

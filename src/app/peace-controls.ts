@@ -1,3 +1,4 @@
+import { getPuppetTermsIssue, getSubjectOverlord, releaseSubjectGovernment } from "../sim/subject-governments";
 import { getWholeProvinces } from "../sim/peace-borders";
 import type { NationId } from "../worldgen/nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
@@ -14,11 +15,13 @@ const esc = (value: unknown) => String(value).replace(/[&<>"']/g, (char) => ({ "
 export function attachPeaceControls(root: HTMLElement, world: WorldState, selected: () => NationId, partner: () => NationId,
   feedback: (message: string) => void): { update: () => void } {
   root.innerHTML = `<details open data-peace-panel><summary>War negotiations</summary><p class="society-note" data-peace-view="outlook"></p>
-    <div class="peace-offers" data-peace-view="offers"></div><div data-peace-editor>
+    <div data-peace-view="subject"></div><div class="peace-offers" data-peace-view="offers"></div><div data-peace-editor>
     <label><input type="checkbox" data-peace-control="automatic" checked> Automatically revise and accept peace conditions</label>
     <p class="society-note">Both governments maintain standing terms from the start of war. Battle losses, occupation, fatigue and domestic unrest change willingness to accept. Publishing your own terms switches this government's negotiations to manual control.</p>
     <div class="society-selectors"><label>Demand provinces<select multiple size="4" data-peace-control="demand" aria-label="Peace demanded provinces"></select></label><label>Offer provinces<select multiple size="4" data-peace-control="offer" aria-label="Peace offered provinces"></select></label></div>
     <div class="society-selectors"><label>Demand weapons<input type="number" min="0" max="100" step="1" value="0" data-peace-control="demand-weapons" aria-label="Peace demanded weapons"></label><label>Offer weapons<input type="number" min="0" max="100" step="1" value="0" data-peace-control="offer-weapons" aria-label="Peace offered weapons"></label></div>
+    <label><input type="checkbox" data-peace-control="puppet"> Install a puppet government in the opposing country</label>
+    <p class="society-note" data-peace-view="puppet"></p>
     <label>Truce duration<select data-peace-control="truce" aria-label="Peace truce duration"><option value="300">5 minutes</option><option value="600">10 minutes</option><option value="900">15 minutes</option></select></label>
     <p class="society-note" data-peace-view="preview"></p><div class="society-actions"><button type="button" data-peace-action="propose">Publish peace conditions</button><button type="button" data-peace-action="accept">Accept opponent's terms</button><button type="button" data-peace-action="map">Preview selected provinces</button></div>
     <p class="society-note">Select up to three whole provinces per side with Ctrl / Command. Ceded territory must connect to existing territory or form a complete island. Remaining territory cannot be split, and neither country can lose its last territory through negotiated peace. Third-party occupations require a separate settlement. Resources and land change only when an offer is accepted; unrelated wars continue.</p></div></details>`;
@@ -34,12 +37,19 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     return (provinces ? provinces.map((macro) => `Province ${macro.id.replace("macro-", "")}`)
       : ids.map(districtName)).map(esc).join(", ") || "No territory";
   };
-  const read = (): PeaceTerms => ({ demandedRegionIds: values("demand"), offeredRegionIds: values("offer"), demandedWeapons: Number(control("demand-weapons").value), offeredWeapons: Number(control("offer-weapons").value), truceSeconds: Number(control("truce").value) });
-  const summary = (offer: PeaceOffer) => `<article class="peace-offer"><strong>${esc(getNationName(world, offer.proposerId))}'s conditions</strong><p>Demands: ${describe(offer.terms.demandedRegionIds)} · ${offer.terms.demandedWeapons} weapons</p><p>Offers: ${describe(offer.terms.offeredRegionIds)} · ${offer.terms.offeredWeapons} weapons</p><small>Truce ${offer.terms.truceSeconds / 60} min · ${offer.source === "opening" ? "Opening terms" : offer.source === "manual" ? "Manually proposed" : "Revised by government"}</small></article>`;
+  const read = (): PeaceTerms => ({ demandedRegionIds: values("demand"), offeredRegionIds: values("offer"), demandedWeapons: Number(control("demand-weapons").value), offeredWeapons: Number(control("offer-weapons").value), truceSeconds: Number(control("truce").value), puppetTarget: (control("puppet") as HTMLInputElement).checked || undefined });
+  const summary = (offer: PeaceOffer) => `<article class="peace-offer"><strong>${esc(getNationName(world, offer.proposerId))}'s conditions</strong><p>Demands: ${describe(offer.terms.demandedRegionIds)} · ${offer.terms.demandedWeapons} weapons</p><p>Offers: ${describe(offer.terms.offeredRegionIds)} · ${offer.terms.offeredWeapons} weapons</p>${offer.terms.puppetTarget ? "<p><strong>Install a puppet government in the opposing country</strong></p>" : ""}<small>Truce ${offer.terms.truceSeconds / 60} min · ${offer.source === "opening" ? "Opening terms" : offer.source === "manual" ? "Manually proposed" : "Revised by government"}</small></article>`;
   const update = () => {
     const a = selected(), b = partner(), war = findWar(world.wars, a, b);
     const enabled = getWarDeclarationMode(world) === "diplomacy" && !!war;
     editor.hidden = !enabled;
+    const ownOverlord = getSubjectOverlord(world, a);
+    const partnerOverlord = getSubjectOverlord(world, b);
+    const describeSubject = (id: NationId, overlord: NationId | undefined) => overlord
+      ? `<p><strong>${esc(getNationName(world, id))}</strong> is a subject of ${esc(getNationName(world, overlord))}. The overlord guarantees its defense and shares military access.</p>`
+      : "";
+    view("subject").innerHTML = describeSubject(a, ownOverlord) + (a !== b ? describeSubject(b, partnerOverlord) : "") +
+      (partnerOverlord === a ? '<button type="button" data-peace-action="release">Grant independence</button>' : "");
     if (!enabled || !war) {
       const signed = [...(world.warNegotiations?.settlements ?? [])].reverse().find((item) =>
         (item.a === a && item.b === b) || (item.a === b && item.b === a));
@@ -80,8 +90,14 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
       for (const [name, ids] of [["demand", own.terms.demandedRegionIds], ["offer", own.terms.offeredRegionIds]] as const)
         for (const option of (control(name) as HTMLSelectElement).options) option.selected = (parcels.get(option.value) ?? []).every((id) => ids.includes(id));
       control("demand-weapons").value = String(own.terms.demandedWeapons); control("offer-weapons").value = String(own.terms.offeredWeapons);
-      control("truce").value = String(own.terms.truceSeconds); revision = own.revision;
+      control("truce").value = String(own.terms.truceSeconds);
+      (control("puppet") as HTMLInputElement).checked = !!own.terms.puppetTarget;
+      revision = own.revision;
     }
+    const puppetIssue = getPuppetTermsIssue(world, a, b);
+    const puppet = control("puppet") as HTMLInputElement;
+    puppet.disabled = !puppet.checked && !!puppetIssue;
+    view("puppet").textContent = puppetIssue ?? "The opposing government keeps its territory and comes under your military protection.";
     const terms = read(), issue = getPeaceTermsIssue(world, a, b, terms), assessment = assessPeaceOffer(world, b, a, terms);
     view("preview").textContent = issue ? `Cannot publish: ${issue}` : `Opponent’s expected response to your draft: ${assessment.accepts ? "Acceptable under current conditions" : "Likely refusal"}. ${assessment.reason}`;
     root.querySelector<HTMLButtonElement>('[data-peace-action="propose"]')!.disabled = !!issue;
@@ -100,9 +116,20 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-peace-action]"); if (!button) return;
     event.stopPropagation(); const a = selected(), b = partner();
     if (button.dataset.peaceAction === "map") { const map = getMapView(world), terms = read(); map.territoryPreviewIds = [...terms.demandedRegionIds, ...terms.offeredRegionIds]; map.revision++; return; }
+    if (button.dataset.peaceAction === "release") {
+      const released = releaseSubjectGovernment(world, a, b);
+      feedback(released ? "Independence granted. Shared military access has ended." : "The selected partner is no longer your subject.");
+      update();
+      return;
+    }
     let success = false;
     if (button.dataset.peaceAction === "propose") { success = proposePeaceTerms(world, a, b, read()); if (success) dirty = false; }
     if (button.dataset.peaceAction === "accept") success = acceptPeaceOffer(world, a, b, Number(button.dataset.peaceRevision));
+    if (success && button.dataset.peaceAction === "accept" && getSubjectOverlord(world, a) === b) {
+      feedback(`Peace signed. ${getNationName(world, a)} is now a subject of ${getNationName(world, b)}.`);
+      update();
+      return;
+    }
     feedback(success ? button.dataset.peaceAction === "accept" ? "Peace signed. Agreed territory, reparations and the truce are in effect." : "Peace conditions published. The other government will reevaluate them as circumstances change." : "The settlement is no longer valid. Review territory, resources and the current war."); update();
   });
   return { update };
