@@ -1,3 +1,4 @@
+import { hasMilitaryAccess } from "./military-access";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { FrontId, OperationalSector } from "./land-fronts";
@@ -526,7 +527,7 @@ function buildWarPassableDistanceMap(
         !neighbor ||
         neighbor.type === "sea" ||
         !owner ||
-        (owner !== nationId && !isAtWar(nationId, owner, warAdjacency)) ||
+        (owner !== nationId && !isAtWar(nationId, owner, warAdjacency) && !hasMilitaryAccess(world, nationId, owner)) ||
         distances.has(neighborId)
       ) {
         continue;

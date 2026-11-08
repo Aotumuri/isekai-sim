@@ -1,3 +1,4 @@
+import { hasMilitaryAccess } from "./military-access";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { getControlledTopology } from "./ai-geography";
@@ -236,7 +237,11 @@ export function isNationRegionSupplied(
   const componentId = world.supplyAssessment.assessmentByNationId
     .get(nationId)
     ?.componentIdByRegionId.get(regionId);
-  return componentId ? isComponentSupplied(world, componentId) : false;
+  if (componentId) return isComponentSupplied(world, componentId);
+  const host = world.occupation.mesoById.get(regionId) ?? getOwnerByMesoId(world).get(regionId);
+  if (!host || host === nationId || !hasMilitaryAccess(world, nationId, host)) return false;
+  const local = world.supplyAssessment.assessmentByNationId.get(host)?.componentIdByRegionId.get(regionId);
+  return local ? isComponentSupplied(world, local) : false;
 }
 
 export function getComponentSupplyState(

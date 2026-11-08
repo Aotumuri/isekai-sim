@@ -16,6 +16,8 @@ export interface UnitEquipmentSlot {
 }
 
 export interface UnitState {
+  volunteerOriginId?: NationId;
+  volunteerMissionId?: number;
   design?: WeaponDesign;
   id: UnitId;
   nationId: NationId;

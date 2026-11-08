@@ -1,3 +1,4 @@
+import { getMilitaryRoutingOwners, applyMilitaryStagingOrders } from "../military-access";
 import type { WorldState } from "../world-state";
 import type { UnitState } from "../unit";
 import { getMoveMsPerRegion } from "../movement";
@@ -48,6 +49,7 @@ interface LandMovementGroup {
 }
 
 interface LandAiRuntime {
+  accessVersion: number;
   lastAssignmentFastTick: number;
   territoryVersion: number;
   occupationVersion: number;
@@ -102,6 +104,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
   if (landUnits.length === 0) {
     return;
   }
+  applyMilitaryStagingOrders(world);
   const runtime = getLandAiRuntime(world);
   const instrumentation = world.instrumentation;
   invalidateSharedPathFields(runtime, world, instrumentation);
@@ -205,6 +208,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     updateAssignmentRuntimeSources(runtime, world, landUnits);
   }
 
+  applyMilitaryStagingOrders(world);
   const movementStartedAt = instrumentation ? performance.now() : 0;
   for (const group of runtime.movementGroups) {
     const isBlockedByEnemy = (toId: MesoRegionId): boolean => {
@@ -229,7 +233,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
       runtime.sharedPathFields,
       mesoById,
       neighborsById,
-      ownerByMesoId,
+      getMilitaryRoutingOwners(world, group.nationId),
       occupationByMesoId,
       warAdjacency,
       isBlockedByEnemy,
@@ -254,6 +258,7 @@ function getLandAiRuntime(world: WorldState): LandAiRuntime {
     return existing;
   }
   const created: LandAiRuntime = {
+    accessVersion: -1,
     lastAssignmentFastTick: Number.NEGATIVE_INFINITY,
     territoryVersion: -1,
     occupationVersion: -1,
@@ -317,7 +322,8 @@ function invalidateSharedPathFields(
   world: WorldState,
   instrumentation?: SimulationInstrumentation,
 ): void {
-  const mapChanged = runtime.pathFieldMapVersion !== world.mapVersion;
+  const mapChanged = runtime.pathFieldMapVersion !== world.mapVersion || runtime.accessVersion !== (world.militaryAccess?.version ?? 0);
+  runtime.accessVersion = world.militaryAccess?.version ?? 0;
   const territoryChanged =
     runtime.pathFieldTerritoryVersion !== world.territoryVersion;
   const occupationChanged =
