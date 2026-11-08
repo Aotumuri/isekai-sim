@@ -213,6 +213,7 @@ function assignPorts(
   rng: SeededRng,
 ): void {
   const candidatesByNation = new Map<Nation["id"], number[]>();
+  const fallbackCityByNation = new Map<Nation["id"], number>();
   const isCoastal = buildCoastalIndex(mesoRegions, idToIndex);
 
   for (const macro of macroRegions) {
@@ -229,6 +230,9 @@ function assignPorts(
         continue;
       }
       if (meso.building !== null) {
+        if (meso.building === "city" && !fallbackCityByNation.has(macro.nationId)) {
+          fallbackCityByNation.set(macro.nationId, index);
+        }
         continue;
       }
       let list = candidatesByNation.get(macro.nationId);
@@ -242,17 +246,17 @@ function assignPorts(
 
   for (const nation of nations) {
     const candidates = candidatesByNation.get(nation.id) ?? [];
-    if (candidates.length === 0) {
-      continue;
-    }
     const baseCount = Math.round(
       nation.macroRegionIds.length * config.nationPortPerMacroRegion,
     );
     const minCount = Math.max(0, Math.round(config.nationMinPortsPerNation));
-    const targetCount = Math.min(
-      candidates.length,
-      Math.max(minCount, baseCount),
-    );
+    const requestedCount = Math.max(minCount, baseCount);
+    if (candidates.length === 0 && requestedCount > 0) {
+      const city = fallbackCityByNation.get(nation.id);
+      if (city !== undefined) mesoRegions[city].building = "port";
+      continue;
+    }
+    const targetCount = Math.min(candidates.length, requestedCount);
     if (targetCount <= 0) {
       continue;
     }

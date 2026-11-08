@@ -147,7 +147,10 @@ export function generateMesoRegions(
 
   mergeRiverMesoRegions(microRegions, mesoRegions, neighborsByIndex, idToIndex);
   const mergedMesoRegions = mesoRegions.filter((region) => region.microRegionIds.length > 0);
-  const neighborsById = buildMesoNeighbors(mergedMesoRegions, microRegions, neighborsByIndex);
+  let neighborsById = buildMesoNeighbors(mergedMesoRegions, microRegions, neighborsByIndex);
+  if (submergeTinyIslands(mergedMesoRegions, neighborsById, microRegions, idToIndex, config.elevationSeaLevel)) {
+    neighborsById = buildMesoNeighbors(mergedMesoRegions, microRegions, neighborsByIndex);
+  }
   for (const region of mergedMesoRegions) {
     region.neighbors = neighborsById.get(region.id) ?? [];
   }
@@ -155,6 +158,50 @@ export function generateMesoRegions(
   assignResources(mergedMesoRegions, config, rng);
 
   return mergedMesoRegions;
+}
+
+const MIN_ISLAND_DISTRICTS = 3;
+
+function submergeTinyIslands(
+  mesoRegions: MesoRegion[],
+  neighborsById: Map<MesoRegion["id"], MesoRegion["neighbors"]>,
+  microRegions: MicroRegion[],
+  microIndexById: Map<MicroRegionId, number>,
+  seaLevel: number,
+): boolean {
+  const landById = new Map(mesoRegions.filter((region) => region.type !== "sea").map((region) => [region.id, region]));
+  const components: MesoRegion[][] = [];
+  const visited = new Set<MesoRegion["id"]>();
+  let largest: MesoRegion[] = [];
+  for (const region of landById.values()) {
+    if (visited.has(region.id)) continue;
+    const component = [region];
+    visited.add(region.id);
+    for (let head = 0; head < component.length; head += 1) {
+      for (const { id } of neighborsById.get(component[head].id) ?? []) {
+        const neighbor = landById.get(id);
+        if (!neighbor || visited.has(id)) continue;
+        visited.add(id);
+        component.push(neighbor);
+      }
+    }
+    components.push(component);
+    if (component.length > largest.length) largest = component;
+  }
+
+  const tinyIslands = components.filter((component) => component !== largest && component.length < MIN_ISLAND_DISTRICTS);
+  for (const island of tinyIslands) {
+    for (const region of island) {
+      region.type = "sea";
+      for (const id of region.microRegionIds) {
+        const micro = microRegions[microIndexById.get(id)!];
+        micro.isSea = true;
+        micro.isRiver = false;
+        micro.elevation = seaLevel;
+      }
+    }
+  }
+  return tinyIslands.length > 0;
 }
 
 function getMesoType(region: MicroRegion): MesoRegionType {
