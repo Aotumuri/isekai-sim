@@ -361,6 +361,29 @@ function buildCandidates(world: WorldState, nationId: NationId): MissionCandidat
       targetShipId: raid.combatShipId, targetSeaRegionId: raider.regionId,
       reasonFlags: ["immediate-raid-threat", "convoy-defense"] });
   }
+  // Invasion convoys do not have a MaritimeSupplyLink yet. Defend the coast
+  // before troops land, even when there is no domestic supply convoy to raid.
+  const warAdjacency = buildWarAdjacency(world.wars);
+  const ownerById = getOwnerByMesoId(world);
+  const mesoById = getMesoById(world);
+  for (const convoy of world.supplyAssessment.convoys.convoys) {
+    if (convoy.mission !== "amphibious" || convoy.state === "suspended") continue;
+    const transport = world.units.find((unit) => unit.id === convoy.transportId);
+    if (!transport || transport.manpower <= 0 ||
+      !isAtWar(nationId, transport.nationId, warAdjacency) ||
+      ownerById.get(convoy.route.destinationPortId) !== nationId ||
+      mesoById.get(transport.regionId)?.type !== "sea") continue;
+    const canIntercept = world.units.some((ship) => {
+      if (!isOperationalCombatShip(ship, nationId) || isAmphibiousOwnedUnit(world, ship.id)) return false;
+      const route = buildNavalPositioningRoute(world, ship.regionId, [transport.regionId]);
+      return route.length > 0 && route.length - 1 <= WORLD_BALANCE.unit.naval.strategy.localInterceptRouteSteps;
+    });
+    if (!canIntercept) continue;
+    result.push({ key: `INTERCEPT:${nationId}:${transport.id}`, nationId, type: "INTERCEPT",
+      priority: 1200, emergency: true, targetConvoyId: convoy.id,
+      targetShipId: transport.id, targetSeaRegionId: transport.regionId,
+      reasonFlags: ["enemy-invasion-convoy", "coastal-defense"] });
+  }
   for (const demand of world.supplyAssessment.maritimeEscorts.demands.filter((item) => item.nationId === nationId)) {
     const [force, strength, frontline, reconnected, cities, reorganizing, downstream] = demand.priority;
     const pressure = world.supplyAssessment.maritimeInterdiction.assignmentsByLinkId.get(demand.maritimeLinkId)?.length ?? 0;
@@ -551,6 +574,15 @@ export function updateNavalStrategyMovement(world: WorldState, dtMs: number): vo
   for (const mission of state.missions) {
     if (mission.type !== "INTERCEPT" && mission.type !== "RESERVE") continue;
     const liveTarget = mission.targetShipId ? unitById.get(mission.targetShipId)?.regionId : undefined;
+    // Do not sail toward the last known position of a sunk invasion transport.
+    if (mission.targetShipId && !liveTarget) {
+      mission.status = "UNAVAILABLE";
+      for (const shipId of mission.shipIds) {
+        const ship = unitById.get(shipId);
+        if (ship && !isAmphibiousOwnedUnit(world, ship.id)) resetMovement(ship);
+      }
+      continue;
+    }
     const target = liveTarget ?? mission.targetPortId ?? mission.targetSeaRegionId;
     if (!target) continue;
     for (const shipId of mission.shipIds) {

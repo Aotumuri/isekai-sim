@@ -75,7 +75,7 @@ import {
   recordMaritimeInterdictionCombat,
   updateMaritimeInterdictionMovement,
 } from "../../src/sim/maritime-interdiction";
-import { updateConvoyMovement } from "../../src/sim/convoy-system";
+import { createAmphibiousConvoy, updateConvoyMovement } from "../../src/sim/convoy-system";
 import {
   getNavalUnitOwnership,
   updateNavalStrategy,
@@ -603,6 +603,70 @@ test("Naval AI creates a real-port blockade mission only as surplus commitment",
   const blockade = world.supplyAssessment.navalStrategy.missions.find((mission) => mission.type === "BLOCKADE");
   assert(blockade?.targetPortId);
   assert.equal(blockade.targetLinkId, assessment.maritimeLinkId);
+});
+
+test("coastal defense intercepts an invasion without a maritime supply raid", () => {
+  const world = createMaritimeWorld(true, 0);
+  world.nations.push(createNation(NATION_B, id("island-c"), []));
+  declareWar(world.wars, NATION_A, NATION_B, 0);
+  const defender = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip");
+  const invader = createUnitForType(createUnitId(world.unitIdCounter++), NATION_B, id("sea-ab"), "TransportShip");
+  defender.moveTicksPerRegion = 1;
+  world.units.push(defender, invader);
+  createAmphibiousConvoy(world, "enemy-landing", invader.id, [],
+    [id("port-b"), id("sea-ab"), id("port-a")], id("port-b"), id("port-a"));
+  updateNavalStrategy(world);
+  const mission = world.supplyAssessment.navalStrategy.missionByShipId.get(defender.id);
+  assert.equal(mission?.type, "INTERCEPT");
+  assert(mission?.reasonFlags.includes("enemy-invasion-convoy"));
+  updateNavalStrategyMovement(world, FAST_TICK_MS);
+  assert.equal(defender.regionId, invader.regionId);
+  const manpower = invader.manpower;
+  updateBattles(world);
+  assert(invader.manpower < manpower);
+  world.units = world.units.filter((unit) => unit.id !== invader.id);
+  updateNavalStrategyMovement(world, FAST_TICK_MS);
+  assert.equal(mission.status, "UNAVAILABLE");
+  assert.equal(defender.moveToId, null);
+});
+
+test("coastal defense ignores neutral and unreachable invasion convoys", () => {
+  for (const atWar of [false, true]) {
+    const world = createMaritimeWorld(true, 0);
+    if (atWar) declareWar(world.wars, NATION_A, NATION_B, 0);
+    const defender = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A,
+      id(atWar ? "port-d" : "port-a"), "CombatShip");
+    const transport = createUnitForType(createUnitId(world.unitIdCounter++), NATION_B, id("sea-ab"), "TransportShip");
+    world.units.push(defender, transport);
+    createAmphibiousConvoy(world, "landing", transport.id, [],
+      [id("port-b"), id("sea-ab"), id("port-a")], id("port-b"), id("port-a"));
+    updateNavalStrategy(world);
+    assert.equal(world.supplyAssessment.navalStrategy.missionByShipId.get(defender.id)?.type, "RESERVE");
+  }
+});
+
+test("amphibious escorts initiate battle against hostile ships without a strategy mission", () => {
+  const world = createMaritimeWorld(true, 3);
+  const enemyMacroIds = world.macroRegions.filter((macro) =>
+    macro.mesoRegionIds.includes(id("port-b")) || macro.mesoRegionIds.includes(id("island-b")))
+    .map((macro) => { macro.nationId = NATION_B; return macro.id; });
+  world.nations.push(createNation(NATION_B, id("island-b"), enemyMacroIds));
+  declareWar(world.wars, NATION_A, NATION_B, 0);
+  const infantry = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "Infantry");
+  const escort = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip");
+  world.units.push(infantry, escort);
+  updateNavalStrategy(world);
+  updateAmphibiousPlanning(world);
+  const operation = world.amphibiousOperations.operations[0];
+  assert(operation && operation.escortIds.includes(escort.id));
+  assert.equal(getNavalUnitOwnership(world, escort.id)?.controller, "AMPHIBIOUS_OPERATION");
+  const hostile = createUnitForType(createUnitId(world.unitIdCounter++), NATION_B, id("sea-ab"), "CombatShip");
+  world.units.push(hostile);
+  escort.regionId = id("sea-ab");
+  const manpower = hostile.manpower;
+  updateBattles(world);
+  assert(hostile.manpower < manpower);
+  assert(escort.org < 1);
 });
 
 test("CombatShips deliberately select moving enemy convoys without interdicting static routes", () => {

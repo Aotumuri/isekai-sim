@@ -12,7 +12,8 @@ import {
   normalizeWarPair,
   type WarAdjacency,
 } from "./war-state";
-import { getNavalMission } from "./naval-strategy";
+import { getNavalMission, getNavalUnitOwnership } from "./naval-strategy";
+import { isOperationalCombatShip } from "./maritime-escort";
 
 export type BattleId = string & { __brand: "BattleId" };
 
@@ -429,7 +430,8 @@ function isCombatShip(unit: UnitState): boolean {
 }
 
 function isActiveMissionCombatShip(world: WorldState, unit: UnitState): boolean {
-  if (!isCombatShip(unit) || unit.manpower <= 0 || unit.org <= 0 || unit.combatPower <= 0) return false;
+  if (!isOperationalCombatShip(unit) || unit.combatPower <= 0) return false;
+  if (getNavalUnitOwnership(world, unit.id)?.controller === "AMPHIBIOUS_OPERATION") return true;
   const mission = getNavalMission(world, unit.id);
   return mission?.status === "ACTIVE" && mission.type !== "RESERVE";
 }

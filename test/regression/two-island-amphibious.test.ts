@@ -27,6 +27,11 @@ test("an established bridgehead remains a strategic reinforcement objective", ()
   const world = createScenarioWorld("two-island-amphibious", {
     seed: 695_919_685_365, width: 640, height: 360, quick: true,
   });
+  // This test isolates reinforcement after a successful landing. Give the
+  // attacker sea control; contested crossings are covered by naval combat tests.
+  const defender = world.nations[0]!;
+  world.units = world.units.filter((unit) => unit.nationId !== defender.id || unit.domain !== "naval");
+  defender.nextUnitProductionTick = Number.POSITIVE_INFINITY;
   withMutedSimulationLogs(() => runSimulation(world, { ticks: 900 }));
 
   const landing = world.amphibiousOperations.operations.find((operation) =>
