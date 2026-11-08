@@ -1,7 +1,7 @@
 import { attachMapControls } from "./map-controls";
 import { attachPlayerMap } from "../render/player-map";
 import { attachSocietyPanel } from "./society-panel";
-import { createWorldConfig } from "../data/world-config";
+import { createDefaultWorldConfig, createWorldConfig } from "../data/world-config";
 import { drawCityCapitalIcons } from "../render/draw/city-capital-icons";
 import { drawMesoBorders } from "../render/draw/meso-borders";
 import { drawMicroRegions } from "../render/draw/micro-regions";
@@ -23,10 +23,12 @@ import type { WorldState } from "../sim/world-state";
 const MAX_UNIT_ANIMATION_SPEED = 4;
 
 export function createGame(root: HTMLElement, setup: { world?: WorldState; paused?: boolean } = {}): void {
-  const config = createWorldConfig(setup.world?.width ?? window.innerWidth, setup.world?.height ?? window.innerHeight);
+  const config = setup.world
+    ? createWorldConfig(setup.world.width, setup.world.height)
+    : createDefaultWorldConfig();
   if (setup.world?.worldSeed !== undefined) config.seed = setup.world.worldSeed;
   console.log("World generation seed:", config.seed);
-  const renderer = createRenderer(root, config);
+  const renderer = createRenderer(root);
   setTerritoryEffectsRenderer(renderer.app.renderer);
   const world = setup.world ?? createWorld(config);
   drawMicroRegions(renderer.worldLayers.layers.MicroTerrain, world.microRegions);
@@ -57,9 +59,16 @@ export function createGame(root: HTMLElement, setup: { world?: WorldState; pause
     world.mesoRegions,
     0,
   );
-  attachViewControls(renderer);
   attachRegionHoverUI(renderer, world);
   const nationInfoBar = attachNationInfoBar(renderer, world);
+  if (!setup.world) {
+    const { width, height } = renderer.app.screen;
+    const mapWidth = width - renderer.uiRightWidth;
+    const scale = Math.min(1, mapWidth / world.width, height / world.height);
+    renderer.worldContainer.scale.set(scale);
+    renderer.worldContainer.position.set((mapWidth - world.width * scale) / 2, (height - world.height * scale) / 2);
+  }
+  attachViewControls(renderer);
   const clock = createSimClock();
   clock.paused = setup.paused ?? false;
   const societyPanel = attachSocietyPanel(root, world, clock);

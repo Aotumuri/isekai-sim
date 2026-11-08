@@ -51,10 +51,14 @@ export interface WorldConfig {
 // ランダムよう
 const DEFAULT_SEED = Math.floor(Math.random() * 1_000_000_000_000);
 
-export function createWorldConfig(width: number, height: number): WorldConfig {
+export function createDefaultWorldConfig(): WorldConfig {
+  return createWorldConfig(2560, 1440, 210_000);
+}
+
+export function createWorldConfig(width: number, height: number, maxMicroRegions = Infinity): WorldConfig {
   const { microRegion, elevation, river, mesoRegion, nation, resources } = WORLD_BALANCE;
   const area = Math.max(1, width * height);
-  const microRegionCount = Math.max(microRegion.minCount, Math.floor(area * microRegion.density));
+  const microRegionCount = Math.min(maxMicroRegions, Math.max(microRegion.minCount, Math.floor(area * microRegion.density)));
   const riverSourceCount = Math.max(
     river.minSourceCount,
     Math.floor(microRegionCount * river.sourceCountRatio),

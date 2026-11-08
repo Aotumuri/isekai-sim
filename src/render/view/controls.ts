@@ -8,6 +8,7 @@ const ZOOM_INTENSITY = 0.0015;
 export function attachViewControls(renderer: Renderer): void {
   const view = renderer.app.view as HTMLCanvasElement;
   view.style.touchAction = "none";
+  const minScale = Math.min(MIN_SCALE, renderer.worldContainer.scale.x);
 
   let isDragging = false;
   let lastPointer: Vec2 | null = null;
@@ -64,7 +65,7 @@ export function attachViewControls(renderer: Renderer): void {
       }
       const currentScale = renderer.worldContainer.scale.x;
       const zoomFactor = Math.exp(-event.deltaY * ZOOM_INTENSITY);
-      const nextScale = clamp(currentScale * zoomFactor, MIN_SCALE, MAX_SCALE);
+      const nextScale = clamp(currentScale * zoomFactor, minScale, MAX_SCALE);
       if (nextScale === currentScale) {
         return;
       }
