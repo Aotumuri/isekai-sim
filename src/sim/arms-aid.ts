@@ -107,9 +107,15 @@ export function updateArmsAid(world: WorldState): void {
   const wars = buildWarAdjacency(world.wars);
   for (const donor of world.nations.filter(isNationActive)) {
     if (donor.resources.weapons < 70 || getNationCharacter(world, donor.id).cooperation < 0.5) continue;
-    const recipient = world.nations.filter(isNationActive).filter((nation) => nation.id !== donor.id &&
-      nation.resources.weapons < 20 && (wars.get(nation.id)?.size ?? 0) > 0 && canSupportNation(world, donor.id, nation.id))
-      .sort((a, b) => a.resources.weapons - b.resources.weapons || a.id.localeCompare(b.id))[0];
+    const design = getNationalDesign(world, donor.id);
+    const recipient = world.nations.filter(isNationActive).filter((nation) => {
+      if (nation.id === donor.id || !canSupportNation(world, donor.id, nation.id)) return false;
+      const wartimeShortage = nation.resources.weapons < 35 && (wars.get(nation.id)?.size ?? 0) > 0;
+      const alliedModernization = design.generation > 0 && hasTreaty(world, donor.id, nation.id, "alliance") &&
+        world.units.some((unit) => unit.nationId === nation.id && canRefitUnit(world, unit) &&
+          design.firepower * design.reliability > (unit.design?.firepower ?? 1) * (unit.design?.reliability ?? 1) * 1.02);
+      return wartimeShortage || alliedModernization;
+    }).sort((a, b) => a.resources.weapons - b.resources.weapons || a.id.localeCompare(b.id))[0];
     if (recipient) sendArmsAid(world, donor.id, recipient.id, 20);
   }
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getArmsAidState, sendArmsAid, updateArmsAid } from "../../src/sim/arms-aid";
-import { getRelation } from "../../src/sim/diplomacy";
+import { getDiplomacyState, getRelation, proposeTreaty } from "../../src/sim/diplomacy";
 import { findTradeRoute } from "../../src/sim/international-trade";
 import { getResearchPortfolio } from "../../src/sim/research";
 import { updateSupplyAssessment } from "../../src/sim/supply-assessment";
@@ -49,4 +49,17 @@ test("hostilities return undelivered aid and insufficient donors cannot drain th
   assert.equal(getArmsAidState(world).shipments[0]!.status, "returned");
   assert.equal(donor.resources.weapons, 100);
   assert.equal(recipient.resources.weapons, 0);
+});
+
+
+test("allies proactively supply modernization equipment even during peace", () => {
+  const { world, donor, recipient } = aidWorld();
+  donor.character = { doctrine: "merchant", aggression: 0.25, cooperation: 0.9, innovation: 0.5, thrift: 0.85 };
+  const relation = getRelation(world, donor.id, recipient.id); relation.opinion = 80; relation.trust = 80;
+  getDiplomacyState(world).influenceByNationId.set(donor.id, 100);
+  assert(proposeTreaty(world, donor.id, recipient.id, "alliance"));
+  getResearchPortfolio(world, donor.id).levels.firepower = 4;
+  updateArmsAid(world);
+  assert.equal(getArmsAidState(world).shipments.length, 1);
+  assert.equal(getArmsAidState(world).shipments[0]!.recipientId, recipient.id);
 });
