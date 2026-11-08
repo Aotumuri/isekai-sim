@@ -172,9 +172,6 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
         label.resolution = 2;
         label.eventMode = "none"; label.alpha = anchor.nationId === view.selectedNationId ? 1 : 0.92;
         labels.addChild(label);
-        if (anchor.primary && anchor.nationId === view.selectedNationId) {
-          selection.lineStyle(1.5, 0xffffff, 0.9); selection.drawCircle(anchor.x, anchor.y, 5);
-        }
       }
     }
     const zoom = renderer.worldContainer.scale.x;
