@@ -1,3 +1,4 @@
+import { getIdeologicalAffinity } from "./ideology-relations";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import { areFactionPartners } from "./factions";
 import type { NationId } from "../worldgen/nation";
@@ -65,7 +66,7 @@ export function getRelation(world: WorldState, a: NationId, b: NationId): Diplom
     const [nationAId, nationBId] = normalizeWarPair(a, b);
     const first = getNationCharacter(world, a), second = getNationCharacter(world, b);
     const affinity = (first.cooperation + second.cooperation - 1) * 35 -
-      Math.abs(first.aggression - second.aggression) * 15;
+      Math.abs(first.aggression - second.aggression) * 15 + getIdeologicalAffinity(world, a, b) * 14;
     relation = { nationAId, nationBId, opinion: affinity, trust: 40, tension: 10,
       grievance: 0, treaties: [], crisis: null, cooldownUntilSlowTick: 0 };
     state.relations.set(key, relation);
@@ -165,11 +166,18 @@ export function updateDiplomaticRelations(world: WorldState): void {
     const first = getNationCharacter(world, a), second = getNationCharacter(world, b);
     const commonEnemy = [...(wars.get(a) ?? [])].some((enemy) => wars.get(b)?.has(enemy));
     const cooperation = (first.cooperation + second.cooperation) / 2;
-    relation.opinion = clamp(relation.opinion + (cooperation - 0.5) * 3 + (commonEnemy ? 2 : 0) - relation.grievance * 0.015, -100, 100);
-    relation.trust = clamp(relation.trust + (relation.treaties.length ? 0.8 : 0.1), 0, 100);
+    const affinity = getIdeologicalAffinity(world, a, b);
+    const treatyGoodwill = relation.treaties.reduce((sum, treaty) => sum +
+      ({ alliance: 22, "non-aggression": 8, trade: 8, truce: 2 }[treaty.type]), 0);
+    // Evidence of cooperation can overcome ideological friction. Personality alone cannot drift every pair to +100.
+    const targetOpinion = clamp((cooperation - 0.5) * 45 + affinity * 30 + (relation.trust - 40) * 0.45 +
+      treatyGoodwill + (commonEnemy ? 25 : 0) - relation.grievance * 0.5, -100, 100);
+    relation.opinion = clamp(relation.opinion + clamp((targetOpinion - relation.opinion) * 0.04, -2, 2), -100, 100);
+    const distrust = Math.max(0, -affinity);
+    relation.trust = clamp(relation.trust + (relation.treaties.length ? 0.8 * (1 - distrust * 0.25) : 0.1 * (1 - distrust * 0.65)), 0, 100);
     relation.grievance = Math.max(0, relation.grievance - 0.2);
     relation.tension = clamp(relation.tension + (first.aggression + second.aggression - 0.9) * 2 -
-      (relation.opinion > 20 ? 1.5 : 0) + relation.grievance * 0.03, 0, 100);
+      (relation.opinion > 20 ? 1.5 : 0) + relation.grievance * 0.03 + distrust * 0.35, 0, 100);
     if (relation.crisis) continue;
     if (relation.opinion >= 55 && relation.trust >= 55) proposeTreaty(world, a, b, "alliance");
     else if (cooperation > 0.6 && relation.opinion >= 20) proposeTreaty(world, a, b, "non-aggression");
