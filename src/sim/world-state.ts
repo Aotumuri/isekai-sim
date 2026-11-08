@@ -1,3 +1,4 @@
+import type { TerritorialClaimsState } from "./territorial-claims";
 import type { MapViewState } from "../render/map-view-state";
 import type { FactionState } from "./factions";
 import type { Ideology } from "./nation-identity";
@@ -44,6 +45,7 @@ import type { WarIntentState } from "./war-intent";
 import type { CommonThreatCoalitionState } from "./common-threat-coalitions";
 
 export interface WorldState {
+  territorialClaims?: TerritorialClaimsState;
   settings?: SimulationSettings;
   diplomacy?: DiplomacyState;
   research?: ResearchState;
