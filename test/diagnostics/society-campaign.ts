@@ -1,3 +1,7 @@
+import { getOwnerByMesoId, getAdjacentNationPairs } from "../../src/sim/world-cache";
+import { proposeTerritorialExchange, respondToTerritorialOffer } from "../../src/sim/territorial-deals";
+import { updateTerritorialClaims } from "../../src/sim/territorial-claims";
+import { getDiplomacyState } from "../../src/sim/diplomacy";
 import { createSeededWorld } from "../helpers/seeded-world";
 import { runSimulation } from "../helpers/simulation-driver";
 import { withMutedSimulationLogs } from "../helpers/muted-logs";
@@ -15,6 +19,17 @@ const ticks = arg("--ticks", 12000), requestedSeed = process.argv.includes("--se
 for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 822748319788]) {
   const world = createSeededWorld({ seed, width: 960, height: 540, quick: true });
   world.settings = createSimulationSettings({ diplomacyEnabled: !process.argv.includes("--legacy") });
+  const originalRegions = new Set(world.macroRegions.flatMap((macro) => macro.mesoRegionIds));
+  if (process.argv.includes("--territorial-scene")) {
+    const [a, b] = getAdjacentNationPairs(world)[0];
+    world.time.slowTick = 600; world.time.fastTick = 6000; world.time.elapsedMs = 600000;
+    updateTerritorialClaims(world);
+    const owners = getOwnerByMesoId(world);
+    const parcel = (owner: typeof a) => [...owners].find(([id, nation]) => nation === owner && id !== world.nations.find((item) => item.id === owner)!.capitalMesoId)![0];
+    getDiplomacyState(world).influenceByNationId.set(a, 100);
+    const offer = proposeTerritorialExchange(world, a, b, [parcel(a)], [parcel(b)]);
+    if (!offer || !respondToTerritorialOffer(world, b, offer.id, true)) throw new Error("Failed territorial campaign setup");
+  }
   let treatyPeak = 0, levels = 0, actualBattles = 0, last = 0;
   const result = withMutedSimulationLogs(() => {
     for (let part = 0; part < ticks; part += 100) {
@@ -26,6 +41,16 @@ for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 8227483
       for (const nation of world.nations) for (const amount of Object.values(nation.resources)) {
         if (!Number.isFinite(amount) || amount < -1e-8) throw new Error(`Invalid resource balance at tick ${world.time.fastTick}`);
       }
+      const parcels = world.macroRegions.flatMap((macro) => macro.mesoRegionIds);
+      if (parcels.length !== originalRegions.size || new Set(parcels).size !== parcels.length || parcels.some((id) => !originalRegions.has(id))) throw new Error("Lost or duplicated territory");
+      for (const nation of world.nations) {
+        const macros = world.macroRegions.filter((macro) => macro.nationId === nation.id).map((macro) => macro.id);
+        if (macros.length !== nation.macroRegionIds.length || macros.some((id) => !nation.macroRegionIds.includes(id))) throw new Error("Invalid province ownership index");
+      }
+      for (const histories of world.territorialClaims?.history.values() ?? []) for (const memory of histories.values()) {
+        if (!Number.isFinite(memory.heldTicks) || memory.heldTicks < 0 || !Number.isFinite(memory.attachment) || memory.attachment < 0 || memory.attachment > 100) throw new Error("Invalid territorial attachment");
+      }
+      if ((world.territorialDeals?.offers.length ?? 0) > 40) throw new Error("Unbounded territorial offers");
       const allUnits = world.units.flatMap((unit) => [unit, ...unit.cargoUnits]);
       if (new Set(allUnits.map((unit) => unit.id)).size !== allUnits.length) throw new Error("Duplicate unit ownership");
       for (const relation of world.diplomacy?.relations.values() ?? []) {
@@ -59,6 +84,7 @@ for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 8227483
     peaceAgreements: world.diplomacy?.peaceAgreements ?? 0, defensiveInterventions: world.diplomacy?.defensiveInterventions ?? 0,
     treatyPeak, tradeDeliveries: world.internationalTrade?.delivered ?? 0, aidDeliveries: world.diplomacy?.aidDeliveries ?? 0,
     researchLevels: levels, retrofits: world.research?.retrofits ?? 0, licenses: world.research?.licensesShared ?? 0,
+    territorialOffers: world.territorialDeals?.offers.length ?? 0, territorialSettlements: world.territorialDeals?.offers.filter((offer) => offer.status === "accepted").length ?? 0,
     factions: world.factions?.factions.length ?? 0, factionMembers: world.factions?.factionByNationId.size ?? 0,
     factionInterventions: world.factions?.interventions ?? 0, battleSamples: actualBattles, eventCount: world.events?.length ?? 0 }));
 }
