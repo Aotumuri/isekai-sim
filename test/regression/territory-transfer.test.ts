@@ -41,3 +41,15 @@ test("administrative division creates a province without changing national terri
   assert.equal(world.macroRegions.length, count + 1); assert.deepEqual(getOwnerByMesoId(world), owners);
   assert.equal(splitProvince(world, macro.nationId, macro.id, [...macro.mesoRegionIds]), false);
 });
+
+test("capital swaps preserve one correct capital marker per nation without resetting bystander losses", () => {
+  const world = createSocietyWorld(), [a, b, c] = world.nations;
+  c.initialCityCount = 99;
+  assert(transferTerritories(world, [{ from: a.id, to: b.id, regionIds: [a.capitalMesoId] }, { from: b.id, to: a.id, regionIds: [b.capitalMesoId] }]));
+  const owners = getOwnerByMesoId(world);
+  for (const nation of [a, b]) {
+    const capitals = world.mesoRegions.filter((region) => owners.get(region.id) === nation.id && region.building === "capital");
+    assert.equal(capitals.length, 1); assert.equal(capitals[0].id, nation.capitalMesoId);
+  }
+  assert.equal(c.initialCityCount, 99);
+});

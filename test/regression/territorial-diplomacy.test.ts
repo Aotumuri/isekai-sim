@@ -52,3 +52,14 @@ test("rejecting a territorial ultimatum escalates without preemptively changing 
   assert(respondToCrisis(world, b, a, "reject")); updateDiplomaticCrises(world);
   assert.equal(getOwnerByMesoId(world).get(id), b); assert.equal(world.wars.length, 1);
 });
+
+test("an old territorial agreement cannot authorize betrayal of an unrelated later truce", () => {
+  const { world, a, b, id, relation } = scene();
+  assert(openDiplomaticCrisis(world, a, b, [id])); assert(respondToCrisis(world, b, a, "concede"));
+  world.time.slowTick += 200;
+  relation.treaties = [{ type: "truce", expiresAtSlowTick: world.time.slowTick + 300 }];
+  const influence = getDiplomacyState(world).influenceByNationId.get(a);
+  assert.equal(betrayTerritorialSettlement(world, a, b), false);
+  assert.equal(getDiplomacyState(world).influenceByNationId.get(a), influence);
+  assert.equal(world.wars.length, 0);
+});

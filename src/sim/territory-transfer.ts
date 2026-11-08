@@ -69,13 +69,17 @@ export function transferTerritories(world: WorldState, legs: TerritoryTransfer[]
     for (const macro of [...world.macroRegions]) if (macro.nationId === leg.from) partition(world, macro, ids, leg.to);
   }
   refreshNationProvinces(world); world.mapVersion++; world.territoryVersion++;
-  const owners = getOwnerByMesoId(world);
+  const owners = getOwnerByMesoId(world), involved = new Set(legs.flatMap((leg) => [leg.from, leg.to]));
+  // Demote all ceded capitals before choosing replacements, including capital swaps.
+  for (const nation of world.nations) if (owners.get(nation.capitalMesoId) !== nation.id) {
+    const old = regions.get(nation.capitalMesoId);
+    if (old?.building === "capital") old.building = "city";
+  }
   for (const nation of world.nations) {
+    if (!involved.has(nation.id)) continue;
     const owned = world.mesoRegions.filter((region) => owners.get(region.id) === nation.id && region.type !== "sea");
     if (!owned.length) continue;
     if (owners.get(nation.capitalMesoId) !== nation.id) {
-      const old = regions.get(nation.capitalMesoId);
-      if (old?.building === "capital") old.building = "city";
       const replacement = owned.find((region) => region.building === "city") ?? owned[0];
       replacement.building = "capital"; nation.capitalMesoId = replacement.id;
     }
