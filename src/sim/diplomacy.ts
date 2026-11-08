@@ -1,3 +1,4 @@
+import type { MesoRegionId } from "../worldgen/meso-region";
 import { areFactionPartners } from "./factions";
 import type { NationId } from "../worldgen/nation";
 import { getNationCharacter } from "./nation-character";
@@ -13,7 +14,8 @@ export interface DiplomaticCrisis {
   aggressorId: NationId;
   openedAtSlowTick: number;
   deadlineSlowTick: number;
-  demand: "concessions" | "containment";
+  demand: "concessions" | "containment" | "territory";
+  regionIds?: MesoRegionId[];
 }
 export interface DiplomaticRelation {
   nationAId: NationId;
@@ -25,6 +27,7 @@ export interface DiplomaticRelation {
   treaties: Treaty[];
   crisis: DiplomaticCrisis | null;
   cooldownUntilSlowTick: number;
+  territorialSettlement?: { aggressorId: NationId; regionIds: MesoRegionId[]; atSlowTick: number };
 }
 export interface DiplomacyState {
   relations: Map<string, DiplomaticRelation>;
