@@ -357,3 +357,11 @@ Legacy equipment refits compare newly added applicable branch levels as well as 
 ### Revolution warning and recovery
 
 Low war support now produces persistent domestic unrest rather than an immediate revolt at zero support. Support below 35% accumulates discontent; crisis pressure and at least 300 seconds of sustained low support are required before a country at 20% support or less can revolt. Better support and peacetime reverse the buildup. Parent and rebel governments receive a 600-second revolution cooldown. The military screen and peace negotiations can use the same unrest state, and world history records major warnings and revolutions.
+
+### Standing war conditions and conditional peace
+
+Both sides publish opening conditions when diplomatic war begins. Each war retains one standing proposal per side. A proposal can demand or offer up to eight districts, transfer up to 100 weapons as reparations, and set a 180–900-second truce. The AI normally limits automatic land demands/concessions to three districts and 25% of the donor's territory. It reviews military balance, occupation, losses since opening, fatigue, domestic danger, territorial value, reparations and national resolve. Captured or claimed districts are preferred; intransigent governments maintain ambitious war goals rather than inadvertently publishing an unconditional white peace.
+
+Mercantile, isolationist and pragmatic governments are more willing to compromise, including concessions that avert a domestic crisis. Governments with aggression at least 0.85 and cooperation at most 0.4 resist compromise and largely discount domestic pressure; overwhelming defeat can still force their hand. Standing terms are revised as circumstances change. Manual proposals remain under the selected government's control until automatic negotiations are re-enabled.
+
+Acceptance revalidates current ownership, third-party occupations, treasury balances and the displayed offer revision before committing anything. Neither side can lose its last territory through negotiated peace. Accepted land exchanges, reparations, withdrawals and the truce resolve together; unrelated wars remain active. A full peace reduces domestic pressure and gives a 90-second recovery window; a separate peace during other ongoing wars offers only limited relief. Settlements are retained in a bounded history.

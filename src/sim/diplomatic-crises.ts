@@ -1,3 +1,4 @@
+import { getWarNegotiation } from "./war-negotiations";
 import { prepareMilitaryAccessForWar } from "./military-access";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import { getForeignClaims, getTerritorialClaim } from "./territorial-claims";
@@ -102,6 +103,7 @@ export function startDiplomaticWar(world: WorldState, aggressorId: NationId, tar
   relation.crisis = null; relation.treaties = [];
   relation.opinion = -80; relation.trust = Math.max(0, relation.trust - 30); relation.tension = 100;
   getDiplomacyState(world).declarations += 1;
+  getWarNegotiation(world, war);
   for (const other of getDiplomacyState(world).relations.values()) {
     if (other === relation || (other.nationAId !== aggressorId && other.nationBId !== aggressorId)) continue;
     other.opinion = Math.max(-100, other.opinion - (cause === "diplomatic-crisis" ? 8 : 1));

@@ -32,3 +32,9 @@ test("time spent inside a revolution cooldown cannot count toward a new crisis",
   assert.equal(getDomesticUnrest(world, nation.id).lowSupportSeconds, 299); assert(!canRevolt(world, nation.id));
   world.time.slowTick = 900; updateDomesticUnrest(world); assert(canRevolt(world, nation.id));
 });
+
+test("sustained moderate discontent is a crisis rather than an eligible revolution", () => {
+  const { world, nation } = scene(); nation.warCooperation = 0.3;
+  world.time.slowTick = 360; updateDomesticUnrest(world);
+  assert.equal(getDomesticUnrest(world, nation.id).phase, "crisis"); assert(!canRevolt(world, nation.id));
+});

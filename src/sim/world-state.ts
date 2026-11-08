@@ -1,3 +1,4 @@
+import type { WarNegotiationState } from "./war-negotiations";
 import type { DomesticUnrestState } from "./domestic-unrest";
 import type { ExileGovernmentState } from "./exile-government";
 import type { VolunteerState } from "./volunteers";
@@ -53,6 +54,7 @@ import type { CommonThreatCoalitionState } from "./common-threat-coalitions";
 
 export interface WorldState {
   domesticUnrest?: DomesticUnrestState;
+  warNegotiations?: WarNegotiationState;
   exileGovernments?: ExileGovernmentState;
   militaryAccess?: MilitaryAccessState;
   volunteers?: VolunteerState;

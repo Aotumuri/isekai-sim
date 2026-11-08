@@ -1,7 +1,9 @@
+import { relieveUnrestAfterPeace } from "./domestic-unrest";
+import { proposePeaceTerms, whitePeaceTerms, assessPeaceOffer, acceptPeaceOffer, updateWarNegotiations } from "./war-negotiations";
 import type { NationId } from "../worldgen/nation";
 import { withdrawAmphibiousOperationsForPeace } from "./amphibious";
 import { getDiplomacyState, getRelation, spendInfluence } from "./diplomacy";
-import { getNationalMilitaryStrength, resolveCrisisPeacefully } from "./diplomatic-crises";
+import { resolveCrisisPeacefully } from "./diplomatic-crises";
 import { getNationCharacter } from "./nation-character";
 import { isNationActive } from "./nation-active";
 import { updateOccupation } from "./occupation";
@@ -59,19 +61,19 @@ export function concludePeace(world: WorldState, a: NationId, b: NationId, reaso
   relation.cooldownUntilSlowTick = world.time.slowTick + 300;
   getDiplomacyState(world).fatigueByWarId.delete(warFatigueKey(war));
   getDiplomacyState(world).peaceAgreements += 1;
+  world.warNegotiations?.active.delete(warFatigueKey(war));
+  relieveUnrestAfterPeace(world, a); relieveUnrestAfterPeace(world, b);
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [a, b],
     message: `${a} and ${b} signed peace (${reason}); occupations and expeditionary troops returned.` });
   return true;
 }
 
 export function offerPeace(world: WorldState, proposerId: NationId, targetId: NationId): boolean {
-  const war = findWar(world.wars, proposerId, targetId);
-  if (!war || getWarDeclarationMode(world) !== "diplomacy" || world.time.fastTick - war.startedAtFastTick < 300) return false;
-  const fatigue = getWarFatigue(world, proposerId, targetId);
-  const targetPower = getNationalMilitaryStrength(world, targetId), proposerPower = getNationalMilitaryStrength(world, proposerId);
-  if (targetPower > proposerPower * 1.8 && fatigue < 70) return false;
-  if (fatigue < 30 && getNationCharacter(world, targetId).cooperation < 0.7) return false;
-  return concludePeace(world, proposerId, targetId);
+  if (!proposePeaceTerms(world, proposerId, targetId, whitePeaceTerms())) return false;
+  const war = findWar(world.wars, proposerId, targetId)!;
+  if (world.time.fastTick - war.startedAtFastTick >= 300 && assessPeaceOffer(world, targetId, proposerId, whitePeaceTerms()).accepts)
+    acceptPeaceOffer(world, targetId, proposerId);
+  return true;
 }
 
 export function mediateCrisis(world: WorldState, mediatorId: NationId, a: NationId, b: NationId): boolean {
@@ -94,12 +96,12 @@ export function updateDiplomaticPeace(world: WorldState): void {
   for (const key of state.fatigueByWarId.keys()) if (!liveKeys.has(key)) state.fatigueByWarId.delete(key);
   for (const war of [...world.wars]) {
     const key = warFatigueKey(war);
-    const age = world.time.fastTick - war.startedAtFastTick;
     const losses = [...war.contributionByNationId.values()].reduce((sum, value) => sum + value, 0);
     const fatigue = Math.min(100, (state.fatigueByWarId.get(key) ?? 0) + 1 + Math.min(2, losses / 10_000));
     state.fatigueByWarId.set(key, fatigue);
-    if (age >= 1200 && fatigue >= 45) offerPeace(world, war.nationAId, war.nationBId);
+
   }
+  updateWarNegotiations(world);
   for (const relation of state.relations.values()) {
     if (!relation.crisis || world.time.slowTick - relation.crisis.openedAtSlowTick < 10) continue;
     const mediator = world.nations.filter(isNationActive).find((nation) => nation.id !== relation.nationAId &&
