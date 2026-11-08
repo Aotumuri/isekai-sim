@@ -56,7 +56,7 @@ test("rejecting a territorial ultimatum escalates without preemptively changing 
 test("an old territorial agreement cannot authorize betrayal of an unrelated later truce", () => {
   const { world, a, b, id, relation } = scene();
   assert(openDiplomaticCrisis(world, a, b, [id])); assert(respondToCrisis(world, b, a, "concede"));
-  world.time.slowTick += 200;
+  world.time.slowTick += 10;
   relation.treaties = [{ type: "truce", expiresAtSlowTick: world.time.slowTick + 300 }];
   const influence = getDiplomacyState(world).influenceByNationId.get(a);
   assert.equal(betrayTerritorialSettlement(world, a, b), false);

@@ -193,7 +193,8 @@ export function betrayTerritorialSettlement(world: WorldState, aggressorId: Nati
     hasTreaty(world, aggressorId, targetId, "alliance") || hasTreaty(world, aggressorId, targetId, "non-aggression") ||
     ![aggressorId, targetId].every((id) => world.nations.some((nation) => nation.id === id && isNationActive(nation)))) return false;
   const relation = getRelation(world, aggressorId, targetId);
-  if (!relation.territorialSettlement || world.time.slowTick - relation.territorialSettlement.atSlowTick >= 120 || !hasTreaty(world, aggressorId, targetId, "truce") || !spendInfluence(world, aggressorId, 20)) return false;
+  if (!relation.territorialSettlement || world.time.slowTick - relation.territorialSettlement.atSlowTick >= 120 ||
+    !relation.treaties.some((treaty) => treaty.type === "truce" && treaty.expiresAtSlowTick === relation.territorialSettlement!.atSlowTick + 120 && treaty.expiresAtSlowTick > world.time.slowTick) || !spendInfluence(world, aggressorId, 20)) return false;
   relation.treaties = relation.treaties.filter((treaty) => treaty.type !== "truce");
   relation.cooldownUntilSlowTick = 0;
   if (!startDiplomaticWar(world, aggressorId, targetId)) return false;
