@@ -1,3 +1,4 @@
+import { allFieldUnits } from "../../src/sim/mobilization";
 import { getOwnerByMesoId, getAdjacentNationPairs } from "../../src/sim/world-cache";
 import { proposeTerritorialExchange, respondToTerritorialOffer } from "../../src/sim/territorial-deals";
 import { updateTerritorialClaims } from "../../src/sim/territorial-claims";
@@ -17,8 +18,9 @@ const arg = (name: string, fallback: number) => {
 };
 const ticks = arg("--ticks", 12000), requestedSeed = process.argv.includes("--seed") ? arg("--seed", 101) : null;
 for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 822748319788]) {
-  const world = createSeededWorld({ seed, width: 960, height: 540, quick: true });
-  world.settings = createSimulationSettings({ diplomacyEnabled: !process.argv.includes("--legacy") });
+  const settings = createSimulationSettings({ diplomacyEnabled: !process.argv.includes("--legacy") });
+  const world = createSeededWorld({ seed, width: 960, height: 540, quick: true, config: { systems: settings } });
+  world.settings = settings;
   const originalRegions = new Set(world.macroRegions.flatMap((macro) => macro.mesoRegionIds));
   if (process.argv.includes("--territorial-scene")) {
     const [a, b] = getAdjacentNationPairs(world)[0];
@@ -30,6 +32,7 @@ for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 8227483
     const offer = proposeTerritorialExchange(world, a, b, [parcel(a)], [parcel(b)]);
     if (!offer || !respondToTerritorialOffer(world, b, offer.id, true)) throw new Error("Failed territorial campaign setup");
   }
+  let peakArmy = 0, peakStrain = 0;
   let treatyPeak = 0, levels = 0, actualBattles = 0, last = 0;
   const result = withMutedSimulationLogs(() => {
     for (let part = 0; part < ticks; part += 100) {
@@ -40,6 +43,13 @@ for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 8227483
       actualBattles += world.battles.length;
       for (const nation of world.nations) for (const amount of Object.values(nation.resources)) {
         if (!Number.isFinite(amount) || amount < -1e-8) throw new Error(`Invalid resource balance at tick ${world.time.fastTick}`);
+      }
+      const militaryCounts = new Map<string, number>();
+      for (const unit of allFieldUnits(world)) if (unit.domain === "land") militaryCounts.set(unit.nationId, (militaryCounts.get(unit.nationId) ?? 0) + 1);
+      for (const count of militaryCounts.values()) peakArmy = Math.max(peakArmy, count);
+      for (const item of world.mobilization?.byNationId.values() ?? []) {
+        if (![item.burden, item.readiness, item.continuousDeployment].every(Number.isFinite) || item.burden < 0 || item.burden > 100 || item.readiness < 0 || item.readiness > 1) throw new Error("Invalid mobilization state");
+        peakStrain = Math.max(peakStrain, item.burden);
       }
       const parcels = world.macroRegions.flatMap((macro) => macro.mesoRegionIds);
       if (parcels.length !== originalRegions.size || new Set(parcels).size !== parcels.length || parcels.some((id) => !originalRegions.has(id))) throw new Error("Lost or duplicated territory");
@@ -85,6 +95,7 @@ for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 8227483
     treatyPeak, tradeDeliveries: world.internationalTrade?.delivered ?? 0, aidDeliveries: world.diplomacy?.aidDeliveries ?? 0,
     researchLevels: levels, retrofits: world.research?.retrofits ?? 0, licenses: world.research?.licensesShared ?? 0,
     territorialOffers: world.territorialDeals?.offers.length ?? 0, territorialSettlements: world.territorialDeals?.offers.filter((offer) => offer.status === "accepted").length ?? 0,
+    peakArmy, peakStrain, demobilizedUnits: [...(world.mobilization?.byNationId.values() ?? [])].reduce((sum, item) => sum + item.demobilized, 0),
     factions: world.factions?.factions.length ?? 0, factionMembers: world.factions?.factionByNationId.size ?? 0,
     factionInterventions: world.factions?.interventions ?? 0, battleSamples: actualBattles, eventCount: world.events?.length ?? 0 }));
 }
