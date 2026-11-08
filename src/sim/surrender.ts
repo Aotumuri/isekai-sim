@@ -1,3 +1,4 @@
+import { allFieldUnits } from "./mobilization";
 import type { MacroRegion } from "../worldgen/macro-region";
 import type { MesoRegion } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
@@ -24,6 +25,10 @@ export function updateSurrender(world: WorldState): void {
   }
   const warAdjacency = buildWarAdjacency(world.wars);
   const unitCountsByNation = collectUnitCountsByNation(world.units);
+  const fieldIds = new Set(world.units.map((unit) => unit.id));
+  for (const unit of allFieldUnits(world)) if (unit.volunteerOriginId && (unit.volunteerOriginId !== unit.nationId || !fieldIds.has(unit.id))) {
+    unitCountsByNation.set(unit.volunteerOriginId, (unitCountsByNation.get(unit.volunteerOriginId) ?? 0) + 1);
+  }
   const occupationCountsByNation = collectOccupationCountsByNation(
     mesoByNation,
     occupationByMesoId,
@@ -733,6 +738,12 @@ function repatriateUnitsAfterSurrender(
     if (ownedMesoIds.length === 0) {
       if (surrenderedNationIds.has(unit.nationId)) {
         changed = true;
+        const origin = world.nations.find((nation) => nation.id === unit.volunteerOriginId && nation.macroRegionIds.length);
+        if (origin) {
+          unit.nationId = origin.id; unit.regionId = origin.capitalMesoId;
+          unit.moveTargetId = null; unit.moveFromId = null; unit.moveToId = null; unit.moveProgressMs = 0;
+          remainingUnits.push(unit);
+        }
         continue;
       }
       remainingUnits.push(unit);

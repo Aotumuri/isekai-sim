@@ -914,11 +914,11 @@ interface DomainUnitCounts {
 
 function collectUnitCountsByNation(units: readonly UnitState[]): Map<NationId, DomainUnitCounts> {
   const counts = new Map<NationId, DomainUnitCounts>();
-  for (const unit of units) {
-    const count = counts.get(unit.nationId) ?? { land: 0, naval: 0 };
+  for (const unit of units) for (const nationId of new Set([unit.nationId, ...(unit.volunteerOriginId ? [unit.volunteerOriginId] : [])])) {
+    const count = counts.get(nationId) ?? { land: 0, naval: 0 };
     if (unit.domain === "naval") count.naval += 1;
     else count.land += 1;
-    counts.set(unit.nationId, count);
+    counts.set(nationId, count);
   }
   return counts;
 }

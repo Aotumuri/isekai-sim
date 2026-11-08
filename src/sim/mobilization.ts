@@ -40,6 +40,7 @@ export function allFieldUnits(world: WorldState): UnitState[] {
     for (const cargo of unit.cargoUnits) visit(cargo);
   };
   for (const unit of world.units) visit(unit);
+  for (const mission of world.volunteers?.missions ?? []) for (const unit of mission.transitUnits) visit(unit);
   return result;
 }
 export function getMobilizationThreat(world: WorldState, nationId: NationId): number {
@@ -100,7 +101,7 @@ export function updateMobilization(world: WorldState): void {
     if (item.threat >= 0.7) item.quietSinceSlowTick = world.time.slowTick;
     const limits = getArmyLimits(world, nation, item);
     item.standingArmy = limits.standing; item.maximumArmy = limits.maximum; item.authorizedArmy = limits.authorized;
-    const ownUnits = units.filter((unit) => unit.nationId === nation.id);
+    const ownUnits = units.filter((unit) => (unit.volunteerOriginId ?? unit.nationId) === nation.id);
     item.landUnits = ownUnits.filter((unit) => unit.domain === "land" && unit.manpower > 0).length;
     item.deployedManpower = ownUnits.reduce((sum, unit) => sum + Math.max(0, unit.manpower) * (unit.domain === "naval" ? 0.5 : 1), 0);
     const support = clamp(nation.warCooperation), safeShare = atWar ? 0.3 + support * 0.2 : 0.12;
@@ -145,7 +146,7 @@ export function updateDemobilization(world: WorldState): void {
     const ownUnits = allFieldUnits(world).filter((unit) => unit.nationId === nation.id);
     const actual = ownUnits.filter((unit) => unit.domain === "land").length;
     const excess = Math.max(0, actual - item.authorizedArmy), batch = Math.min(excess, Math.max(2, Math.ceil(actual * 0.05)));
-    const candidates = world.units.filter((unit) => unit.nationId === nation.id && unit.domain === "land" && unit.manpower > 0 && unit.cargoUnits.length === 0 &&
+    const candidates = world.units.filter((unit) => unit.nationId === nation.id && unit.domain === "land" && unit.manpower > 0 && unit.cargoUnits.length === 0 && !unit.volunteerOriginId && !world.militaryAccess?.orders.has(unit.id) &&
       owners.get(unit.regionId) === nation.id && !world.occupation.mesoById.has(unit.regionId) &&
       (!unit.moveToId || owners.get(unit.moveToId) === nation.id) && !unit.amphibiousEmbarkRequested && !unit.amphibiousLandRequested &&
       !world.amphibiousOperations.operationByUnitId.has(unit.id) && !world.amphibiousOperations.capabilityDemandByUnitId.has(unit.id) && !world.offensiveOperations.operationIdByUnitId.has(unit.id) &&

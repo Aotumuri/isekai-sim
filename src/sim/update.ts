@@ -1,3 +1,4 @@
+import { updateVolunteers } from "./volunteers";
 import { updateAlliedWarRequests } from "./allied-war-requests";
 import { updateMilitaryAccess } from "./military-access";
 import { updateMobilization, updateDemobilization } from "./mobilization";
@@ -184,6 +185,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateDiplomaticCrises(world);
   updateFactionWarCalls(world);
   updateAlliedWarRequests(world);
+  updateVolunteers(world);
   updateWarDeclarations(world);
   updateMobilization(world);
   beginAiGeographyEvaluation(world);

@@ -22,12 +22,13 @@ export function attachMobilizationControls(root: HTMLElement, world: WorldState,
     const item = getMobilization(world, nation.id), limits = getArmyLimits(world, nation, item), enabled = !!world.settings?.mobilizationEnabled;
     if (document.activeElement !== policy) policy.value = item.policy;
     policy.disabled = !enabled;
-    const own = allFieldUnits(world).filter((unit) => unit.nationId === nation.id);
+    const own = allFieldUnits(world).filter((unit) => unit.nationId === nation.id || unit.volunteerOriginId === nation.id);
     const land = own.filter((unit) => unit.domain === "land").length;
     view("status").textContent = enabled ? `${labels[item.phase]} · ${item.burden >= 70 ? "Severe civilian strain" : item.burden >= 40 ? "Civilian discontent is rising" : "Civilian strain is manageable"}` : "Mobilization disabled: legacy recruitment and the 100-unit land limit apply.";
     view("metrics").innerHTML = [["Fielded land units", land], ["Authorized army", limits.authorized], ["Standing army", limits.standing], ["Current full-mobilization ceiling", limits.maximum],
-      ["Civilian manpower pool", Math.floor(nation.resources.manpower)], ["Enlisted personnel", Math.round(own.reduce((sum, unit) => sum + unit.manpower, 0))],
-      ["Strain support penalty", `${Math.round(item.appliedSupportPenalty * 100)}%`]].map(([label, value]) => `<span>${label}<strong>${value}</strong></span>`).join("");
+      ["Civilian manpower pool", Math.floor(nation.resources.manpower)], ["Enlisted personnel", Math.round(own.filter((unit) => (unit.volunteerOriginId ?? unit.nationId) === nation.id).reduce((sum, unit) => sum + unit.manpower, 0))],
+      ["Volunteers abroad", own.filter((unit) => unit.volunteerOriginId === nation.id && unit.nationId !== nation.id).length],
+      ["Foreign volunteers commanded", own.filter((unit) => unit.nationId === nation.id && unit.volunteerOriginId && unit.volunteerOriginId !== nation.id).length], ["Strain support penalty", `${Math.round(item.appliedSupportPenalty * 100)}%`]].map(([label, value]) => `<span>${label}<strong>${value}</strong></span>`).join("");
     view("support-label").textContent = `War support · ${Math.round(nation.warCooperation * 100)}%`;
     view("strain-label").textContent = `Public strain · ${item.burden.toFixed(1)}/100`;
     view("readiness-label").textContent = `Mobilization readiness · ${Math.round(item.readiness * 100)}%`;
