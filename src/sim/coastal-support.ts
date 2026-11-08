@@ -5,7 +5,7 @@ import { isOperationalCombatShip } from "./maritime-escort";
 import { buildNavalPositioningRoute } from "./naval-pathfinding";
 import { isAmphibiousOwnedUnit } from "./amphibious";
 import { buildWarAdjacency, isAtWar } from "./war-state";
-import { getMesoById, getOwnerByMesoId } from "./world-cache";
+import { getMesoById, getOwnerByMesoId, getPortTargetsByNation } from "./world-cache";
 import type { WorldState } from "./world-state";
 
 /** Support actual coastal fighting and committed landings, never empty coasts. */
@@ -15,13 +15,13 @@ export function getCoastalSupportTargets(world: WorldState, nationId: NationId):
   const targets = new Set<MesoRegionId>();
   for (const unit of world.units) {
     if (unit.domain !== "land" || unit.manpower <= 0 || unit.org <= 0 || !unit.moveToId) continue;
-    const owner = ownerById.get(unit.moveToId);
+    const owner = world.occupation.mesoById.get(unit.moveToId) ?? ownerById.get(unit.moveToId);
     if (!owner || !isAtWar(unit.nationId, owner, warAdjacency)) continue;
     if (unit.nationId === nationId || owner === nationId) targets.add(unit.moveToId);
   }
   for (const operation of world.amphibiousOperations.operations) {
     if (operation.phase !== "transporting") continue;
-    const owner = ownerById.get(operation.destinationPortId);
+    const owner = world.occupation.mesoById.get(operation.destinationPortId) ?? ownerById.get(operation.destinationPortId);
     if (owner && isAtWar(operation.nationId, owner, warAdjacency) &&
       (operation.nationId === nationId || owner === nationId)) targets.add(operation.destinationPortId);
   }
@@ -40,15 +40,15 @@ export function canReachCoast(world: WorldState, nationId: NationId, coastId: Me
   const seas = getCoastalSeaRegions(world, coastId);
   const starts = new Set(world.units.filter((unit) => isOperationalCombatShip(unit, nationId) &&
     !isAmphibiousOwnedUnit(world, unit.id)).map((unit) => unit.regionId));
-  // A supplied home port can build a fleet even when no ship exists yet.
-  for (const [portId, ownerId] of getOwnerByMesoId(world)) {
-    if (ownerId === nationId && getMesoById(world).get(portId)?.building === "port") starts.add(portId);
-  }
+  // Home ports can build a fleet even when no ship exists yet.
+  for (const portId of getPortTargetsByNation(world).get(nationId) ?? []) starts.add(portId);
   return [...starts].some((start) => buildNavalPositioningRoute(world, start, seas, true).length > 0);
 }
 
 /** Bounded organization pressure. Ships must be on station in uncontested sea. */
 export function getCoastalSupportModifier(world: WorldState, nationId: NationId, coastId: MesoRegionId): number {
+  if (!world.supplyAssessment.navalStrategy.missions.some((mission) =>
+    mission.nationId === nationId && mission.type === "SUPPORT" && mission.targetCoastId === coastId)) return 1;
   const seas = new Set(getCoastalSeaRegions(world, coastId));
   if (seas.size === 0) return 1;
   const warAdjacency = buildWarAdjacency(world.wars);

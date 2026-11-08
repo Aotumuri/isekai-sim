@@ -374,7 +374,7 @@ function buildCandidates(world: WorldState, nationId: NationId): MissionCandidat
     const transport = world.units.find((unit) => unit.id === convoy.transportId);
     if (!transport || transport.manpower <= 0 ||
       !isAtWar(nationId, transport.nationId, warAdjacency) ||
-      ownerById.get(convoy.route.destinationPortId) !== nationId ||
+      (world.occupation.mesoById.get(convoy.route.destinationPortId) ?? ownerById.get(convoy.route.destinationPortId)) !== nationId ||
       mesoById.get(transport.regionId)?.type !== "sea") continue;
     const canIntercept = world.units.some((ship) => {
       if (!isOperationalCombatShip(ship, nationId) || isAmphibiousOwnedUnit(world, ship.id)) return false;
@@ -418,8 +418,11 @@ function buildCandidates(world: WorldState, nationId: NationId): MissionCandidat
   }
   for (const coastId of getCoastalSupportTargets(world, nationId)) {
     if (!canReachCoast(world, nationId, coastId)) continue;
-    result.push({ key: `SUPPORT:${nationId}:${coastId}`, nationId, type: "SUPPORT",
-      priority: 190, targetCoastId: coastId, reasonFlags: ["coastal-fire-support"] });
+    for (let slot = 0; slot < 3; slot += 1) result.push({
+      key: `SUPPORT:${nationId}:${coastId}${slot > 0 ? `:reinforcement-${slot}` : ""}`,
+      nationId, type: "SUPPORT", priority: 190 - slot, slotIndex: slot,
+      targetCoastId: coastId, reasonFlags: ["coastal-fire-support"],
+    });
   }
   return result.sort((a, b) => b.priority - a.priority || compareIds(a.key, b.key));
 }
@@ -724,7 +727,7 @@ export function getNavalUnitOwnership(
 function missionKey(mission: NavalMission): string {
   const base = `${mission.type}:${mission.nationId}:${mission.targetShipId ?? mission.targetLinkId ?? mission.targetPortId ?? mission.targetCoastId ?? ""}`;
   if (mission.type === "ESCORT") return `${base}:${mission.slotIndex ?? 0}`;
-  if (mission.type === "RAID" && (mission.slotIndex ?? 0) > 0) return `${base}:reinforcement-${mission.slotIndex}`;
+  if ((mission.type === "RAID" || mission.type === "SUPPORT") && (mission.slotIndex ?? 0) > 0) return `${base}:reinforcement-${mission.slotIndex}`;
   return base;
 }
 function distanceSquared(ship: UnitState, targetId: MesoRegionId, world: WorldState): number {

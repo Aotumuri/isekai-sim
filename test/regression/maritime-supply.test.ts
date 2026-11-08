@@ -1,3 +1,4 @@
+import { getCoastalSupportModifier } from "../../src/sim/coastal-support";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SeededRng } from "../../src/utils/seeded-rng";
@@ -667,6 +668,99 @@ test("amphibious escorts initiate battle against hostile ships without a strateg
   updateBattles(world);
   assert(hostile.manpower < manpower);
   assert(escort.org < 1);
+});
+
+test("a coastal offensive creates shore support without enemy supply convoys", () => {
+  const world = createCoastalBattleWorld();
+  const ship = world.units.find((unit) => unit.type === "CombatShip")!;
+  updateNavalStrategy(world);
+  const mission = world.supplyAssessment.navalStrategy.missionByShipId.get(ship.id);
+  assert.equal(mission?.type, "SUPPORT");
+  assert.equal(mission?.targetCoastId, id("port-b"));
+  assert.equal(getCoastalSupportModifier(world, NATION_A, id("port-b")), 1);
+  ship.moveTicksPerRegion = 1;
+  updateNavalStrategyMovement(world, FAST_TICK_MS);
+  assert.equal(ship.regionId, id("sea-ab"));
+  assert.equal(getCoastalSupportModifier(world, NATION_A, id("port-b")), 1.12);
+  const missionId = mission.id;
+  updateNavalStrategy(world);
+  assert.equal(world.supplyAssessment.navalStrategy.missionByShipId.get(ship.id)?.id, missionId);
+  // When fighting ends, the fleet returns to reserve.
+  world.units.find((unit) => unit.nationId === NATION_A && unit.domain === "land")!.moveToId = null;
+  updateNavalStrategy(world);
+  assert.equal(world.supplyAssessment.navalStrategy.missionByShipId.get(ship.id)?.type, "RESERVE");
+});
+
+test("shore support increases organization pressure without increasing manpower damage", () => {
+  const baseline = createCoastalBattleWorld(false);
+  const supported = createCoastalBattleWorld();
+  const ship = supported.units.find((unit) => unit.type === "CombatShip")!;
+  ship.regionId = id("sea-ab");
+  updateNavalStrategy(supported);
+  updateBattles(baseline);
+  updateBattles(supported);
+  const defender = (world: WorldState) => world.units.find((unit) => unit.nationId === NATION_B)!;
+  assert(defender(supported).org < defender(baseline).org);
+  assert.equal(defender(supported).manpower, defender(baseline).manpower);
+  const attacker = (world: WorldState) => world.units.find((unit) => unit.nationId === NATION_A && unit.domain === "land")!;
+  assert.equal(attacker(supported).org, attacker(baseline).org);
+});
+
+test("shore support is capped and requires an operational fleet in uncontested sea", () => {
+  const world = createCoastalBattleWorld();
+  const ship = world.units.find((unit) => unit.type === "CombatShip")!;
+  ship.regionId = id("sea-ab");
+  updateNavalStrategy(world);
+  for (let i = 0; i < 4; i += 1) {
+    const extra = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("sea-ab"), "CombatShip");
+    world.units.push(extra);
+  }
+  updateNavalStrategy(world);
+  assert.equal(getCoastalSupportModifier(world, NATION_A, id("port-b")), 1.25);
+  const hostile = createUnitForType(createUnitId(world.unitIdCounter++), NATION_B, id("sea-ab"), "CombatShip");
+  world.units.push(hostile);
+  assert.equal(getCoastalSupportModifier(world, NATION_A, id("port-b")), 1);
+  hostile.org = 0;
+  assert.equal(getCoastalSupportModifier(world, NATION_A, id("port-b")), 1.25);
+  for (const unit of world.units.filter((unit) => unit.type === "CombatShip" && unit.nationId === NATION_A)) unit.combatPower = 0;
+  assert.equal(getCoastalSupportModifier(world, NATION_A, id("port-b")), 1);
+  assert.equal(getCoastalSupportModifier(world, NATION_A, id("island-b")), 1);
+});
+
+test("a coastal defense fleet pressures the land attacker", () => {
+  const baseline = createCoastalBattleWorld(false);
+  const supported = createCoastalBattleWorld();
+  for (const world of [baseline, supported]) {
+    const attacker = world.units.find((unit) => unit.nationId === NATION_A && unit.domain === "land")!;
+    const defender = world.units.find((unit) => unit.nationId === NATION_B)!;
+    attacker.moveToId = null;
+    attacker.regionId = id("port-a");
+    defender.regionId = id("land");
+    defender.moveToId = id("port-a");
+  }
+  const ship = supported.units.find((unit) => unit.type === "CombatShip")!;
+  ship.regionId = id("sea-ab");
+  updateNavalStrategy(supported);
+  updateBattles(baseline);
+  updateBattles(supported);
+  assert(supported.units.find((unit) => unit.nationId === NATION_B)!.org <
+    baseline.units.find((unit) => unit.nationId === NATION_B)!.org);
+});
+
+test("coastal fighting bootstraps a useful fleet from zero", () => {
+  const world = createCoastalBattleWorld(false);
+  const nation = world.nations[0]!;
+  nation.resources.manpower = 100_000; nation.resources.steel = 10_000;
+  nation.resources.weapons = 10_000; nation.resources.fuel = 10_000;
+  nation.nextUnitProductionTick = 0;
+  updateSupplyAssessment(world);
+  const force = world.supplyAssessment.navalStrategy.assessments.find((item) => item.nationId === NATION_A)?.desiredForce;
+  assert(force && force.offensiveOpportunityDemand > 0 && force.deficit > 0);
+  updateProduction(world);
+  const ship = world.units.find((unit) => unit.nationId === NATION_A && unit.type === "CombatShip");
+  assert(ship);
+  updateNavalStrategy(world);
+  assert.equal(world.supplyAssessment.navalStrategy.missionByShipId.get(ship.id)?.type, "SUPPORT");
 });
 
 test("CombatShips deliberately select moving enemy convoys without interdicting static routes", () => {
@@ -1802,6 +1896,20 @@ function addEnemyPort(world: WorldState): void {
   world.mapVersion += 1;
   world.territoryVersion += 1;
   world.buildingVersion += 1;
+}
+
+function createCoastalBattleWorld(withShip = true): WorldState {
+  const world = createMaritimeWorld(true, 0);
+  world.nations.push(createNation(NATION_B, id("port-b"), []));
+  world.occupation.mesoById.set(id("port-b"), NATION_B);
+  world.occupation.version += 1;
+  declareWar(world.wars, NATION_A, NATION_B, 0);
+  const attacker = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("island-b"), "Infantry");
+  attacker.moveToId = id("port-b");
+  const defender = createUnitForType(createUnitId(world.unitIdCounter++), NATION_B, id("port-b"), "Infantry");
+  world.units.push(attacker, defender);
+  if (withShip) world.units.push(createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip"));
+  return world;
 }
 
 function createStrategicAllocationWorld(combatShipCount: number): WorldState {
