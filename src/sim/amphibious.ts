@@ -507,9 +507,15 @@ export function updateAmphibiousPlanning(world: WorldState): void {
     const opportunityValid = isAtWar(demand.nationId, demand.enemyNationId, warAdjacency) &&
       ownPorts.length > 0 && enemyPorts.length > 0 &&
       isStrategicOpportunity(world, demand.nationId, demand.enemyNationId);
-    const candidate = opportunityValid
-      ? chooseCandidate(world, demand.nationId, demand.enemyNationId, ownPorts, enemyPorts)
+    // Reassess the target without resetting fleet positioning whenever its score changes.
+    const assemblyPorts = hasCompleteFleetLease(demand) && ownPorts.includes(demand.departurePortId)
+      ? [demand.departurePortId] : ownPorts;
+    let candidate = opportunityValid
+      ? chooseCandidate(world, demand.nationId, demand.enemyNationId, assemblyPorts, enemyPorts)
       : null;
+    if (opportunityValid && !candidate && assemblyPorts !== ownPorts) {
+      candidate = chooseCandidate(world, demand.nationId, demand.enemyNationId, ownPorts, enemyPorts);
+    }
     if (demand.readyAtTick !== null) reportOperationConnection({
       demandId: demand.id, tick: world.time.fastTick, stage: "candidate", candidateAvailable: candidate !== null,
       gates: {
@@ -571,6 +577,25 @@ export function updateAmphibiousOperations(world: WorldState): void {
   const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
   for (const operation of world.amphibiousOperations.operations) {
     if (operation.phase === "landed" || operation.phase === "cancelled") continue;
+    if (operation.phase === "transporting") {
+      // Once at sea, losing cover exposes the transports to attack. Surviving
+      // transports continue along the route with the troops still aboard.
+      const lostEscorts = operation.escortIds.filter((id) => !isOperationalCombatShip(unitById.get(id), operation.nationId));
+      if (lostEscorts.length > 0) {
+        operation.escortIds = operation.escortIds.filter((id) => !lostEscorts.includes(id));
+        for (const id of lostEscorts) {
+          const escort = unitById.get(id);
+          if (escort) resetMovement(escort);
+        }
+        for (const id of operation.convoyIds) {
+          const convoy = world.supplyAssessment.convoys.convoyById.get(id);
+          if (!convoy) continue;
+          convoy.escortIds = convoy.escortIds.filter((escortId) => !lostEscorts.includes(escortId));
+          convoy.members = convoy.members.filter((member) => !lostEscorts.includes(member.unitId));
+        }
+        world.amphibiousOperations.version += 1;
+      }
+    }
     const validation = getAmphibiousOperationValidation(world, operation, unitById);
     if (validation.failures.length > 0) {
       cancelOperation(world, operation, validation.failures[0]!, validation.phase, unitById);
@@ -720,12 +745,16 @@ export function updateAmphibiousCapabilityAssembly(world: WorldState, dtMs: numb
 }
 
 function isStrategicOpportunity(world: WorldState, nationId: NationId, enemyId: NationId): boolean {
-  const hasLandFront = world.landFronts.operationalSectors.some((front) =>
-    front.sideA.nationId === nationId && front.sideB.nationId === enemyId ||
-    front.sideA.nationId === enemyId && front.sideB.nationId === nationId);
+  const hasLandFront = hasAmphibiousLandFront(world, nationId, enemyId);
   const usefulOffensive = world.offensiveOperations.operations.some((operation) =>
     operation.nationId === nationId && operation.enemyNationId === enemyId && operation.outcome === null);
   return !hasLandFront || !usefulOffensive;
+}
+
+function hasAmphibiousLandFront(world: WorldState, nationId: NationId, enemyId: NationId): boolean {
+  return world.landFronts.operationalSectors.some((front) =>
+    front.sideA.nationId === nationId && front.sideB.nationId === enemyId ||
+    front.sideA.nationId === enemyId && front.sideB.nationId === nationId);
 }
 
 interface LandingCandidate {
@@ -1005,21 +1034,16 @@ function refreshCapabilityProgress(world: WorldState, demand: AmphibiousCapabili
     demand.assignedTransportIds = leaseTransports;
     demand.assignedEscortIds = leaseEscorts;
   }
-  demand.assignedLandingUnitIds = demand.assignedLandingUnitIds.filter((id) => {
-    const unit = unitById.get(id);
-    return !!unit && unit.domain === "land" && unit.nationId === demand.nationId &&
-      canReachControlled(world, demand.nationId, unit.regionId, demand.departurePortId);
-  });
+  const previousLandingIds = new Set(demand.assignedLandingUnitIds);
   rebuildOwnership(world);
-  const landingForce = selectLandingForce(world, demand.nationId, demand.departurePortId,
-    demand.requiredLandingStrength, demand.desiredLandingUnitCount);
-  const landingById = new Map([
-    ...demand.assignedLandingUnitIds.map((id) => [id, unitById.get(id)] as const),
-    ...landingForce.units.map((unit) => [unit.id, unit] as const),
-  ]);
-  const selectedLandingUnits = [...landingById.values()].filter((unit): unit is UnitState => !!unit)
-    .sort(compareLandingUnits).slice(0, demand.desiredLandingUnitCount);
+  const landingForce = selectLandingForce(world, demand);
+  const selectedLandingUnits = landingForce.units;
   demand.assignedLandingUnitIds = selectedLandingUnits.map((unit) => unit.id);
+  for (const id of demand.assignedLandingUnitIds) previousLandingIds.delete(id);
+  for (const id of previousLandingIds) {
+    const unit = unitById.get(id);
+    if (unit?.moveTargetId === demand.departurePortId) resetMovement(unit);
+  }
   for (const unit of selectedLandingUnits) {
     releaseUnitFromFrontAllocation(world, unit.id);
     if (unit.regionId !== demand.departurePortId) unit.moveTargetId = demand.departurePortId;
@@ -1028,12 +1052,13 @@ function refreshCapabilityProgress(world: WorldState, demand: AmphibiousCapabili
   demand.availableTransportCount = demand.assignedTransportIds.length;
   demand.availableEscortCount = demand.assignedEscortIds.length;
   demand.availableLandingUnitCount = selectedLandingUnits.length;
-  demand.availableLandingStrength = selectedLandingUnits.reduce((sum, unit) => sum + getUnitCombatStrength(unit), 0);
+  demand.availableLandingStrength = landingForce.strength;
   demand.assaultRatio = demand.requiredLandingStrength > 0
     ? demand.availableLandingStrength / demand.requiredLandingStrength : 0;
   demand.lastValidatedAtTick = world.time.fastTick;
-  const forceReady = demand.availableLandingUnitCount >= demand.desiredLandingUnitCount &&
+  const forceReady = demand.availableLandingUnitCount > 0 &&
     demand.availableLandingStrength >= demand.requiredLandingStrength;
+  if (forceReady) demand.desiredLandingUnitCount = demand.availableLandingUnitCount;
   const opportunityWindow = estimateOpportunityWindow(world, demand.nationId, demand.enemyNationId).ticks;
   const emergencyForceReady = opportunityWindow <= WORLD_BALANCE.unit.amphibiousAssault.emergencyWindowTicks &&
     demand.assaultRatio >= WORLD_BALANCE.unit.amphibiousAssault.emergencyMinimumAssaultRatio;
@@ -1049,8 +1074,9 @@ function refreshCapabilityProgress(world: WorldState, demand: AmphibiousCapabili
     demand.desiredEscortCount = Math.max(1, Math.ceil(demand.desiredTransportCount /
       Math.max(1, WORLD_BALANCE.unit.amphibiousAssault.escortsPerTransports)));
   }
-  if (hasCompleteFleetLease(demand) && !launchForceReady) {
-    // A fleet is never held while the minimum landing force is no longer viable.
+  const leasedCapacity = getFleetTransportCapacity(leaseTransports.map((id) => unitById.get(id)!));
+  if (hasCompleteFleetLease(demand) && (!launchForceReady || leasedCapacity < demand.availableLandingUnitCount)) {
+    // Re-evaluate the lease when the current fleet cannot carry the assault force.
     releaseFleetLease(world, demand);
     rebuildOwnership(world);
   }
@@ -1092,6 +1118,7 @@ function refreshCapabilityProgress(world: WorldState, demand: AmphibiousCapabili
     startAssembly(world, demand, unitById);
     completeAssemblyIfReady(world, demand, unitById);
   }
+  refreshFleetReadinessTarget(world, demand);
   rebuildOwnership(world);
   if (previousState !== demand.state || demand.state !== "ready") {
     world.amphibiousOperations.version += 1;
@@ -1413,7 +1440,9 @@ export function getAmphibiousOperationValidation(
     failures.push("route-invalid");
   }
   if (transports.some((transport) => !isOperationalTransport(transport, op.nationId))) failures.push("transport-lost");
-  if (op.escortIds.some((id) => !isOperationalCombatShip(units.get(id), op.nationId))) failures.push("escort-lost");
+  if (phase === "ready" && op.escortIds.some((id) => !isOperationalCombatShip(units.get(id), op.nationId))) {
+    failures.push("escort-lost");
+  }
   const liveForce = op.phase === "escort-wait" || op.phase === "transporting"
     ? transports.flatMap((transport) => transport?.cargoUnits ?? [])
     : op.assignedUnitIds.map((id) => units.get(id)).filter(Boolean);
@@ -1974,7 +2003,10 @@ function estimateOpportunityWindow(
   const resistanceWindowTicks = Math.round(120 + resistance * 1080);
   let window = resistanceWindowTicks;
   reasons.push(`enemy-resistance:${resistance.toFixed(2)}`);
-  const ageWindow = Math.max(240, Math.round(1200 - Math.max(0, warAge - 800) * 0.25));
+  // Without a land front, elapsed time alone cannot close the only invasion route.
+  const ageWindow = hasAmphibiousLandFront(world, nationId, enemyId)
+    ? Math.max(240, Math.round(1200 - Math.max(0, warAge - 800) * 0.25))
+    : 1200;
   if (ageWindow < window) reasons.push("mature-war");
   window = Math.min(window, ageWindow);
   const afterAgeCapTicks = window;
@@ -2073,14 +2105,13 @@ function findAvailableTransports(
   const logisticsTransportIds = new Set(
     world.supplyAssessment.maritimeLogistics.assignments.map((assignment) => assignment.transportId),
   );
-  return world.units.filter((unit) =>
+  const fleet = world.units.filter((unit) =>
     isOperationalTransport(unit, nationId) &&
     Number.isFinite(unit.moveTicksPerRegion) &&
     !logisticsTransportIds.has(unit.id) &&
-    !isAmphibiousOwnedUnit(world, unit.id) &&
-    (departurePortId === undefined ||
-      getCachedMaritimePositioningSegments(world, unit.regionId, departurePortId) !== null)
-  ).sort(compareUnits);
+    !isAmphibiousOwnedUnit(world, unit.id)
+  );
+  return rankReachableFleet(world, fleet, departurePortId);
 }
 
 function findAvailableEscorts(
@@ -2091,26 +2122,33 @@ function findAvailableEscorts(
   const reserveIds = new Set(world.supplyAssessment.navalStrategy.missions
     .filter((mission) => mission.nationId === nationId && mission.type === "RESERVE")
     .flatMap((mission) => mission.shipIds));
-  return world.units.filter((unit) =>
+  const fleet = world.units.filter((unit) =>
     isOperationalCombatShip(unit, nationId) &&
     Number.isFinite(unit.moveTicksPerRegion) &&
     reserveIds.has(unit.id) &&
-    !isAmphibiousOwnedUnit(world, unit.id) &&
-    (departurePortId === undefined ||
-      getCachedMaritimePositioningSegments(world, unit.regionId, departurePortId) !== null)
-  ).sort(compareUnits);
+    !isAmphibiousOwnedUnit(world, unit.id)
+  );
+  return rankReachableFleet(world, fleet, departurePortId);
+}
+
+function rankReachableFleet(
+  world: WorldState,
+  fleet: UnitState[],
+  departurePortId?: MesoRegionId,
+): UnitState[] {
+  if (!departurePortId) return fleet.sort(compareUnits);
+  return fleet.flatMap((unit) => {
+    const segments = getCachedMaritimePositioningSegments(world, unit.regionId, departurePortId);
+    return segments === null ? [] : [{ unit, eta: positioningTicks(unit, segments) }];
+  }).sort((a, b) => a.eta - b.eta || compareUnits(a.unit, b.unit)).map(({ unit }) => unit);
 }
 
 function selectLandingForce(
   world: WorldState,
-  nationId: NationId,
-  departurePortId: MesoRegionId,
-  requiredStrength: number,
-  desiredUnitCount: number,
-  providedDistance?: Map<MesoRegionId, number>,
+  demand: AmphibiousCapabilityDemand,
 ): { units: UnitState[]; strength: number } {
-  const distance = providedDistance ??
-    getControlledDistanceField(world, nationId, [departurePortId]).distanceByRegionId;
+  const { nationId, departurePortId, requiredLandingStrength } = demand;
+  const previousIds = new Set(demand.assignedLandingUnitIds);
   const unavailable = new Set([
     ...world.retreatPlans.retreatIdByUnitId.keys(),
     ...world.reorganization.planIdByUnitId.keys(),
@@ -2121,13 +2159,18 @@ function selectLandingForce(
   ]);
   const candidates = world.units.filter((unit) =>
     unit.domain === "land" && unit.nationId === nationId &&
-    !unavailable.has(unit.id) &&
+    getUnitCombatStrength(unit) > 0 && !unavailable.has(unit.id) &&
+    !world.amphibiousOperations.operationByUnitId.has(unit.id) &&
+    (!world.amphibiousOperations.capabilityDemandByUnitId.has(unit.id) || previousIds.has(unit.id)) &&
     canReachControlled(world, nationId, unit.regionId, departurePortId)
-  ).sort(compareLandingUnits);
+  ).sort((a, b) =>
+    Number(b.regionId === departurePortId) - Number(a.regionId === departurePortId) ||
+    Number(previousIds.has(b.id)) - Number(previousIds.has(a.id)) ||
+    compareLandingUnits(a, b));
   const units: UnitState[] = [];
   let strength = 0;
   for (const unit of candidates) {
-    if (units.length >= desiredUnitCount && strength >= requiredStrength) break;
+    if (strength >= requiredLandingStrength) break;
     units.push(unit);
     strength += getUnitCombatStrength(unit);
   }

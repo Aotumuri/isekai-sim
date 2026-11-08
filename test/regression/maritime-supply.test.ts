@@ -253,20 +253,7 @@ test("amphibious planning delays for combat power then launches multiple transpo
 });
 
 test("a launched amphibious voyage survives loss of its historical departure port", () => {
-  const world = createMaritimeWorld(true, 3);
-  const enemyMacroIds = world.macroRegions
-    .filter((macro) => macro.mesoRegionIds.includes(id("port-b")) || macro.mesoRegionIds.includes(id("island-b")))
-    .map((macro) => { macro.nationId = NATION_B; return macro.id; });
-  world.nations.push(createNation(NATION_B, id("island-b"), enemyMacroIds));
-  world.cache.ownerByMesoId.clear();
-  declareWar(world.wars, NATION_A, NATION_B, 0);
-  const infantry = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "Infantry");
-  const escort = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip");
-  world.units.push(infantry, escort);
-  world.supplyAssessment.navalStrategy.missions = [{
-    id: "reserve-test", nationId: NATION_A, type: "RESERVE", shipIds: [escort.id],
-    targetPortId: id("port-a"), priority: 10, createdTick: 0, status: "ACTIVE", reasonFlags: ["test-reserve"],
-  }];
+  const { world, infantry } = createAmphibiousVoyageWorld();
   updateAmphibiousPlanning(world);
   const operation = world.amphibiousOperations.operations[0]!;
 
@@ -307,6 +294,68 @@ test("a launched amphibious voyage survives loss of its historical departure por
   assert.equal(operation.phase, "landed");
   assert.equal(infantry.regionId, id("port-b"));
 });
+
+test("surviving amphibious transports can land after losing their escort at sea", () => {
+  const { world, infantry, escort } = createAmphibiousVoyageWorld();
+  updateAmphibiousPlanning(world);
+  const operation = world.amphibiousOperations.operations[0]!;
+
+  for (let tick = 0; tick < 4 && operation.phase !== "transporting"; tick += 1) {
+    world.time.fastTick += 1;
+    updateAmphibiousOperations(world);
+  }
+  assert.equal(operation.phase, "transporting");
+  assert(operation.convoyId);
+
+  const convoy = world.supplyAssessment.convoys.convoyById.get(operation.convoyId)!;
+  for (let tick = 0; tick < 100 && convoy.currentWaypoint === 0; tick += 1) {
+    updateConvoyMovement(world, FAST_TICK_MS);
+  }
+  assert.ok(convoy.currentWaypoint > 0);
+  escort.org = 0;
+  updateAmphibiousOperations(world);
+  assert.equal(operation.phase, "transporting");
+  assert.deepEqual(convoy.escortIds, []);
+  assert.deepEqual(convoy.members.map((member) => member.role), ["transport"]);
+  assert.equal(world.amphibiousOperations.operationByUnitId.has(escort.id), false);
+
+  for (let tick = 0; tick < 400 && (operation.phase as string) !== "landed"; tick += 1) {
+    world.time.fastTick += 1;
+    updateConvoyMovement(world, FAST_TICK_MS);
+    updateAmphibiousOperations(world);
+  }
+  assert.equal(operation.phase, "landed");
+  assert.equal(infantry.regionId, id("port-b"));
+});
+
+test("a viable island crossing still launches late in the war", () => {
+  const { world, escort } = createAmphibiousVoyageWorld();
+  escort.moveTicksPerRegion = 150;
+  world.time.fastTick = 10_000;
+  updateAmphibiousPlanning(world);
+
+  const operation = world.amphibiousOperations.operations[0];
+  assert.ok(operation);
+  assert.ok(operation.launchFeasibility.estimatedVoyageTicks > 240);
+});
+
+function createAmphibiousVoyageWorld() {
+  const world = createMaritimeWorld(true, 3);
+  const enemyMacroIds = world.macroRegions
+    .filter((macro) => macro.mesoRegionIds.includes(id("port-b")) || macro.mesoRegionIds.includes(id("island-b")))
+    .map((macro) => { macro.nationId = NATION_B; return macro.id; });
+  world.nations.push(createNation(NATION_B, id("island-b"), enemyMacroIds));
+  world.cache.ownerByMesoId.clear();
+  declareWar(world.wars, NATION_A, NATION_B, 0);
+  const infantry = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "Infantry");
+  const escort = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip");
+  world.units.push(infantry, escort);
+  world.supplyAssessment.navalStrategy.missions = [{
+    id: "reserve-test", nationId: NATION_A, type: "RESERVE", shipIds: [escort.id],
+    targetPortId: id("port-a"), priority: 10, createdTick: 0, status: "ACTIVE", reasonFlags: ["test-reserve"],
+  }];
+  return { world, infantry, escort };
+}
 
 test("an island war bootstraps amphibious capability from zero through naval production", () => {
   const world = createMaritimeWorld(true, 0);

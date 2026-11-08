@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
 import type { MesoRegionId } from "../../src/worldgen/meso-region";
 import { createScenarioWorld } from "../scenarios";
 import { runSimulation } from "../helpers/simulation-driver";
@@ -21,6 +22,31 @@ test("two-island amphibious scenario has exactly two isolated balanced combatant
   assert.deepEqual(world.nations.map((nation) => nation.resources), [world.nations[0]!.resources, world.nations[0]!.resources]);
   assert.deepEqual(world.nations.map((nation) =>
     world.units.filter((unit) => unit.nationId === nation.id).length), [21, 21]);
+});
+
+test("competing ports do not keep island invasion fleets from sailing and landing", () => {
+  const world = createScenarioWorld("two-island-amphibious", {
+    seed: 822_748_319_788, width: 640, height: 360, quick: true,
+  });
+  withMutedSimulationLogs(() => runSimulation(world, { ticks: 2_000 }));
+
+  assert.ok(world.amphibiousOperations.operations.some((operation) =>
+    operation.kind === "landing" && operation.phase === "landed"));
+});
+
+test("an island invasion lands before the AI negotiates peace", () => {
+  const world = createScenarioWorld("two-island-amphibious", {
+    seed: 9, width: 640, height: 360, quick: true,
+    config: { systems: { diplomacyEnabled: true } },
+  });
+  withMutedSimulationLogs(() => runSimulation(world, { ticks: 2_600 }));
+
+  const settlement = world.warNegotiations?.settlements[0];
+  assert.ok(settlement);
+  assert.ok(world.amphibiousOperations.operations.some((operation) =>
+    operation.kind === "landing" && operation.phase === "landed" &&
+    operation.completedAtTick !== null &&
+    operation.completedAtTick * FAST_TICK_MS <= settlement.atSlowTick * SLOW_TICK_MS));
 });
 
 test("an established bridgehead remains a strategic reinforcement objective", () => {

@@ -1,3 +1,4 @@
+import type { WorldConfig } from "../../src/data/world-config";
 import type { WorldState } from "../../src/sim/world-state";
 
 export interface ScenarioOptions {
@@ -5,6 +6,7 @@ export interface ScenarioOptions {
   width: number;
   height: number;
   quick: boolean;
+  config?: Partial<WorldConfig>;
   reserveEnabled?: boolean;
   reorganizationEnabled?: boolean;
   exploitationEnabled?: boolean;
