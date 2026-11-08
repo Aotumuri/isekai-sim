@@ -140,6 +140,7 @@ function formatUnitLines(units: UnitState[], world?: WorldState): string[] {
     );
     const navalStatus = world ? formatNavalUnitStatus(world, unit) : null;
     if (navalStatus) lines.push(navalStatus);
+    if (world && unit.volunteerOriginId) lines.push(`Volunteers from: ${getNationName(world, unit.volunteerOriginId)}`);
     const equipment = formatUnitEquipment(unit);
     if (equipment) {
       lines.push(`Eq: ${equipment}`);

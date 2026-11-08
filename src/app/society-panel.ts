@@ -1,3 +1,4 @@
+import { attachMilitaryCooperationControls } from "./military-cooperation-controls";
 import { attachMobilizationControls } from "./mobilization-controls";
 import { attachTerritoryControls, districtName } from "./territory-controls";
 import { attachFactionControls } from "./faction-controls";
@@ -57,6 +58,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
         <div class="society-actions"><button type="button" data-action="aid" title="Send 20 weapons and retain a reserve of 30. Requires friendly relations and an open route.">Send 20 weapons</button><button type="button" data-action="peace" title="A recent war or a decisive advantage can prevent a negotiated peace.">Offer peace</button><button type="button" data-action="crisis" class="society-danger" title="12 influence. Treaties, strategic access and military strength constrain ultimatums.">Ultimatum · 12</button></div>
         <div data-view="crisis"></div>
         <details><summary>Break a treaty (damages trust and opinion)</summary><div class="society-actions"><button type="button" data-action="break-alliance">Break alliance</button><button type="button" data-action="break-pact">Break non-aggression</button><button type="button" data-action="break-trade">Break trade pact</button></div></details>
+        <div data-military-cooperation-ui></div>
         <h2>Resource exchange</h2><p class="society-note">Exchange equal value. Exports are reserved at dispatch and arrive after transit.</p>
         <div class="society-trade-form"><label>Export<select data-control="export" aria-label="Export resource">${resourceOptions}</select></label><label>Amount<input data-control="amount" aria-label="Export quantity" type="number" min="1" max="50" value="12" step="1"></label><label>Import<select data-control="import" aria-label="Import resource">${resourceOptions}</select></label><button type="button" data-action="exchange">Propose exchange</button></div><p class="society-note" data-view="exchange"></p>
         <div data-view="shipments"></div><h2>Relations</h2><div data-view="relations"></div>
@@ -84,6 +86,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
   const factions = attachFactionControls(wrapper.querySelector<HTMLElement>("[data-faction-ui]")!, world, () => nationSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   const territories = attachTerritoryControls(wrapper.querySelector<HTMLElement>("[data-territory-ui]")!, world, () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   const mobilizationControls = attachMobilizationControls(wrapper.querySelector<HTMLElement>("[data-mobilization-ui]")!, world, () => nationSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
+  const militaryCooperation = attachMilitaryCooperationControls(wrapper.querySelector<HTMLElement>("[data-military-cooperation-ui]")!, world, () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   let visible = false, lastRender = -Infinity, cachedNationIds = "";
   let lastPaused: boolean | undefined;
   let lastSelected: NationId | null = null, lastTarget: NationId | null = null;
@@ -160,6 +163,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     factions.update();
     territories.update();
     mobilizationControls.update();
+    militaryCooperation.update();
     const design = getNationalDesign(world, a);
     view("design").innerHTML = [["Firepower", design.firepower], ["Reliability", design.reliability], ["Weapons required", design.weaponCost], ["Manufacturing steel", design.steelCost], ["Fuel use", design.fuelUse], ["Organization recovery", design.recovery]].map(([label, value]) => `<span>${label}<strong>×${Number(value).toFixed(2)}</strong></span>`).join("");
     view("events").innerHTML = [...(world.events ?? [])].slice(-40).reverse().map((event) => `<article class="society-event"><time>${Math.floor(event.tick / 600)}:${String(Math.floor(event.tick / 10) % 60).padStart(2, "0")}</time><span>${esc(event.message)}</span></article>`).join("") || '<p class="society-note">Diplomacy, trade, research and mobilization events appear here.</p>';
