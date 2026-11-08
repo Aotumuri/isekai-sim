@@ -1,3 +1,5 @@
+import { formatCoastalSupportStatus, formatNavalUnitStatus } from "../naval-status";
+import type { WorldState } from "../../sim/world-state";
 import { EQUIPMENT_CATALOG } from "../../data/equipment-catalog";
 import type { UnitState } from "../../sim/unit";
 import type { MacroRegion } from "../../worldgen/macro-region";
@@ -11,6 +13,7 @@ export function formatRegionTooltip(
   macro: MacroRegion | null,
   nation: Nation | null,
   units: UnitState[],
+  world?: WorldState,
 ): string {
   const terrain = region.isSea ? "Sea" : region.isRiver ? "River" : "Land";
   const elevation = region.elevation.toFixed(3);
@@ -45,7 +48,8 @@ export function formatRegionTooltip(
 
   lines.push(macro ? `Macro: ${macro.id} (${macro.isCore ? "Core" : "Remote"})` : "Macro: -");
   lines.push(nation ? `Nation: ${nation.id}` : "Nation: -");
-  lines.push(...formatUnitLines(units));
+  if (meso && world) lines.push(...formatCoastalSupportStatus(world, meso.id));
+  lines.push(...formatUnitLines(units, world));
 
   return lines.join("\n");
 }
@@ -102,7 +106,7 @@ function formatVec2(pos: MesoRegion["center"]): string {
   return `${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}`;
 }
 
-function formatUnitLines(units: UnitState[]): string[] {
+function formatUnitLines(units: UnitState[], world?: WorldState): string[] {
   if (units.length === 0) {
     return ["Units: 0"];
   }
@@ -114,6 +118,8 @@ function formatUnitLines(units: UnitState[]): string[] {
     lines.push(
       `Unit: ${unit.nationId} ${unit.type} (MP ${unit.manpower}, Org ${orgPercent}%)`,
     );
+    const navalStatus = world ? formatNavalUnitStatus(world, unit) : null;
+    if (navalStatus) lines.push(navalStatus);
     const equipment = formatUnitEquipment(unit);
     if (equipment) {
       lines.push(`Eq: ${equipment}`);

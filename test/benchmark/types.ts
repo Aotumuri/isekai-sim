@@ -322,6 +322,7 @@ export interface WorldSummary {
   navalRaidShips: number;
   navalInterceptShips: number;
   navalBlockadeShips: number;
+  navalSupportShips: number;
   navalReserveShips: number;
   navalDesiredCombatShips: number;
   navalCombatShipDeficit: number;

@@ -1,3 +1,4 @@
+import { formatCoastalSupportStatus, formatNavalUnitStatus, summarizeNavy } from "../../src/render/naval-status";
 import { getCoastalSupportModifier } from "../../src/sim/coastal-support";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -761,6 +762,20 @@ test("coastal fighting bootstraps a useful fleet from zero", () => {
   assert(ship);
   updateNavalStrategy(world);
   assert.equal(world.supplyAssessment.navalStrategy.missionByShipId.get(ship.id)?.type, "SUPPORT");
+});
+
+test("naval status follows active support, enemy interference and fleet losses", () => {
+  const world = createCoastalBattleWorld();
+  const ship = world.units.find((unit) => unit.type === "CombatShip")!;
+  ship.regionId = id("sea-ab");
+  updateNavalStrategy(world);
+  assert.match(formatNavalUnitStatus(world, ship)!, /Shore bombardment.*port-b/);
+  assert.match(formatCoastalSupportStatus(world, id("port-b")).join("\n"), /\+12% organization pressure/);
+  assert.equal(summarizeNavy(world, NATION_A).combatShips, 1);
+  world.units.push(createUnitForType(createUnitId(world.unitIdCounter++), NATION_B, id("sea-ab"), "CombatShip"));
+  assert.match(formatCoastalSupportStatus(world, id("port-b")).join("\n"), /contested/);
+  world.units = world.units.filter((unit) => unit.id !== ship.id);
+  assert.equal(summarizeNavy(world, NATION_A).combatShips, 0);
 });
 
 test("CombatShips deliberately select moving enemy convoys without interdicting static routes", () => {

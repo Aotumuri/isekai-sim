@@ -1,4 +1,5 @@
 import { Container, Graphics, Text, TextStyle, type FederatedPointerEvent } from "pixi.js";
+import { summarizeNavy } from "./naval-status";
 import { WORLD_BALANCE } from "../data/balance";
 import type { NationRuntime } from "../sim/nation-runtime";
 import type { UnitState } from "../sim/unit";
@@ -114,6 +115,8 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
 
   const overviewRows = {
     units: createRow("Units", "-", labelStyle, valueStyle, renderer),
+    fleet: createRow("Fleet", "-", labelStyle, valueStyle, renderer),
+    seaSupply: createRow("Sea supply", "-", labelStyle, valueStyle, renderer),
     meso: createRow("Regions", "-", labelStyle, valueStyle, renderer),
     cities: createRow("Cities", "-", labelStyle, valueStyle, renderer),
     wars: createRow("Wars", "-", labelStyle, valueStyle, renderer),
@@ -326,6 +329,9 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
           const stats = buildNationStats(world, nation, mesoById);
           nameText.text = stats.displayName;
           setRowValue(overviewRows.units, `${stats.unitCount}`);
+          const navy = summarizeNavy(world, nation.id);
+          setRowValue(overviewRows.fleet, `${navy.combatShips} combat / ${navy.transports} transport`);
+          setRowValue(overviewRows.seaSupply, `${navy.activeRoutes}/${navy.totalRoutes} routes active`);
           setRowValue(overviewRows.meso, `${stats.mesoCount}`);
           setRowValue(overviewRows.cities, `${stats.cityCount}`);
           setRowValue(overviewRows.wars, `${stats.warCount}`);

@@ -41,6 +41,7 @@ export function attachTimeHud(renderer: Renderer): TimeHud {
       `Time ${formatClock(time.elapsedMs)}`,
       `Speed x${formatSpeed(getSpeedMultiplier(clock))}`,
       "Keys [ ] or 1-8",
+      "Hold Space: Region / naval orders",
       "F: Toggle Debug",
       "D: Debug display settings",
     ].join("\n");

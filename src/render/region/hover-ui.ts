@@ -90,7 +90,7 @@ export function attachRegionHoverUI(renderer: Renderer, world: WorldState): void
       const macro = region.mesoRegionId ? macroByMesoId.get(region.mesoRegionId) ?? null : null;
       const nation = macro ? nationById.get(macro.nationId) ?? null : null;
       const units = getUnitsForMeso(region.mesoRegionId);
-      panel.setText(formatRegionTooltip(region, meso, macro, nation, units));
+      panel.setText(formatRegionTooltip(region, meso, macro, nation, units, world));
     }
 
     panel.position(screenPos, renderer.app.screen);

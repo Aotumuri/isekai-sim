@@ -497,6 +497,7 @@ export function summarizeWorld(world: WorldState): WorldSummary {
     navalRaidShips: missionShipCount(world, "RAID"),
     navalInterceptShips: missionShipCount(world, "INTERCEPT"),
     navalBlockadeShips: missionShipCount(world, "BLOCKADE"),
+    navalSupportShips: missionShipCount(world, "SUPPORT"),
     navalReserveShips: missionShipCount(world, "RESERVE"),
     navalDesiredCombatShips: world.supplyAssessment.navalStrategy.assessments.reduce(
       (sum, assessment) => sum + assessment.desiredForce.desiredCombatShips, 0),
