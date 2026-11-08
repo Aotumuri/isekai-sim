@@ -4,6 +4,7 @@ import { withMutedSimulationLogs } from "../helpers/muted-logs";
 import { createSimulationSettings } from "../../src/sim/simulation-settings";
 import { RESEARCH_BRANCHES } from "../../src/sim/research";
 import { isNationActive } from "../../src/sim/nation-active";
+import { getNationIdeology } from "../../src/sim/nation-identity";
 
 const arg = (name: string, fallback: number) => {
   const index = process.argv.indexOf(name), value = index < 0 ? fallback : Number(process.argv[index + 1]);
@@ -37,6 +38,16 @@ for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 8227483
           !Number.isFinite(portfolio.progress[branch]) || portfolio.progress[branch] < 0) throw new Error("Invalid research progress");
       }
       if (world.events && world.events.length > 200) throw new Error("Unbounded event history");
+      const members = new Set<string>();
+      for (const faction of world.factions?.factions ?? []) {
+        if (!faction.memberIds.length || !faction.memberIds.includes(faction.leaderId)) throw new Error("Invalid faction leader");
+        for (const id of faction.memberIds) {
+          if (members.has(id) || world.factions?.factionByNationId.get(id) !== faction ||
+            !faction.charter.allowedIdeologyIds.includes(getNationIdeology(world, id).id)) throw new Error("Invalid faction membership");
+          members.add(id);
+        }
+      }
+      if (members.size !== (world.factions?.factionByNationId.size ?? 0)) throw new Error("Stale faction membership index");
       last = world.time.fastTick;
     }
     return last;
@@ -48,5 +59,6 @@ for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 8227483
     peaceAgreements: world.diplomacy?.peaceAgreements ?? 0, defensiveInterventions: world.diplomacy?.defensiveInterventions ?? 0,
     treatyPeak, tradeDeliveries: world.internationalTrade?.delivered ?? 0, aidDeliveries: world.diplomacy?.aidDeliveries ?? 0,
     researchLevels: levels, retrofits: world.research?.retrofits ?? 0, licenses: world.research?.licensesShared ?? 0,
-    battleSamples: actualBattles, eventCount: world.events?.length ?? 0 }));
+    factions: world.factions?.factions.length ?? 0, factionMembers: world.factions?.factionByNationId.size ?? 0,
+    factionInterventions: world.factions?.interventions ?? 0, battleSamples: actualBattles, eventCount: world.events?.length ?? 0 }));
 }
