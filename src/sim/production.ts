@@ -933,6 +933,10 @@ function updateCapacityDiagnostics(
     currentLandUnits += counts.land;
     currentNavalUnits += counts.naval;
   }
+  // Capacity is charged to both countries; the global headcount still counts each soldier once.
+  if (world.volunteers) for (const unit of allFieldUnits(world)) if (unit.volunteerOriginId && unit.volunteerOriginId !== unit.nationId) {
+    if (unit.domain === "land") currentLandUnits--; else currentNavalUnits--;
+  }
   const diagnostics = world.productionDiagnostics;
   const changed = diagnostics.currentLandUnits !== currentLandUnits ||
     diagnostics.currentNavalUnits !== currentNavalUnits;

@@ -1,3 +1,5 @@
+import { updateProduction } from "../../src/sim/production";
+import { getMilitaryAccessState } from "../../src/sim/military-access";
 import { updateCivilWar } from "../../src/sim/civil-war";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -38,6 +40,9 @@ test("volunteers are existing troops, remain charged to the donor and fight unde
   const deployed = world.units.filter((unit) => unit.volunteerMissionId === mission.id);
   assert.equal(deployed.length, 2); assert(deployed.every((unit) => unit.nationId === host.id && unit.volunteerOriginId === donor.id));
   assert.equal(findWar(world.wars, donor.id, enemy.id), null); assert.equal(allFieldUnits(world).length, count);
+  for (const nation of world.nations) nation.nextUnitProductionTick = Infinity;
+  updateProduction(world);
+  assert.equal(world.productionDiagnostics.currentLandUnits, allFieldUnits(world).filter((unit) => unit.domain === "land").length);
 });
 
 test("trust and protected relations cannot be bypassed by sending volunteer forces", () => {
@@ -89,4 +94,13 @@ test("foreign volunteers retain their mission allegiance when a recipient provin
   const volunteer = world.units.find((unit) => unit.volunteerMissionId === mission.id)!; volunteer.regionId = target;
   host.warCooperation = 0; const before = world.nations.length; updateCivilWar(world);
   assert.equal(world.nations.length, before + 1); assert.equal(volunteer.nationId, host.id); assert.equal(volunteer.volunteerOriginId, donor.id);
+});
+
+
+test("the volunteer home reserve excludes troops already ordered to stage abroad", () => {
+  const { world, donor, host } = scene();
+  const units = world.units.filter((unit) => unit.nationId === donor.id);
+  for (const unit of units.slice(0, 5)) getMilitaryAccessState(world).orders.set(unit.id, { nationId: donor.id, destinationId: host.capitalMesoId });
+  assert.equal(sendVolunteers(world, donor.id, host.id, 2), null);
+  assert.equal(getDiplomacyState(world).influenceByNationId.get(donor.id), 100);
 });
