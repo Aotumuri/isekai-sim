@@ -1,3 +1,4 @@
+import { areFactionPartners } from "./factions";
 import type { NationId } from "../worldgen/nation";
 import { getNationCharacter } from "./nation-character";
 import { isNationActive } from "./nation-active";
@@ -74,7 +75,7 @@ export function hasTreaty(world: WorldState, a: NationId, b: NationId, type: Tre
     treaty.type === type && treaty.expiresAtSlowTick > world.time.slowTick) ?? false;
 }
 export function isDiplomaticallyProtected(world: WorldState, a: NationId, b: NationId): boolean {
-  return (["truce", "non-aggression", "alliance"] as const).some((type) => hasTreaty(world, a, b, type));
+  return areFactionPartners(world, a, b) || (["truce", "non-aggression", "alliance"] as const).some((type) => hasTreaty(world, a, b, type));
 }
 export function getInfluence(world: WorldState, nationId: NationId): number {
   const influence = getDiplomacyState(world).influenceByNationId;

@@ -1,3 +1,4 @@
+import { areFactionPartners, getFactionDefenders } from "./factions";
 import type { NationId } from "../worldgen/nation";
 import { getDiplomacyState, getRelation, hasTreaty, isDiplomaticallyProtected, spendInfluence } from "./diplomacy";
 import { getNationCharacter } from "./nation-character";
@@ -72,7 +73,7 @@ export function resolveCrisisPeacefully(world: WorldState, a: NationId, b: Natio
 }
 
 export function startDiplomaticWar(world: WorldState, aggressorId: NationId, targetId: NationId,
-  cause: "diplomatic-crisis" | "defensive-alliance" = "diplomatic-crisis"): boolean {
+  cause: "diplomatic-crisis" | "defensive-alliance" | "faction-obligation" = "diplomatic-crisis"): boolean {
   if (getWarDeclarationMode(world) !== "diplomacy" || isDiplomaticallyProtected(world, aggressorId, targetId)) return false;
   if (![aggressorId, targetId].every((id) => world.nations.some((nation) => nation.id === id && isNationActive(nation)))) return false;
   const war = declareWar(world.wars, aggressorId, targetId, world.time.fastTick);
@@ -110,7 +111,7 @@ export function updateDiplomaticCrises(world: WorldState): void {
       resolveCrisisPeacefully(world, attacker, defender, "deterrence"); continue;
     }
     const defensiveAllies = world.nations.filter((nation) => nation.id !== attacker && nation.id !== defender &&
-      isNationActive(nation) && hasTreaty(world, nation.id, defender, "alliance"));
+      isNationActive(nation) && (hasTreaty(world, nation.id, defender, "alliance") || getFactionDefenders(world, defender).includes(nation.id)));
     const defense = getNationalMilitaryStrength(world, defender) + defensiveAllies.reduce((sum, nation) => sum + getNationalMilitaryStrength(world, nation.id) * 0.7, 0);
     if (defense > getNationalMilitaryStrength(world, attacker) * 1.8) {
       resolveCrisisPeacefully(world, attacker, defender, "allied deterrence"); continue;
@@ -128,9 +129,9 @@ export function updateDiplomaticCrises(world: WorldState): void {
   }
   // Allies defend the directly attacked state; defensive calls do not recurse.
   for (const war of [...world.wars]) {
-    if (war.cause === "defensive-alliance") continue;
+    if (war.cause === "defensive-alliance" || war.cause === "faction-obligation") continue;
     for (const ally of world.nations.filter(isNationActive)) {
-      if (ally.id === war.aggressorId || ally.id === war.defenderId ||
+      if (ally.id === war.aggressorId || ally.id === war.defenderId || areFactionPartners(world, ally.id, war.defenderId) ||
         !hasTreaty(world, ally.id, war.defenderId, "alliance") || findWar(world.wars, ally.id, war.aggressorId)) continue;
       if (world.wars.filter((item) => item.nationAId === ally.id || item.nationBId === ally.id).length >= 2) continue;
       if (startDiplomaticWar(world, ally.id, war.aggressorId, "defensive-alliance")) state.defensiveInterventions += 1;

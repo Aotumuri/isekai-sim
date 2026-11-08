@@ -1,3 +1,4 @@
+import { areFactionPartners } from "./factions";
 import type { NationId } from "../worldgen/nation";
 import { canSupportNation } from "./arms-aid";
 import { getDiplomacyState, getRelation, hasTreaty, spendInfluence } from "./diplomacy";
@@ -11,7 +12,7 @@ export function licenseTechnology(world: WorldState, licensorId: NationId, recip
   if (!world.settings?.researchEnabled || getWarDeclarationMode(world) !== "diplomacy" ||
     !RESEARCH_BRANCHES.includes(branch) || !canSupportNation(world, licensorId, recipientId)) return false;
   const relation = getRelation(world, licensorId, recipientId);
-  if (relation.trust < 55 || (!hasTreaty(world, licensorId, recipientId, "alliance") && !hasTreaty(world, licensorId, recipientId, "trade"))) return false;
+  if (relation.trust < 55 || (!areFactionPartners(world, licensorId, recipientId) && !hasTreaty(world, licensorId, recipientId, "alliance") && !hasTreaty(world, licensorId, recipientId, "trade"))) return false;
   const licensor = world.nations.find((nation) => nation.id === licensorId && isNationActive(nation));
   const recipient = world.nations.find((nation) => nation.id === recipientId && isNationActive(nation));
   if (!licensor || !recipient || recipient.resources.weapons < 12 || recipient.resources.steel < 8) return false;

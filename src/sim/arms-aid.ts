@@ -1,3 +1,4 @@
+import { areFactionPartners } from "./factions";
 import type { NationId } from "../worldgen/nation";
 import { getDiplomacyState, getRelation, hasTreaty } from "./diplomacy";
 import { canRefitUnit, getDevelopedUnitWeaponCost } from "./equipment-development";
@@ -27,7 +28,7 @@ export function canSupportNation(world: WorldState, donorId: NationId, recipient
   if (isAtWar(donorId, recipientId, wars)) return false;
   const relation = getRelation(world, donorId, recipientId);
   const commonEnemy = [...(wars.get(donorId) ?? [])].some((enemy) => wars.get(recipientId)?.has(enemy));
-  const friendly = hasTreaty(world, donorId, recipientId, "alliance") ||
+  const friendly = areFactionPartners(world, donorId, recipientId) || hasTreaty(world, donorId, recipientId, "alliance") ||
     (relation.opinion >= 40 && relation.trust >= 40) || (commonEnemy && relation.opinion >= 0);
   return friendly && ![...(wars.get(recipientId) ?? [])].some((enemy) => hasTreaty(world, donorId, enemy, "alliance"));
 }

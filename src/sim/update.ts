@@ -1,3 +1,4 @@
+import { updateFactions, updateFactionWarCalls } from "./factions";
 import { updateTechnologyExchange } from "./technology-exchange";
 import { updateArmsAid } from "./arms-aid";
 import { updateInternationalTrade } from "./international-trade";
@@ -170,8 +171,10 @@ export function stepFastTick(world: WorldState, dtMs: number): void {
 export function stepSlowTick(world: WorldState, _dtMs: number): void {
   world.time.slowTick += 1;
   updateDiplomaticRelations(world);
+  updateFactions(world);
   updateDiplomaticPeace(world);
   updateDiplomaticCrises(world);
+  updateFactionWarCalls(world);
   updateWarDeclarations(world);
   beginAiGeographyEvaluation(world);
   updateSupplyAssessment(world);

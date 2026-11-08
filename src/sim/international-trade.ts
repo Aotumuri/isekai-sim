@@ -1,3 +1,4 @@
+import { areFactionPartners } from "./factions";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { getDiplomacyState, getRelation, hasTreaty } from "./diplomacy";
@@ -106,7 +107,7 @@ export function proposeResourceTrade(world: WorldState, sellerId: NationId, buye
   if (getWarDeclarationMode(world) !== "diplomacy" || !world.settings?.tradeEnabled || sellerId === buyerId ||
     offeredResource === requestedResource || !TRADE_RESOURCES.includes(offeredResource) || !TRADE_RESOURCES.includes(requestedResource) ||
     !Number.isFinite(offeredAmount) || !Number.isFinite(requestedAmount) || offeredAmount <= 0 || requestedAmount <= 0) return false;
-  if (!hasTreaty(world, sellerId, buyerId, "trade") && !hasTreaty(world, sellerId, buyerId, "alliance")) return false;
+  if (!areFactionPartners(world, sellerId, buyerId) && !hasTreaty(world, sellerId, buyerId, "trade") && !hasTreaty(world, sellerId, buyerId, "alliance")) return false;
   const ratio = offeredAmount * TRADE_RESOURCE_VALUES[offeredResource] / (requestedAmount * TRADE_RESOURCE_VALUES[requestedResource]);
   if (ratio < 0.8 || ratio > 1.25) return false;
   const state = getInternationalTradeState(world);
@@ -137,7 +138,7 @@ export function updateInternationalTrade(world: WorldState): void {
     state.lastSlowTick = world.time.slowTick;
     for (const deal of state.deals.filter((item) => item.status === "in-transit")) {
       const seller = world.nations.find((nation) => nation.id === deal.sellerId), buyer = world.nations.find((nation) => nation.id === deal.buyerId);
-      const agreement = hasTreaty(world, deal.sellerId, deal.buyerId, "trade") || hasTreaty(world, deal.sellerId, deal.buyerId, "alliance");
+      const agreement = areFactionPartners(world, deal.sellerId, deal.buyerId) || hasTreaty(world, deal.sellerId, deal.buyerId, "trade") || hasTreaty(world, deal.sellerId, deal.buyerId, "alliance");
       const open = world.settings?.diplomacyEnabled && world.settings.tradeEnabled && seller && buyer &&
         isNationActive(seller) && isNationActive(buyer) && agreement && isTradeRouteOpen(world, deal.sellerId, deal.buyerId, deal.route);
       if (!open) {

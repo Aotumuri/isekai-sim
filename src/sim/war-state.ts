@@ -3,7 +3,7 @@ import type { NationId } from "../worldgen/nation";
 export type WarId = string & { __brand: "WarId" };
 
 export interface WarState {
-  cause?: "diplomatic-crisis" | "defensive-alliance";
+  cause?: "diplomatic-crisis" | "defensive-alliance" | "faction-obligation";
   id: WarId;
   nationAId: NationId;
   nationBId: NationId;

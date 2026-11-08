@@ -1,3 +1,4 @@
+import type { FactionState } from "./factions";
 import type { Ideology } from "./nation-identity";
 import type { ArmsAidState } from "./arms-aid";
 import type { InternationalTradeState } from "./international-trade";
@@ -49,6 +50,7 @@ export interface WorldState {
   armsAid?: ArmsAidState;
   worldSeed?: number;
   customIdeologies?: Ideology[];
+  factions?: FactionState;
   events?: SimulationEvent[];
   width: number;
   height: number;
