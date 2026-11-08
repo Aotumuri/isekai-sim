@@ -67,3 +67,17 @@ test("national doctrine, shortages and manual focus change research priorities",
   portfolio.focus = "firepower";
   assert(getResearchPriorities(world, nation.id).firepower > guardian.firepower);
 });
+
+test("the military economy reserves enough steel for research instead of consuming the entire science budget", async () => {
+  const { updateProduction } = await import("../../src/sim/production");
+  const { world, nation, portfolio } = fundedWorld();
+  nation.resources.steel = 10;
+  nation.resources.weapons = 20;
+  nation.nextUnitProductionTick = Infinity;
+  updateProduction(world);
+  const scienceStock = nation.resources.steel;
+  assert(scienceStock >= 8);
+  updateResearch(world);
+  assert.equal(portfolio.status, "researching");
+  assert(nation.resources.steel < scienceStock);
+});

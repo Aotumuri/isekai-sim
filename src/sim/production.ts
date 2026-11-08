@@ -736,7 +736,7 @@ function applyResourceOutputs(
       const maxWeapons = Math.floor(weaponCapacity);
       const maxBySteel =
         steelPerWeapon > 0
-          ? Math.floor(resources.steel / steelPerWeapon)
+          ? Math.floor(Math.max(0, resources.steel - (world.settings?.researchEnabled ? 8 : 0)) / steelPerWeapon)
           : maxWeapons;
       const weaponsProduced = Math.max(0, Math.min(maxWeapons, maxBySteel));
       if (weaponsProduced > 0) {
