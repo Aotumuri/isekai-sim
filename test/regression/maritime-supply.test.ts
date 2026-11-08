@@ -339,6 +339,33 @@ test("a viable island crossing still launches late in the war", () => {
   assert.ok(operation.launchFeasibility.estimatedVoyageTicks > 240);
 });
 
+test("an invasion retries from a viable alternative coast after a transport loss", () => {
+  const { world } = createAmphibiousVoyageWorld();
+  const secondPort = world.mesoRegions.find((region) => region.id === id("port-c"))!;
+  const crossing = world.mesoRegions.find((region) => region.id === id("sea-ab"))!;
+  const province = world.macroRegions.find((item) => item.mesoRegionIds.includes(secondPort.id))!;
+  province.nationId = NATION_B;
+  crossing.neighbors.push({ id: secondPort.id, hasRiver: false });
+  secondPort.neighbors.push({ id: crossing.id, hasRiver: false });
+  world.territoryVersion++;
+  world.mapVersion++;
+  updateAmphibiousPlanning(world);
+
+  const initial = world.amphibiousOperations.operations[0];
+  assert.ok(initial);
+  initial.phase = "cancelled";
+  initial.cancellationReason = "transport-lost";
+  initial.launchedAtTick = 1;
+  initial.completedAtTick = 10;
+  world.time.fastTick = 20;
+  updateAmphibiousPlanning(world);
+
+  const retry = world.amphibiousOperations.operations[1];
+  assert.ok(retry);
+  assert.notEqual(retry.destinationPortId, initial.destinationPortId);
+  assert.equal(retry.enemyNationId, initial.enemyNationId);
+});
+
 function createAmphibiousVoyageWorld() {
   const world = createMaritimeWorld(true, 3);
   const enemyMacroIds = world.macroRegions

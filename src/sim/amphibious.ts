@@ -845,11 +845,38 @@ function chooseCandidate(world: WorldState, nationId: NationId, enemyId: NationI
         selectedReason, targetTypes, kind: "landing", bridgeheadCampaignId: null, waveNumber: null });
     }
   }
-  const selected = candidates.sort((a, b) => b.score - a.score || compareIds(a.destination, b.destination) || compareIds(a.departure, b.departure))[0] ?? null;
+  candidates.sort((a, b) => b.score - a.score || compareIds(a.destination, b.destination) || compareIds(a.departure, b.departure));
+  const preferred = candidates[0];
+  const failedSites = getRecentlyFailedLandingSites(world, nationId, enemyId);
+  const alternative = preferred && failedSites.has(preferred.destination)
+    ? candidates.find((candidate) => !failedSites.has(candidate.destination) &&
+      candidate.requiredStrength <= preferred.requiredStrength * 1.25 &&
+      candidate.route.length <= preferred.route.length * 2)
+    : undefined;
+  const selected = alternative ?? preferred ?? null;
   if (world.instrumentation) {
     world.instrumentation.recordDuration("amphibious.landingSiteEvaluation", performance.now() - startedAt);
   }
   return selected;
+}
+
+const FAILED_LANDING_RETRY_TICKS = 600;
+
+function getRecentlyFailedLandingSites(world: WorldState, nationId: NationId, enemyId: NationId): Set<MesoRegionId> {
+  const sites = new Set<MesoRegionId>();
+  const war = findWar(world.wars, nationId, enemyId);
+  if (!war) return sites;
+  const cutoff = Math.max(war.startedAtFastTick, world.time.fastTick - FAILED_LANDING_RETRY_TICKS);
+  for (const operation of world.amphibiousOperations.operations) {
+    if (operation.kind !== "landing" || operation.nationId !== nationId || operation.enemyNationId !== enemyId ||
+      operation.launchedAtTick === null || operation.launchedAtTick < war.startedAtFastTick) continue;
+
+    const lostAtSea = operation.cancellationReason === "transport-lost" || operation.cancellationReason === "convoy-lost";
+    const failedAt = operation.beachheadOutcome === "failure" ? operation.beachheadEvaluatedAtTick
+      : lostAtSea ? operation.completedAtTick : null;
+    if (failedAt !== null && failedAt >= cutoff) sites.add(operation.destinationPortId);
+  }
+  return sites;
 }
 
 function estimateAssaultStrength(
