@@ -1,3 +1,4 @@
+import type { Ideology } from "./nation-identity";
 import type { ArmsAidState } from "./arms-aid";
 import type { InternationalTradeState } from "./international-trade";
 import type { ResearchState } from "./research";
@@ -47,6 +48,7 @@ export interface WorldState {
   internationalTrade?: InternationalTradeState;
   armsAid?: ArmsAidState;
   worldSeed?: number;
+  customIdeologies?: Ideology[];
   events?: SimulationEvent[];
   width: number;
   height: number;

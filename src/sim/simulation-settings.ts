@@ -1,3 +1,5 @@
+import { getNationName } from "./nation-identity";
+import type { NationId } from "../worldgen/nation";
 import type { WorldState } from "./world-state";
 
 export interface SimulationSettings {
@@ -29,6 +31,8 @@ export interface SimulationEvent {
 
 export function recordSimulationEvent(world: WorldState, event: Omit<SimulationEvent, "tick">): void {
   const events = world.events ??= [];
-  events.push({ ...event, tick: world.time.fastTick });
+  const names = new Map(world.nations.map((nation) => [nation.id as string, getNationName(world, nation.id)]));
+  const message = event.message.replace(/nation-[a-zA-Z0-9-]+/g, (id) => names.get(id) ?? getNationName(world, id as NationId));
+  events.push({ ...event, message, tick: world.time.fastTick });
   if (events.length > 200) events.splice(0, events.length - 200);
 }

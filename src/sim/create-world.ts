@@ -1,3 +1,4 @@
+import { assignNationIdentities } from "./nation-identity";
 import { createSimulationSettings } from "./simulation-settings";
 import type { WorldConfig } from "../data/world-config";
 import { WORLD_BALANCE } from "../data/balance";
@@ -133,7 +134,7 @@ export function createWorld(config: WorldConfig): WorldState {
   const buildingVersion = 0;
   const cache = createWorldCache();
 
-  return {
+  const world: WorldState = {
     settings: createSimulationSettings(config.systems),
     worldSeed: config.seed,
     events: [],
@@ -179,6 +180,8 @@ export function createWorld(config: WorldConfig): WorldState {
     cache,
     time,
   };
+  assignNationIdentities(world);
+  return world;
 }
 
 function collectCityCountsByNation(

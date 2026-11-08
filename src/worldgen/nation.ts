@@ -4,6 +4,8 @@ import type { MacroRegionId } from "./macro-region";
 export type NationId = string & { __brand: "NationId" };
 
 export interface Nation {
+  name?: string;
+  ideologyId?: string;
   id: NationId;
   capitalMesoId: MesoRegionId;
   macroRegionIds: MacroRegionId[];
