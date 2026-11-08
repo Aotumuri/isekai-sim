@@ -1,5 +1,6 @@
+import { getIdeologicalAffinity } from "./ideology-relations";
 import type { NationId } from "../worldgen/nation";
-import { breakTreaty, getRelation, spendInfluence } from "./diplomacy";
+import { breakTreaty, getRelation, spendInfluence, getInfluence } from "./diplomacy";
 import { startDiplomaticWar, getNationalMilitaryStrength } from "./diplomatic-crises";
 import { getNationCharacter } from "./nation-character";
 import { getIdeologies, getNationIdeology, getNationName, identityHash } from "./nation-identity";
@@ -22,10 +23,13 @@ export interface Faction {
 export interface FactionState {
   factions: Faction[]; factionByNationId: Map<NationId, Faction>; nextFactionNumber: number;
   lastAISlowTick: number; handledCalls: Set<string>; version: number; interventions: number;
+  membershipSince: Map<NationId, number>; cohesionFailures: Map<NationId, number>; aiDefections: number;
 }
 export function getFactionState(world: WorldState): FactionState {
-  return world.factions ??= { factions: [], factionByNationId: new Map(), nextFactionNumber: 0,
-    lastAISlowTick: -30, handledCalls: new Set(), version: 0, interventions: 0 };
+  const state = world.factions ??= { factions: [], factionByNationId: new Map(), nextFactionNumber: 0,
+    lastAISlowTick: -30, handledCalls: new Set(), version: 0, interventions: 0, membershipSince: new Map(), cohesionFailures: new Map(), aiDefections: 0 };
+  state.membershipSince ??= new Map(); state.cohesionFailures ??= new Map(); state.aiDefections ??= 0;
+  return state;
 }
 export function getNationFaction(world: WorldState, id: NationId): Faction | undefined { return world.factions?.factionByNationId.get(id); }
 export function areFactionPartners(world: WorldState, a: NationId, b: NationId): boolean {
@@ -50,29 +54,70 @@ export function createFaction(world: WorldState, founderId: NationId, charter: F
     ![charter.defensiveObligation, charter.offensiveObligation].every((value) => ["mandatory", "voluntary", "none"].includes(value)) ||
     typeof charter.considerPersonality !== "boolean") return null;
   const suffix = ["Accord", "League", "Pact", "Union"][identityHash(founderId) % 4];
-  const name = requestedName.trim().replace(/\s+/g, " ") || `${getNationName(world, founderId)} ${suffix}`;
+  const requested = requestedName.trim().replace(/\s+/g, " "), baseName = requested || `${getNationName(world, founderId)} ${suffix}`;
   const state = getFactionState(world);
+  let name = baseName, ordinal = 2;
+  if (!requested) while (state.factions.some((faction) => faction.name.toLowerCase() === name.toLowerCase())) name = `${baseName} ${ordinal++}`;
   if (name.length > 60 || name.length < 3 || state.factions.some((faction) => faction.name.toLowerCase() === name.toLowerCase()) ||
     !spendInfluence(world, founderId, 20)) return null;
   const faction: Faction = { id: `faction-${state.nextFactionNumber++}`, name, founderId, leaderId: founderId,
     memberIds: [founderId], charter: { ...charter, allowedIdeologyIds: allowed }, createdAtSlowTick: world.time.slowTick };
-  state.factions.push(faction); state.factionByNationId.set(founderId, faction); state.version += 1;
+  state.factions.push(faction); state.factionByNationId.set(founderId, faction); state.membershipSince.set(founderId, world.time.slowTick); state.version += 1;
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [founderId], message: `${getNationName(world, founderId)} founded ${name}.` });
   return faction;
 }
+export function getFactionAdmissionRequirements(world: WorldState, nationId: NationId, memberId: NationId) {
+  const affinity = getIdeologicalAffinity(world, nationId, memberId), friction = Math.max(0, -affinity);
+  return { affinity, opinion: Math.ceil(15 + friction * 30), trust: Math.ceil(35 + friction * 30) };
+}
+export function getFactionAdmissionIssue(world: WorldState, nationId: NationId, faction: Faction): string | null {
+  if (getWarDeclarationMode(world) !== "diplomacy") return "Diplomacy is disabled.";
+  if (getNationFaction(world, nationId)) return "Already a faction member.";
+  if (!world.nations.some((nation) => nation.id === nationId && isNationActive(nation))) return "Nation is inactive.";
+  if (!faction.charter.allowedIdeologyIds.includes(getNationIdeology(world, nationId).id)) return "Ideology is outside this charter.";
+  for (const member of faction.memberIds) {
+    if (findWar(world.wars, nationId, member)) return "At war with a member.";
+    const relation = getRelation(world, nationId, member), requirements = getFactionAdmissionRequirements(world, nationId, member);
+    if (relation.crisis) return `An ultimatum with ${getNationName(world, member)} blocks entry.`;
+    if (relation.opinion < requirements.opinion || relation.trust < requirements.trust) return `Requires opinion ${requirements.opinion} and trust ${requirements.trust} with ${getNationName(world, member)}.`;
+  }
+  return factionWillingness(world, nationId, faction.charter) < 40 ? "Personality rejects this charter's obligations." : null;
+}
 export function canJoinFaction(world: WorldState, nationId: NationId, faction: Faction): boolean {
-  if (getWarDeclarationMode(world) !== "diplomacy" || getNationFaction(world, nationId) ||
-    !world.nations.some((nation) => nation.id === nationId && isNationActive(nation)) ||
-    !faction.charter.allowedIdeologyIds.includes(getNationIdeology(world, nationId).id)) return false;
-  const relation = getRelation(world, nationId, faction.leaderId);
-  return relation.opinion >= 15 && relation.trust >= 35 && !relation.crisis &&
-    !faction.memberIds.some((member) => findWar(world.wars, nationId, member)) && factionWillingness(world, nationId, faction.charter) >= 40;
+  return getFactionAdmissionIssue(world, nationId, faction) === null;
+}
+export function getFactionCohesion(world: WorldState, faction: Faction) {
+  let affinity = 0, opinion = 0, trust = 0, pairs = 0;
+  for (let i = 0; i < faction.memberIds.length; i++) for (let j = i + 1; j < faction.memberIds.length; j++) {
+    const a = faction.memberIds[i], b = faction.memberIds[j], relation = getRelation(world, a, b);
+    affinity += getIdeologicalAffinity(world, a, b); opinion += relation.opinion; trust += relation.trust; pairs++;
+  }
+  return { affinity: pairs ? affinity / pairs : 1, opinion: pairs ? opinion / pairs : 0, trust: pairs ? trust / pairs : 40 };
+}
+function commonEnemy(world: WorldState, a: NationId, b: NationId): boolean {
+  const enemies = new Set(world.wars.filter((war) => war.nationAId === a || war.nationBId === a).map((war) => war.nationAId === a ? war.nationBId : war.nationAId));
+  return world.wars.some((war) => (war.nationAId === b && enemies.has(war.nationBId)) || (war.nationBId === b && enemies.has(war.nationAId)));
+}
+export function factionJoinScore(world: WorldState, nationId: NationId, faction: Faction): number {
+  if (!canJoinFaction(world, nationId, faction)) return -Infinity;
+  const members = faction.memberIds, size = Math.max(1, members.length), active = Math.max(1, world.nations.filter(isNationActive).length);
+  let affinity = 0, opinion = 0, trust = 0, threats = 0;
+  for (const member of members) {
+    const relation = getRelation(world, nationId, member);
+    affinity += getIdeologicalAffinity(world, nationId, member); opinion += relation.opinion; trust += relation.trust;
+    if (commonEnemy(world, nationId, member)) threats++;
+  }
+  const coverage = members.length / active, dominance = coverage * 25 + Math.max(0, coverage - 0.5) * 35;
+  const independence = (1 - getNationCharacter(world, nationId).cooperation) * 8;
+  const opposedWithoutCause = members.some((id) => getIdeologicalAffinity(world, nationId, id) <= -0.75 &&
+    getRelation(world, nationId, id).opinion < 70 && !commonEnemy(world, nationId, id));
+  return 50 + affinity / size * 20 + opinion / size * 0.25 + trust / size * 0.15 + (threats ? 25 : 0) - dominance - independence - (opposedWithoutCause ? 25 : 0);
 }
 export function joinFaction(world: WorldState, nationId: NationId, factionId: string): boolean {
   const faction = world.factions?.factions.find((item) => item.id === factionId);
   if (!faction || !canJoinFaction(world, nationId, faction) || !spendInfluence(world, nationId, 5)) return false;
   faction.memberIds.push(nationId); faction.memberIds.sort();
-  getFactionState(world).factionByNationId.set(nationId, faction); getFactionState(world).version += 1;
+  const state = getFactionState(world); state.factionByNationId.set(nationId, faction); state.membershipSince.set(nationId, world.time.slowTick); state.cohesionFailures.delete(nationId); state.version += 1;
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [nationId, faction.leaderId], message: `${getNationName(world, nationId)} joined ${faction.name}.` });
   return true;
 }
@@ -81,6 +126,8 @@ export function leaveFaction(world: WorldState, nationId: NationId, reason = "wi
   if (!faction) return false;
   const state = getFactionState(world);
   faction.memberIds = faction.memberIds.filter((id) => id !== nationId); state.factionByNationId.delete(nationId);
+  state.membershipSince.delete(nationId); state.cohesionFailures.delete(nationId);
+  if (reason === "diplomatic cohesion collapsed") state.aiDefections++;
   for (const id of faction.memberIds) {
     const relation = getRelation(world, nationId, id);
     relation.trust = Math.max(0, relation.trust - 10); relation.opinion = Math.max(-100, relation.opinion - 8);
@@ -160,28 +207,71 @@ export function updateFactionWarCalls(world: WorldState): void {
     }
   }
 }
+function aiCharter(world: WorldState, nationId: NationId): FactionCharter {
+  const character = getNationCharacter(world, nationId);
+  return { allowedIdeologyIds: [getNationIdeology(world, nationId).id],
+    defensiveObligation: character.cooperation >= 0.6 ? "mandatory" : "voluntary",
+    offensiveObligation: character.aggression >= 0.75 ? "mandatory" : character.aggression >= 0.5 ? "voluntary" : "none", considerPersonality: true };
+}
+function reviewFactionCohesion(world: WorldState): void {
+  const state = getFactionState(world);
+  for (const nation of [...world.nations].sort((a, b) => a.id.localeCompare(b.id))) {
+    const faction = getNationFaction(world, nation.id);
+    if (!faction || faction.memberIds.length < 2) { state.cohesionFailures.delete(nation.id); continue; }
+    const others = faction.memberIds.filter((id) => id !== nation.id);
+    const friction = others.reduce((sum, id) => sum + getIdeologicalAffinity(world, nation.id, id), 0) / others.length;
+    const opinion = others.reduce((sum, id) => sum + getRelation(world, nation.id, id).opinion, 0) / others.length;
+    const trust = others.reduce((sum, id) => sum + getRelation(world, nation.id, id).trust, 0) / others.length;
+    const sharedThreat = others.some((id) => commonEnemy(world, nation.id, id));
+    const ideologicalDispute = others.some((id) => getIdeologicalAffinity(world, nation.id, id) <= -0.75 &&
+      getRelation(world, nation.id, id).opinion < 60 && !commonEnemy(world, nation.id, id));
+    const loyaltyThreshold = 45 + Math.max(0, -friction) * 12;
+    const broken = opinion < -15 || trust < 25 || ideologicalDispute || (friction < -0.2 && opinion < loyaltyThreshold && !sharedThreat);
+    const failures = broken ? (state.cohesionFailures.get(nation.id) ?? 0) + 1 : 0;
+    state.cohesionFailures.set(nation.id, failures);
+    if (failures >= 3 && world.time.slowTick - (state.membershipSince.get(nation.id) ?? faction.createdAtSlowTick) >= 120 &&
+      !world.wars.some((war) => war.nationAId === nation.id || war.nationBId === nation.id)) leaveFaction(world, nation.id, "diplomatic cohesion collapsed");
+  }
+}
 export function updateFactions(world: WorldState): void {
   if (getWarDeclarationMode(world) !== "diplomacy") return;
   const state = getFactionState(world);
   if (world.time.slowTick - state.lastAISlowTick < 30) return;
   state.lastAISlowTick = world.time.slowTick;
-  const active = world.nations.filter(isNationActive), activeIds = new Set(active.map((nation) => nation.id));
+  const active = world.nations.filter(isNationActive).sort((a, b) => a.id.localeCompare(b.id)), activeIds = new Set(active.map((nation) => nation.id));
   for (const faction of [...state.factions]) for (const id of [...faction.memberIds]) {
     if (!activeIds.has(id) || !faction.charter.allowedIdeologyIds.includes(getNationIdeology(world, id).id)) leaveFaction(world, id, "membership no longer eligible");
   }
+  reviewFactionCohesion(world);
   for (const nation of active) {
     if (getNationFaction(world, nation.id)) continue;
-    const candidate = state.factions.find((faction) => canJoinFaction(world, nation.id, faction));
-    if (candidate && joinFaction(world, nation.id, candidate.id)) continue;
-    const character = getNationCharacter(world, nation.id);
-    const charter: FactionCharter = {
-      allowedIdeologyIds: character.cooperation >= 0.7 ? getIdeologies(world).map((item) => item.id) : [getNationIdeology(world, nation.id).id],
-      defensiveObligation: character.cooperation >= 0.6 ? "mandatory" : "voluntary",
-      offensiveObligation: character.aggression >= 0.75 ? "mandatory" : character.aggression >= 0.5 ? "voluntary" : "none", considerPersonality: true,
-    };
-    const partner = active.find((other) => other.id !== nation.id && !getNationFaction(world, other.id) &&
-      charter.allowedIdeologyIds.includes(getNationIdeology(world, other.id).id) &&
-      getRelation(world, nation.id, other.id).opinion >= 20 && factionWillingness(world, other.id, charter) >= 40 && !findWar(world.wars, nation.id, other.id));
-    if (partner) { const faction = createFaction(world, nation.id, charter); if (faction) joinFaction(world, partner.id, faction.id); }
+    const candidate = [...state.factions].map((faction) => ({ faction, score: factionJoinScore(world, nation.id, faction) }))
+      .sort((a, b) => b.score - a.score || a.faction.id.localeCompare(b.faction.id))[0];
+    const charter = aiCharter(world, nation.id), character = getNationCharacter(world, nation.id);
+    let founding: { partner: typeof nation; charter: FactionCharter; score: number } | undefined;
+    if (getInfluence(world, nation.id) >= 20 && factionWillingness(world, nation.id, charter) >= 40) {
+      for (const other of active) {
+        if (other.id === nation.id || getNationFaction(world, other.id) || getInfluence(world, other.id) < 5 || findWar(world.wars, nation.id, other.id)) continue;
+        const relation = getRelation(world, nation.id, other.id), affinity = getIdeologicalAffinity(world, nation.id, other.id);
+        const sharedThreat = commonEnemy(world, nation.id, other.id);
+        // Ideological blocs are the default; an exceptional shared-war coalition may admit one other ideology.
+        if (affinity < 1 && (!sharedThreat || relation.opinion < 45 || relation.trust < 70)) continue;
+        const proposed = { ...charter, allowedIdeologyIds: [...new Set([...charter.allowedIdeologyIds, getNationIdeology(world, other.id).id])] };
+        const temporary: Faction = { id: "draft", name: "draft", founderId: nation.id, leaderId: nation.id, memberIds: [nation.id], charter: proposed, createdAtSlowTick: world.time.slowTick };
+        if (!canJoinFaction(world, other.id, temporary)) continue;
+        const score = 50 + affinity * 15 + relation.opinion * 0.2 + relation.trust * 0.1 + (sharedThreat ? 25 : 0);
+        if (!founding || score > founding.score || (score === founding.score && other.id < founding.partner.id)) founding = { partner: other, charter: proposed, score };
+      }
+    }
+    if (candidate && candidate.score >= 60 && (!founding || candidate.score >= founding.score) && joinFaction(world, nation.id, candidate.faction.id)) continue;
+    if (founding) {
+      const faction = createFaction(world, nation.id, founding.charter);
+      if (faction) { joinFaction(world, founding.partner.id, faction.id); continue; }
+    }
+    // A country may form the nucleus of a counterweight to an ideologically hostile large bloc.
+    const rival = state.factions.find((faction) => faction.memberIds.length >= 2 && faction.memberIds.length / active.length >= 0.35 &&
+      getIdeologicalAffinity(world, nation.id, faction.leaderId) < -0.2 && getRelation(world, nation.id, faction.leaderId).opinion <= 15);
+    if (rival && getInfluence(world, nation.id) >= 20 && factionWillingness(world, nation.id, charter) >= 40 &&
+      (character.cooperation >= 0.4 || character.aggression >= 0.6)) createFaction(world, nation.id, charter);
   }
 }
