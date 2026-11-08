@@ -1,3 +1,4 @@
+import { createSimulationSettings } from "./simulation-settings";
 import type { WorldConfig } from "../data/world-config";
 import { WORLD_BALANCE } from "../data/balance";
 import { SeededRng } from "../utils/seeded-rng";
@@ -133,6 +134,9 @@ export function createWorld(config: WorldConfig): WorldState {
   const cache = createWorldCache();
 
   return {
+    settings: createSimulationSettings(config.systems),
+    worldSeed: config.seed,
+    events: [],
     width: config.width,
     height: config.height,
     microRegions,

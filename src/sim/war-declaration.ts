@@ -1,3 +1,4 @@
+import { getWarDeclarationMode } from "./simulation-settings";
 import { WORLD_BALANCE } from "../data/balance";
 import type { NationId } from "../worldgen/nation";
 import { isNationActive } from "./nation-active";
@@ -20,6 +21,7 @@ export interface WarIntentCandidate {
 }
 
 export function updateWarDeclarations(world: WorldState): void {
+  if (getWarDeclarationMode(world) !== "legacy") return;
   const settings = WORLD_BALANCE.war.declare;
   const range = settings.slowTickRange;
   if (range.min <= 0 || range.max <= 0) return;

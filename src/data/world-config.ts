@@ -1,3 +1,4 @@
+import type { SimulationSettings } from "../sim/simulation-settings";
 import { WORLD_BALANCE } from "./balance";
 
 export interface Range {
@@ -6,6 +7,7 @@ export interface Range {
 }
 
 export interface WorldConfig {
+  systems?: Partial<SimulationSettings>;
   width: number;
   height: number;
   microRegionCount: number;

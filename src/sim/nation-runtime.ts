@@ -1,3 +1,4 @@
+import type { NationCharacter } from "./nation-character";
 import type { Nation } from "../worldgen/nation";
 import type { UnitId } from "./unit";
 
@@ -39,6 +40,7 @@ export function createNationResourceFlow(): NationResourceFlow {
 }
 
 export type NationRuntime = Nation & {
+  character?: NationCharacter;
   unitRoles: NationUnitRoles;
   capitalFallCount: number;
   surrenderScore: number;

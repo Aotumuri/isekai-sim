@@ -1,3 +1,4 @@
+import type { SimulationSettings, SimulationEvent } from "./simulation-settings";
 import type { MicroRegion } from "../worldgen/micro-region";
 import type { MicroRegionEdge } from "../worldgen/micro-region-edge";
 import type { MacroRegion } from "../worldgen/macro-region";
@@ -36,6 +37,9 @@ import type { WarIntentState } from "./war-intent";
 import type { CommonThreatCoalitionState } from "./common-threat-coalitions";
 
 export interface WorldState {
+  settings?: SimulationSettings;
+  worldSeed?: number;
+  events?: SimulationEvent[];
   width: number;
   height: number;
   microRegions: MicroRegion[];
