@@ -24,13 +24,13 @@ import type { SimClock } from "../sim/time";
 import type { WorldState } from "../sim/world-state";
 
 const BRANCH_NAMES: Record<ResearchBranch, string> = {
-  firepower: "Firepower", reliability: "Reliability", materials: "Material efficiency", fuel: "Fuel efficiency", logistics: "Logistics", production: "Production",
+  firepower: "Firepower", reliability: "Reliability", materials: "Material efficiency", fuel: "Fuel efficiency", logistics: "Logistics", production: "Production", armor: "Protection", mobility: "Speed", handling: "Accuracy & handling", capacity: "Cargo capacity",
 };
 const DOCTRINES = { expansionist: "Expansionist", merchant: "Mercantile", technocrat: "Technocratic",
   guardian: "Defensive", pragmatist: "Pragmatic", isolationist: "Isolationist" };
 const TREATY_NAMES = { alliance: "Defensive alliance", trade: "Trade pact", "non-aggression": "Non-aggression", truce: "Truce" };
 const RESOURCE_NAMES: Record<TradeResource, string> = { steel: "Steel", fuel: "Fuel", weapons: "Weapons" };
-const RESEARCH_STATUS = { researching: "Researching", "saving resources": "Saving research funds", "capital isolated": "Capital isolated", complete: "Research complete", paused: "Preparing" };
+const RESEARCH_STATUS = { researching: "Researching", "saving resources": "Saving research funds", "capital isolated": "Capital isolated", complete: "Research complete", paused: "Preparing", "government in exile": "Government in exile" };
 const esc = (value: unknown) => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]!));
 
 export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: SimClock): { update: () => void; openDiplomacy: () => void; openFactions: () => void; close: () => void } {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { designFromResearch, emptyResearchLevels, getResearchCost, getResearchPortfolio, getResearchPriorities,
-  getResearchState, RESEARCH_BRANCHES, updateResearch } from "../../src/sim/research";
+  getResearchState, RESEARCH_BRANCHES, EQUIPMENT_FAMILIES, updateResearch } from "../../src/sim/research";
 import { updateSupplyAssessment } from "../../src/sim/supply-assessment";
 import { createSocietyWorld } from "../helpers/society-world";
 
@@ -39,7 +39,7 @@ test("research pauses without a budget and when disabled, and stops at the level
   updateResearch(world);
   assert.equal(portfolio.totalScience, 0);
   world.settings!.researchEnabled = true;
-  for (const branch of RESEARCH_BRANCHES) portfolio.levels[branch] = 10;
+  for (const family of EQUIPMENT_FAMILIES) for (const branch of RESEARCH_BRANCHES) getResearchPortfolio(world, nation.id, family).levels[branch] = 10;
   updateResearch(world);
   assert.equal(portfolio.status, "complete");
   assert.equal(nation.resources.steel, 1000);
@@ -47,8 +47,8 @@ test("research pauses without a budget and when disabled, and stops at the level
 
 test("firepower carries resource and reliability penalties that other research can offset", () => {
   const { nation } = fundedWorld();
-  const heavy = designFromResearch(nation.id, { ...emptyResearchLevels(), firepower: 8 });
-  const mature = designFromResearch(nation.id, { ...emptyResearchLevels(), firepower: 8, reliability: 8, materials: 8, fuel: 8 });
+  const heavy = designFromResearch(nation.id, { ...emptyResearchLevels(), firepower: 8 }, "Tank");
+  const mature = designFromResearch(nation.id, { ...emptyResearchLevels(), firepower: 8, reliability: 8, materials: 8, fuel: 8 }, "Tank");
   assert(heavy.firepower > 1 && heavy.weaponCost > 1 && heavy.fuelUse > 1 && heavy.reliability < 1);
   assert.equal(mature.firepower, heavy.firepower);
   assert(mature.reliability > heavy.reliability && mature.weaponCost < heavy.weaponCost && mature.fuelUse < heavy.fuelUse);
@@ -62,8 +62,9 @@ test("national doctrine, shortages and manual focus change research priorities",
   const guardian = getResearchPriorities(world, nation.id);
   assert(merchant.production > guardian.production);
   assert(guardian.reliability > merchant.reliability);
+  const beforeFuel = getResearchPriorities(world, nation.id, "Tank").fuel;
   nation.resourceFlow.delta.fuel = -10;
-  assert(getResearchPriorities(world, nation.id).fuel > guardian.fuel);
+  assert(getResearchPriorities(world, nation.id, "Tank").fuel > beforeFuel);
   portfolio.focus = "firepower";
   assert(getResearchPriorities(world, nation.id).firepower > guardian.firepower);
 });

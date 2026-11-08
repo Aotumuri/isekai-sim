@@ -51,12 +51,12 @@ test("refits cost resources at a supplied facility and do not instantly upgrade 
 test("researched fuel economy affects operating consumption and keeps designs after fuel-status updates", () => {
   const { world, nation } = preparedWorld();
   const tank = createUnitForType(createUnitId(world.unitIdCounter++), nation.id, nation.capitalMesoId, "Tank");
-  tank.design = designFromResearch(nation.id, { ...emptyResearchLevels(), firepower: 8 });
+  tank.design = designFromResearch(nation.id, { ...emptyResearchLevels(), firepower: 8 }, "Tank");
   world.units.push(tank);
   updateProduction(world);
   const heavyConsumption = nation.resourceFlow.usage.fuel;
   const heavyDesign = tank.design;
-  tank.design = designFromResearch(nation.id, { ...emptyResearchLevels(), firepower: 8, fuel: 8 });
+  tank.design = designFromResearch(nation.id, { ...emptyResearchLevels(), firepower: 8, fuel: 8 }, "Tank");
   world.time.slowTick += 1;
   updateProduction(world);
   assert(nation.resourceFlow.usage.fuel < heavyConsumption);

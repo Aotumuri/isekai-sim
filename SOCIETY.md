@@ -335,3 +335,9 @@ Validation: `test/regression/exile-government.test.ts` covers recognition, trust
 ### Country name variety
 
 Country names use 64 roots and 64 endings (4,096 base combinations, up from 576). Collisions select another unused combination rather than appending a number. Once those combinations are exhausted, middle syllables expand the grammar without numeric suffixes. Names reserve existing spellings case-insensitively, preserve established countries when new states appear, and remain deterministic for a world seed without consuming the simulation RNG. Regression coverage generates 5,000 unique names in reversed nation order and checks case-insensitive collisions and newly formed states.
+
+### Research by equipment family
+
+Small arms, tanks, warships and transport ships have independent research levels, progress, branch focus and program priority. Program priority can be Automatic, Paused, Low, Normal or High. A nation divides one science/resource budget between programs; creating four programs does not multiply its research budget. National personality and coastal access guide Automatic priorities. Existing unified research is migrated once into applicable branches; exile governments preserve their programs while research is suspended.
+
+Small arms specialize in firepower, accuracy/handling and reliability. Tanks and warships can specialize in firepower, protection or speed. Transport ships develop cargo capacity, protection and speed. Applicable programs also offer material efficiency, production, logistics and fuel efficiency. Extra firepower, armor, speed and payload have manufacturing, fuel, reliability or mobility tradeoffs; efficiency research offsets them. Payload growth has strictly shrinking marginal gains, and a capped design raises a standard ten-unit transport's capacity to at most 25.
