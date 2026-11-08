@@ -435,12 +435,12 @@ function attachDebugConfigPanel(
   content.on("pointerdown", (event) => event.stopPropagation());
   content.on("pointertap", (event) => event.stopPropagation());
   const background = new Graphics();
-  const title = new Text("DEBUG 表示設定", new TextStyle({
+  const title = new Text("Debug display settings", new TextStyle({
     fontFamily: FONT_FAMILY, fontSize: 13, fontWeight: "600", fill: CONFIG_ACCENT,
   }));
   title.resolution = renderer.app.renderer.resolution;
   title.position.set(10, 8);
-  const hint = new Text("項目をクリックして表示切替", new TextStyle({
+  const hint = new Text("Click a category to toggle it", new TextStyle({
     fontFamily: FONT_FAMILY, fontSize: 10, fill: CONFIG_MUTED,
   }));
   hint.resolution = renderer.app.renderer.resolution;

@@ -1,3 +1,4 @@
+import type { MapViewState } from "../render/map-view-state";
 import type { FactionState } from "./factions";
 import type { Ideology } from "./nation-identity";
 import type { ArmsAidState } from "./arms-aid";
@@ -51,6 +52,7 @@ export interface WorldState {
   worldSeed?: number;
   customIdeologies?: Ideology[];
   factions?: FactionState;
+  mapView?: MapViewState;
   events?: SimulationEvent[];
   width: number;
   height: number;
