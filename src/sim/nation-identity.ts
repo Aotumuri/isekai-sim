@@ -6,8 +6,43 @@ export const BUILTIN_IDEOLOGIES: readonly Ideology[] = [
   { id: "communism", name: "Communism" }, { id: "capitalism", name: "Capitalism" },
   { id: "cohesionism", name: "Cohesionism" }, { id: "avian-supremacy", name: "Avian Supremacy" },
 ];
-const PREFIXES = ["Aster", "Val", "Nor", "Eld", "Cal", "Syl", "Raven", "Sol", "Mer", "Vel", "Arden", "Lun", "Cor", "Thal", "Iver", "Or", "Bran", "Zeph", "Dun", "Fen", "Kest", "Hal", "Tir", "Wyn"];
-const SUFFIXES = ["ia", "oria", "mark", "mere", "land", "vale", "heim", "ara", "en", "ria", "holm", "essa", "or", "crest", "wyn", "fall", "gard", "haven", "dell", "mont", "reach", "ath", "ond", "is"];
+const PREFIXES = [
+  "Aster", "Val", "Nor", "Eld", "Cal", "Syl", "Raven", "Sol", "Mer", "Vel", "Arden", "Lun", "Cor", "Thal", "Iver", "Or", "Bran", "Zeph", "Dun", "Fen", "Kest", "Hal", "Tir", "Wyn",
+  "Bel", "Caer", "Dor", "Es", "Fael", "Glen", "Hel", "Isen", "Jor", "Kael", "Lor", "Mar", "Nim", "Ost", "Pyr", "Quel", "Riv", "Sar", "Tor", "Ul", "Vard", "West", "Xan", "Yor", "Zar", "Ash", "Bryn", "Cyr", "Drae", "Eir", "Frost", "Gal", "High", "Il", "Jun", "Kel", "Myr", "Oak", "Rhos", "Ser",
+];
+const SUFFIXES = [
+  "ia", "oria", "mark", "mere", "land", "vale", "heim", "ara", "en", "ria", "holm", "essa", "or", "crest", "wyn", "fall", "gard", "haven", "dell", "mont", "reach", "ath", "ond", "is",
+  "acia", "adia", "ael", "amar", "anor", "antis", "aris", "asar", "aven", "bridge", "brook", "cairn", "dale", "dor", "drin", "eria", "ford", "gate", "glen", "gora", "hall", "harbor", "marsh", "hold", "hollow", "ith", "keep", "len", "moor", "nar", "ora", "port", "rim", "ross", "stead", "stone", "terra", "thorn", "tor", "watch",
+];
+const MIDDLE_SYLLABLES = ["an", "el", "ir", "ol", "un", "ar", "en", "is", "or", "ur", "al", "er", "in", "os", "ul", "ath"];
+function middleSyllables(index: number): string {
+  let result = "";
+  while (index > 0) {
+    index--;
+    result = MIDDLE_SYLLABLES[index % MIDDLE_SYLLABLES.length]! + result;
+    index = Math.floor(index / MIDDLE_SYLLABLES.length);
+  }
+  return result;
+}
+function greatestCommonDivisor(a: number, b: number): number {
+  while (b) [a, b] = [b, a % b];
+  return a;
+}
+function chooseNationName(hash: number, used: ReadonlySet<string>): string {
+  const count = PREFIXES.length * SUFFIXES.length;
+  const start = (hash % PREFIXES.length) * SUFFIXES.length + (hash >>> 8) % SUFFIXES.length;
+  let step = ((hash >>> 16) | 1) % count;
+  // A coprime stride visits every combination before expanding the name grammar.
+  while (greatestCommonDivisor(step, count) !== 1) step++;
+  for (let variation = 0; ; variation++) {
+    const middle = middleSyllables(variation);
+    for (let attempt = 0; attempt < count; attempt++) {
+      const index = (start + attempt * step) % count;
+      const name = `${PREFIXES[Math.floor(index / SUFFIXES.length)]}${middle}${SUFFIXES[index % SUFFIXES.length]}`;
+      if (!used.has(name.toLowerCase())) return name;
+    }
+  }
+}
 export function identityHash(value: string): number {
   let hash = 2166136261;
   for (const char of value) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
@@ -24,14 +59,12 @@ export function createIdeology(world: WorldState, name: string): Ideology | null
   return ideology;
 }
 export function assignNationIdentities(world: WorldState): void {
-  const used = new Set(world.nations.filter((nation) => nation.name).map((nation) => nation.name!));
+  const used = new Set(world.nations.filter((nation) => nation.name).map((nation) => nation.name!.toLowerCase()));
   for (const nation of [...world.nations].sort((a, b) => a.id.localeCompare(b.id))) {
     const hash = identityHash(`${world.worldSeed ?? 0}:${nation.id}:identity`);
     if (!nation.name) {
-      const base = `${PREFIXES[hash % PREFIXES.length]}${SUFFIXES[(hash >>> 8) % SUFFIXES.length]}`;
-      let name = base, suffix = 2;
-      while (used.has(name)) name = `${base} ${suffix++}`;
-      nation.name = name; used.add(name);
+      const name = chooseNationName(hash, used);
+      nation.name = name; used.add(name.toLowerCase());
     }
     nation.ideologyId ??= BUILTIN_IDEOLOGIES[(hash >>> 16) % BUILTIN_IDEOLOGIES.length]!.id;
   }
