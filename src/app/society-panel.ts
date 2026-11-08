@@ -1,3 +1,4 @@
+import { attachPoliticsControls } from "./politics-controls";
 import { attachPeaceControls } from "./peace-controls";
 import { getDesignTransportCapacity } from "../sim/unit-capabilities";
 import { getIdeologicalAffinity, ideologyAffinityLabel } from "../sim/ideology-relations";
@@ -53,7 +54,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       </details>
       <div class="society-selectors"><label>Selected nation<select data-control="nation" aria-label="Selected nation"></select></label><label>Diplomatic partner<select data-control="partner" aria-label="Diplomatic partner"></select></label></div>
       <div class="society-country" data-view="country"></div><div data-exile-ui></div>
-      <nav class="society-tabs" aria-label="Information views"><button type="button" data-tab="diplomacy" aria-pressed="true">Diplomacy</button><button type="button" data-tab="territory" aria-pressed="false">Territories</button><button type="button" data-tab="military" aria-pressed="false">Military</button><button type="button" data-tab="research" aria-pressed="false">Research</button><button type="button" data-tab="factions" aria-pressed="false">Factions</button><button type="button" data-tab="history" aria-pressed="false">World history</button></nav>
+      <nav class="society-tabs" aria-label="Information views"><button type="button" data-tab="diplomacy" aria-pressed="true">Diplomacy</button><button type="button" data-tab="politics" aria-pressed="false">Politics</button><button type="button" data-tab="territory" aria-pressed="false">Territories</button><button type="button" data-tab="military" aria-pressed="false">Military</button><button type="button" data-tab="research" aria-pressed="false">Research</button><button type="button" data-tab="factions" aria-pressed="false">Factions</button><button type="button" data-tab="history" aria-pressed="false">World history</button></nav>
       <p class="society-feedback" role="status" aria-live="polite">Nations act autonomously. Select a nation to guide its policies and diplomacy.</p>
       <section data-pane="diplomacy">
         <div data-view="relation"></div><div data-view="truce-extension"></div>
@@ -66,6 +67,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
         <div class="society-trade-form"><label>Export<select data-control="export" aria-label="Export resource">${resourceOptions}</select></label><label>Amount<input data-control="amount" aria-label="Export quantity" type="number" min="1" max="50" value="12" step="1"></label><label>Import<select data-control="import" aria-label="Import resource">${resourceOptions}</select></label><button type="button" data-action="exchange">Propose exchange</button></div><p class="society-note" data-view="exchange"></p>
         <div data-view="shipments"></div><h2>Relations</h2><div data-view="relations"></div>
       </section>
+      <section data-pane="politics" hidden><div data-politics-ui></div></section>
       <section data-pane="territory" hidden><div data-territory-ui></div></section>
       <section data-pane="military" hidden><div data-mobilization-ui></div></section>
       <section data-pane="research" hidden>
@@ -91,6 +93,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
   (control("import") as HTMLSelectElement).value = "weapons";
   const feedback = wrapper.querySelector<HTMLElement>(".society-feedback")!;
   const exileControls = attachExileControls(wrapper.querySelector<HTMLElement>("[data-exile-ui]")!, world, () => nationSelect.value as NationId, (id) => { selectMapNation(world, id); nationSelect.value = id; update(true); });
+  const politics = attachPoliticsControls(wrapper.querySelector<HTMLElement>("[data-politics-ui]")!, world);
   const peaceControls = attachPeaceControls(wrapper.querySelector<HTMLElement>("[data-peace-ui]")!, world, () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   const factions = attachFactionControls(wrapper.querySelector<HTMLElement>("[data-faction-ui]")!, world, () => nationSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   const territories = attachTerritoryControls(wrapper.querySelector<HTMLElement>("[data-territory-ui]")!, world, () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
@@ -193,6 +196,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       CombatShip: "Warships: choose stronger guns, tougher protection or higher speed. Armor slows the ship; powerful guns and engines increase operating costs. Efficiency and reliability research offset these penalties.",
       TransportShip: "Transport ships: expand cargo capacity, improve survivability or increase speed. Capacity gains diminish: a standard 10-unit ship reaches at most 25 units at level 10. Larger hulls cost more, burn more fuel and move more slowly.",
     }[family]);
+    if (!panel.querySelector<HTMLElement>('[data-pane="politics"]')?.hidden) politics.update(nation);
     peaceControls.update();
     exileControls.update();
     factions.update();

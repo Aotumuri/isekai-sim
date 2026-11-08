@@ -11,7 +11,7 @@ const esc = (text: unknown) => String(text).replace(/[&<>"']/g, (char) => ({ "&"
 export function attachFactionControls(root: HTMLElement, world: WorldState, selected: () => NationId,
   feedback: (message: string) => void): { update: () => void } {
   root.innerHTML = `<h2>Ideology and factions</h2><p class="society-note">Faction members share a map color. Similar ideologies cooperate more easily. Cross-ideology membership needs stronger relationships with every member; shared threats can bridge differences.</p>
-    <label>National ideology<select data-faction-control="national-ideology" aria-label="National ideology"></select></label>
+    <label>National ideology (sandbox override)<select data-faction-control="national-ideology" aria-label="National ideology"></select></label>
     <div data-faction-view="membership"></div>
     <h2>Create a faction</h2><label>Faction name<input type="text" data-faction-control="name" aria-label="Faction name" maxlength="60" placeholder="Automatic name"></label>
     <p class="society-note">Your ideology is selected by default. Include other ideologies to offer a broader coalition; admission still requires diplomatic trust and compatible relationships.</p><fieldset class="faction-ideologies"><legend>Eligible ideologies</legend><div data-faction-view="ideologies"></div></fieldset>
@@ -55,7 +55,7 @@ export function attachFactionControls(root: HTMLElement, world: WorldState, sele
     const target = event.target as HTMLSelectElement;
     if (target.dataset.factionControl !== "national-ideology") return;
     const success = setNationIdeology(world, selected(), target.value);
-    feedback(success ? "National ideology updated." : "Leave your faction before adopting an ideology outside its charter."); update();
+    feedback(success ? "National ideology and governing mandate updated." : "Leave your faction before adopting an ideology outside its charter."); update();
   });
   root.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-faction-action]"); if (!button) return;

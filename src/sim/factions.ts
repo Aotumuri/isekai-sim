@@ -1,3 +1,4 @@
+import { setPoliticalMandate } from "./politics";
 import { getIdeologicalAffinity } from "./ideology-relations";
 import type { NationId } from "../worldgen/nation";
 import { breakTreaty, getRelation, spendInfluence, getInfluence } from "./diplomacy";
@@ -199,7 +200,7 @@ export function setNationIdeology(world: WorldState, nationId: NationId, ideolog
   const faction = getNationFaction(world, nationId);
   if (!nation || !getIdeologies(world).some((item) => item.id === ideologyId) ||
     (faction && !faction.charter.allowedIdeologyIds.includes(ideologyId))) return false;
-  nation.ideologyId = ideologyId;
+  setPoliticalMandate(world, nation, ideologyId);
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [nationId], message: `${getNationName(world, nationId)} adopted ${getNationIdeology(world, nationId).name}.` });
   return true;
 }

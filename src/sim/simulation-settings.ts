@@ -25,7 +25,7 @@ export function getWarDeclarationMode(world: WorldState): "diplomacy" | "legacy"
 
 export interface SimulationEvent {
   tick: number;
-  category: "diplomacy" | "research" | "aid" | "trade" | "military";
+  category: "diplomacy" | "research" | "aid" | "trade" | "military" | "politics";
   nationIds: string[];
   message: string;
 }
