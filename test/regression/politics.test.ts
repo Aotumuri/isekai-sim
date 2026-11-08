@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { getDomesticUnrest } from "../../src/sim/domestic-unrest";
+import { updateCivilWar } from "../../src/sim/civil-war";
+import { declareWar } from "../../src/sim/war-state";
+import { withMutedSimulationLogs } from "../helpers/muted-logs";
 import { getIdeologicalAffinity } from "../../src/sim/ideology-relations";
 import { getNationCharacter } from "../../src/sim/nation-character";
 import { getNationalPolitics, increasePoliticalSupport, updateNationalPolitics } from "../../src/sim/politics";
@@ -47,4 +51,36 @@ test("monarchies change policy through succession and have no elected seats", ()
   assert.equal(nation.ideologyId, "cohesionism");
   assert.equal(government.seats.size, 0);
   assert.deepEqual(government.coalition, ["cohesionism"]);
+});
+
+
+test("a monarchy's revolutionary opposition establishes its own parliamentary government", () => {
+  const world = createSocietyWorld();
+  const parent = world.nations.find((nation) => nation.macroRegionIds.length > 1 &&
+    world.macroRegions.some((macro) => macro.nationId === nation.id && macro.mesoRegionIds.some((id) =>
+      world.mesoRegions.find((region) => region.id === id)?.building === "city")));
+  assert.ok(parent);
+  const other = world.nations.find((nation) => nation.id !== parent.id)!;
+  parent.ideologyId = "capitalism";
+  const monarchy = getNationalPolitics(world, parent);
+  monarchy.system = "monarchy";
+  monarchy.seats.clear();
+  increasePoliticalSupport(monarchy, "communism", 18);
+  declareWar(world.wars, parent.id, other.id, 0);
+  parent.warCooperation = 0;
+  const unrest = getDomesticUnrest(world, parent.id);
+  unrest.pressure = 100;
+  unrest.lowSupportSeconds = 300;
+
+  const count = world.nations.length;
+  withMutedSimulationLogs(() => updateCivilWar(world));
+  assert.equal(world.nations.length, count + 1);
+  const rebel = world.nations.at(-1)!;
+  const parliament = getNationalPolitics(world, rebel);
+  assert.equal(parliament.system, "democracy");
+  assert.equal(rebel.ideologyId, "communism");
+  assert.equal(getNationCharacter(world, rebel.id).doctrine, "guardian");
+  assert.equal([...parliament.seats.values()].reduce((sum, seats) => sum + seats, 0), 100);
+  assert.equal(parent.ideologyId, "capitalism");
+  assert.equal(monarchy.system, "monarchy");
 });

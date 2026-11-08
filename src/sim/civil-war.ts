@@ -1,4 +1,5 @@
 import { updateDomesticUnrest, canRevolt, recordRevolution } from "./domestic-unrest";
+import { establishRevolutionaryGovernment } from "./politics";
 import { getNationName } from "./nation-identity";
 import { recordSimulationEvent } from "./simulation-settings";
 import { WORLD_BALANCE } from "../data/balance";
@@ -155,6 +156,7 @@ export function updateCivilWar(world: WorldState): void {
         : Number.POSITIVE_INFINITY,
     };
     world.nations.push(newNation);
+    establishRevolutionaryGovernment(world, nation, newNation);
     recordRevolution(world, nation.id, newNationId);
     recordSimulationEvent(world, { category: "diplomacy", nationIds: [nation.id, newNationId],
       message: `Revolution in ${getNationName(world, nation.id)} after sustained domestic unrest; ${getNationName(world, newNationId)} declared independence.` });

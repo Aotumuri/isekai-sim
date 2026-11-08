@@ -86,7 +86,6 @@ export function increasePoliticalSupport(politics: NationalPolitics, ideologyId:
 }
 
 function adoptGovernmentIdeology(world: WorldState, nation: NationRuntime, ideologyId: string): void {
-  if (nation.ideologyId === ideologyId) return;
   const base = nation.preGovernmentCharacter ??= { ...getNationCharacter(world, nation.id) };
   const policy = POLICY_PROFILES[ideologyId];
   nation.ideologyId = ideologyId;
@@ -103,12 +102,32 @@ function adoptGovernmentIdeology(world: WorldState, nation: NationRuntime, ideol
 export function setPoliticalMandate(world: WorldState, nation: NationRuntime, ideologyId: string): void {
   const politics = getNationalPolitics(world, nation);
   if (politics.governingIdeologyId === ideologyId && nation.ideologyId === ideologyId) return;
+  installPoliticalMandate(world, nation, politics, ideologyId);
+}
+
+function installPoliticalMandate(world: WorldState, nation: NationRuntime, politics: NationalPolitics, ideologyId: string): void {
   politics.governingIdeologyId = ideologyId;
   politics.support = initialSupport(ideologyId, identityHash(`${nation.id}:${ideologyId}:mandate`));
   politics.consecutiveMandates = 1;
+  politics.nextMandateAt = world.time.slowTick + (politics.system === "democracy" ? ELECTION_INTERVAL : SUCCESSION_INTERVAL);
+  politics.nextSupportReviewAt = world.time.slowTick + SUPPORT_REVIEW_INTERVAL;
   politics.seats = politics.system === "democracy" ? new Map(politics.support) : new Map();
   politics.coalition = politics.system === "democracy" ? formCoalition(politics.seats, ideologyId) : [ideologyId];
   adoptGovernmentIdeology(world, nation, ideologyId);
+}
+
+export function establishRevolutionaryGovernment(world: WorldState, parent: NationRuntime, rebel: NationRuntime): void {
+  if (getWarDeclarationMode(world) !== "diplomacy") return;
+  const parentPolitics = getNationalPolitics(world, parent);
+  const incumbent = parentPolitics.governingIdeologyId;
+  const ideology = rankedParties(parentPolitics.support, incumbent).find(([id]) => id !== incumbent)?.[0] ??
+    BUILTIN_IDEOLOGIES.find(({ id }) => id !== incumbent)!.id;
+  const politics = getNationalPolitics(world, rebel);
+  politics.system = "democracy";
+  installPoliticalMandate(world, rebel, politics, ideology);
+  const ideologyName = getNationIdeology(world, rebel.id).name;
+  recordSimulationEvent(world, { category: "politics", nationIds: [parent.id, rebel.id],
+    message: `${rebel.id} founded a parliamentary government led by ${ideologyName}, formerly in opposition in ${parent.id}.` });
 }
 
 export function updateNationalPolitics(world: WorldState): void {
@@ -144,7 +163,7 @@ export function updateNationalPolitics(world: WorldState): void {
       politics.coalition = [leader];
     }
     politics.consecutiveMandates = incumbent === politics.governingIdeologyId ? politics.consecutiveMandates + 1 : 1;
-    adoptGovernmentIdeology(world, nation, politics.governingIdeologyId);
+    if (nation.ideologyId !== politics.governingIdeologyId) adoptGovernmentIdeology(world, nation, politics.governingIdeologyId);
     const name = getIdeologies(world).find(({ id }) => id === politics.governingIdeologyId)?.name ?? politics.governingIdeologyId;
     recordSimulationEvent(world, { category: "politics", nationIds: [nation.id],
       message: `${nation.id}: ${democratic ? "election" : "royal succession"} ${incumbent === politics.governingIdeologyId ? "retained" : "brought to power"} ${name}.` });
