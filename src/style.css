@@ -50,7 +50,7 @@ canvas {
 .society-country strong { font-size: 16px; }
 .society-country span { color: #bad1ee; }
 .society-country small { color: #b7c4d5; grid-column: 1 / -1; }
-.society-tabs { display: flex; gap: 8px; margin-top: 16px; }
+.society-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 16px; }
 .society-tabs button { flex: 1; }
 .society-tabs button[aria-pressed=true] { background: #284d77; border-color: #83b3f5; }
 .society-note { color: #acbfd5; font-size: 12px; line-height: 1.7; }
@@ -116,3 +116,11 @@ canvas {
 .territory-province label { display: flex; align-items: center; gap: 5px; padding: 4px 0; }
 .territory-province input { width: auto; }
 @media (max-width: 600px) { .territory-parcels { grid-template-columns: 1fr; } }
+
+.mobilization-metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 16px 0; }
+.mobilization-metrics span { display: flex; flex-direction: column; gap: 5px; padding: 10px; border-radius: 6px; background: #1c2c3d; font-size: 12px; color: #bcd0df; }
+.mobilization-metrics strong { color: #f3f5ec; font-size: 20px; }
+[data-mobilization-ui] progress { width: 100%; height: 12px; accent-color: #79bbd8; }
+[data-mobilization-view="strain"] { accent-color: #ea9955 !important; }
+[data-mobilization-view="status"] { padding: 12px 0; color: #dfcb91; }
+[data-mobilization-ui] h3 { font-size: 13px; margin-bottom: 6px; }

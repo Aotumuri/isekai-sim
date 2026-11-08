@@ -1,3 +1,4 @@
+import { attachMobilizationControls } from "./mobilization-controls";
 import { attachTerritoryControls, districtName } from "./territory-controls";
 import { attachFactionControls } from "./faction-controls";
 import { getNationName, getNationIdeology } from "../sim/nation-identity";
@@ -40,6 +41,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       <details class="society-settings"><summary>Simulation settings</summary>
         <label><input type="checkbox" data-setting="diplomacyEnabled"> Diplomacy (overrides legacy war declarations)</label>
         <label><input type="checkbox" data-setting="legacyWarDeclarationsEnabled"> Legacy war declarations (when diplomacy is off)</label>
+        <label><input type="checkbox" data-setting="mobilizationEnabled"> Mobilization and civilian strain</label>
         <label><input type="checkbox" data-setting="researchEnabled"> National research and automatic refits</label>
         <label><input type="checkbox" data-setting="armsAidEnabled"> Arms aid</label>
         <label><input type="checkbox" data-setting="tradeEnabled"> Resource trade</label>
@@ -47,7 +49,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       </details>
       <div class="society-selectors"><label>Selected nation<select data-control="nation" aria-label="Selected nation"></select></label><label>Diplomatic partner<select data-control="partner" aria-label="Diplomatic partner"></select></label></div>
       <div class="society-country" data-view="country"></div>
-      <nav class="society-tabs" aria-label="Information views"><button type="button" data-tab="diplomacy" aria-pressed="true">Diplomacy</button><button type="button" data-tab="territory" aria-pressed="false">Territories</button><button type="button" data-tab="research" aria-pressed="false">Research</button><button type="button" data-tab="factions" aria-pressed="false">Factions</button><button type="button" data-tab="history" aria-pressed="false">World history</button></nav>
+      <nav class="society-tabs" aria-label="Information views"><button type="button" data-tab="diplomacy" aria-pressed="true">Diplomacy</button><button type="button" data-tab="territory" aria-pressed="false">Territories</button><button type="button" data-tab="military" aria-pressed="false">Military</button><button type="button" data-tab="research" aria-pressed="false">Research</button><button type="button" data-tab="factions" aria-pressed="false">Factions</button><button type="button" data-tab="history" aria-pressed="false">World history</button></nav>
       <p class="society-feedback" role="status" aria-live="polite">Nations act autonomously. Select a nation to guide its policies and diplomacy.</p>
       <section data-pane="diplomacy">
         <div data-view="relation"></div>
@@ -60,6 +62,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
         <div data-view="shipments"></div><h2>Relations</h2><div data-view="relations"></div>
       </section>
       <section data-pane="territory" hidden><div data-territory-ui></div></section>
+      <section data-pane="military" hidden><div data-mobilization-ui></div></section>
       <section data-pane="research" hidden>
         <div class="society-selectors"><label>Research focus<select data-control="focus" aria-label="Research focus"><option value="auto">Automatic: personality and circumstances</option>${branchOptions}</select></label><label>Research budget<select data-control="investment" aria-label="Research budget"><option value="economy">Economy (0.5×)</option><option value="balanced">Balanced (1×)</option><option value="ambitious">Ambitious (1.5×)</option></select></label></div>
         <p class="society-note" data-view="research-status"></p><div data-view="research"></div>
@@ -80,6 +83,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
   const feedback = wrapper.querySelector<HTMLElement>(".society-feedback")!;
   const factions = attachFactionControls(wrapper.querySelector<HTMLElement>("[data-faction-ui]")!, world, () => nationSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   const territories = attachTerritoryControls(wrapper.querySelector<HTMLElement>("[data-territory-ui]")!, world, () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
+  const mobilizationControls = attachMobilizationControls(wrapper.querySelector<HTMLElement>("[data-mobilization-ui]")!, world, () => nationSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   let visible = false, lastRender = -Infinity, cachedNationIds = "";
   let lastPaused: boolean | undefined;
   let lastSelected: NationId | null = null, lastTarget: NationId | null = null;
@@ -155,9 +159,10 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     }).join("");
     factions.update();
     territories.update();
+    mobilizationControls.update();
     const design = getNationalDesign(world, a);
     view("design").innerHTML = [["Firepower", design.firepower], ["Reliability", design.reliability], ["Weapons required", design.weaponCost], ["Manufacturing steel", design.steelCost], ["Fuel use", design.fuelUse], ["Organization recovery", design.recovery]].map(([label, value]) => `<span>${label}<strong>×${Number(value).toFixed(2)}</strong></span>`).join("");
-    view("events").innerHTML = [...(world.events ?? [])].slice(-40).reverse().map((event) => `<article class="society-event"><time>${Math.floor(event.tick / 600)}:${String(Math.floor(event.tick / 10) % 60).padStart(2, "0")}</time><span>${esc(event.message)}</span></article>`).join("") || '<p class="society-note">Diplomacy, trade and research events appear here.</p>';
+    view("events").innerHTML = [...(world.events ?? [])].slice(-40).reverse().map((event) => `<article class="society-event"><time>${Math.floor(event.tick / 600)}:${String(Math.floor(event.tick / 10) % 60).padStart(2, "0")}</time><span>${esc(event.message)}</span></article>`).join("") || '<p class="society-note">Diplomacy, trade, research and mobilization events appear here.</p>';
     for (const button of panel.querySelectorAll<HTMLButtonElement>("button[data-action]")) {
       const action = button.dataset.action;
       if (["improve", "pact", "trade-pact", "alliance", "aid", "peace", "crisis", "negotiate", "concede", "reject", "break-alliance", "break-pact", "break-trade", "exchange", "license"].includes(action ?? "")) {
