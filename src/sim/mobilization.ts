@@ -92,10 +92,12 @@ export function updateMobilization(world: WorldState): void {
     const atWar = world.wars.some((war) => war.nationAId === nation.id || war.nationBId === nation.id);
     item.threat = threats.get(nation.id) ?? 0;
     if (item.policy === "total") item.threat = Math.max(item.threat, 0.95);
-    const desired = item.policy === "limited" && !atWar ? Math.min(0.4, item.threat) : item.threat;
+    let desired = item.policy === "limited" && !atWar ? Math.min(0.4, item.threat) : item.threat;
+    // Ambiguous warnings do not justify permanent mass conscription against civilian opposition.
+    if (!atWar && item.threat < 0.7) desired *= 1 - item.burden * 0.008;
     const direction = desired - item.readiness;
     item.readiness = clamp(item.readiness + Math.sign(direction) * Math.min(Math.abs(direction), elapsed * (direction > 0 ? 0.025 : 0.012)));
-    if (item.threat > 0.05) item.quietSinceSlowTick = world.time.slowTick;
+    if (item.threat >= 0.7) item.quietSinceSlowTick = world.time.slowTick;
     const limits = getArmyLimits(world, nation, item);
     item.standingArmy = limits.standing; item.maximumArmy = limits.maximum; item.authorizedArmy = limits.authorized;
     const ownUnits = units.filter((unit) => unit.nationId === nation.id);
@@ -138,14 +140,15 @@ export function updateDemobilization(world: WorldState): void {
   const owners = getOwnerByMesoId(world), removed = new Set<string>();
   for (const nation of world.nations) {
     const item = world.mobilization?.byNationId.get(nation.id);
-    if (!item || !nation.macroRegionIds.length || item.threat > 0.05 || world.time.slowTick - item.quietSinceSlowTick < 30 ||
+    if (!item || !nation.macroRegionIds.length || item.threat >= 0.7 || world.time.slowTick - item.quietSinceSlowTick < 30 ||
       world.time.slowTick - item.lastDemobilizationTick < 5 || world.wars.some((war) => war.nationAId === nation.id || war.nationBId === nation.id)) continue;
-    const actual = allFieldUnits(world).filter((unit) => unit.domain === "land" && unit.nationId === nation.id).length;
+    const ownUnits = allFieldUnits(world).filter((unit) => unit.nationId === nation.id);
+    const actual = ownUnits.filter((unit) => unit.domain === "land").length;
     const excess = Math.max(0, actual - item.authorizedArmy), batch = Math.min(excess, Math.max(2, Math.ceil(actual * 0.05)));
     const candidates = world.units.filter((unit) => unit.nationId === nation.id && unit.domain === "land" && unit.manpower > 0 && unit.cargoUnits.length === 0 &&
       owners.get(unit.regionId) === nation.id && !world.occupation.mesoById.has(unit.regionId) &&
       (!unit.moveToId || owners.get(unit.moveToId) === nation.id) && !unit.amphibiousEmbarkRequested && !unit.amphibiousLandRequested &&
-      !world.amphibiousOperations.operationByUnitId.has(unit.id) && !world.offensiveOperations.operationIdByUnitId.has(unit.id) &&
+      !world.amphibiousOperations.operationByUnitId.has(unit.id) && !world.amphibiousOperations.capabilityDemandByUnitId.has(unit.id) && !world.offensiveOperations.operationIdByUnitId.has(unit.id) &&
       !world.retreatPlans.retreatIdByUnitId.has(unit.id) && !world.reorganization.planIdByUnitId.has(unit.id) &&
       !world.battles.some((battle) => battle.mesoId === unit.regionId) && isNationRegionSupplied(world, nation.id, unit.regionId)).sort((a, b) => a.org - b.org || a.id.localeCompare(b.id));
     let count = 0;
@@ -159,7 +162,7 @@ export function updateDemobilization(world: WorldState): void {
     }
     if (!count) continue;
     item.lastDemobilizationTick = world.time.slowTick; item.landUnits = actual - count;
-    nation.initialUnitCount = Math.max(0, nation.initialUnitCount - count);
+    nation.initialUnitCount = Math.max(ownUnits.length - count, nation.initialUnitCount - count);
     nation.unitRoles.defenseUnitIds = nation.unitRoles.defenseUnitIds.filter((id) => !removed.has(id));
     nation.unitRoles.occupationUnitIds = nation.unitRoles.occupationUnitIds.filter((id) => !removed.has(id));
     recordSimulationEvent(world, { category: "military", nationIds: [nation.id], message: `${nation.id} demobilized ${count} units; surviving personnel returned and equipment was partly recovered.` });

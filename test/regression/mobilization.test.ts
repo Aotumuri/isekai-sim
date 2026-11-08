@@ -1,3 +1,4 @@
+import { getAdjacentNationPairs } from "../../src/sim/world-cache";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createSocietyWorld } from "../helpers/society-world";
@@ -56,6 +57,7 @@ test("automatic demobilization returns only surviving personnel and partial equi
   updateSupplyAssessment(world); item.authorizedArmy = 3; item.threat = 0; item.quietSinceSlowTick = 0; world.time.slowTick = 40;
   const before = a.resources.manpower, weapons = a.resources.weapons;
   updateDemobilization(world); assert.equal(item.demobilized, 2);
+  assert.equal(a.initialUnitCount, 18);
   assert.equal(a.resources.manpower - before, 1200); assert.equal(a.resources.weapons - weapons, 6);
   const count = world.units.length; updateDemobilization(world); assert.equal(world.units.length, count);
   declareWar(world.wars, a.id, b.id, 0); world.time.slowTick += 10; updateDemobilization(world); assert.equal(world.units.length, count);
@@ -99,4 +101,19 @@ test("strain clamped at zero support cannot manufacture support when it is later
   assert.equal(a.warCooperation, 0);
   item.burden = 0; updateWarCooperation(world);
   assert(a.warCooperation > 0.1 && a.warCooperation < 0.13);
+});
+
+
+test("civilian opposition moderates ambiguous alerts, while actual ultimatums protect mobilized troops", () => {
+  const world = createSocietyWorld(), [aId, bId] = getAdjacentNationPairs(world)[0];
+  const a = world.nations.find((nation) => nation.id === aId)!, item = getMobilization(world, aId);
+  const relation = getRelation(world, aId, bId); relation.opinion = -70; relation.tension = 90;
+  item.burden = 90; item.readiness = 0.6; item.quietSinceSlowTick = 0;
+  for (let i = 0; i < 80; i++) world.units.push(createUnitForType(createUnitId(world.unitIdCounter++), aId, a.capitalMesoId, "Infantry"));
+  world.time.slowTick = 40; updateMobilization(world); updateSupplyAssessment(world); updateDemobilization(world);
+  assert(item.readiness < 0.6); assert(item.demobilized > 0);
+  const before = item.demobilized;
+  relation.crisis = { aggressorId: bId, demand: "concessions", openedAtSlowTick: 40, deadlineSlowTick: 100 };
+  world.time.slowTick += 40; updateMobilization(world); updateDemobilization(world);
+  assert.equal(item.demobilized, before); assert.equal(item.phase, "mobilizing");
 });
