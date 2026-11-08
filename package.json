@@ -14,6 +14,7 @@
     "benchmark": "node --import tsx test/benchmark/run-benchmark.ts",
     "benchmark:quick": "node --import tsx test/benchmark/run-benchmark.ts --quick",
     "benchmark:compare": "node --import tsx test/benchmark/compare-results.ts",
+    "diagnose:society": "node --import tsx test/diagnostics/society-campaign.ts",
     "diagnostic:two-island": "node --import tsx test/diagnostics/two-island-campaign.ts",
     "diagnose:fleet-ready": "node --import tsx test/diagnostics/fleet-ready-capability-demand.ts",
     "diagnose:strategic-window-ab": "node --import tsx test/diagnostics/strategic-window-ab.ts",

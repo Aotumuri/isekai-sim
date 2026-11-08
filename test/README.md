@@ -101,3 +101,24 @@ monotonicity, ID integrity and finite resources/unit state.
 Battles can delete units after the AI phase in the same fast tick. Unit-role IDs
 are therefore checked after the following `repositionUnits` phase, which is the
 point where those derived role lists are refreshed.
+
+
+## Diplomacy, research and international logistics
+
+Existing military regression fixtures explicitly select legacy declarations and
+pause the new society systems so their original assumptions remain reproducible.
+New game worlds enable diplomacy, research, trade and arms aid by default.
+
+Run the society campaign diagnostic for autonomous international behavior:
+
+```bash
+npm run diagnose:society
+npm run diagnose:society -- --seed 822748319788 --ticks 60000
+npm run diagnose:society -- --legacy --seed 101 --ticks 12000
+```
+
+The diagnostic checks resource, relation, research, treaty, unit ownership and
+history bounds during each campaign. Its summaries distinguish legacy and
+diplomatic declarations and report actual trade/aid arrivals, research, refits
+and technology licenses. See [SOCIETY.md](../SOCIETY.md) for player controls,
+balance formulas and recorded results.
