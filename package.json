@@ -31,7 +31,8 @@
     "diagnose:amphibious-hybrid-v2": "node --import tsx test/diagnostics/amphibious-hybrid-v2.ts",
     "diagnose:amphibious-hybrid-aborts": "node --import tsx test/diagnostics/amphibious-hybrid-aborts.ts",
     "diagnose:amphibious-capital-launch-state": "node --import tsx test/diagnostics/amphibious-capital-launch-state.ts",
-    "diagnose:mobilization": "node --import tsx test/diagnostics/mobilization-cycle.ts"
+    "diagnose:mobilization": "node --import tsx test/diagnostics/mobilization-cycle.ts",
+    "diagnose:faction-balance": "node --import tsx test/diagnostics/faction-balance.ts"
   },
   "dependencies": {
     "d3-delaunay": "^6.0.4",

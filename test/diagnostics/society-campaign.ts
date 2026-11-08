@@ -32,7 +32,7 @@ for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 8227483
     const offer = proposeTerritorialExchange(world, a, b, [parcel(a)], [parcel(b)]);
     if (!offer || !respondToTerritorialOffer(world, b, offer.id, true)) throw new Error("Failed territorial campaign setup");
   }
-  let peakArmy = 0, peakStrain = 0;
+  let peakArmy = 0, peakStrain = 0, peakFactions = 0, peakMultiNationBlocs = 0;
   let treatyPeak = 0, levels = 0, actualBattles = 0, last = 0;
   const result = withMutedSimulationLogs(() => {
     for (let part = 0; part < ticks; part += 100) {
@@ -78,6 +78,8 @@ for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 8227483
           !Number.isFinite(portfolio.progress[branch]) || portfolio.progress[branch] < 0) throw new Error("Invalid research progress");
       }
       if (world.events && world.events.length > 200) throw new Error("Unbounded event history");
+      peakFactions = Math.max(peakFactions, world.factions?.factions.length ?? 0);
+      peakMultiNationBlocs = Math.max(peakMultiNationBlocs, world.factions?.factions.filter((faction) => faction.memberIds.length >= 2).length ?? 0);
       const members = new Set<string>();
       for (const faction of world.factions?.factions ?? []) {
         if (!faction.memberIds.length || !faction.memberIds.includes(faction.leaderId)) throw new Error("Invalid faction leader");
@@ -88,6 +90,7 @@ for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 8227483
         }
       }
       if (members.size !== (world.factions?.factionByNationId.size ?? 0)) throw new Error("Stale faction membership index");
+      if (world.factions) for (const id of world.factions.membershipSince.keys()) if (!members.has(id)) throw new Error("Stale faction loyalty record");
       last = world.time.fastTick;
     }
     return last;
@@ -103,6 +106,7 @@ for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 8227483
     peakArmy, peakStrain, demobilizedUnits: [...(world.mobilization?.byNationId.values() ?? [])].reduce((sum, item) => sum + item.demobilized, 0),
     militaryAccessGrants: world.militaryAccess?.grants.filter((grant) => grant.revokedAtSlowTick === undefined).length ?? 0, alliedRequestsAccepted: world.alliedWarRequests?.requests.filter((request) => request.status === "accepted").length ?? 0,
     volunteerMissions: world.volunteers?.missions.length ?? 0, volunteersReturned: world.volunteers?.missions.reduce((sum, mission) => sum + mission.returnedUnits, 0) ?? 0,
+    peakFactions, peakMultiNationBlocs, factionDefections: world.factions?.aiDefections ?? 0,
     factions: world.factions?.factions.length ?? 0, factionMembers: world.factions?.factionByNationId.size ?? 0,
     factionInterventions: world.factions?.interventions ?? 0, battleSamples: actualBattles, eventCount: world.events?.length ?? 0 }));
 }
