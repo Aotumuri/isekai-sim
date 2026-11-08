@@ -28,6 +28,8 @@ export interface ResearchState {
   steelSpent: number;
   retrofits: number;
   licensesShared: number;
+  lastLicenseSlowTick: number;
+  licenseCooldowns: Map<string, number>;
 }
 export interface WeaponDesign {
   manufacturerId: NationId;
@@ -45,7 +47,7 @@ export function emptyResearchLevels(): ResearchLevels {
 }
 export function getResearchState(world: WorldState): ResearchState {
   return world.research ??= { byNationId: new Map(), lastSlowTick: -1, lastRetrofitSlowTick: -10, weaponsSpent: 0,
-    steelSpent: 0, retrofits: 0, licensesShared: 0 };
+    steelSpent: 0, retrofits: 0, licensesShared: 0, lastLicenseSlowTick: -60, licenseCooldowns: new Map() };
 }
 export function getResearchPortfolio(world: WorldState, nationId: NationId): ResearchPortfolio {
   const state = getResearchState(world);
