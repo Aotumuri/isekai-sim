@@ -90,7 +90,7 @@ export function resolveCrisisPeacefully(world: WorldState, a: NationId, b: Natio
 }
 
 export function startDiplomaticWar(world: WorldState, aggressorId: NationId, targetId: NationId,
-  cause: "diplomatic-crisis" | "defensive-alliance" | "faction-obligation" = "diplomatic-crisis"): boolean {
+  cause: "diplomatic-crisis" | "defensive-alliance" | "faction-obligation" | "allied-request" = "diplomatic-crisis"): boolean {
   if (getWarDeclarationMode(world) !== "diplomacy" || isDiplomaticallyProtected(world, aggressorId, targetId)) return false;
   if (![aggressorId, targetId].every((id) => world.nations.some((nation) => nation.id === id && isNationActive(nation)))) return false;
   if (findWar(world.wars, aggressorId, targetId)) return false;
@@ -161,7 +161,7 @@ export function updateDiplomaticCrises(world: WorldState): void {
   }
   // Allies defend the directly attacked state; defensive calls do not recurse.
   for (const war of [...world.wars]) {
-    if (war.cause === "defensive-alliance" || war.cause === "faction-obligation") continue;
+    if (war.cause === "allied-request" || war.cause === "defensive-alliance" || war.cause === "faction-obligation") continue;
     for (const ally of world.nations.filter(isNationActive)) {
       if (ally.id === war.aggressorId || ally.id === war.defenderId || areFactionPartners(world, ally.id, war.defenderId) ||
         !hasTreaty(world, ally.id, war.defenderId, "alliance") || findWar(world.wars, ally.id, war.aggressorId)) continue;

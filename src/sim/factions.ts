@@ -135,7 +135,7 @@ function callMembers(world: WorldState, war: WarState, principal: NationId, enem
 export function updateFactionWarCalls(world: WorldState): void {
   if (getWarDeclarationMode(world) !== "diplomacy" || !world.factions) return;
   const state = world.factions;
-  const roots = world.wars.filter((war) => war.cause !== "faction-obligation" && war.cause !== "defensive-alliance");
+  const roots = world.wars.filter((war) => war.cause !== "allied-request" && war.cause !== "faction-obligation" && war.cause !== "defensive-alliance");
   const livePrefixes = roots.map((war) => `${war.id}|${war.startedAtFastTick}|`);
   for (const key of state.handledCalls) if (!livePrefixes.some((prefix) => key.startsWith(prefix))) state.handledCalls.delete(key);
   for (const war of roots) {
