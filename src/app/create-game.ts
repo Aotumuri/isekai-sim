@@ -20,7 +20,7 @@ import { updateSimulation } from "../sim/update";
 import { attachTimeControls } from "./time-controls";
 import type { WorldState } from "../sim/world-state";
 
-const DISABLE_UNIT_ANIMATION_SPEED = 4;
+const MAX_UNIT_ANIMATION_SPEED = 4;
 
 export function createGame(root: HTMLElement, setup: { world?: WorldState; paused?: boolean } = {}): void {
   const config = createWorldConfig(setup.world?.width ?? window.innerWidth, setup.world?.height ?? window.innerHeight);
@@ -124,7 +124,7 @@ export function createGame(root: HTMLElement, setup: { world?: WorldState; pause
       world.units,
       world.mesoRegions,
       clock.accumulatorMs,
-      getSpeedMultiplier(clock) < DISABLE_UNIT_ANIMATION_SPEED,
+      getSpeedMultiplier(clock) <= MAX_UNIT_ANIMATION_SPEED,
     );
   });
 }
