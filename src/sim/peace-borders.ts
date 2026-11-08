@@ -2,9 +2,9 @@ import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { WorldState } from "./world-state";
 import type { TerritoryTransfer } from "./territory-transfer";
-import { getOwnerByMesoId } from "./world-cache";
+import { getMesoById, getNeighborsById, getOwnerByMesoId } from "./world-cache";
 
-function components(ids: Set<MesoRegionId>, neighbors: Map<MesoRegionId, MesoRegionId[]>): MesoRegionId[][] {
+export function connectedRegionGroups(ids: Set<MesoRegionId>, neighbors: Map<MesoRegionId, MesoRegionId[]>): MesoRegionId[][] {
   const unseen = new Set(ids), result: MesoRegionId[][] = [];
   for (const seed of unseen) {
     unseen.delete(seed);
@@ -32,10 +32,10 @@ export function getPeaceBorderIssue(world: WorldState, legs: TerritoryTransfer[]
   for (const nation of affected) {
     const original = new Set([...land].filter((id) => before.get(id) === nation));
     const final = new Set([...land].filter((id) => after.get(id) === nation));
-    const groups = components(final, neighbors);
+    const groups = connectedRegionGroups(final, neighbors);
     const groupById = new Map(groups.flatMap((group, index) => group.map((id) => [id, index] as const)));
     // Existing islands and enclaves are permitted, but no original land component may be cut apart.
-    for (const group of components(original, neighbors)) {
+    for (const group of connectedRegionGroups(original, neighbors)) {
       const remainingGroups = new Set(group.filter((id) => final.has(id)).map((id) => groupById.get(id)));
       if (remainingGroups.size > 1) return "This settlement would split a country's remaining territory. Choose a different border.";
     }
@@ -54,20 +54,30 @@ export function getPeaceBorderIssue(world: WorldState, legs: TerritoryTransfer[]
 /** Grow concessions from valid borders rather than cherry-picking interior resources. */
 export function selectPeaceDistricts(world: WorldState, from: NationId, to: NationId, candidates: MesoRegionId[], cap: number): MesoRegionId[] {
   const selected: MesoRegionId[] = [], pending = [...new Set(candidates)];
+  const owners = getOwnerByMesoId(world), neighbors = getNeighborsById(world);
+  const selectedSet = new Set<MesoRegionId>();
+  const borderImprovement = (id: MesoRegionId) => (neighbors.get(id) ?? []).reduce((score, neighbor) => {
+    const owner = selectedSet.has(neighbor) ? to : owners.get(neighbor);
+    return score + Number(owner === to) - Number(owner === from);
+  }, 0);
   while (selected.length < cap) {
-    const index = pending.findIndex((id) => !getPeaceBorderIssue(world, [{ from, to, regionIds: [...selected, id] }]));
+    const ranked = [...pending].sort((a, b) => borderImprovement(b) - borderImprovement(a));
+    const next = ranked.find((id) => !getPeaceBorderIssue(world, [{ from, to, regionIds: [...selected, id] }]));
+    const index = next === undefined ? -1 : pending.indexOf(next);
     if (index < 0) {
       // Multi-district islands must be considered together; no individual district is valid.
-      const regions = new Map(world.mesoRegions.map((region) => [region.id, region]));
+      const regions = getMesoById(world);
       const neighbors = new Map(pending.map((id) => [id, (regions.get(id)?.neighbors ?? []).map((next) => next.id)]));
-      const island = components(new Set(pending), neighbors).find((group) => group.length + selected.length <= cap &&
+      const island = connectedRegionGroups(new Set(pending), neighbors).find((group) => group.length + selected.length <= cap &&
         !getPeaceBorderIssue(world, [{ from, to, regionIds: [...selected, ...group] }]));
       if (!island) break;
       selected.push(...island);
-      for (const id of island) pending.splice(pending.indexOf(id), 1);
+      for (const id of island) { selectedSet.add(id); pending.splice(pending.indexOf(id), 1); }
       continue;
     }
-    selected.push(pending.splice(index, 1)[0]);
+    const [id] = pending.splice(index, 1);
+    selectedSet.add(id);
+    selected.push(id);
   }
   return selected;
 }

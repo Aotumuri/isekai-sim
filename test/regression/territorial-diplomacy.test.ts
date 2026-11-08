@@ -1,3 +1,4 @@
+import { selectPeaceDistricts } from "../../src/sim/peace-borders";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createSocietyWorld } from "../helpers/society-world";
@@ -10,9 +11,14 @@ import { updateStrategicThreatObservation } from "../../src/sim/strategic-threat
 
 function scene() {
   const world = createSocietyWorld(); updateSupplyAssessment(world); updateStrategicThreatObservation(world);
-  const exposure = world.strategicThreatObservation.exposures.find((item) => item.landAdjacent)!;
-  const a = exposure.observerNationId, b = exposure.threatNationId;
-  const id = [...getOwnerByMesoId(world)].find(([id, owner]) => owner === b && id !== world.nations.find((nation) => nation.id === b)!.capitalMesoId)![0];
+  const candidates = world.strategicThreatObservation.exposures.filter((item) => item.landAdjacent)
+    .flatMap(({ observerNationId: a, threatNationId: b }) => {
+      const parcels = [...getOwnerByMesoId(world)].filter(([id, owner]) =>
+        owner === b && id !== world.nations.find((nation) => nation.id === b)!.capitalMesoId).map(([id]) => id);
+      return selectPeaceDistricts(world, b, a, parcels, 1).map((id) => ({ a, b, id }));
+    });
+  assert.ok(candidates.length);
+  const { a, b, id } = candidates[0];
   getTerritorialClaims(world).history.get(id)!.set(a, { heldTicks: 500, attachment: 60 });
   const ratio = getNationalMilitaryStrength(world, b) / Math.max(1, getNationalMilitaryStrength(world, a));
   for (const unit of world.units.filter((item) => item.nationId === a)) unit.manpower *= ratio * 1.2;

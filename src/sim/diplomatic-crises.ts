@@ -1,3 +1,4 @@
+import { getPeaceBorderIssue, selectPeaceDistricts } from "./peace-borders";
 import { getWarNegotiation } from "./war-negotiations";
 import { prepareMilitaryAccessForWar } from "./military-access";
 import type { MesoRegionId } from "../worldgen/meso-region";
@@ -20,6 +21,11 @@ export function getNationalMilitaryStrength(world: WorldState, nationId: NationI
     ? getUnitCombatStrength(unit) * (unit.type === "TransportShip" ? 0.1 : 1) : 0), 0);
 }
 
+function canSettleTerritorialDemand(world: WorldState, from: NationId, to: NationId, regionIds: MesoRegionId[]): boolean {
+  const transfers = [{ from, to, regionIds }];
+  return canTransferTerritories(world, transfers) && !getPeaceBorderIssue(world, transfers);
+}
+
 export function openDiplomaticCrisis(world: WorldState, aggressorId: NationId, targetId: NationId, requestedRegions?: MesoRegionId[]): boolean {
   if (getWarDeclarationMode(world) !== "diplomacy" || aggressorId === targetId) return false;
   if (![aggressorId, targetId].every((id) => world.nations.some((nation) => nation.id === id && isNationActive(nation)))) return false;
@@ -27,7 +33,7 @@ export function openDiplomaticCrisis(world: WorldState, aggressorId: NationId, t
   const regionIds = requestedRegions ? [...requestedRegions] : undefined;
   if (regionIds && (!regionIds.length || regionIds.length > 8 || new Set(regionIds).size !== regionIds.length ||
     regionIds.some((id) => getTerritorialClaim(world, aggressorId, id) < 20) ||
-    !canTransferTerritories(world, [{ from: targetId, to: aggressorId, regionIds }]))) return false;
+    !canSettleTerritorialDemand(world, targetId, aggressorId, regionIds))) return false;
   const relation = getRelation(world, aggressorId, targetId);
   if (relation.crisis || world.time.slowTick < relation.cooldownUntilSlowTick) return false;
   const exposure = world.strategicThreatObservation.exposures.find((item) =>
@@ -56,7 +62,7 @@ export function respondToCrisis(world: WorldState, responderId: NationId, otherI
   if (response === "reject") { crisis.deadlineSlowTick = world.time.slowTick; return true; }
   if (response === "concede") {
     if (crisis.demand === "territory") {
-      if (!crisis.regionIds || !transferTerritories(world, [{ from: responderId, to: otherId, regionIds: crisis.regionIds }], "ultimatum")) return false;
+      if (!crisis.regionIds || !canSettleTerritorialDemand(world, responderId, otherId, crisis.regionIds) || !transferTerritories(world, [{ from: responderId, to: otherId, regionIds: crisis.regionIds }], "ultimatum")) return false;
       relation.territorialSettlement = { aggressorId: otherId, regionIds: [...crisis.regionIds], atSlowTick: world.time.slowTick };
       resolveCrisisPeacefully(world, responderId, otherId, "accepted territorial demand");
       // Consent prevents an annexation penalty, but coercion still leaves resentment.
@@ -129,7 +135,7 @@ export function updateDiplomaticCrises(world: WorldState): void {
     }
     if (crisis.demand === "territory" && (!crisis.regionIds?.length ||
       crisis.regionIds.some((id) => getOwnerByMesoId(world).get(id) !== defender) ||
-      !canTransferTerritories(world, [{ from: defender, to: attacker, regionIds: crisis.regionIds }]))) {
+      !canSettleTerritorialDemand(world, defender, attacker, crisis.regionIds))) {
       resolveCrisisPeacefully(world, attacker, defender, "territorial demand no longer valid"); continue;
     }
     const ratio = getNationalMilitaryStrength(world, attacker) / Math.max(1, getNationalMilitaryStrength(world, defender));
@@ -184,10 +190,11 @@ export function updateDiplomaticCrises(world: WorldState): void {
     const desire = character.aggression * 40 + relation.tension * 0.6 + relation.grievance * 0.4 -
       relation.opinion * 0.35 + intent.opportunity * 0.3 - intent.expectedCost * 0.3 - intent.existingCommitment;
     const claims = getForeignClaims(world, attacker, candidate.targetNationId);
-    const territorialTarget = claims.find((claim) => claim.strength >= 35 &&
-      world.nations.find((nation) => nation.id === candidate.targetNationId)?.capitalMesoId !== claim.regionId);
+    const capital = world.nations.find((nation) => nation.id === candidate.targetNationId)?.capitalMesoId;
+    const territorialTargets = claims.filter((claim) => claim.strength >= 35 && claim.regionId !== capital).map((claim) => claim.regionId);
+    const requested = desire >= 45 ? selectPeaceDistricts(world, candidate.targetNationId, attacker, territorialTargets, 1) : [];
     if (desire >= 45 && openDiplomaticCrisis(world, attacker, candidate.targetNationId,
-      territorialTarget ? [territorialTarget.regionId] : undefined)) opened.add(attacker);
+      requested.length ? requested : undefined)) opened.add(attacker);
   }
 }
 

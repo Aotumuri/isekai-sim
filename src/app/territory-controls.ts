@@ -1,3 +1,4 @@
+import { getPeaceBorderIssue } from "../sim/peace-borders";
 import type { NationId } from "../worldgen/nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { WorldState } from "../sim/world-state";
@@ -89,6 +90,14 @@ export function attachTerritoryControls(root: HTMLElement, world: WorldState, se
       feedback(success ? `Port built in ${districtName(ids[0])}.` : "Select one safe, supplied coastal district and check construction resources.");
       update();
       return;
+    }
+    if (action === "exchange" || action === "ultimatum") {
+      const offered = picked("offered"), requested = picked("requested");
+      const issue = getPeaceBorderIssue(world, [
+        ...(action === "exchange" && offered.length ? [{ from: a, to: b, regionIds: offered }] : []),
+        ...(requested.length ? [{ from: b, to: a, regionIds: requested }] : []),
+      ]);
+      if (issue) { feedback(issue); return; }
     }
     if (action === "exchange") success = !!proposeTerritorialExchange(world, a, b, picked("offered"), picked("requested"));
     if (action === "ultimatum") success = openDiplomaticCrisis(world, a, b, picked("requested"));

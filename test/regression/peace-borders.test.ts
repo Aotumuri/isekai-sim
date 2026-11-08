@@ -112,3 +112,8 @@ test("surrender grows contiguous shares even when both victors occupied alternat
   assert.equal(owners.get(id(6)), owners.get(id(7)), "the offshore island changes hands as a unit");
   assert.equal(b.macroRegionIds.length, 0);
 });
+
+test("automatic concessions prefer filling a border pocket over extending a salient", () => {
+  const { world, a, b, id } = scene("aabbbb", [[0, 1], [0, 2], [2, 3], [2, 5], [1, 4], [0, 4], [4, 5], [3, 5]]);
+  assert.deepEqual(selectPeaceDistricts(world, b.id, a.id, [id(2), id(4)], 1), [id(4)]);
+});

@@ -1,3 +1,4 @@
+import { getPeaceBorderIssue } from "./peace-borders";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { WorldState } from "./world-state";
@@ -24,6 +25,11 @@ function legs(offer: Pick<TerritorialOffer, "proposerId" | "targetId" | "offered
     ...(offer.requested.length ? [{ from: offer.targetId, to: offer.proposerId, regionIds: offer.requested }] : []),
   ];
 }
+function canSettleOffer(world: WorldState, offer: Pick<TerritorialOffer, "proposerId" | "targetId" | "offered" | "requested">): boolean {
+  const transfers = legs(offer);
+  return canTransferTerritories(world, transfers) && !getPeaceBorderIssue(world, transfers);
+}
+
 export function territorialValue(world: WorldState, nationId: NationId, ids: MesoRegionId[]): number {
   const regions = getMesoById(world), nation = world.nations.find((item) => item.id === nationId);
   return ids.reduce((sum, id) => {
@@ -45,7 +51,7 @@ export function proposeTerritorialExchange(world: WorldState, proposerId: Nation
   if (getWarDeclarationMode(world) !== "diplomacy" || proposerId === targetId || findWar(world.wars, proposerId, targetId) ||
     getRelation(world, proposerId, targetId).crisis) return null;
   const draft = { proposerId, targetId, offered: [...offered], requested: [...requested] };
-  if (!canTransferTerritories(world, legs(draft))) return null;
+  if (!canSettleOffer(world, draft)) return null;
   const state = getTerritorialDeals(world);
   if (state.offers.filter((offer) => offer.status === "pending").length >= 20 ||
     state.offers.some((offer) => offer.status === "pending" && ((offer.proposerId === proposerId && offer.targetId === targetId) ||
@@ -67,7 +73,7 @@ export function respondToTerritorialOffer(world: WorldState, nationId: NationId,
   if (!offer) return false;
   if (world.time.slowTick >= offer.expiresAtSlowTick) { offer.status = "expired"; return false; }
   if (findWar(world.wars, offer.proposerId, offer.targetId) || getRelation(world, offer.proposerId, offer.targetId).crisis ||
-    !canTransferTerritories(world, legs(offer))) { offer.status = "stale"; return false; }
+    !canSettleOffer(world, offer)) { offer.status = "stale"; return false; }
   if (!accept) offer.status = "rejected";
   else {
     if (!transferTerritories(world, legs(offer))) return false;
@@ -93,7 +99,7 @@ export function updateTerritorialDeals(world: WorldState): void {
   for (const offer of state.offers) if (offer.status === "pending") {
     if (now >= offer.expiresAtSlowTick) offer.status = "expired";
     else if (findWar(world.wars, offer.proposerId, offer.targetId) || getRelation(world, offer.proposerId, offer.targetId).crisis ||
-      !canTransferTerritories(world, legs(offer))) offer.status = "stale";
+      !canSettleOffer(world, offer)) offer.status = "stale";
     else if (now - offer.createdAtSlowTick >= 10) respondToTerritorialOffer(world, offer.targetId, offer.id, willAcceptTerritorialOffer(world, offer));
   }
   if (now - state.lastAISlowTick < 60) return;

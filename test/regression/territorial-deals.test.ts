@@ -1,16 +1,27 @@
+import { getPeaceBorderIssue, selectPeaceDistricts } from "../../src/sim/peace-borders";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createSocietyWorld } from "../helpers/society-world";
 import { proposeTerritorialExchange, respondToTerritorialOffer, updateTerritorialDeals, willAcceptTerritorialOffer } from "../../src/sim/territorial-deals";
 import { getDiplomacyState, getRelation } from "../../src/sim/diplomacy";
-import { getOwnerByMesoId } from "../../src/sim/world-cache";
+import { getAdjacentNationPairs, getOwnerByMesoId } from "../../src/sim/world-cache";
 import { transferTerritories } from "../../src/sim/territory-transfer";
 
 function scene() {
-  const world = createSocietyWorld(), [a, b] = world.nations;
-  const find = (id: typeof a.id) => [...getOwnerByMesoId(world)].filter(([region, owner]) => owner === id && region !== world.nations.find((nation) => nation.id === id)!.capitalMesoId).map(([region]) => region);
-  getDiplomacyState(world).influenceByNationId.set(a.id, 100);
-  return { world, a: a.id, b: b.id, offered: find(a.id), requested: find(b.id) };
+  const world = createSocietyWorld();
+  const owners = getOwnerByMesoId(world);
+  for (const [a, b] of getAdjacentNationPairs(world)) {
+    const parcels = (id: typeof a) => [...owners].filter(([region, owner]) =>
+      owner === id && region !== world.nations.find((nation) => nation.id === id)!.capitalMesoId).map(([region]) => region);
+    const offered = selectPeaceDistricts(world, a, b, parcels(a), 1);
+    const requested = selectPeaceDistricts(world, b, a, parcels(b), 1);
+    if (!offered.length || !requested.length || getPeaceBorderIssue(world, [
+      { from: a, to: b, regionIds: offered }, { from: b, to: a, regionIds: requested },
+    ])) continue;
+    getDiplomacyState(world).influenceByNationId.set(a, 100);
+    return { world, a, b, offered, requested };
+  }
+  throw new Error("No pair has mutually transferable border districts.");
 }
 
 test("exchanges wait for the recipient and atomically settle only the offered parcels", () => {
@@ -27,7 +38,7 @@ test("exchanges wait for the recipient and atomically settle only the offered pa
 test("stale and expired offers cannot transfer parcels or consume extra influence", () => {
   const { world, a, b, offered, requested } = scene();
   const offer = proposeTerritorialExchange(world, a, b, [offered[0]], [requested[0]])!;
-  assert.equal(proposeTerritorialExchange(world, a, b, [offered[1]], []), null);
+  assert.equal(proposeTerritorialExchange(world, a, b, [offered[0]], []), null);
   assert.equal(getDiplomacyState(world).influenceByNationId.get(a), 92);
   assert(transferTerritories(world, [{ from: b, to: a, regionIds: [requested[0]] }]));
   assert.equal(respondToTerritorialOffer(world, b, offer.id, true), false); assert.equal(offer.status, "stale");
@@ -46,4 +57,14 @@ test("AI values resources, attachment and capitals; gifts can be accepted and em
   assert.equal(willAcceptTerritorialOffer(world, { ...gift, requested: [capital] }), false);
   world.time.slowTick += 10; updateTerritorialDeals(world);
   assert.equal(gift.status, "accepted"); assert.equal(getOwnerByMesoId(world).get(offered[0]), b);
+});
+
+
+test("an exchange cannot create a new enclave even if both parties agree", () => {
+  const { world, a, b } = scene();
+  const detached = [...getOwnerByMesoId(world)].find(([id, owner]) => owner === a &&
+    getPeaceBorderIssue(world, [{ from: a, to: b, regionIds: [id] }])?.includes("enclaves"));
+  assert.ok(detached);
+  assert.equal(proposeTerritorialExchange(world, a, b, [detached[0]], []), null);
+  assert.equal(getDiplomacyState(world).influenceByNationId.get(a), 100);
 });
