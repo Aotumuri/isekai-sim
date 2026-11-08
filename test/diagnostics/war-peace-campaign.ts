@@ -17,13 +17,14 @@ const results = [false, true].map((hardline) => {
   a.character = hardline ? { ...uncompromising } : { doctrine: "merchant", aggression: 0.25, cooperation: 0.9, innovation: 0.5, thrift: 0.8 };
   b.character = { ...uncompromising }; a.resources.weapons = b.resources.weapons = 100;
   const war = declareWar(world.wars, a.id, b.id, 0)!; getWarNegotiation(world, war);
+  const initialNationCount = world.nations.length;
   let firstPeace: number | null = null, firstRevolution: number | null = null;
   withMutedSimulationLogs(() => {
     for (let tick = 1; tick <= 9000; tick++) {
       world.time.fastTick = tick; world.time.slowTick = Math.floor(tick / 10); world.time.elapsedMs = tick * 100;
       updateWarCooperation(world); updateCivilWar(world);
       if (tick % 10 === 0) updateDiplomaticPeace(world);
-      if (world.nations.length > 3 && firstRevolution === null) firstRevolution = tick / 10;
+      if (world.nations.length > initialNationCount && firstRevolution === null) firstRevolution = tick / 10;
       if (!findWar(world.wars, a.id, b.id) && firstPeace === null) firstPeace = tick / 10;
       for (const nation of world.nations) for (const amount of Object.values(nation.resources)) assert(Number.isFinite(amount) && amount >= 0);
       if (firstPeace !== null || firstRevolution !== null) break;

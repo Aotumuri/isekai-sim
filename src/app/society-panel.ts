@@ -1,3 +1,4 @@
+import { attachPeaceControls } from "./peace-controls";
 import { getDesignTransportCapacity } from "../sim/unit-capabilities";
 import { getIdeologicalAffinity, ideologyAffinityLabel } from "../sim/ideology-relations";
 import { attachExileControls } from "./exile-controls";
@@ -57,8 +58,8 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       <section data-pane="diplomacy">
         <div data-view="relation"></div>
         <div class="society-actions"><button type="button" data-action="improve" title="10 influence. Opinion +10, trust +3, tension -8.">Send envoy · 10</button><button type="button" data-action="pact" title="Requires opinion 20, trust 30 and influence 12.">Non-aggression · 12</button><button type="button" data-action="trade-pact" title="Requires opinion 10, trust 30 and influence 8.">Trade pact · 8</button><button type="button" data-action="alliance" title="Requires opinion 55, trust 55 and influence 20.">Defensive alliance · 20</button></div>
-        <label>Aid equipment<select data-control="aid-family" aria-label="Aid equipment">${familyOptions}</select></label><div class="society-actions"><button type="button" data-action="aid" title="Send equipment for the selected weapon family and retain a reserve of 30. Requires friendly relations and an open route.">Send 20 weapons</button><button type="button" data-action="peace" title="A recent war or a decisive advantage can prevent a negotiated peace.">Offer peace</button><button type="button" data-action="crisis" class="society-danger" title="12 influence. Treaties, strategic access and military strength constrain ultimatums.">Ultimatum · 12</button></div>
-        <div data-view="crisis"></div>
+        <label>Aid equipment<select data-control="aid-family" aria-label="Aid equipment">${familyOptions}</select></label><div class="society-actions"><button type="button" data-action="aid" title="Send equipment for the selected weapon family and retain a reserve of 30. Requires friendly relations and an open route.">Send 20 weapons</button><button type="button" data-action="peace" title="Propose status-quo terms. Acceptance depends on war outlook, personality and domestic stability.">Propose white peace</button><button type="button" data-action="crisis" class="society-danger" title="12 influence. Treaties, strategic access and military strength constrain ultimatums.">Ultimatum · 12</button></div>
+        <div data-view="crisis"></div><div data-peace-ui></div>
         <details><summary>Break a treaty (damages trust and opinion)</summary><div class="society-actions"><button type="button" data-action="break-alliance">Break alliance</button><button type="button" data-action="break-pact">Break non-aggression</button><button type="button" data-action="break-trade">Break trade pact</button></div></details>
         <div data-military-cooperation-ui></div>
         <h2>Resource exchange</h2><p class="society-note">Exchange equal value. Exports are reserved at dispatch and arrive after transit.</p>
@@ -90,6 +91,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
   (control("import") as HTMLSelectElement).value = "weapons";
   const feedback = wrapper.querySelector<HTMLElement>(".society-feedback")!;
   const exileControls = attachExileControls(wrapper.querySelector<HTMLElement>("[data-exile-ui]")!, world, () => nationSelect.value as NationId, (id) => { selectMapNation(world, id); nationSelect.value = id; update(true); });
+  const peaceControls = attachPeaceControls(wrapper.querySelector<HTMLElement>("[data-peace-ui]")!, world, () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   const factions = attachFactionControls(wrapper.querySelector<HTMLElement>("[data-faction-ui]")!, world, () => nationSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   const territories = attachTerritoryControls(wrapper.querySelector<HTMLElement>("[data-territory-ui]")!, world, () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   const mobilizationControls = attachMobilizationControls(wrapper.querySelector<HTMLElement>("[data-mobilization-ui]")!, world, () => nationSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
@@ -187,6 +189,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       CombatShip: "Warships: choose stronger guns, tougher protection or higher speed. Armor slows the ship; powerful guns and engines increase operating costs. Efficiency and reliability research offset these penalties.",
       TransportShip: "Transport ships: expand cargo capacity, improve survivability or increase speed. Capacity gains diminish: a standard 10-unit ship reaches at most 25 units at level 10. Larger hulls cost more, burn more fuel and move more slowly.",
     }[family]);
+    peaceControls.update();
     exileControls.update();
     factions.update();
     territories.update();
@@ -270,6 +273,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       for (const unit of world.units.filter((item) => item.nationId === a && item.type === control("research-family").value)) if (count < 2 && refitUnit(world, unit.id)) count += 1;
       success = count > 0;
     }
+    if (action === "peace" && success) { feedback.textContent = findWar(world.wars, a, b) ? "White peace proposed. The opposing government will reconsider as the war changes." : "Peace signed. The truce and withdrawal of troops are in effect."; update(true); return; }
     feedback.textContent = success ? "Action completed. Relations, resources, shipments and history have been updated." :
       "Requirements are not met. Check influence, relations, agreements, reserves and routes. Refits require an improved design and a supplied facility.";
     update(true);

@@ -135,3 +135,13 @@ canvas {
 .research-programs strong, .research-programs span, .research-programs small { display: block; }
 .research-programs span, .research-programs small { font-size: 11px; color: #b9cde4; margin-top: 4px; }
 .research-programs button[aria-pressed=true] { background: #284d77; border-color: #83b3f5; }
+
+.peace-offers { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin: 12px 0; }
+.peace-offer { padding: 10px; background: #14263b; border: 1px solid #34516f; border-radius: 6px; font-size: 12px; overflow-wrap: anywhere; }
+.peace-offer strong { color: #d8e9ff; }
+.peace-offer small { color: #a9bfd8; }
+[data-peace-editor] select, [data-peace-editor] input[type=number] { width: 100%; margin-top: 6px; }
+
+.peace-offers > :only-child { grid-column: 1 / -1; }
+
+.peace-assessment { grid-column: 1 / -1; }
