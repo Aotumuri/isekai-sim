@@ -413,7 +413,7 @@ function updateProductionInternal(world: WorldState): void {
           world.instrumentation?.incrementCounter("production.naval.fulfilled.reserve");
         }
       }
-      if (reason !== "transport") recordCombatShipFulfilled(world, reason);
+      if (reason !== "transport") recordCombatShipFulfilled(world, reason, getDevelopedUnitWeaponCost(unitType, design));
       return true;
     };
 
@@ -542,10 +542,10 @@ function recordCombatShipRequest(world: WorldState, reason: CombatShipProduction
   }
 }
 
-function recordCombatShipFulfilled(world: WorldState, reason: CombatShipProductionReason): void {
+function recordCombatShipFulfilled(world: WorldState, reason: CombatShipProductionReason, weaponCost: number): void {
   const diagnostics = world.productionDiagnostics;
   diagnostics.navalCombatFulfilledByReason[reason] += 1;
-  diagnostics.navalCombatWeaponsCost += getUnitWeaponCost("CombatShip");
+  diagnostics.navalCombatWeaponsCost += weaponCost;
   diagnostics.navalCombatManpowerCost += getUnitManpowerCost("CombatShip");
   if (reason !== "escort-deficit") {
     world.instrumentation?.incrementCounter(`production.naval.fulfilled.${reasonCounterSuffix(reason)}`);
@@ -839,11 +839,6 @@ function canAffordUnit(resources: NationResources, unitType: UnitType, design?: 
   const weaponCost = getDevelopedUnitWeaponCost(unitType, design);
   const manpowerCost = getUnitManpowerCost(unitType);
   return resources.weapons >= weaponCost && resources.manpower >= manpowerCost;
-}
-
-function getUnitWeaponCost(unitType: UnitType): number {
-  const value = WORLD_BALANCE.unit.types[unitType].weaponCost ?? 0;
-  return Math.max(0, Math.round(value));
 }
 
 function getUnitManpowerCost(unitType: UnitType): number {

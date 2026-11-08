@@ -133,7 +133,7 @@ export function updateResearch(world: WorldState): void {
       portfolio.progress[branch] += budget * priorities[branch] / total;
       const cost = getResearchCost(portfolio, branch);
       if (portfolio.progress[branch] + 1e-9 < cost) continue;
-      portfolio.progress[branch] -= cost; portfolio.levels[branch] += 1; portfolio.completedProjects += 1;
+      portfolio.progress[branch] = Math.max(0, portfolio.progress[branch] - cost); portfolio.levels[branch] += 1; portfolio.completedProjects += 1;
       recordSimulationEvent(world, { category: "research", nationIds: [nation.id],
         message: `${nation.id} completed ${branch} level ${portfolio.levels[branch]}.` });
     }
