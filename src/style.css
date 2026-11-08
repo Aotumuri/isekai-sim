@@ -106,3 +106,4 @@ canvas {
 .map-legend > button { display: block; margin-top: 7px; }
 .map-message { color: #f0c590; margin: 5px 0 0; }.map-message:empty { display: none; }
 @media(max-width:720px) { .map-controls { width: min(350px,calc(100vw - 24px)); right: 12px; top: 150px; } }
+.map-legend-item i.occupation-swatch { width: 24px; background: repeating-linear-gradient(45deg,#dfb975 0 3px,#30455a 3px 8px); }

@@ -4,7 +4,7 @@ import { isNationActive } from "../sim/nation-active";
 import { getOwnerByMesoId } from "../sim/world-cache";
 import type { WorldState } from "../sim/world-state";
 import { getMapView, selectMapNation, setMapMode, type MapMode } from "../render/map-view-state";
-import { DIPLOMATIC_COLORS, getDiplomaticStatus, getFactionColor } from "../render/political-map-data";
+import { DIPLOMATIC_COLORS, getDiplomaticStatus, getFactionColor, getOccupationSummary, getPoliticalFill } from "../render/political-map-data";
 import { buildRegionBounds, findRegion } from "../render/region/hit-test";
 import type { Renderer } from "../render/renderer";
 import type { FrontDebugOverlay } from "../render/front-debug-overlay";
@@ -15,7 +15,7 @@ export function attachMapControls(root: HTMLElement, renderer: Renderer, world: 
   debug: FrontDebugOverlay, society: { openDiplomacy: () => void; openFactions: () => void; close: () => void }): { update: () => void } {
   const controls = document.createElement("section"); controls.className = "map-controls"; controls.setAttribute("aria-label", "Map display");
   controls.innerHTML = `<nav class="map-mode-buttons" aria-label="Map modes"><button type="button" data-map-mode="political">Political</button><button type="button" data-map-mode="diplomacy">Diplomacy <kbd>E</kbd></button><button type="button" data-map-mode="factions">Factions</button><button type="button" data-map-mode="debug">Debug <kbd>F</kbd></button></nav>
-    <details class="map-display-options"><summary>Display settings</summary><label><input type="checkbox" data-map-option="provinceBorders" checked> Province borders</label><label><input type="checkbox" data-map-option="districtBorders"> District grid</label><label><input type="checkbox" data-map-option="labels" checked> Country names</label></details>
+    <details class="map-display-options"><summary>Display settings</summary><label><input type="checkbox" data-map-option="provinceBorders" checked> Province borders</label><label><input type="checkbox" data-map-option="districtBorders"> District grid</label><label><input type="checkbox" data-map-option="labels" checked> Country names</label><label><input type="checkbox" data-map-option="occupations" checked> Occupation overlay</label></details>
     <div class="map-selection" data-map-view="selection"></div><div class="map-legend" data-map-view="legend"></div><p class="map-message" role="status" data-map-view="message"></p>`;
   root.appendChild(controls);
   const view = (name: string) => controls.querySelector<HTMLElement>(`[data-map-view="${name}"]`)!;
@@ -33,7 +33,7 @@ export function attachMapControls(root: HTMLElement, renderer: Renderer, world: 
     if (button.dataset.mapAction === "factions") society.openFactions();
   });
   controls.addEventListener("change", (event) => {
-    const input = event.target as HTMLInputElement, key = input.dataset.mapOption as "provinceBorders" | "districtBorders" | "labels";
+    const input = event.target as HTMLInputElement, key = input.dataset.mapOption as "provinceBorders" | "districtBorders" | "labels" | "occupations";
     if (key) { const state = getMapView(world); state[key] = input.checked; state.revision += 1; update(true); }
   });
   const bounds = buildRegionBounds(world.microRegions);
@@ -75,7 +75,7 @@ export function attachMapControls(root: HTMLElement, renderer: Renderer, world: 
     if (!force && performance.now() - lastRender < 500) return;
     lastRender = performance.now();
     const contentKey = JSON.stringify([state.mode, state.revision, world.factions?.version ?? 0,
-      active.map((nation) => [nation.id, nation.name, nation.ideologyId]),
+      active.map((nation) => [nation.id, nation.name, nation.ideologyId]), world.occupation.version, world.territoryVersion,
       state.diplomaticFocusId && state.targetNationId ? getDiplomaticStatus(world, state.diplomaticFocusId, state.targetNationId) : null]);
     if (contentKey === lastContentKey) return;
     lastContentKey = contentKey;
@@ -90,6 +90,10 @@ export function attachMapControls(root: HTMLElement, renderer: Renderer, world: 
       const nonAligned = active.filter((nation) => !getNationFaction(world, nation.id)).length;
       view("legend").innerHTML = `<h2>Faction colors</h2>${factions.map((faction) => `<span class="map-legend-item"><i style="background:${color(getFactionColor(faction.id))}"></i>${esc(faction.name)} · ${faction.memberIds.filter((id) => active.some((nation) => nation.id === id)).length}</span>`).join("")}<span class="map-legend-item"><i style="background:#7b8899"></i>Non-aligned · ${nonAligned}</span><button type="button" data-map-action="factions">Manage factions</button>`;
     } else view("legend").innerHTML = state.mode === "debug" ? '<span>Debug view: original district grid, occupation overlays and operational markers.</span>' : "";
+    if (state.mode !== "debug" && state.occupations) {
+      const occupations = getOccupationSummary(world);
+      if (occupations.length) view("legend").innerHTML += `<h2>Occupied territory</h2><span class="map-legend-item"><i class="occupation-swatch"></i>Stripes show the occupier; borders show the owner.</span>${occupations.slice(0, 5).map((entry) => `<span class="map-legend-item"><i style="background:${color(getPoliticalFill(world, entry.occupierId))}"></i>${esc(getNationName(world, entry.ownerId))} → ${esc(getNationName(world, entry.occupierId))} · ${entry.regions}</span>`).join("")}`;
+    }
   };
   update(true);
   return { update: () => update() };

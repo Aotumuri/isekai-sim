@@ -65,3 +65,26 @@ export function getNationLabelAnchors(world: WorldState): NationLabelAnchor[] {
   }
   return result;
 }
+
+
+export interface PlayerOccupation { regionId: MesoRegionId; ownerId: NationId; occupierId: NationId }
+export function getPlayerOccupations(world: WorldState): PlayerOccupation[] {
+  const owners = getOwnerByMesoId(world);
+  const regions = getMesoById(world);
+  const result: PlayerOccupation[] = [];
+  for (const [regionId, occupierId] of world.occupation.mesoById) {
+    const ownerId = owners.get(regionId);
+    if (!ownerId || ownerId === occupierId || regions.get(regionId)?.type === "sea") continue;
+    result.push({ regionId, ownerId, occupierId });
+  }
+  return result;
+}
+export function getOccupationSummary(world: WorldState): { ownerId: NationId; occupierId: NationId; regions: number }[] {
+  const pairs = new Map<string, { ownerId: NationId; occupierId: NationId; regions: number }>();
+  for (const entry of getPlayerOccupations(world)) {
+    const key = `${entry.ownerId}|${entry.occupierId}`;
+    const summary = pairs.get(key) ?? { ownerId: entry.ownerId, occupierId: entry.occupierId, regions: 0 };
+    summary.regions += 1; pairs.set(key, summary);
+  }
+  return [...pairs.values()].sort((a, b) => b.regions - a.regions || a.ownerId.localeCompare(b.ownerId));
+}

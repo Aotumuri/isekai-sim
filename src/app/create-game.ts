@@ -18,15 +18,17 @@ import { createWorld } from "../sim/create-world";
 import { createSimClock, getSpeedMultiplier } from "../sim/time";
 import { updateSimulation } from "../sim/update";
 import { attachTimeControls } from "./time-controls";
+import type { WorldState } from "../sim/world-state";
 
 const DISABLE_UNIT_ANIMATION_SPEED = 4;
 
-export function createGame(root: HTMLElement): void {
-  const config = createWorldConfig(window.innerWidth, window.innerHeight);
+export function createGame(root: HTMLElement, setup: { world?: WorldState; paused?: boolean } = {}): void {
+  const config = createWorldConfig(setup.world?.width ?? window.innerWidth, setup.world?.height ?? window.innerHeight);
+  if (setup.world?.worldSeed !== undefined) config.seed = setup.world.worldSeed;
   console.log("World generation seed:", config.seed);
   const renderer = createRenderer(root, config);
   setTerritoryEffectsRenderer(renderer.app.renderer);
-  const world = createWorld(config);
+  const world = setup.world ?? createWorld(config);
   drawMicroRegions(renderer.worldLayers.layers.MicroTerrain, world.microRegions);
   drawMesoBorders(renderer.worldLayers.layers.MesoBorder, world.microRegions);
   drawNationBorders(
@@ -59,6 +61,7 @@ export function createGame(root: HTMLElement): void {
   attachRegionHoverUI(renderer, world);
   const nationInfoBar = attachNationInfoBar(renderer, world);
   const clock = createSimClock();
+  clock.paused = setup.paused ?? false;
   const societyPanel = attachSocietyPanel(root, world, clock);
   attachTimeControls(clock);
   const timeHud = attachTimeHud(renderer);

@@ -1,3 +1,4 @@
+import { getOwnerByMesoId } from "../../sim/world-cache";
 import { getNationName, getNationIdeology } from "../../sim/nation-identity";
 import { getNationFaction } from "../../sim/factions";
 import { formatCoastalSupportStatus, formatNavalUnitStatus } from "../naval-status";
@@ -20,6 +21,10 @@ export function formatRegionTooltip(
   if (world?.mapView && world.mapView.mode !== "debug") {
     const lines = nation ? [getNationName(world, nation.id), getNationIdeology(world, nation.id).name,
       `Faction: ${getNationFaction(world, nation.id)?.name ?? "Non-aligned"}`] : [region.isSea ? "Open sea" : "Unclaimed territory"];
+    if (meso) {
+      const owner = getOwnerByMesoId(world).get(meso.id), occupier = world.occupation.mesoById.get(meso.id);
+      if (owner && occupier && owner !== occupier) lines.push(`Owned by: ${getNationName(world, owner)}`, `Occupied by: ${getNationName(world, occupier)}`);
+    }
     if (meso?.building) lines.push(`Building: ${formatBuilding(meso.building)}`);
     if (meso?.resource) lines.push(`Resource: ${formatResource(meso.resource)}`);
     if (meso) lines.push(...formatCoastalSupportStatus(world, meso.id));

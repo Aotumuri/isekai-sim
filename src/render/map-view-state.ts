@@ -3,11 +3,11 @@ import type { WorldState } from "../sim/world-state";
 export type MapMode = "political" | "diplomacy" | "factions" | "debug";
 export interface MapViewState {
   mode: MapMode; selectedNationId: NationId | null; diplomaticFocusId: NationId | null;
-  targetNationId: NationId | null; provinceBorders: boolean; districtBorders: boolean; labels: boolean; revision: number;
+  targetNationId: NationId | null; provinceBorders: boolean; districtBorders: boolean; labels: boolean; occupations: boolean; revision: number;
 }
 export function getMapView(world: WorldState): MapViewState {
   return world.mapView ??= { mode: "political", selectedNationId: null, diplomaticFocusId: null, targetNationId: null,
-    provinceBorders: true, districtBorders: false, labels: true, revision: 0 };
+    provinceBorders: true, districtBorders: false, labels: true, occupations: true, revision: 0 };
 }
 export function setMapMode(world: WorldState, mode: MapMode): boolean {
   const view = getMapView(world);

@@ -1,5 +1,7 @@
-import { Container, Graphics, Text, TextStyle } from "pixi.js";
+import { Container, Graphics, Text, TextStyle, Rectangle, WRAP_MODES } from "pixi.js";
 import type { WorldState } from "../sim/world-state";
+import type { MesoRegionId } from "../worldgen/meso-region";
+import type { MicroRegion } from "../worldgen/micro-region";
 import type { NationId } from "../worldgen/nation";
 import { getNationName } from "../sim/nation-identity";
 import { getNationFaction } from "../sim/factions";
@@ -7,7 +9,7 @@ import { clearLayer } from "./clear-layer";
 import { findSharedSegments, type Segment } from "./meso-border-geometry";
 import { getNationColor } from "./nation-color";
 import { getMapView } from "./map-view-state";
-import { classifyPoliticalBoundary, getNationLabelAnchors, getPoliticalFill } from "./political-map-data";
+import { classifyPoliticalBoundary, getNationLabelAnchors, getPoliticalFill, getPlayerOccupations } from "./political-map-data";
 import type { Renderer } from "./renderer";
 
 export function attachPlayerMap(renderer: Renderer, world: WorldState): { update: () => void } {
@@ -15,7 +17,16 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
   const fills = new Map<NationId, Graphics>(), borders = new Map<NationId, Graphics>();
   const outlines = new Map<NationId, Segment[]>();
   const labels = new Container(), selection = new Graphics();
-  let geometryKey = "", colorKey = "", labelKey = "", lastZoom = -1;
+  let geometryKey = "", colorKey = "", labelKey = "", lastZoom = -1, occupationKey = "";
+  let occupationLayer = new Container();
+  const occupationEntries = new Map<MesoRegionId, Graphics>();
+  const microByMeso = new Map<MesoRegionId, MicroRegion[]>();
+  const hatchTile = new Graphics();
+  hatchTile.lineStyle(3, 0xffffff, 1);
+  for (const x of [-16, 0, 16]) { hatchTile.moveTo(x, 0); hatchTile.lineTo(x + 16, 16); }
+  const hatchTexture = renderer.app.renderer.generateTexture(hatchTile, { region: new Rectangle(0, 0, 16, 16), resolution: 1 });
+  hatchTexture.baseTexture.wrapMode = WRAP_MODES.REPEAT;
+  hatchTile.destroy();
   const polygons = (graphics: Graphics, polygon: { x: number; y: number }[]) => {
     if (!polygon.length) return;
     graphics.moveTo(polygon[0]!.x, polygon[0]!.y);
@@ -26,7 +37,8 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
     for (const segment of segments) { graphics.moveTo(segment.a.x, segment.a.y); graphics.lineTo(segment.b.x, segment.b.y); }
   };
   const rebuild = () => {
-    clearLayer(layer); fills.clear(); borders.clear(); outlines.clear();
+    clearLayer(layer); fills.clear(); borders.clear(); outlines.clear(); occupationEntries.clear(); microByMeso.clear();
+    occupationLayer = new Container(); occupationKey = "";
     // clearLayer destroys children; replace the two reusable overlay containers below.
     const provinces = new Graphics(), districts = new Graphics(), ocean = new Graphics();
     const ownerByMeso = new Map(world.macroRegions.flatMap((macro) => macro.mesoRegionIds.map((id) => [id, macro.nationId] as const)));
@@ -39,6 +51,10 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
       const border = new Graphics(); border.lineStyle(2.2, 0xffffff, 1); border.tint = getNationColor(nation.id); borders.set(nation.id, border);
     }
     for (const region of world.microRegions) {
+      if (region.mesoRegionId) {
+        const list = microByMeso.get(region.mesoRegionId) ?? [];
+        list.push(region); microByMeso.set(region.mesoRegionId, list);
+      }
       const owner = region.mesoRegionId ? ownerByMeso.get(region.mesoRegionId) : undefined;
       const fill = owner ? fills.get(owner) : undefined;
       polygons(fill ?? ocean, region.polygon);
@@ -59,6 +75,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
     }
     ocean.endFill(); layer.addChild(ocean);
     for (const fill of fills.values()) { fill.endFill(); layer.addChild(fill); }
+    layer.addChild(occupationLayer);
     provinces.name = "PlayerProvinces"; districts.name = "PlayerDistricts";
     layer.addChild(provinces, districts);
     for (const border of borders.values()) layer.addChild(border);
@@ -74,6 +91,28 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
     renderer.worldLayers.layers.TerritoryEffects.visible = debug;
     const nextGeometry = `${world.mapVersion}:${world.territoryVersion}`;
     if (nextGeometry !== geometryKey) { geometryKey = nextGeometry; rebuild(); }
+    occupationLayer.visible = view.occupations;
+    const nextOccupations = `${geometryKey}:${world.occupation.version}:${view.revision}:${view.mode === "diplomacy" ? world.time.slowTick : 0}:${world.factions?.version ?? 0}`;
+    if (view.occupations && nextOccupations !== occupationKey) {
+      occupationKey = nextOccupations;
+      const current = getPlayerOccupations(world), live = new Set(current.map((entry) => entry.regionId));
+      for (const [id, graphics] of occupationEntries) if (!live.has(id)) {
+        occupationLayer.removeChild(graphics); graphics.destroy(); occupationEntries.delete(id);
+      }
+      for (const entry of current) {
+        let graphics = occupationEntries.get(entry.regionId);
+        if (!graphics) {
+          graphics = new Graphics();
+          graphics.beginFill(0xffffff, 0.4);
+          for (const micro of microByMeso.get(entry.regionId) ?? []) polygons(graphics, micro.polygon);
+          graphics.endFill();
+          graphics.beginTextureFill({ texture: hatchTexture, color: 0xffffff, alpha: 0.95 });
+          for (const micro of microByMeso.get(entry.regionId) ?? []) polygons(graphics, micro.polygon);
+          graphics.endFill(); occupationEntries.set(entry.regionId, graphics); occupationLayer.addChild(graphics);
+        }
+        graphics.tint = getPoliticalFill(world, entry.occupierId);
+      }
+    }
     (layer.getChildByName("PlayerProvinces") as Graphics).visible = view.provinceBorders;
     (layer.getChildByName("PlayerDistricts") as Graphics).visible = view.districtBorders;
     const nextColors = `${nextGeometry}:${view.revision}:${world.time.slowTick}:${world.factions?.version ?? 0}`;

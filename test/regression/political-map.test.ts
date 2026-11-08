@@ -70,3 +70,24 @@ test("country labels are anchored on owned land, including disconnected holdings
     assert.notEqual(world.mesoRegions.find((region) => region.id === anchor.regionId)?.type, "sea");
   }
 });
+
+test("occupation overlays distinguish the owner from the controller and disappear on liberation or annexation", async () => {
+  const { getPlayerOccupations, getOccupationSummary } = await import("../../src/render/political-map-data");
+  const world = createSocietyWorld(), [owner, occupier] = world.nations;
+  assert(owner && occupier);
+  const macro = world.macroRegions.find((item) => item.nationId === owner.id)!;
+  const occupiedRegions = macro.mesoRegionIds.slice(0, 2);
+  assert(occupiedRegions.length > 0);
+  for (const id of occupiedRegions) world.occupation.mesoById.set(id, occupier.id);
+  world.occupation.version += 1;
+  assert.equal(getPlayerOccupations(world).length, occupiedRegions.length);
+  assert.deepEqual(getOccupationSummary(world), [{ ownerId: owner.id, occupierId: occupier.id, regions: occupiedRegions.length }]);
+  for (const id of occupiedRegions) world.occupation.mesoById.delete(id);
+  world.occupation.version += 1;
+  assert.equal(getPlayerOccupations(world).length, 0);
+  // Stale occupation records after a legal transfer must not paint false occupation.
+  for (const id of occupiedRegions) world.occupation.mesoById.set(id, occupier.id);
+  macro.nationId = occupier.id; world.territoryVersion += 1;
+  assert.equal(getPlayerOccupations(world).length, 0);
+  assert.equal(getMapView(world).occupations, true);
+});
