@@ -42,7 +42,7 @@ export function attachTimeHud(renderer: Renderer): TimeHud {
       clock.paused ? "Paused" : `Speed x${formatSpeed(getSpeedMultiplier(clock))}`,
       "Keys [ ] or 1-8",
       "Hold Space: Region / naval orders",
-      "E: Diplomatic map · F: Debug view",
+      "E: Diplomacy · C: Claims · F: Debug",
       "D: Debug settings · P: Pause",
     ].join("\n");
     if (nextText === lastText) {

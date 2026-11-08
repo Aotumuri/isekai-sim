@@ -11,13 +11,13 @@ import { getDiplomacyState } from "../../src/sim/diplomacy";
 import { getNationalMilitaryStrength } from "../../src/sim/diplomatic-crises";
 import { selectMapNation } from "../../src/render/map-view-state";
 
-const world = createSeededWorld({ seed: 101, width: window.innerWidth, height: window.innerHeight, quick: true });
+export const world = createSeededWorld({ seed: 101, width: window.innerWidth, height: window.innerHeight, quick: true });
 world.settings = createSimulationSettings();
 updateSupplyAssessment(world); updateStrategicThreatObservation(world);
 const exposure = world.strategicThreatObservation.exposures.find((item) => item.landAdjacent);
 if (!exposure) throw new Error("Scene needs an adjacent border");
-const a = exposure.observerNationId, b = exposure.threatNationId;
-const target = world.mesoRegions.find((region) => getOwnerByMesoId(world).get(region.id) === b &&
+export const a = exposure.observerNationId, b = exposure.threatNationId;
+export const target = world.mesoRegions.find((region) => getOwnerByMesoId(world).get(region.id) === b &&
   region.id !== world.nations.find((nation) => nation.id === b).capitalMesoId &&
   region.neighbors.some((neighbor) => getOwnerByMesoId(world).get(neighbor.id) === a));
 if (!target) throw new Error("Scene needs a disputed district");

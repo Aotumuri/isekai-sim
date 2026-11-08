@@ -305,3 +305,11 @@ npm run diagnose:society -- --seed 822748319788 --ticks 60000
 通常の外交・戦闘を含む3シード各12,000ステップの検証も通過した。シード822748319788では60,000ステップ後も5か国が存続し、4か国が2つの複数国陣営に分かれ、1か国は非加盟だった。世界の途中経過では最大3陣営を記録した。戦争・併合・国数によって陣営の数は変わり、すべてのワールドで複数陣営を保証するものではない。
 
 回帰テストでは思想の相性、自然な関係の分化、異主義の同盟、加盟先の順位付け、全加盟国との信頼、複数の実質的な陣営、共通敵による混成陣営、平時の離脱、強い友好での維持、既存の巨大混成陣営の分裂、設立国の再出発を確認した。`/test/visual/faction-politics.html` では同じ外交AIによる4陣営の色分け、主義の初期選択と相性表示、異主義間の同盟締結を再現できる。
+
+### Territorial claims map
+
+Select a nation and press **C**, or choose **Claims**, to view its territorial interests. Blue marks its legal territory; foreign claims run from amber (20) to red (100), using the same historical attachment and resource interest scores as the Territories panel. Cream outlines mark districts explicitly requested in active territorial ultimatums. This display does not change ownership or issue demands. Occupation stripes remain available independently.
+
+Click any country in this mode to immediately view that country's claims. Hold **Space** over a district to inspect its claim strength, previous tenure, resource interest and active ultimatum status. **C** again or **Esc** returns to the previous map mode. Claims mode requires a selected nation; selecting open sea clears the reference and returns to Political.
+
+Validation: `test/regression/claim-map.test.ts` covers selection, return behavior, historical/resource interest, formal demands, withdrawn demands, returned territory, tooltip details and the bounded color scale. `test/visual/territorial-claims.html` provides a paused historical dispute with an active ultimatum; press C to inspect its overlay.

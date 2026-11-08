@@ -40,7 +40,7 @@ test("every map mode allows national selection and selection immediately changes
   assert.equal(getMapView(world).diplomaticFocusId, b.id);
   assert.equal(getMapView(world).targetNationId, a.id);
   setMapMode(world, "diplomacy"); assert.equal(getMapView(world).diplomaticFocusId, b.id);
-  for (const mode of ["factions", "debug", "political"] as const) {
+  for (const mode of ["factions", "debug", "political", "claims"] as const) {
     setMapMode(world, mode); selectMapNation(world, a.id);
     assert.equal(getMapView(world).selectedNationId, a.id);
     assert.equal(getMapView(world).diplomaticFocusId, a.id);

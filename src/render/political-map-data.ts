@@ -6,6 +6,7 @@ import { getMesoById, getOwnerByMesoId } from "../sim/world-cache";
 import type { WorldState } from "../sim/world-state";
 import type { NationId } from "../worldgen/nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
+import { CLAIM_COLORS } from "./claim-map-data";
 import { getNationColor } from "./nation-color";
 export type DiplomaticStatus = "selected" | "friendly" | "neutral" | "hostile" | "war";
 export const DIPLOMATIC_COLORS: Record<DiplomaticStatus, number> = {
@@ -25,6 +26,7 @@ export function getFactionColor(id: string): number { return FACTION_PALETTE[ide
 export function getPoliticalFill(world: WorldState, nationId: NationId): number {
   const view = world.mapView;
   if (view?.mode === "diplomacy" && view.diplomaticFocusId) return DIPLOMATIC_COLORS[getDiplomaticStatus(world, view.diplomaticFocusId, nationId)];
+  if (view?.mode === "claims") return nationId === view.selectedNationId ? CLAIM_COLORS.home : CLAIM_COLORS.other;
   if (view?.mode === "factions") {
     const faction = getNationFaction(world, nationId);
     return faction ? getFactionColor(faction.id) : 0x7b8899;

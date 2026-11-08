@@ -1,3 +1,4 @@
+import { getMapClaims } from "../claim-map-data";
 import { getOwnerByMesoId } from "../../sim/world-cache";
 import { getNationName, getNationIdeology } from "../../sim/nation-identity";
 import { getNationFaction } from "../../sim/factions";
@@ -24,6 +25,18 @@ export function formatRegionTooltip(
     if (meso) {
       lines.push(`District ${meso.id.replace("meso-", "")}`);
       const owner = getOwnerByMesoId(world).get(meso.id), occupier = world.occupation.mesoById.get(meso.id);
+      if (world.mapView.mode === "claims" && world.mapView.selectedNationId && meso.type !== "sea") {
+        const focus = world.mapView.selectedNationId;
+        const claim = getMapClaims(world, focus).find((item) => item.regionId === meso.id);
+        lines.push(`Claims of: ${getNationName(world, focus)}`);
+        if (owner === focus) lines.push("Home territory");
+        else if (claim) {
+          lines.push(`Claim strength: ${Math.round(claim.strength)} / 100`);
+          if (claim.heldTicks > 0) lines.push(`Previously held: ${claim.heldTicks} seconds`);
+          if (meso.resource) lines.push("Resource interest");
+          if (claim.demanded) lines.push("Active territorial ultimatum");
+        } else lines.push("No territorial claim");
+      }
       if (owner && occupier && owner !== occupier) lines.push(`Owned by: ${getNationName(world, owner)}`, `Occupied by: ${getNationName(world, occupier)}`);
     }
     if (meso?.building) lines.push(`Building: ${formatBuilding(meso.building)}`);

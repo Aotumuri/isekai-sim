@@ -40,7 +40,7 @@ export function attachRegionHoverUI(renderer: Renderer, world: WorldState): void
   let activeRegionId: string | null = null;
   let isSpacePressed = false;
   let lastPointerGlobal: Vec2 | null = null;
-  let lastInfoTick = -1;
+  let lastInfoTick = -1, lastViewRevision = -1;
 
   const isWorldPointer = (screenPos: Vec2 | null): boolean => {
     if (!screenPos) {
@@ -85,9 +85,10 @@ export function attachRegionHoverUI(renderer: Renderer, world: WorldState): void
     }
 
     const territoryChanged = refreshTerritory();
-    if (territoryChanged || activeRegionId !== region.id || lastInfoTick !== world.time.fastTick) {
+    if (territoryChanged || activeRegionId !== region.id || lastInfoTick !== world.time.fastTick || lastViewRevision !== world.mapView?.revision) {
       activeRegionId = region.id;
       lastInfoTick = world.time.fastTick;
+      lastViewRevision = world.mapView?.revision ?? -1;
       const meso = region.mesoRegionId ? mesoById.get(region.mesoRegionId) ?? null : null;
       const macro = region.mesoRegionId ? macroByMesoId.get(region.mesoRegionId) ?? null : null;
       const nation = macro ? nationById.get(macro.nationId) ?? null : null;

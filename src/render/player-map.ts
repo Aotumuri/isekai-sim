@@ -8,6 +8,7 @@ import { getNationFaction } from "../sim/factions";
 import { clearLayer } from "./clear-layer";
 import { findSharedSegments, type Segment } from "./meso-border-geometry";
 import { getNationColor } from "./nation-color";
+import { CLAIM_COLORS, getClaimColor, getMapClaims } from "./claim-map-data";
 import { getMapView } from "./map-view-state";
 import { classifyPoliticalBoundary, getNationLabelAnchors, getPoliticalFill, getPlayerOccupations } from "./political-map-data";
 import type { Renderer } from "./renderer";
@@ -19,6 +20,8 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
   const labels = new Container(), selection = new Graphics(), parcelSelection = new Graphics();
   const districtOutlines = new Map<MesoRegionId, Segment[]>();
   let geometryKey = "", colorKey = "", labelKey = "", lastZoom = -1, occupationKey = "";
+  let claimKey = "", claimLayer = new Container(), demandOutline = new Graphics();
+  const claimEntries = new Map<MesoRegionId, Graphics>();
   let occupationLayer = new Container();
   const occupationEntries = new Map<MesoRegionId, Graphics>();
   const microByMeso = new Map<MesoRegionId, MicroRegion[]>();
@@ -40,6 +43,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
   const rebuild = () => {
     clearLayer(layer); fills.clear(); borders.clear(); outlines.clear(); occupationEntries.clear(); microByMeso.clear(); districtOutlines.clear();
     occupationLayer = new Container(); occupationKey = "";
+    claimLayer = new Container(); demandOutline = new Graphics(); claimEntries.clear(); claimKey = "";
     // clearLayer destroys children; replace the two reusable overlay containers below.
     const provinces = new Graphics(), districts = new Graphics(), ocean = new Graphics();
     const ownerByMeso = new Map(world.macroRegions.flatMap((macro) => macro.mesoRegionIds.map((id) => [id, macro.nationId] as const)));
@@ -79,10 +83,11 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
     }
     ocean.endFill(); layer.addChild(ocean);
     for (const fill of fills.values()) { fill.endFill(); layer.addChild(fill); }
-    layer.addChild(occupationLayer);
+    layer.addChild(claimLayer, occupationLayer);
     provinces.name = "PlayerProvinces"; districts.name = "PlayerDistricts";
     layer.addChild(provinces, districts);
     for (const border of borders.values()) layer.addChild(border);
+    layer.addChild(demandOutline);
     // Labels live in a separate layer so geometry rebuilds cannot destroy them.
     colorKey = ""; labelKey = "";
   };
@@ -95,6 +100,28 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
     renderer.worldLayers.layers.TerritoryEffects.visible = debug;
     const nextGeometry = `${world.mapVersion}:${world.territoryVersion}`;
     if (nextGeometry !== geometryKey) { geometryKey = nextGeometry; rebuild(); }
+    claimLayer.visible = demandOutline.visible = view.mode === "claims";
+    if (view.mode === "claims" && view.selectedNationId) {
+      const nextClaims = `${geometryKey}:${view.revision}:${world.territorialClaims?.version}:${world.time.slowTick}:${JSON.stringify([...(world.diplomacy?.relations.values() ?? [])].filter((r) => r.crisis?.aggressorId === view.selectedNationId).map((r) => r.crisis))}`;
+      if (nextClaims !== claimKey) {
+        const claims = getMapClaims(world, view.selectedNationId);
+        claimKey = nextClaims; demandOutline.clear(); demandOutline.lineStyle(3, CLAIM_COLORS.demand, 1);
+        const live = new Set(claims.map((entry) => entry.regionId));
+        for (const [id, graphics] of claimEntries) if (!live.has(id)) {
+          claimLayer.removeChild(graphics); graphics.destroy(); claimEntries.delete(id);
+        }
+        for (const entry of claims) {
+          let graphics = claimEntries.get(entry.regionId);
+          if (!graphics) {
+            graphics = new Graphics(); graphics.beginFill(0xffffff, 0.92);
+            for (const micro of microByMeso.get(entry.regionId) ?? []) polygons(graphics, micro.polygon);
+            graphics.endFill(); claimEntries.set(entry.regionId, graphics); claimLayer.addChild(graphics);
+          }
+          graphics.tint = getClaimColor(entry.strength);
+          if (entry.demanded) stroke(demandOutline, districtOutlines.get(entry.regionId) ?? []);
+        }
+      }
+    }
     occupationLayer.visible = view.occupations;
     const nextOccupations = `${geometryKey}:${world.occupation.version}:${view.revision}:${view.mode === "diplomacy" ? world.time.slowTick : 0}:${world.factions?.version ?? 0}`;
     if (view.occupations && nextOccupations !== occupationKey) {
