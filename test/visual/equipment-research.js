@@ -1,0 +1,17 @@
+import "../../src/style.css";
+import { createGame } from "../../src/app/create-game";
+import { createSeededWorld } from "../helpers/seeded-world";
+import { createSimulationSettings } from "../../src/sim/simulation-settings";
+import { getResearchPortfolio, updateResearch } from "../../src/sim/research";
+import { updateSupplyAssessment } from "../../src/sim/supply-assessment";
+import { selectMapNation } from "../../src/render/map-view-state";
+const world = createSeededWorld({ seed: 101, width: window.innerWidth, height: window.innerHeight, quick: true });
+world.settings = createSimulationSettings();
+const nation = world.nations[0]; nation.resources.steel = nation.resources.weapons = 1000;
+const rifles = getResearchPortfolio(world, nation.id, "Infantry"); rifles.levels.handling = 3; rifles.completedProjects = 3;
+const tanks = getResearchPortfolio(world, nation.id, "Tank"); tanks.priority = "high"; tanks.focus = "armor"; tanks.levels.armor = 4; tanks.levels.mobility = 2; tanks.completedProjects = 6;
+const ships = getResearchPortfolio(world, nation.id, "CombatShip"); ships.levels.firepower = 3; ships.priority = "low"; ships.completedProjects = 3;
+const transports = getResearchPortfolio(world, nation.id, "TransportShip"); transports.levels.capacity = 10; transports.priority = "normal"; transports.focus = "capacity"; transports.completedProjects = 10;
+updateSupplyAssessment(world); updateResearch(world);
+selectMapNation(world, nation.id);
+createGame(document.getElementById("app"), { world, paused: true });

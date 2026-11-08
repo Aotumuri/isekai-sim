@@ -1,3 +1,4 @@
+import { getUnitTransportCapacity } from "../../sim/unit-capabilities";
 import { getMapClaims } from "../claim-map-data";
 import { getOwnerByMesoId } from "../../sim/world-cache";
 import { getNationName, getNationIdeology } from "../../sim/nation-identity";
@@ -152,6 +153,8 @@ function formatUnitLines(units: UnitState[], world?: WorldState): string[] {
     if (unit.design && unit.design.generation > 0) lines.push(
       `Design: ${unit.design.manufacturerId} / Gen ${unit.design.generation} / Power x${unit.design.firepower.toFixed(2)} / Reliability x${unit.design.reliability.toFixed(2)}`,
     );
+    if (unit.design && unit.design.generation > 0) lines.push(`Protection x${(unit.design.armor ?? 1).toFixed(2)} / Speed x${(unit.design.mobility ?? 1).toFixed(2)}${unit.type === "Infantry" ? ` / Handling x${(unit.design.handling ?? 1).toFixed(2)}` : ""}`);
+    if (unit.type === "TransportShip") lines.push(`Cargo: ${unit.cargoUnits.length} / ${getUnitTransportCapacity(unit)} units`);
     const navalStatus = world ? formatNavalUnitStatus(world, unit) : null;
     if (navalStatus) lines.push(navalStatus);
     if (world && unit.volunteerOriginId) lines.push(`Volunteers from: ${getNationName(world, unit.volunteerOriginId)}`);
