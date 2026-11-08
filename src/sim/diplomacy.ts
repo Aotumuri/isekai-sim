@@ -31,6 +31,7 @@ export interface DiplomacyState {
   fatigueByWarId: Map<string, number>;
   lastRelationsSlowTick: number;
   lastCrisisSlowTick: number;
+  lastPeaceSlowTick: number;
   lastTradeSlowTick: number;
   lastAidSlowTick: number;
   treatiesSigned: number;
@@ -45,7 +46,7 @@ export interface DiplomacyState {
 
 export function getDiplomacyState(world: WorldState): DiplomacyState {
   return world.diplomacy ??= { relations: new Map(), influenceByNationId: new Map(),
-    fatigueByWarId: new Map(), lastRelationsSlowTick: -10, lastCrisisSlowTick: -10,
+    fatigueByWarId: new Map(), lastRelationsSlowTick: -10, lastCrisisSlowTick: -10, lastPeaceSlowTick: -10,
     lastTradeSlowTick: -20, lastAidSlowTick: -30, treatiesSigned: 0, declarations: 0,
     crisesOpened: 0, crisesResolved: 0, peaceAgreements: 0, defensiveInterventions: 0,
     tradeDeliveries: 0, aidDeliveries: 0 };

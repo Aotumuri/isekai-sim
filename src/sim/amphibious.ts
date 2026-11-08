@@ -1433,7 +1433,33 @@ export function getAmphibiousOperationValidation(
   return { phase, owner, failures: [...new Set(failures)] };
 }
 
-function cancelOperation(world: WorldState, op: AmphibiousOperation, reason: AmphibiousCancellationReason, phase: AmphibiousValidationPhase, units: Map<UnitId, UnitState>): void {
+/** Agreed withdrawal preserves embarked troops instead of treating peace as a lost landing. */
+export function withdrawAmphibiousOperationsForPeace(world: WorldState, a: NationId, b: NationId): void {
+  const units = new Map(world.units.map((unit) => [unit.id, unit]));
+  for (const op of world.amphibiousOperations.operations) {
+    if (op.phase === "landed" || op.phase === "cancelled" ||
+      !((op.nationId === a && op.enemyNationId === b) || (op.nationId === b && op.enemyNationId === a))) continue;
+    const home = world.nations.find((nation) => nation.id === op.nationId)?.capitalMesoId;
+    if (!home) continue;
+    for (const transportId of op.transportIds) {
+      const transport = units.get(transportId);
+      if (!transport) continue;
+      for (const cargo of transport.cargoUnits) {
+        cargo.regionId = home; resetMovement(cargo);
+        if (!units.has(cargo.id)) { world.units.push(cargo); units.set(cargo.id, cargo); }
+      }
+      transport.cargoUnits = [];
+    }
+    cancelOperation(world, op, "war-ended", "voyage", units, true);
+  }
+  for (const demand of world.amphibiousOperations.capabilityDemands) {
+    if (((demand.nationId === a && demand.enemyNationId === b) || (demand.nationId === b && demand.enemyNationId === a)) &&
+      demand.state !== "cancelled" && demand.state !== "expired") demand.state = "cancelled";
+  }
+  rebuildOwnership(world);
+}
+
+function cancelOperation(world: WorldState, op: AmphibiousOperation, reason: AmphibiousCancellationReason, phase: AmphibiousValidationPhase, units: Map<UnitId, UnitState>, peacefulWithdrawal = false): void {
   const transports = op.transportIds.map((id) => units.get(id)).filter((unit): unit is UnitState => !!unit);
   for (const transport of transports) if (transport.cargoUnits.length) {
     const region = getMesoById(world).get(transport.regionId);
@@ -1448,20 +1474,23 @@ function cancelOperation(world: WorldState, op: AmphibiousOperation, reason: Amp
   op.phase = "cancelled"; op.cancellationReason = reason; op.completedAtTick = world.time.fastTick;
   reportLifecycle(world, op, "cancelled", reason);
   op.preparationLeaseEndedAtTick ??= world.time.fastTick;
-  world.amphibiousOperations.cancelledPlans += 1; world.amphibiousOperations.failedLandings += 1;
-  if (phase === "ready") world.amphibiousOperations.readyFailures += 1;
-  else if (phase === "voyage") world.amphibiousOperations.voyageFailures += 1;
-  else if (phase === "landing") world.amphibiousOperations.landingFailures += 1;
-  if (reason === "departure-port-lost") world.amphibiousOperations.departurePortCancellations += 1;
-  world.amphibiousOperations.totalCancellationAgeTicks += Math.max(0, world.time.fastTick - op.preparationLeaseStartedAtTick);
-  if (reason === "war-ended" || reason === "target-invalid" || reason === "departure-port-lost" || reason === "preparation-timeout") {
-    world.amphibiousOperations.falseNegativeCount += 1;
+  world.amphibiousOperations.cancelledPlans += 1;
+  if (!peacefulWithdrawal) {
+    world.amphibiousOperations.failedLandings += 1;
+    if (phase === "ready") world.amphibiousOperations.readyFailures += 1;
+    else if (phase === "voyage") world.amphibiousOperations.voyageFailures += 1;
+    else if (phase === "landing") world.amphibiousOperations.landingFailures += 1;
+    if (reason === "departure-port-lost") world.amphibiousOperations.departurePortCancellations += 1;
+    world.amphibiousOperations.totalCancellationAgeTicks += Math.max(0, world.time.fastTick - op.preparationLeaseStartedAtTick);
+    if (reason === "war-ended" || reason === "target-invalid" || reason === "departure-port-lost" || reason === "preparation-timeout") {
+      world.amphibiousOperations.falseNegativeCount += 1;
+    }
+    if (reason === "transport-lost") world.amphibiousOperations.transportLosses += 1;
+    if (phase === "ready") world.instrumentation?.incrementCounter("amphibious.validationFailure.ready");
+    else if (phase === "voyage") world.instrumentation?.incrementCounter("amphibious.validationFailure.voyage");
+    else if (phase === "landing") world.instrumentation?.incrementCounter("amphibious.validationFailure.landing");
+    if (reason === "departure-port-lost") world.instrumentation?.incrementCounter("amphibious.departurePortCancellation");
   }
-  if (reason === "transport-lost") world.amphibiousOperations.transportLosses += 1;
-  if (phase === "ready") world.instrumentation?.incrementCounter("amphibious.validationFailure.ready");
-  else if (phase === "voyage") world.instrumentation?.incrementCounter("amphibious.validationFailure.voyage");
-  else if (phase === "landing") world.instrumentation?.incrementCounter("amphibious.validationFailure.landing");
-  if (reason === "departure-port-lost") world.instrumentation?.incrementCounter("amphibious.departurePortCancellation");
   world.amphibiousOperations.version += 1;
 }
 

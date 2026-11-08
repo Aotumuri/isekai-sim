@@ -46,7 +46,7 @@ export function declareWar(
   }
 
   const war: WarState = {
-    id: createWarId(wars.length),
+    id: createWarId(wars.reduce((next, war) => Math.max(next, Number(war.id.slice(4)) + 1 || 0), 0)),
     nationAId: normalizedA,
     nationBId: normalizedB,
     aggressorId,
