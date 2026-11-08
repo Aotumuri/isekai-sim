@@ -13,6 +13,7 @@ import {
   type NationResources,
 } from "./nation-runtime";
 import { nextScheduledTickRange } from "./schedule";
+import { inheritTerritorialClaims, updateTerritorialClaims } from "./territorial-claims";
 import type { UnitState } from "./unit";
 import { declareWar } from "./war-state";
 import type { WorldState } from "./world-state";
@@ -79,6 +80,9 @@ export function updateCivilWar(world: WorldState): void {
       buildingChanged = true;
     }
     const newNationId = createNationId(world.nations.length);
+    // Record tenure through the split while the old borders are still intact.
+    if (!territoryChanged) updateTerritorialClaims(world);
+    inheritTerritorialClaims(world, nation.id, newNationId, rebelMesoIds);
     const initialUnitCount = reassignUnitsToRebels(
       world.units,
       nation.id,

@@ -44,6 +44,23 @@ export function getForeignClaims(world: WorldState, nationId: NationId, ownerId?
   return result.sort((a, b) => b.strength - a.strength || a.regionId.localeCompare(b.regionId));
 }
 
+/** A revolutionary government shares the parent's historical claims and keeps tenure in its own territory. */
+export function inheritTerritorialClaims(
+  world: WorldState,
+  parentId: NationId,
+  rebelId: NationId,
+  rebelRegionIds: ReadonlySet<MesoRegionId>,
+): void {
+  const state = getTerritorialClaims(world);
+  for (const [id, memories] of state.history) {
+    const memory = memories.get(parentId);
+    if (!memory || memories.has(rebelId)) continue;
+    if (state.owners.get(id) === parentId && !rebelRegionIds.has(id)) continue;
+    memories.set(rebelId, { ...memory });
+  }
+  state.version += 1;
+}
+
 /** Snapshot before a transfer; consenting nations do not resent their own agreed cessions. */
 export function updateTerritorialClaims(world: WorldState, consenting: ReadonlySet<NationId> = new Set()): void {
   const state = getTerritorialClaims(world), owners = getOwnerByMesoId(world);
