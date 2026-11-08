@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getDiplomacyState, getRelation, hasTreaty } from "../../src/sim/diplomacy";
+import { extendTruce, getDiplomacyState, getInfluence, getRelation, hasTreaty, TRUCE_EXTENSION } from "../../src/sim/diplomacy";
 import { concludePeace, getWarFatigue, mediateCrisis, updateDiplomaticPeace } from "../../src/sim/diplomatic-peace";
 import { declareWar, findWar } from "../../src/sim/war-state";
 import { createSocietyWorld } from "../helpers/society-world";
@@ -69,4 +69,26 @@ test("peace rescues troops embarked at sea without counting a failed landing", (
   assert.equal(transport.cargoUnits.length, 0);
   for (const id of cargoIds) assert.equal(world.units.filter((unit) => unit.id === id).length, 1);
   assert.equal(world.amphibiousOperations.failedLandings, failures);
+});
+
+test("a friendly partner extends an expiring truce once and keeps both parties protected", () => {
+  const world = createSocietyWorld();
+  const [a, b] = world.nations;
+  const relation = getRelation(world, a.id, b.id);
+  relation.opinion = 20;
+  relation.trust = 49;
+  relation.tension = 20;
+  relation.treaties.push({ type: "truce", expiresAtSlowTick: 300 });
+  world.time.slowTick = 240;
+
+  const influence = getInfluence(world, a.id);
+  assert.equal(extendTruce(world, a.id, b.id), false);
+  assert.equal(getInfluence(world, a.id), influence);
+  relation.trust = 60;
+  assert.ok(extendTruce(world, a.id, b.id));
+  assert.equal(getInfluence(world, a.id), influence - TRUCE_EXTENSION.cost);
+  assert.equal(extendTruce(world, a.id, b.id), false);
+  world.time.slowTick = 300;
+  assert.ok(hasTreaty(world, b.id, a.id, "truce"));
+  assert.equal(relation.treaties[0].expiresAtSlowTick, 300 + TRUCE_EXTENSION.seconds);
 });

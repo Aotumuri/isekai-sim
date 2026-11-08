@@ -10,7 +10,7 @@ import { getNationName, getNationIdeology } from "../sim/nation-identity";
 import { getMapView, setMapMode, selectMapNation } from "../render/map-view-state";
 import type { NationId } from "../worldgen/nation";
 import { getNationCharacter } from "../sim/nation-character";
-import { breakTreaty, improveRelations, proposeTreaty, relationKey } from "../sim/diplomacy";
+import { breakTreaty, extendTruce, getTruceExtensionIssue, improveRelations, proposeTreaty, relationKey, TRUCE_EXTENSION } from "../sim/diplomacy";
 import { openDiplomaticCrisis, respondToCrisis } from "../sim/diplomatic-crises";
 import { findWar } from "../sim/war-state";
 import { offerPeace } from "../sim/diplomatic-peace";
@@ -56,7 +56,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       <nav class="society-tabs" aria-label="Information views"><button type="button" data-tab="diplomacy" aria-pressed="true">Diplomacy</button><button type="button" data-tab="territory" aria-pressed="false">Territories</button><button type="button" data-tab="military" aria-pressed="false">Military</button><button type="button" data-tab="research" aria-pressed="false">Research</button><button type="button" data-tab="factions" aria-pressed="false">Factions</button><button type="button" data-tab="history" aria-pressed="false">World history</button></nav>
       <p class="society-feedback" role="status" aria-live="polite">Nations act autonomously. Select a nation to guide its policies and diplomacy.</p>
       <section data-pane="diplomacy">
-        <div data-view="relation"></div>
+        <div data-view="relation"></div><div data-view="truce-extension"></div>
         <div class="society-actions"><button type="button" data-action="improve" title="10 influence. Opinion +10, trust +3, tension -8.">Send envoy · 10</button><button type="button" data-action="pact" title="Requires opinion 20, trust 30 and influence 12.">Non-aggression · 12</button><button type="button" data-action="trade-pact" title="Requires opinion 10, trust 30 and influence 8.">Trade pact · 8</button><button type="button" data-action="alliance" title="Requires opinion 55, trust 55 and influence 20.">Defensive alliance · 20</button></div>
         <label>Aid equipment<select data-control="aid-family" aria-label="Aid equipment">${familyOptions}</select></label><div class="society-actions"><button type="button" data-action="aid" title="Send equipment for the selected weapon family and retain a reserve of 30. Requires friendly relations and an open route.">Send 20 weapons</button><button type="button" data-action="peace" title="Propose status-quo terms. Acceptance depends on war outlook, personality and domestic stability.">Propose white peace</button><button type="button" data-action="crisis" class="society-danger" title="12 influence. Treaties, strategic access and military strength constrain ultimatums.">Ultimatum · 12</button></div>
         <div data-view="crisis"></div><div data-peace-ui></div>
@@ -149,6 +149,10 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     view("country").innerHTML = `<strong>${n(a)}</strong><span>${DOCTRINES[character.doctrine]} · ${esc(getNationIdeology(world, a).name)} · Influence ${Math.floor(world.diplomacy?.influenceByNationId.get(a) ?? 30)}</span><small>Steel ${Math.floor(nation.resources.steel)} / Fuel ${Math.floor(nation.resources.fuel)} / Weapons ${Math.floor(nation.resources.weapons)}</small>`;
     const treaties = relation?.treaties.filter((treaty) => treaty.expiresAtSlowTick > world.time.slowTick) ?? [];
     view("relation").innerHTML = `<h2>${n(b)} — relations</h2><p class="society-note">Ideologies: ${esc(getNationIdeology(world, a).name)} ↔ ${esc(getNationIdeology(world, b).name)} · ${ideologyAffinityLabel(getIdeologicalAffinity(world, a, b))}</p>${findWar(world.wars, a, b) ? '<p class="society-note">At war</p>' : ""}${relation ? `<div class="society-metrics"><span>Opinion <b>${Math.round(relation.opinion)}</b></span><span>Trust <b>${Math.round(relation.trust)}</b></span><span>Tension <b>${Math.round(relation.tension)}</b></span></div><p class="society-note">${treaties.map((treaty) => `${TREATY_NAMES[treaty.type]} (${treaty.expiresAtSlowTick - world.time.slowTick}s remaining)`).join(" / ") || "No treaties"}</p>` : '<p class="society-note">No diplomatic relation history yet.</p>'}`;
+    if (treaties.some((treaty) => treaty.type === "truce")) {
+      const issue = getTruceExtensionIssue(world, a, b);
+      view("truce-extension").innerHTML = `<div class="society-actions"><button type="button" data-action="extend-truce" ${issue ? "disabled" : ""}>Extend truce by ${TRUCE_EXTENSION.seconds}s · ${TRUCE_EXTENSION.cost}</button></div>${issue ? `<p class="society-note">${esc(issue)}</p>` : ""}`;
+    } else view("truce-extension").replaceChildren();
     const crisis = relation?.crisis;
     view("crisis").innerHTML = crisis ? `<div class="society-crisis">Ultimatum: ${n(crisis.aggressorId)} → ${n(crisis.aggressorId === a ? b : a)}${crisis.demand === "territory" ? `<br>Demands: ${(crisis.regionIds ?? []).map(districtName).join(", ")}` : ""}<br>Negotiation deadline: ${Math.max(0, crisis.deadlineSlowTick - world.time.slowTick)}s${crisis.aggressorId !== a ? `<div class="society-actions"><button type="button" data-action="negotiate">Negotiate · 15</button><button type="button" data-action="concede">${crisis.demand === "territory" ? "Accept territorial demand" : "Concede 30 weapons"}</button><button type="button" data-action="reject">Reject</button></div>` : ""}</div>` : "";
     const offered = control("export").value as TradeResource, requested = control("import").value as TradeResource;
@@ -259,6 +263,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     else if (action === "alliance") success = proposeTreaty(world, a, b, "alliance");
     else if (action === "aid") success = sendArmsAid(world, a, b, 20, control("aid-family").value as EquipmentFamily);
     else if (action === "peace") success = offerPeace(world, a, b);
+    else if (action === "extend-truce") success = extendTruce(world, a, b);
     else if (action === "crisis") success = openDiplomaticCrisis(world, a, b);
     else if (action === "negotiate" || action === "concede" || action === "reject") success = respondToCrisis(world, a, b, action);
     else if (action === "break-alliance") success = breakTreaty(world, a, b, "alliance");
