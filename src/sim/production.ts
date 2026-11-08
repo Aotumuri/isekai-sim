@@ -1,3 +1,4 @@
+import { allFieldUnits, getArmyLimits, getMobilization } from "./mobilization";
 import { equipNewUnit, getDevelopedUnitWeaponCost } from "./equipment-development";
 import { getNationalDesign, type WeaponDesign } from "./research";
 import { WORLD_BALANCE } from "../data/balance";
@@ -189,7 +190,7 @@ function updateProductionInternal(world: WorldState): void {
   const cityTargetsByNation = getCityTargetsByNation(world);
   const portTargetsByNation = getPortTargetsByNation(world);
   const capacityCountStartedAt = world.instrumentation ? performance.now() : 0;
-  const unitCountsByNation = collectUnitCountsByNation(world.units);
+  const unitCountsByNation = collectUnitCountsByNation(allFieldUnits(world));
   updateCapacityDiagnostics(world, unitCountsByNation);
   if (world.instrumentation) {
     world.instrumentation.recordDuration(
@@ -252,7 +253,7 @@ function updateProductionInternal(world: WorldState): void {
   );
   const maxLandUnits = Math.max(0, Math.round(production.maxLandUnits));
   const maxNavalUnits = Math.max(0, Math.round(production.maxNavalUnits));
-  const landCapacity = maxLandUnits > 0 ? maxLandUnits : Number.POSITIVE_INFINITY;
+  const legacyLandCapacity = maxLandUnits > 0 ? maxLandUnits : Number.POSITIVE_INFINITY;
   const navalCapacity = maxNavalUnits > 0 ? maxNavalUnits : Number.POSITIVE_INFINITY;
 
   for (const nation of world.nations) {
@@ -262,6 +263,10 @@ function updateProductionInternal(world: WorldState): void {
     if (world.time.slowTick < nation.nextUnitProductionTick) {
       continue;
     }
+    const mobilization = world.settings?.mobilizationEnabled ? getMobilization(world, nation.id) : undefined;
+    const landCapacity = mobilization ? getArmyLimits(world, nation, mobilization).authorized : legacyLandCapacity;
+    const recruitmentBatch = mobilization ? Math.max(1, Math.ceil(landCapacity * 0.035)) : Number.POSITIVE_INFINITY;
+    let recruited = 0;
     const design = getNationalDesign(world, nation.id);
     const currentCounts = unitCountsByNation.get(nation.id) ?? { land: 0, naval: 0 };
     let currentLandCount = currentCounts.land;
@@ -302,6 +307,7 @@ function updateProductionInternal(world: WorldState): void {
     for (const reason of combatShipReasons) recordCombatShipRequest(world, reason);
 
     const addUnit = (regionId: MesoRegionId): boolean => {
+      if (recruited >= recruitmentBatch) return false;
       if (currentLandCount >= landCapacity) {
         recordCapacityBlock("land");
         return false;
@@ -365,7 +371,8 @@ function updateProductionInternal(world: WorldState): void {
         return false;
       }
       newUnits.push(createUnitForWorld(world, nation.id, regionId, unitType));
-      currentLandCount += 1;
+      currentLandCount += 1; recruited++;
+      if (mobilization) mobilization.recruited++;
       diagnostics.successfulProductions += 1;
       world.instrumentation?.incrementCounter("production.successful");
       return true;
@@ -487,8 +494,8 @@ function updateProductionInternal(world: WorldState): void {
     });
     nation.nextUnitProductionTick = nextScheduledTickRange(
       world.time.slowTick,
-      minInterval,
-      maxInterval,
+      mobilization && mobilization.threat >= 0.35 ? 2 : minInterval,
+      mobilization && mobilization.threat >= 0.35 ? (mobilization.phase === "war" ? 6 : 12) : maxInterval,
       world.simRng,
     );
   }

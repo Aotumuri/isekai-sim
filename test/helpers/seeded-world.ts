@@ -30,7 +30,7 @@ export function createSeededWorld(options: SeededWorldOptions = {}): WorldState 
     ...base,
     ...quickOverrides,
     // Existing benchmarks isolate the original military simulation.
-    systems: { diplomacyEnabled: false, researchEnabled: false, armsAidEnabled: false, tradeEnabled: false },
+    systems: { mobilizationEnabled: false, diplomacyEnabled: false, researchEnabled: false, armsAidEnabled: false, tradeEnabled: false },
     ...options.config,
     seed: options.seed ?? STANDARD_BENCHMARK_SEED,
     width,

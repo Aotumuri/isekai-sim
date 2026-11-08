@@ -53,7 +53,7 @@ test("war fatigue updates once per interval and trusted third parties can mediat
 
 test("peace rescues troops embarked at sea without counting a failed landing", () => {
   const world = createScenarioWorld("two-island-amphibious", { seed: 695919685365, width: 640, height: 360, quick: true });
-  world.settings = createSimulationSettings({ researchEnabled: false });
+  world.settings = createSimulationSettings({ researchEnabled: false, mobilizationEnabled: false });
   const sea = new Set(world.mesoRegions.filter((region) => region.type === "sea").map((region) => region.id));
   withMutedSimulationLogs(() => {
     for (let i = 0; i < 600 && !world.units.some((unit) => sea.has(unit.regionId) && unit.cargoUnits.length > 0); i += 1) {

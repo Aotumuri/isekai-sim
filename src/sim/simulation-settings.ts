@@ -3,6 +3,7 @@ import type { NationId } from "../worldgen/nation";
 import type { WorldState } from "./world-state";
 
 export interface SimulationSettings {
+  mobilizationEnabled: boolean;
   diplomacyEnabled: boolean;
   legacyWarDeclarationsEnabled: boolean;
   researchEnabled: boolean;
@@ -11,7 +12,7 @@ export interface SimulationSettings {
 }
 
 export function createSimulationSettings(overrides: Partial<SimulationSettings> = {}): SimulationSettings {
-  return { diplomacyEnabled: true, legacyWarDeclarationsEnabled: true,
+  return { mobilizationEnabled: true, diplomacyEnabled: true, legacyWarDeclarationsEnabled: true,
     researchEnabled: true, armsAidEnabled: true, tradeEnabled: true, ...overrides };
 }
 
@@ -24,7 +25,7 @@ export function getWarDeclarationMode(world: WorldState): "diplomacy" | "legacy"
 
 export interface SimulationEvent {
   tick: number;
-  category: "diplomacy" | "research" | "aid" | "trade";
+  category: "diplomacy" | "research" | "aid" | "trade" | "military";
   nationIds: string[];
   message: string;
 }

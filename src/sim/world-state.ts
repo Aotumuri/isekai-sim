@@ -1,3 +1,4 @@
+import type { MobilizationState } from "./mobilization";
 import type { TerritorialDealsState } from "./territorial-deals";
 import type { TerritorialClaimsState } from "./territorial-claims";
 import type { MapViewState } from "../render/map-view-state";
@@ -46,6 +47,7 @@ import type { WarIntentState } from "./war-intent";
 import type { CommonThreatCoalitionState } from "./common-threat-coalitions";
 
 export interface WorldState {
+  mobilization?: MobilizationState;
   territorialClaims?: TerritorialClaimsState;
   territorialDeals?: TerritorialDealsState;
   settings?: SimulationSettings;

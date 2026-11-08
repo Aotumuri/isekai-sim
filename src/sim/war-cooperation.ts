@@ -1,3 +1,4 @@
+import { applyMobilizationSupport, restoreMobilizationSupport } from "./mobilization";
 import { WORLD_BALANCE } from "../data/balance";
 import type { MacroRegion } from "../worldgen/macro-region";
 import type { MesoRegion } from "../worldgen/meso-region";
@@ -31,6 +32,7 @@ export function updateWarCooperation(world: WorldState): void {
     if (!isNationActive(nation)) {
       continue;
     }
+    restoreMobilizationSupport(world, nation);
     const nextBoost = Math.max(
       0,
       nation.warCooperationBoost - cooperationBalance.civilWarBoostDecay,
@@ -47,6 +49,7 @@ export function updateWarCooperation(world: WorldState): void {
           cooperationBalance.max,
         );
       }
+      applyMobilizationSupport(world, nation);
       continue;
     }
 
@@ -84,6 +87,7 @@ export function updateWarCooperation(world: WorldState): void {
     if (targetCooperation < nation.warCooperation) {
       nation.warCooperation = targetCooperation;
     }
+    applyMobilizationSupport(world, nation);
   }
 }
 

@@ -87,11 +87,12 @@ export function pickUnitType(rng: SeededRng): LandUnitType {
 export function createInitialUnits(
   nations: Nation[],
   rng: SeededRng,
+  standingArmy = false,
 ): UnitState[] {
   const units: UnitState[] = [];
   let unitIndex = 0;
   for (const nation of nations) {
-    const count = Math.max(1, Math.floor(nation.macroRegionIds.length / 0.5));
+    const count = standingArmy ? Math.max(3, Math.min(16, Math.ceil(nation.macroRegionIds.length * 0.6))) : Math.max(1, Math.floor(nation.macroRegionIds.length / 0.5));
     for (let i = 0; i < count; i += 1) {
       const unitId = createUnitId(unitIndex);
       const unitType = pickUnitType(rng);
