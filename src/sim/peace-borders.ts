@@ -54,14 +54,10 @@ export function getPeaceBorderIssue(world: WorldState, legs: TerritoryTransfer[]
 /** Grow concessions from valid borders rather than cherry-picking interior resources. */
 export function selectPeaceDistricts(world: WorldState, from: NationId, to: NationId, candidates: MesoRegionId[], cap: number): MesoRegionId[] {
   const selected: MesoRegionId[] = [], pending = [...new Set(candidates)];
-  const owners = getOwnerByMesoId(world), neighbors = getNeighborsById(world);
   const selectedSet = new Set<MesoRegionId>();
-  const borderImprovement = (id: MesoRegionId) => (neighbors.get(id) ?? []).reduce((score, neighbor) => {
-    const owner = selectedSet.has(neighbor) ? to : owners.get(neighbor);
-    return score + Number(owner === to) - Number(owner === from);
-  }, 0);
   while (selected.length < cap) {
-    const ranked = [...pending].sort((a, b) => borderImprovement(b) - borderImprovement(a));
+    const ranked = pending.map((id) => ({ id, improvement: borderImprovement(world, from, to, [id], selectedSet) }))
+      .sort((a, b) => b.improvement - a.improvement).map(({ id }) => id);
     const next = ranked.find((id) => !getPeaceBorderIssue(world, [{ from, to, regionIds: [...selected, id] }]));
     const index = next === undefined ? -1 : pending.indexOf(next);
     if (index < 0) {
@@ -78,6 +74,59 @@ export function selectPeaceDistricts(world: WorldState, from: NationId, to: Nati
     const [id] = pending.splice(index, 1);
     selectedSet.add(id);
     selected.push(id);
+  }
+  return selected;
+}
+
+function borderImprovement(world: WorldState, from: NationId, to: NationId, ids: MesoRegionId[], selected: Set<MesoRegionId>): number {
+  const owners = getOwnerByMesoId(world), neighbors = getNeighborsById(world), parcel = new Set(ids);
+  let improvement = 0;
+  for (const id of ids) for (const neighbor of neighbors.get(id) ?? []) {
+    if (parcel.has(neighbor)) continue;
+    const owner = selected.has(neighbor) ? to : owners.get(neighbor);
+    improvement += Number(owner === to) - Number(owner === from);
+  }
+  return improvement;
+}
+
+/** Identify transfers that preserve existing provincial boundaries. */
+export function getWholeProvinces(world: WorldState, owner: NationId, regionIds: readonly MesoRegionId[]) {
+  const requested = new Set(regionIds);
+  const provinces = world.macroRegions.filter((macro) =>
+    macro.nationId === owner && macro.mesoRegionIds.length > 0 && macro.mesoRegionIds.every((id) => requested.has(id)));
+  return provinces.reduce((sum, macro) => sum + macro.mesoRegionIds.length, 0) === regionIds.length ? provinces : null;
+}
+
+export function selectPeaceProvinces(
+  world: WorldState,
+  from: NationId,
+  to: NationId,
+  candidates: readonly MesoRegionId[],
+  provinceLimit: number,
+  districtLimit: number,
+): MesoRegionId[] {
+  const priority = new Set(candidates);
+  if (!priority.size) return [];
+  const capital = world.nations.find((nation) => nation.id === from)?.capitalMesoId;
+  const provinces = world.macroRegions.filter((macro) => macro.nationId === from);
+  const pending = provinces.filter(({ mesoRegionIds }) =>
+    !mesoRegionIds.includes(capital!) && mesoRegionIds.some((id) => priority.has(id)) &&
+    mesoRegionIds.every((id) => {
+      const occupier = world.occupation.mesoById.get(id);
+      return !occupier || occupier === to || occupier === from;
+    }))
+    .map(({ mesoRegionIds }) => ({ ids: mesoRegionIds,
+      score: mesoRegionIds.filter((id) => priority.has(id)).length / mesoRegionIds.length }));
+  const selected: MesoRegionId[] = [];
+  for (let count = 0; count < Math.min(provinceLimit, provinces.length - 1); count++) {
+    const selectedSet = new Set(selected);
+    const ranked = pending.filter(({ ids }) => ids.length + selected.length <= districtLimit)
+      .map((entry) => ({ entry, improvement: borderImprovement(world, from, to, entry.ids, selectedSet) }))
+      .sort((a, b) => b.improvement - a.improvement || b.entry.score - a.entry.score);
+    const next = ranked.find(({ entry }) => !getPeaceBorderIssue(world, [{ from, to, regionIds: [...selected, ...entry.ids] }]));
+    if (!next) break;
+    selected.push(...next.entry.ids);
+    pending.splice(pending.indexOf(next.entry), 1);
   }
   return selected;
 }

@@ -1,9 +1,10 @@
+import { getWholeProvinces } from "../sim/peace-borders";
 import type { NationId } from "../worldgen/nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { WorldState } from "../sim/world-state";
 import { findWar } from "../sim/war-state";
 import { getNationName } from "../sim/nation-identity";
-import { getOwnerByMesoId } from "../sim/world-cache";
+import { getMesoById, getOwnerByMesoId } from "../sim/world-cache";
 import { getWarDeclarationMode } from "../sim/simulation-settings";
 import { getDomesticUnrest } from "../sim/domestic-unrest";
 import { getMapView } from "../render/map-view-state";
@@ -16,18 +17,25 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     <div class="peace-offers" data-peace-view="offers"></div><div data-peace-editor>
     <label><input type="checkbox" data-peace-control="automatic" checked> Automatically revise and accept peace conditions</label>
     <p class="society-note">Both governments maintain standing terms from the start of war. Battle losses, occupation, fatigue and domestic unrest change willingness to accept. Publishing your own terms switches this government's negotiations to manual control.</p>
-    <div class="society-selectors"><label>Demand districts<select multiple size="4" data-peace-control="demand" aria-label="Peace demanded districts"></select></label><label>Offer districts<select multiple size="4" data-peace-control="offer" aria-label="Peace offered districts"></select></label></div>
+    <div class="society-selectors"><label>Demand provinces<select multiple size="4" data-peace-control="demand" aria-label="Peace demanded provinces"></select></label><label>Offer provinces<select multiple size="4" data-peace-control="offer" aria-label="Peace offered provinces"></select></label></div>
     <div class="society-selectors"><label>Demand weapons<input type="number" min="0" max="100" step="1" value="0" data-peace-control="demand-weapons" aria-label="Peace demanded weapons"></label><label>Offer weapons<input type="number" min="0" max="100" step="1" value="0" data-peace-control="offer-weapons" aria-label="Peace offered weapons"></label></div>
     <label>Truce duration<select data-peace-control="truce" aria-label="Peace truce duration"><option value="300">5 minutes</option><option value="600">10 minutes</option><option value="900">15 minutes</option></select></label>
-    <p class="society-note" data-peace-view="preview"></p><div class="society-actions"><button type="button" data-peace-action="propose">Publish peace conditions</button><button type="button" data-peace-action="accept">Accept opponent's terms</button><button type="button" data-peace-action="map">Preview selected districts</button></div>
-    <p class="society-note">Select multiple districts with Ctrl / Command. Ceded districts must connect to existing territory or form a complete island. Remaining territory cannot be split, and neither country can lose its last territory through negotiated peace. Third-party occupations require a separate settlement. Resources and land change only when an offer is accepted; unrelated wars continue.</p></div></details>`;
+    <p class="society-note" data-peace-view="preview"></p><div class="society-actions"><button type="button" data-peace-action="propose">Publish peace conditions</button><button type="button" data-peace-action="accept">Accept opponent's terms</button><button type="button" data-peace-action="map">Preview selected provinces</button></div>
+    <p class="society-note">Select up to three whole provinces per side with Ctrl / Command. Ceded territory must connect to existing territory or form a complete island. Remaining territory cannot be split, and neither country can lose its last territory through negotiated peace. Third-party occupations require a separate settlement. Resources and land change only when an offer is accepted; unrelated wars continue.</p></div></details>`;
   const control = (name: string) => root.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-peace-control="${name}"]`)!;
   const view = (name: string) => root.querySelector<HTMLElement>(`[data-peace-view="${name}"]`)!;
   const editor = root.querySelector<HTMLElement>("[data-peace-editor]")!;
   let key = "", revision = -1, dirty = false;
-  const values = (name: string) => [...(control(name) as HTMLSelectElement).selectedOptions].map((option) => option.value as MesoRegionId);
+  const parcels = new Map<string, MesoRegionId[]>();
+  const values = (name: string) => [...(control(name) as HTMLSelectElement).selectedOptions].flatMap((option) => parcels.get(option.value) ?? []);
+  const describe = (ids: MesoRegionId[]) => {
+    const owner = getOwnerByMesoId(world).get(ids[0]);
+    const provinces = owner ? getWholeProvinces(world, owner, ids) : null;
+    return (provinces ? provinces.map((macro) => `Province ${macro.id.replace("macro-", "")}`)
+      : ids.map(districtName)).map(esc).join(", ") || "No territory";
+  };
   const read = (): PeaceTerms => ({ demandedRegionIds: values("demand"), offeredRegionIds: values("offer"), demandedWeapons: Number(control("demand-weapons").value), offeredWeapons: Number(control("offer-weapons").value), truceSeconds: Number(control("truce").value) });
-  const summary = (offer: PeaceOffer) => `<article class="peace-offer"><strong>${esc(getNationName(world, offer.proposerId))}'s conditions</strong><p>Demands: ${offer.terms.demandedRegionIds.map((id) => esc(districtName(id))).join(", ") || "No territory"} · ${offer.terms.demandedWeapons} weapons</p><p>Offers: ${offer.terms.offeredRegionIds.map((id) => esc(districtName(id))).join(", ") || "No territory"} · ${offer.terms.offeredWeapons} weapons</p><small>Truce ${offer.terms.truceSeconds / 60} min · ${offer.source === "opening" ? "Opening terms" : offer.source === "manual" ? "Manually proposed" : "Revised by government"}</small></article>`;
+  const summary = (offer: PeaceOffer) => `<article class="peace-offer"><strong>${esc(getNationName(world, offer.proposerId))}'s conditions</strong><p>Demands: ${describe(offer.terms.demandedRegionIds)} · ${offer.terms.demandedWeapons} weapons</p><p>Offers: ${describe(offer.terms.offeredRegionIds)} · ${offer.terms.offeredWeapons} weapons</p><small>Truce ${offer.terms.truceSeconds / 60} min · ${offer.source === "opening" ? "Opening terms" : offer.source === "manual" ? "Manually proposed" : "Revised by government"}</small></article>`;
   const update = () => {
     const a = selected(), b = partner(), war = findWar(world.wars, a, b);
     const enabled = getWarDeclarationMode(world) === "diplomacy" && !!war;
@@ -47,14 +55,30 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     (control("automatic") as HTMLInputElement).checked = negotiation.automatic.get(a) ?? true;
     const next = `${negotiation.key}:${a}:${world.territoryVersion}`;
     if (next !== key) {
-      const owners = getOwnerByMesoId(world);
-      const options = (id: NationId) => world.mesoRegions.filter((region) => region.type !== "sea" && owners.get(region.id) === id).map((region) =>
-        `<option value="${esc(region.id)}">${esc(districtName(region.id))}${region.building === "capital" ? " · Capital" : region.building ? ` · ${esc(region.building)}` : ""}${region.resource ? ` · ${esc(region.resource)}` : ""}</option>`).join("");
-      control("demand").innerHTML = options(b); control("offer").innerHTML = options(a); key = next; revision = -1; dirty = false;
+      parcels.clear();
+      const regions = getMesoById(world);
+      const options = (id: NationId, existing: MesoRegionId[]) => {
+        const current = new Set(existing);
+        const output: string[] = [];
+        for (const macro of world.macroRegions.filter((item) => item.nationId === id && item.mesoRegionIds.length)) {
+          parcels.set(macro.id, macro.mesoRegionIds);
+          const capital = macro.mesoRegionIds.some((regionId) => regions.get(regionId)?.building === "capital");
+          output.push(`<option value="${esc(macro.id)}">Province ${esc(macro.id.replace("macro-", ""))} · ${macro.mesoRegionIds.length} districts${capital ? " · Capital" : ""}</option>`);
+          if (!macro.mesoRegionIds.every((regionId) => current.has(regionId))) {
+            for (const regionId of macro.mesoRegionIds.filter((item) => current.has(item))) {
+              parcels.set(regionId, [regionId]);
+              output.push(`<option value="${esc(regionId)}">${esc(districtName(regionId))} · Existing terms</option>`);
+            }
+          }
+        }
+        return output.join("");
+      };
+      control("demand").innerHTML = options(b, own.terms.demandedRegionIds);
+      control("offer").innerHTML = options(a, own.terms.offeredRegionIds); key = next; revision = -1; dirty = false;
     }
     if (!dirty && revision !== own.revision) {
       for (const [name, ids] of [["demand", own.terms.demandedRegionIds], ["offer", own.terms.offeredRegionIds]] as const)
-        for (const option of (control(name) as HTMLSelectElement).options) option.selected = ids.includes(option.value as MesoRegionId);
+        for (const option of (control(name) as HTMLSelectElement).options) option.selected = (parcels.get(option.value) ?? []).every((id) => ids.includes(id));
       control("demand-weapons").value = String(own.terms.demandedWeapons); control("offer-weapons").value = String(own.terms.offeredWeapons);
       control("truce").value = String(own.terms.truceSeconds); revision = own.revision;
     }

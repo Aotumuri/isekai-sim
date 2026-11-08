@@ -1,5 +1,5 @@
 import { getRelation } from "./diplomacy";
-import { getPeaceBorderIssue, selectPeaceDistricts } from "./peace-borders";
+import { getPeaceBorderIssue, getWholeProvinces, selectPeaceProvinces } from "./peace-borders";
 import type { NationId } from "../worldgen/nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { WorldState } from "./world-state";
@@ -60,8 +60,14 @@ function legsFor(proposer: NationId, target: NationId, terms: PeaceTerms): Terri
 }
 export function getPeaceTermsIssue(world: WorldState, proposer: NationId, target: NationId, terms: PeaceTerms): string | null {
   if (getWarDeclarationMode(world) !== "diplomacy" || !findWar(world.wars, proposer, target)) return "These nations are not negotiating an active war.";
-  if (!Array.isArray(terms.demandedRegionIds) || !Array.isArray(terms.offeredRegionIds) ||
-    terms.demandedRegionIds.length > 8 || terms.offeredRegionIds.length > 8) return "A proposal can transfer up to eight districts in either direction.";
+  const validSize = (owner: NationId, ids: MesoRegionId[]) => {
+    if (!Array.isArray(ids)) return false;
+    const provinces = getWholeProvinces(world, owner, ids);
+    return provinces ? provinces.length <= 3 : ids.length <= 8;
+  };
+  if (!validSize(target, terms.demandedRegionIds) || !validSize(proposer, terms.offeredRegionIds)) {
+    return "Select up to three whole provinces on each side.";
+  }
   if (![terms.demandedWeapons, terms.offeredWeapons].every((amount) => Number.isInteger(amount) && amount >= 0 && amount <= 100) ||
     (terms.demandedWeapons > 0 && terms.offeredWeapons > 0) || !Number.isInteger(terms.truceSeconds) || terms.truceSeconds < 180 || terms.truceSeconds > 900) return "Check reparations and the truce duration.";
   const a = world.nations.find((nation) => nation.id === proposer && nation.macroRegionIds.length);
@@ -89,16 +95,16 @@ function automaticTerms(world: WorldState, proposer: NationId, target: NationId,
   const hardline = isFightOnGovernment(world, proposer);
   const aggressor = findWar(world.wars, proposer, target)?.aggressorId === proposer;
   if (advantage > 0.15 || hardline || (aggressor && pursuingOpeningGoals && urgency < 0.55)) {
-    const cap = Math.min(3, Math.max(0, Math.floor(ownedLand(world, target).length * 0.25)));
+    const cap = Math.floor(ownedLand(world, target).length * 0.25);
     const candidates = candidateDistricts(world, proposer, target);
     if (hardline) for (const id of ownedLand(world, target)) if (id !== b.capitalMesoId && !candidates.includes(id) &&
       (!world.occupation.mesoById.has(id) || world.occupation.mesoById.get(id) === proposer)) candidates.push(id);
-    terms.demandedRegionIds = selectPeaceDistricts(world, target, proposer, candidates, cap);
+    terms.demandedRegionIds = selectPeaceProvinces(world, target, proposer, candidates, 2, cap);
     terms.demandedWeapons = Math.min(hardline ? 40 : 30, Math.floor(b.resources.weapons * (hardline ? 0.35 : 0.15)),
       Math.max(pursuingOpeningGoals || hardline ? 15 : 0, Math.floor(advantage * 40)));
   } else if (!opening && (advantage < -0.15 || urgency >= 0.55)) {
-    const cap = Math.min(3, Math.max(0, Math.floor(ownedLand(world, proposer).length * (urgency >= 0.8 ? 0.25 : 0.15))));
-    terms.offeredRegionIds = selectPeaceDistricts(world, proposer, target, candidateDistricts(world, target, proposer), cap);
+    const cap = Math.floor(ownedLand(world, proposer).length * (urgency >= 0.8 ? 0.25 : 0.15));
+    terms.offeredRegionIds = selectPeaceProvinces(world, proposer, target, candidateDistricts(world, target, proposer), 1, cap);
     terms.offeredWeapons = Math.min(25, Math.floor(a.resources.weapons * 0.15));
     terms.truceSeconds = 600;
   }

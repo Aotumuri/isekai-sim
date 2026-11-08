@@ -4,7 +4,7 @@ import test from "node:test";
 import { createSocietyWorld } from "../helpers/society-world";
 import { createMesoRegionId } from "../../src/worldgen/meso-region";
 import { createMacroRegionId } from "../../src/worldgen/macro-region";
-import { getPeaceBorderIssue, selectPeaceDistricts } from "../../src/sim/peace-borders";
+import { getPeaceBorderIssue, selectPeaceDistricts, selectPeaceProvinces } from "../../src/sim/peace-borders";
 import { declareWar, findWar } from "../../src/sim/war-state";
 import { getPeaceTermsIssue, proposePeaceTerms, acceptPeaceOffer, whitePeaceTerms } from "../../src/sim/war-negotiations";
 import { getOwnerByMesoId } from "../../src/sim/world-cache";
@@ -116,4 +116,25 @@ test("surrender grows contiguous shares even when both victors occupied alternat
 test("automatic concessions prefer filling a border pocket over extending a salient", () => {
   const { world, a, b, id } = scene("aabbbb", [[0, 1], [0, 2], [2, 3], [2, 5], [1, 4], [0, 4], [4, 5], [3, 5]]);
   assert.deepEqual(selectPeaceDistricts(world, b.id, a.id, [id(2), id(4)], 1), [id(4)]);
+});
+
+test("a province larger than eight districts can be demanded and ceded intact", () => {
+  const { world, a, b, id } = scene("abbbbbbbbbbbbb", Array.from({ length: 13 }, (_, index) => [index, index + 1]));
+  const borderProvince = world.macroRegions[1];
+  const packageIds = Array.from({ length: 10 }, (_, index) => id(index + 1));
+  borderProvince.mesoRegionIds = packageIds;
+  const capitalProvince = { id: createMacroRegionId(100), nationId: b.id, isCore: true, mesoRegionIds: [id(11), id(12), id(13)] };
+  world.macroRegions.push(capitalProvince);
+  b.macroRegionIds.push(capitalProvince.id);
+  b.capitalMesoId = id(13);
+  world.territoryVersion++;
+  assert.deepEqual(selectPeaceProvinces(world, b.id, a.id, [id(7)], 1, 12), packageIds);
+
+  const terms = { ...whitePeaceTerms(), demandedRegionIds: packageIds };
+  assert.equal(getPeaceTermsIssue(world, a.id, b.id, terms), null);
+  assert(proposePeaceTerms(world, a.id, b.id, terms));
+  assert(acceptPeaceOffer(world, b.id, a.id));
+  assert.equal(borderProvince.nationId, a.id);
+  assert.deepEqual(borderProvince.mesoRegionIds, packageIds);
+  assert.equal(capitalProvince.nationId, b.id);
 });
