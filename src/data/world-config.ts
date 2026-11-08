@@ -52,7 +52,10 @@ export interface WorldConfig {
 const DEFAULT_SEED = Math.floor(Math.random() * 1_000_000_000_000);
 
 export function createDefaultWorldConfig(): WorldConfig {
-  return createWorldConfig(2560, 1440, 210_000);
+  return {
+    ...createWorldConfig(2560, 1440, 210_000),
+    nationTargetMacroRegionsPerNation: 6,
+  };
 }
 
 export function createWorldConfig(width: number, height: number, maxMicroRegions = Infinity): WorldConfig {
