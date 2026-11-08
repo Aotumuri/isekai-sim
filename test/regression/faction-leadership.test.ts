@@ -35,3 +35,11 @@ test("only the leader can expel and wartime members cannot be abandoned", () => 
   assert(!expelFactionMember(world, a.id, c.id)); world.wars = [];
   assert(expelFactionMember(world, a.id, c.id)); assert(!faction.memberIds.includes(c.id)); assert.equal(faction.leaderId, a.id);
 });
+
+test("a faction dissolves immediately when no recognized government can lead it", async () => {
+  const { updateFactionGovernments } = await import("../../src/sim/factions");
+  const { world, faction } = scene();
+  for (const nation of world.nations) nation.macroRegionIds = [];
+  updateFactionGovernments(world);
+  assert(!world.factions!.factions.includes(faction)); assert.equal(world.factions!.factionByNationId.size, 0);
+});

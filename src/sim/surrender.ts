@@ -1,3 +1,6 @@
+import { updateFactionGovernments } from "./factions";
+import { establishExileGovernment, updateExileGovernments } from "./exile-government";
+import { updateTerritorialClaims } from "./territorial-claims";
 import { allFieldUnits } from "./mobilization";
 import type { MacroRegion } from "../worldgen/macro-region";
 import type { MesoRegion } from "../worldgen/meso-region";
@@ -24,9 +27,8 @@ export function updateSurrender(world: WorldState): void {
     nationById.set(nation.id, nation);
   }
   const warAdjacency = buildWarAdjacency(world.wars);
-  const unitCountsByNation = collectUnitCountsByNation(world.units);
-  const fieldIds = new Set(world.units.map((unit) => unit.id));
-  for (const unit of allFieldUnits(world)) if (unit.volunteerOriginId && (unit.volunteerOriginId !== unit.nationId || !fieldIds.has(unit.id))) {
+  const unitCountsByNation = collectUnitCountsByNation(allFieldUnits(world));
+  for (const unit of allFieldUnits(world)) if (unit.volunteerOriginId && unit.volunteerOriginId !== unit.nationId) {
     unitCountsByNation.set(unit.volunteerOriginId, (unitCountsByNation.get(unit.volunteerOriginId) ?? 0) + 1);
   }
   const occupationCountsByNation = collectOccupationCountsByNation(
@@ -94,7 +96,10 @@ export function updateSurrender(world: WorldState): void {
     const surrenderScore = baseSurrenderScore * cooperationMultiplier;
     nation.surrenderScore = surrenderScore;
 
-    if (unitCount <= 0) {
+    const exile = world.exileGovernments?.byNationId.get(nation.id);
+    const reforming = exile?.status === "restored" && world.time.slowTick < exile.graceUntilSlowTick &&
+      !occupationByMesoId.has(nation.capitalMesoId);
+    if (unitCount <= 0 && !reforming) {
       surrendering.push(nation.id);
       continue;
     }
@@ -146,6 +151,8 @@ export function updateSurrender(world: WorldState): void {
       occupancyByMacro,
     );
 
+    updateTerritorialClaims(world);
+    if (assignments.size) establishExileGovernment(world, surrenderNationId, new Set(surrendering));
     const didChange = applyAssignments(
       surrenderNationId,
       assignments,
@@ -204,6 +211,9 @@ export function updateSurrender(world: WorldState): void {
       new Set(surrenderedThisTick),
     );
     world.territoryVersion += 1;
+    updateTerritorialClaims(world);
+    updateExileGovernments(world);
+    updateFactionGovernments(world);
   }
 }
 

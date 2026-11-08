@@ -1,3 +1,4 @@
+import { updateExileGovernments } from "./exile-government";
 import { updateVolunteers } from "./volunteers";
 import { updateAlliedWarRequests } from "./allied-war-requests";
 import { updateMilitaryAccess } from "./military-access";
@@ -176,6 +177,7 @@ export function stepFastTick(world: WorldState, dtMs: number): void {
 
 export function stepSlowTick(world: WorldState, _dtMs: number): void {
   world.time.slowTick += 1;
+  updateExileGovernments(world);
   updateTerritorialClaims(world);
   updateDiplomaticRelations(world);
   updateMilitaryAccess(world);

@@ -41,6 +41,7 @@ export function allFieldUnits(world: WorldState): UnitState[] {
   };
   for (const unit of world.units) visit(unit);
   for (const mission of world.volunteers?.missions ?? []) for (const unit of mission.transitUnits) visit(unit);
+  for (const record of world.exileGovernments?.byNationId.values() ?? []) for (const unit of record.reserveUnits) visit(unit);
   return result;
 }
 export function getMobilizationThreat(world: WorldState, nationId: NationId): number {
@@ -146,7 +147,7 @@ export function updateDemobilization(world: WorldState): void {
     const ownUnits = allFieldUnits(world).filter((unit) => unit.nationId === nation.id);
     const actual = ownUnits.filter((unit) => unit.domain === "land").length;
     const excess = Math.max(0, actual - item.authorizedArmy), batch = Math.min(excess, Math.max(2, Math.ceil(actual * 0.05)));
-    const candidates = world.units.filter((unit) => unit.nationId === nation.id && unit.domain === "land" && unit.manpower > 0 && unit.cargoUnits.length === 0 && !unit.volunteerOriginId && !world.militaryAccess?.orders.has(unit.id) &&
+    const candidates = world.units.filter((unit) => unit.nationId === nation.id && unit.domain === "land" && unit.manpower > 0 && unit.cargoUnits.length === 0 && !unit.volunteerOriginId && !unit.exileOriginId && !world.militaryAccess?.orders.has(unit.id) &&
       owners.get(unit.regionId) === nation.id && !world.occupation.mesoById.has(unit.regionId) &&
       (!unit.moveToId || owners.get(unit.moveToId) === nation.id) && !unit.amphibiousEmbarkRequested && !unit.amphibiousLandRequested &&
       !world.amphibiousOperations.operationByUnitId.has(unit.id) && !world.amphibiousOperations.capabilityDemandByUnitId.has(unit.id) && !world.offensiveOperations.operationIdByUnitId.has(unit.id) &&

@@ -1,7 +1,7 @@
 import type { NationId } from "../worldgen/nation";
 import { getNationFaction } from "../sim/factions";
 import { getNationIdeology, getNationName } from "../sim/nation-identity";
-import { isNationActive } from "../sim/nation-active";
+import { isNationPresent } from "../sim/nation-active";
 import { getOwnerByMesoId } from "../sim/world-cache";
 import type { WorldState } from "../sim/world-state";
 import { getMapView, selectMapNation, setMapMode, type MapMode } from "../render/map-view-state";
@@ -62,7 +62,7 @@ export function attachMapControls(root: HTMLElement, renderer: Renderer, world: 
   let lastRender = -Infinity, lastContentKey = "";
   const update = (force = false) => {
     const state = getMapView(world);
-    const active = world.nations.filter(isNationActive);
+    const active = world.nations.filter((nation) => isNationPresent(world, nation));
     if (state.selectedNationId && !active.some((nation) => nation.id === state.selectedNationId)) {
       state.selectedNationId = null; state.diplomaticFocusId = null; state.targetNationId = null;
       if (state.mode === "diplomacy" || state.mode === "claims") state.mode = "political";
@@ -78,14 +78,14 @@ export function attachMapControls(root: HTMLElement, renderer: Renderer, world: 
     if (!force && performance.now() - lastRender < 500) return;
     lastRender = performance.now();
     const claims = state.mode === "claims" && state.selectedNationId ? getMapClaims(world, state.selectedNationId) : [];
-    const contentKey = JSON.stringify([claims, state.mode, state.revision, world.factions?.version ?? 0,
+    const contentKey = JSON.stringify([world.exileGovernments?.version ?? 0, claims, state.mode, state.revision, world.factions?.version ?? 0,
       active.map((nation) => [nation.id, nation.name, nation.ideologyId]), world.occupation.version, world.territoryVersion,
       state.diplomaticFocusId && state.targetNationId ? getDiplomaticStatus(world, state.diplomaticFocusId, state.targetNationId) : null]);
     if (contentKey === lastContentKey) return;
     lastContentKey = contentKey;
     for (const button of controls.querySelectorAll<HTMLElement>("[data-map-mode]")) button.setAttribute("aria-pressed", String(button.dataset.mapMode === state.mode));
     const selected = state.selectedNationId;
-    view("selection").innerHTML = selected ? `<strong>${esc(getNationName(world, selected))}</strong><span>${esc(getNationIdeology(world, selected).name)} · ${esc(getNationFaction(world, selected)?.name ?? "Non-aligned")}</span><button type="button" data-map-action="diplomacy">Open diplomacy · E</button><button type="button" data-map-mode="claims">View territorial claims · C</button>` : '<span>Click a nation to select it. E: Diplomacy · C: Territorial claims.</span>';
+    view("selection").innerHTML = selected ? `<strong>${esc(getNationName(world, selected))}</strong><span>${world.exileGovernments?.byNationId.get(selected)?.status === "exiled" ? `Government in exile · Host: ${esc(getNationName(world, world.exileGovernments.byNationId.get(selected)!.hostId))} · ` : ""}${esc(getNationIdeology(world, selected).name)} · ${esc(getNationFaction(world, selected)?.name ?? "Non-aligned")}</span><button type="button" data-map-action="diplomacy">Open diplomacy · E</button><button type="button" data-map-mode="claims">View territorial claims · C</button>` : '<span>Click a nation to select it. E: Diplomacy · C: Territorial claims.</span>';
     if (state.mode === "diplomacy" && state.diplomaticFocusId) {
       const labels = { selected: "Reference nation", friendly: "Friendly", neutral: "Neutral", hostile: "Hostile", war: "At war" };
       view("legend").innerHTML = `<h2>Relations with ${esc(getNationName(world, state.diplomaticFocusId))}</h2>${Object.entries(DIPLOMATIC_COLORS).map(([status, value]) => `<span class="map-legend-item"><i style="background:${color(value)}"></i>${labels[status as keyof typeof labels]}</span>`).join("")}${state.targetNationId ? `<p>${esc(getNationName(world, state.targetNationId))}: ${labels[getDiplomaticStatus(world, state.diplomaticFocusId, state.targetNationId)]}</p>` : ""}`;

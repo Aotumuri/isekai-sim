@@ -124,3 +124,8 @@ canvas {
 [data-mobilization-view="strain"] { accent-color: #ea9955 !important; }
 [data-mobilization-view="status"] { padding: 12px 0; color: #dfcb91; }
 [data-mobilization-ui] h3 { font-size: 13px; margin-bottom: 6px; }
+
+.society-exile { display: block; margin-top: 8px; }
+.society-exile strong, .society-exile small { display: block; margin-bottom: 6px; }
+
+.society-country > .society-note, .society-country > .society-actions { grid-column: 1 / -1; }

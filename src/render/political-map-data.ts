@@ -1,4 +1,4 @@
-import { relationKey } from "../sim/diplomacy";
+import { hasExileConflict, relationKey } from "../sim/diplomacy";
 import { areFactionPartners, getNationFaction } from "../sim/factions";
 import { identityHash } from "../sim/nation-identity";
 import { findWar } from "../sim/war-state";
@@ -14,7 +14,7 @@ export const DIPLOMATIC_COLORS: Record<DiplomaticStatus, number> = {
 };
 export function getDiplomaticStatus(world: WorldState, focus: NationId, other: NationId): DiplomaticStatus {
   if (focus === other) return "selected";
-  if (findWar(world.wars, focus, other)) return "war";
+  if (findWar(world.wars, focus, other) || hasExileConflict(world, focus, other)) return "war";
   const relation = world.diplomacy?.relations.get(relationKey(focus, other));
   if (areFactionPartners(world, focus, other) || relation?.treaties.some((treaty) =>
     treaty.type === "alliance" && treaty.expiresAtSlowTick > world.time.slowTick)) return "friendly";

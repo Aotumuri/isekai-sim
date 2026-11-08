@@ -1,4 +1,5 @@
 import { getIdeologicalAffinity, ideologyAffinityLabel } from "../sim/ideology-relations";
+import { attachExileControls } from "./exile-controls";
 import { attachMilitaryCooperationControls } from "./military-cooperation-controls";
 import { attachMobilizationControls } from "./mobilization-controls";
 import { attachTerritoryControls, districtName } from "./territory-controls";
@@ -18,7 +19,7 @@ import { getNationalDesign, getResearchCost, getResearchPortfolio, emptyResearch
   RESEARCH_BRANCHES, type ResearchBranch, type ResearchPortfolio } from "../sim/research";
 import { createSimulationSettings, getWarDeclarationMode } from "../sim/simulation-settings";
 import { licenseTechnology } from "../sim/technology-exchange";
-import { isNationActive } from "../sim/nation-active";
+import { isNationActive, isNationPresent } from "../sim/nation-active";
 import type { SimClock } from "../sim/time";
 import type { WorldState } from "../sim/world-state";
 
@@ -50,7 +51,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
         <p data-view="mode"></p>
       </details>
       <div class="society-selectors"><label>Selected nation<select data-control="nation" aria-label="Selected nation"></select></label><label>Diplomatic partner<select data-control="partner" aria-label="Diplomatic partner"></select></label></div>
-      <div class="society-country" data-view="country"></div>
+      <div class="society-country" data-view="country"></div><div data-exile-ui></div>
       <nav class="society-tabs" aria-label="Information views"><button type="button" data-tab="diplomacy" aria-pressed="true">Diplomacy</button><button type="button" data-tab="territory" aria-pressed="false">Territories</button><button type="button" data-tab="military" aria-pressed="false">Military</button><button type="button" data-tab="research" aria-pressed="false">Research</button><button type="button" data-tab="factions" aria-pressed="false">Factions</button><button type="button" data-tab="history" aria-pressed="false">World history</button></nav>
       <p class="society-feedback" role="status" aria-live="polite">Nations act autonomously. Select a nation to guide its policies and diplomacy.</p>
       <section data-pane="diplomacy">
@@ -84,6 +85,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
   const nationSelect = control("nation") as HTMLSelectElement, partnerSelect = control("partner") as HTMLSelectElement;
   (control("import") as HTMLSelectElement).value = "weapons";
   const feedback = wrapper.querySelector<HTMLElement>(".society-feedback")!;
+  const exileControls = attachExileControls(wrapper.querySelector<HTMLElement>("[data-exile-ui]")!, world, () => nationSelect.value as NationId, (id) => { selectMapNation(world, id); nationSelect.value = id; update(true); });
   const factions = attachFactionControls(wrapper.querySelector<HTMLElement>("[data-faction-ui]")!, world, () => nationSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   const territories = attachTerritoryControls(wrapper.querySelector<HTMLElement>("[data-territory-ui]")!, world, () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   const mobilizationControls = attachMobilizationControls(wrapper.querySelector<HTMLElement>("[data-mobilization-ui]")!, world, () => nationSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
@@ -108,10 +110,10 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     }
     if (!visible || (!force && performance.now() - lastRender < 750)) return;
     lastRender = performance.now();
-    const active = world.nations.filter(isNationActive), ids = active.map((nation) => nation.id).join("|");
+    const active = world.nations.filter((nation) => isNationPresent(world, nation)), ids = active.map((nation) => `${nation.id}:${world.exileGovernments?.byNationId.get(nation.id)?.status ?? "home"}`).join("|");
     if (ids !== cachedNationIds) {
       const a = nationSelect.value, b = partnerSelect.value;
-      const options = active.map((nation) => `<option value="${esc(nation.id)}">${n(nation.id)}</option>`).join("");
+      const options = active.map((nation) => `<option value="${esc(nation.id)}">${n(nation.id)}${world.exileGovernments?.byNationId.get(nation.id)?.status === "exiled" ? " (in exile)" : ""}</option>`).join("");
       nationSelect.innerHTML = options; partnerSelect.innerHTML = options;
       nationSelect.value = active.some((nation) => nation.id === a) ? a : active[0]?.id ?? "";
       partnerSelect.value = active.some((nation) => nation.id === b && nation.id !== nationSelect.value) ? b : active.find((nation) => nation.id !== nationSelect.value)?.id ?? "";
@@ -161,6 +163,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       const cost = getResearchCost(portfolio, branch), percent = portfolio.levels[branch] >= 10 ? 100 : Math.min(100, portfolio.progress[branch] / cost * 100);
       return `<div class="society-research-row"><span>${BRANCH_NAMES[branch]}</span><b>Lv.${portfolio.levels[branch]}</b><progress aria-label="${BRANCH_NAMES[branch]} research progress" max="100" value="${percent}"></progress><small>${Math.floor(percent)}%</small></div>`;
     }).join("");
+    exileControls.update();
     factions.update();
     territories.update();
     mobilizationControls.update();
@@ -173,9 +176,11 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       if (["improve", "pact", "trade-pact", "alliance", "aid", "peace", "crisis", "negotiate", "concede", "reject", "break-alliance", "break-pact", "break-trade", "exchange", "license"].includes(action ?? "")) {
         button.disabled = mode !== "diplomacy" || a === b || !active.some((item) => item.id === b) ||
           (action === "aid" && !settings.armsAidEnabled) || (action === "exchange" && !settings.tradeEnabled) ||
-          (action === "license" && !settings.researchEnabled);
+          (action === "license" && !settings.researchEnabled) ||
+          (["aid", "peace", "crisis", "negotiate", "concede", "reject", "exchange", "license"].includes(action ?? "") &&
+            (!isNationActive(nation) || !active.some((item) => item.id === b && isNationActive(item))));
       }
-      if (action === "refit") button.disabled = !settings.researchEnabled;
+      if (action === "refit") button.disabled = !settings.researchEnabled || !isNationActive(nation);
     }
   };
 

@@ -1,3 +1,5 @@
+import { getRelation, hasTreaty } from "./diplomacy";
+import { areFactionPartners } from "./factions";
 import type { MacroRegion, MacroRegionId } from "../worldgen/macro-region";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
@@ -114,5 +116,48 @@ export function transferTerritories(world: WorldState, legs: TerritoryTransfer[]
   updateTerritorialClaims(world, reason === "unilateral" ? new Set() : new Set(legs.map((leg) => leg.from)));
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [...new Set(legs.flatMap((leg) => [leg.from, leg.to]))],
     message: `Territorial ${reason}: ${legs.map((leg) => `${leg.from} ceded ${leg.regionIds.length} regions to ${leg.to}`).join("; ")}.` });
+  return true;
+}
+
+/** Liberation is restricted to the recorded homeland actually held by the recognized host. */
+export function restoreExiledTerritories(world: WorldState, nationId: NationId, liberatorId: NationId, regionIds: MesoRegionId[]): boolean {
+  const exile = world.exileGovernments?.byNationId.get(nationId);
+  if (!exile || exile.status === "dissolved" || exile.hostId !== liberatorId || !regionIds.length || new Set(regionIds).size !== regionIds.length) return false;
+  const relation = getRelation(world, nationId, liberatorId);
+  if (findWar(world.wars, nationId, liberatorId) || relation.trust < 60 || relation.opinion < 35 ||
+    (!areFactionPartners(world, nationId, liberatorId) && !hasTreaty(world, nationId, liberatorId, "alliance"))) return false;
+  const owners = getOwnerByMesoId(world), regions = getMesoById(world), remaining = new Map<NationId, number>();
+  for (const [id, owner] of owners) if (regions.get(id)?.type !== "sea") remaining.set(owner, (remaining.get(owner) ?? 0) + 1);
+  for (const id of regionIds) {
+    const owner = owners.get(id), controller = world.occupation.mesoById.get(id) ?? owner;
+    if (!owner || owner === nationId || !exile.homelandIds.includes(id) || regions.get(id)?.type === "sea" || controller !== liberatorId ||
+      (owner !== liberatorId && !findWar(world.wars, liberatorId, owner))) return false;
+    remaining.set(owner, (remaining.get(owner) ?? 0) - 1);
+  }
+  // A host cannot give away its last foothold; full enemy capitulations use the existing settlement path.
+  if ([...remaining].some(([id, count]) => id !== nationId && count <= 0)) return false;
+  updateTerritorialClaims(world);
+  const ids = new Set(regionIds), formerOwners = new Set(regionIds.map((id) => owners.get(id)!));
+  for (const macro of [...world.macroRegions]) if (formerOwners.has(macro.nationId)) partition(world, macro, ids, nationId);
+  refreshNationProvinces(world); world.mapVersion++; world.territoryVersion++;
+  for (const id of ids) {
+    const region = regions.get(id)!; if (region.building === "capital") region.building = "city";
+    world.occupation.mesoById.delete(id); world.occupation.dirtyMesoIds.add(id);
+  }
+  const newOwners = getOwnerByMesoId(world);
+  for (const formerOwner of formerOwners) {
+    const nation = world.nations.find((item) => item.id === formerOwner)!;
+    if (newOwners.get(nation.capitalMesoId) === formerOwner) continue;
+    const owned = world.mesoRegions.filter((region) => region.type !== "sea" && newOwners.get(region.id) === formerOwner);
+    const replacement = owned.find((region) => region.building === "city" && !world.occupation.mesoById.has(region.id)) ??
+      owned.find((region) => !world.occupation.mesoById.has(region.id)) ?? owned[0];
+    if (replacement) { nation.capitalMesoId = replacement.id; replacement.building = "capital"; }
+  }
+  world.occupation.version++; world.buildingVersion++;
+  world.battles = world.battles.filter((battle) => !ids.has(battle.mesoId));
+  updateOccupation(world);
+  updateTerritorialClaims(world, new Set([liberatorId]));
+  recordSimulationEvent(world, { category: "diplomacy", nationIds: [nationId, liberatorId],
+    message: `${liberatorId} restored ${regionIds.length} liberated homeland districts to ${nationId}.` });
   return true;
 }

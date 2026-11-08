@@ -44,7 +44,7 @@ export function sendVolunteers(world: WorldState, donorId: NationId, recipientId
   if (state.missions.some((mission) => mission.donorId === donorId && mission.recipientId === recipientId && mission.endedAtSlowTick !== undefined && world.time.slowTick - mission.endedAtSlowTick < 120) || outstanding.length >= 20 || outstanding.some((mission) => mission.donorId === donorId && mission.recipientId === recipientId) ||
     outstanding.filter((mission) => mission.donorId === donorId).reduce((sum, mission) => sum + mission.unitIds.length, 0) + count > 8) return null;
   const donor = world.nations.find((nation) => nation.id === donorId)!;
-  const owners = getOwnerByMesoId(world), own = world.units.filter((unit) => unit.nationId === donorId && unit.domain === "land" && !unit.volunteerOriginId);
+  const owners = getOwnerByMesoId(world), own = world.units.filter((unit) => unit.nationId === donorId && unit.domain === "land" && !unit.volunteerOriginId && !unit.exileOriginId);
   const homeArmy = own.filter((unit) => owners.get(unit.regionId) === donorId && !world.militaryAccess?.orders.has(unit.id) && !unit.amphibiousEmbarkRequested).length;
   if (homeArmy - count < 3) return null;
   const candidates = own.filter((unit) => owners.get(unit.regionId) === donorId && !unit.moveToId && unit.org >= 0.6 && unit.manpower > 0 &&

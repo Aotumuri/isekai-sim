@@ -3,7 +3,7 @@ import type { MesoRegionId } from "../worldgen/meso-region";
 import { areFactionPartners } from "./factions";
 import type { NationId } from "../worldgen/nation";
 import { getNationCharacter } from "./nation-character";
-import { isNationActive } from "./nation-active";
+import { isNationPresent } from "./nation-active";
 import { getWarDeclarationMode, recordSimulationEvent } from "./simulation-settings";
 import { getAdjacentNationPairs } from "./world-cache";
 import { buildWarAdjacency, isAtWar, normalizeWarPair } from "./war-state";
@@ -78,6 +78,15 @@ export function hasTreaty(world: WorldState, a: NationId, b: NationId, type: Tre
   return getDiplomacyState(world).relations.get(relationKey(a, b))?.treaties.some((treaty) =>
     treaty.type === type && treaty.expiresAtSlowTick > world.time.slowTick) ?? false;
 }
+/** Exile governments oppose occupiers through their host's continuing war. */
+export function hasExileConflict(world: WorldState, a: NationId, b: NationId): boolean {
+  const hostile = (id: NationId, enemy: NationId) => {
+    const record = world.exileGovernments?.byNationId.get(id);
+    return record?.status === "exiled" && record.enemyIds.includes(enemy) && world.wars.some((war) =>
+      (war.nationAId === record.hostId && war.nationBId === enemy) || (war.nationBId === record.hostId && war.nationAId === enemy));
+  };
+  return hostile(a, b) || hostile(b, a);
+}
 export function isDiplomaticallyProtected(world: WorldState, a: NationId, b: NationId): boolean {
   return areFactionPartners(world, a, b) || (["truce", "non-aggression", "alliance"] as const).some((type) => hasTreaty(world, a, b, type));
 }
@@ -96,8 +105,8 @@ export function spendInfluence(world: WorldState, nationId: NationId, amount: nu
 export function proposeTreaty(world: WorldState, proposerId: NationId, partnerId: NationId,
   type: Exclude<TreatyType, "truce">): boolean {
   if (getWarDeclarationMode(world) !== "diplomacy" || proposerId === partnerId) return false;
-  if (![proposerId, partnerId].every((id) => world.nations.some((nation) => nation.id === id && isNationActive(nation)))) return false;
-  if (isAtWar(proposerId, partnerId, buildWarAdjacency(world.wars)) || hasTreaty(world, proposerId, partnerId, type)) return false;
+  if (![proposerId, partnerId].every((id) => world.nations.some((nation) => nation.id === id && isNationPresent(world, nation)))) return false;
+  if (isAtWar(proposerId, partnerId, buildWarAdjacency(world.wars)) || hasExileConflict(world, proposerId, partnerId) || hasTreaty(world, proposerId, partnerId, type)) return false;
   const relation = getRelation(world, proposerId, partnerId);
   const threshold = type === "alliance" ? 55 : type === "non-aggression" ? 20 : 10;
   const cost = type === "alliance" ? 20 : type === "non-aggression" ? 12 : 8;
@@ -132,8 +141,8 @@ export function breakTreaty(world: WorldState, breakerId: NationId, partnerId: N
 
 export function improveRelations(world: WorldState, nationId: NationId, partnerId: NationId): boolean {
   if (getWarDeclarationMode(world) !== "diplomacy" || nationId === partnerId ||
-    isAtWar(nationId, partnerId, buildWarAdjacency(world.wars))) return false;
-  if (![nationId, partnerId].every((id) => world.nations.some((nation) => nation.id === id && isNationActive(nation)))) return false;
+    isAtWar(nationId, partnerId, buildWarAdjacency(world.wars)) || hasExileConflict(world, nationId, partnerId)) return false;
+  if (![nationId, partnerId].every((id) => world.nations.some((nation) => nation.id === id && isNationPresent(world, nation)))) return false;
   if (!spendInfluence(world, nationId, 10)) return false;
   const relation = getRelation(world, nationId, partnerId);
   relation.opinion = Math.min(100, relation.opinion + 10);
@@ -149,7 +158,7 @@ export function updateDiplomaticRelations(world: WorldState): void {
   const state = getDiplomacyState(world), now = world.time.slowTick;
   if (now - state.lastRelationsSlowTick < 10) return;
   state.lastRelationsSlowTick = now;
-  const active = new Set(world.nations.filter(isNationActive).map((nation) => nation.id));
+  const active = new Set(world.nations.filter((nation) => isNationPresent(world, nation)).map((nation) => nation.id));
   for (const id of active) state.influenceByNationId.set(id, Math.min(100, getInfluence(world, id) + 3));
   const contacts = [...getAdjacentNationPairs(world), ...world.strategicThreatObservation.exposures.map((exposure) =>
     [exposure.observerNationId, exposure.threatNationId] as [NationId, NationId])];
@@ -162,7 +171,7 @@ export function updateDiplomaticRelations(world: WorldState): void {
     for (const treaty of expired) recordSimulationEvent(world, { category: "diplomacy", nationIds: [a, b],
       message: `${a} and ${b}: ${treaty.type} expired.` });
     relation.treaties = relation.treaties.filter((treaty) => treaty.expiresAtSlowTick > now);
-    if (isAtWar(a, b, wars)) { relation.opinion = Math.max(-100, relation.opinion - 3); continue; }
+    if (isAtWar(a, b, wars) || hasExileConflict(world, a, b)) { relation.opinion = Math.max(-100, relation.opinion - 3); continue; }
     const first = getNationCharacter(world, a), second = getNationCharacter(world, b);
     const commonEnemy = [...(wars.get(a) ?? [])].some((enemy) => wars.get(b)?.has(enemy));
     const cooperation = (first.cooperation + second.cooperation) / 2;

@@ -4,7 +4,7 @@ import { breakTreaty, getRelation, spendInfluence, getInfluence } from "./diplom
 import { startDiplomaticWar, getNationalMilitaryStrength } from "./diplomatic-crises";
 import { getNationCharacter } from "./nation-character";
 import { getIdeologies, getNationIdeology, getNationName, identityHash } from "./nation-identity";
-import { isNationActive } from "./nation-active";
+import { isNationActive, isNationPresent } from "./nation-active";
 import { getWarDeclarationMode, recordSimulationEvent } from "./simulation-settings";
 import { findWar, type WarState } from "./war-state";
 import type { WorldState } from "./world-state";
@@ -135,11 +135,29 @@ export function getFactionSuccessors(world: WorldState, faction: Faction): Natio
 }
 export function ensureFactionLeadership(world: WorldState, faction: Faction): void {
   if (faction.memberIds.includes(faction.leaderId) && world.nations.some((nation) => nation.id === faction.leaderId && isNationActive(nation))) return;
-  const successor = getFactionSuccessors(world, faction)[0];
-  if (!successor || successor === faction.leaderId) return;
+  const recognized = faction.memberIds.filter((id) => world.nations.some((nation) => nation.id === id && isNationPresent(world, nation))).sort();
+  const successor = getFactionSuccessors(world, faction)[0] ?? (recognized.includes(faction.leaderId) ? faction.leaderId : recognized[0]);
+  if (!successor) {
+    const state = getFactionState(world);
+    state.factions = state.factions.filter((item) => item !== faction);
+    for (const id of faction.memberIds) { state.factionByNationId.delete(id); state.membershipSince.delete(id); state.cohesionFailures.delete(id); }
+    state.version++;
+    recordSimulationEvent(world, { category: "diplomacy", nationIds: faction.memberIds,
+      message: `${faction.name} dissolved after losing every recognized member government.` });
+    return;
+  }
+  if (successor === faction.leaderId) return;
   const previous = faction.leaderId; faction.leaderId = successor; getFactionState(world).version++;
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [previous, successor],
     message: `${getNationName(world, successor)} succeeded ${getNationName(world, previous)} as leader of ${faction.name}.` });
+}
+export function updateFactionGovernments(world: WorldState): void {
+  if (!world.factions) return;
+  for (const faction of [...world.factions.factions]) {
+    for (const id of [...faction.memberIds]) if (!world.nations.some((nation) => nation.id === id && isNationPresent(world, nation)))
+      leaveFaction(world, id, "government collapsed");
+    if (world.factions.factions.includes(faction)) ensureFactionLeadership(world, faction);
+  }
 }
 export function transferFactionLeadership(world: WorldState, leaderId: NationId, successorId: NationId): boolean {
   const faction = getNationFaction(world, leaderId);
@@ -155,7 +173,7 @@ export function transferFactionLeadership(world: WorldState, leaderId: NationId,
 export function expelFactionMember(world: WorldState, leaderId: NationId, memberId: NationId): boolean {
   const faction = getNationFaction(world, leaderId);
   if (getWarDeclarationMode(world) !== "diplomacy" || !faction || faction.leaderId !== leaderId || leaderId === memberId ||
-    !faction.memberIds.includes(memberId) || faction.memberIds.some((id) => world.wars.some((war) => war.nationAId === id || war.nationBId === id)) ||
+    !faction.memberIds.includes(memberId) || faction.memberIds.some((id) => world.exileGovernments?.byNationId.get(id)?.status === "exiled" || world.wars.some((war) => war.nationAId === id || war.nationBId === id)) ||
     !spendInfluence(world, leaderId, 10)) return false;
   return leaveFaction(world, memberId, `expelled by leader ${getNationName(world, leaderId)}`);
 }
@@ -194,7 +212,7 @@ function voluntaryCallAccepted(world: WorldState, member: NationId, enemy: Natio
 export function getFactionDefenders(world: WorldState, nationId: NationId): NationId[] {
   const faction = getNationFaction(world, nationId);
   if (!faction || faction.charter.defensiveObligation === "none") return [];
-  return faction.memberIds.filter((id) => id !== nationId && (faction.charter.defensiveObligation === "mandatory" || getNationCharacter(world, id).cooperation >= 0.6));
+  return faction.memberIds.filter((id) => id !== nationId && world.nations.some((nation) => nation.id === id && isNationActive(nation)) && (faction.charter.defensiveObligation === "mandatory" || getNationCharacter(world, id).cooperation >= 0.6));
 }
 function callMembers(world: WorldState, war: WarState, principal: NationId, enemy: NationId, defensive: boolean): { id: NationId; forced: boolean }[] {
   const result = [{ id: principal, forced: false }], faction = getNationFaction(world, principal);
@@ -203,7 +221,7 @@ function callMembers(world: WorldState, war: WarState, principal: NationId, enem
   if (obligation === "none") return result;
   const state = getFactionState(world);
   for (const member of faction.memberIds) {
-    if (member === principal || areFactionPartners(world, member, enemy)) continue;
+    if (member === principal || areFactionPartners(world, member, enemy) || !world.nations.some((nation) => nation.id === member && isNationActive(nation))) continue;
     const key = `${war.id}|${war.startedAtFastTick}|${member}|${defensive ? "defense" : "offense"}`;
     const alreadyFighting = !!findWar(world.wars, member, enemy);
     if (state.handledCalls.has(key) && !alreadyFighting) continue;
@@ -255,6 +273,7 @@ function reviewFactionCohesion(world: WorldState): void {
   const state = getFactionState(world);
   for (const nation of [...world.nations].sort((a, b) => a.id.localeCompare(b.id))) {
     const faction = getNationFaction(world, nation.id);
+    if (!isNationActive(nation)) continue;
     if (!faction || faction.memberIds.length < 2) { state.cohesionFailures.delete(nation.id); continue; }
     const others = faction.memberIds.filter((id) => id !== nation.id);
     const friction = others.reduce((sum, id) => sum + getIdeologicalAffinity(world, nation.id, id), 0) / others.length;
@@ -276,7 +295,7 @@ export function updateFactions(world: WorldState): void {
   const state = getFactionState(world);
   if (world.time.slowTick - state.lastAISlowTick < 30) return;
   state.lastAISlowTick = world.time.slowTick;
-  const active = world.nations.filter(isNationActive).sort((a, b) => a.id.localeCompare(b.id)), activeIds = new Set(active.map((nation) => nation.id));
+  const active = world.nations.filter(isNationActive).sort((a, b) => a.id.localeCompare(b.id)), activeIds = new Set(world.nations.filter((nation) => isNationPresent(world, nation)).map((nation) => nation.id));
   for (const faction of [...state.factions]) for (const id of [...faction.memberIds]) {
     if (!activeIds.has(id) || !faction.charter.allowedIdeologyIds.includes(getNationIdeology(world, id).id)) leaveFaction(world, id, "membership no longer eligible");
   }
