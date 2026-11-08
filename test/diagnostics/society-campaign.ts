@@ -51,6 +51,11 @@ for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 8227483
         if (![item.burden, item.readiness, item.continuousDeployment].every(Number.isFinite) || item.burden < 0 || item.burden > 100 || item.readiness < 0 || item.readiness > 1) throw new Error("Invalid mobilization state");
         peakStrain = Math.max(peakStrain, item.burden);
       }
+      for (const mission of world.volunteers?.missions ?? []) {
+        if (new Set(mission.unitIds).size !== mission.unitIds.length || mission.transitUnits.some((unit) => unit.volunteerMissionId !== mission.id || !mission.unitIds.includes(unit.id))) throw new Error("Invalid volunteer inventory");
+        if (["completed", "lost", "integrated"].includes(mission.status) && mission.transitUnits.length) throw new Error("Terminal volunteer mission holds troops");
+      }
+      if ((world.volunteers?.missions.length ?? 0) > 40 || (world.alliedWarRequests?.requests.length ?? 0) > 40 || (world.militaryAccess?.grants.length ?? 0) > 128) throw new Error("Unbounded military cooperation history");
       const parcels = world.macroRegions.flatMap((macro) => macro.mesoRegionIds);
       if (parcels.length !== originalRegions.size || new Set(parcels).size !== parcels.length || parcels.some((id) => !originalRegions.has(id))) throw new Error("Lost or duplicated territory");
       for (const nation of world.nations) {
@@ -61,7 +66,7 @@ for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 8227483
         if (!Number.isFinite(memory.heldTicks) || memory.heldTicks < 0 || !Number.isFinite(memory.attachment) || memory.attachment < 0 || memory.attachment > 100) throw new Error("Invalid territorial attachment");
       }
       if ((world.territorialDeals?.offers.length ?? 0) > 40) throw new Error("Unbounded territorial offers");
-      const allUnits = world.units.flatMap((unit) => [unit, ...unit.cargoUnits]);
+      const allUnits = [...world.units.flatMap((unit) => [unit, ...unit.cargoUnits]), ...(world.volunteers?.missions.flatMap((mission) => mission.transitUnits) ?? [])];
       if (new Set(allUnits.map((unit) => unit.id)).size !== allUnits.length) throw new Error("Duplicate unit ownership");
       for (const relation of world.diplomacy?.relations.values() ?? []) {
         if (!Number.isFinite(relation.opinion) || relation.opinion < -100 || relation.opinion > 100 ||
@@ -96,6 +101,8 @@ for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 8227483
     researchLevels: levels, retrofits: world.research?.retrofits ?? 0, licenses: world.research?.licensesShared ?? 0,
     territorialOffers: world.territorialDeals?.offers.length ?? 0, territorialSettlements: world.territorialDeals?.offers.filter((offer) => offer.status === "accepted").length ?? 0,
     peakArmy, peakStrain, demobilizedUnits: [...(world.mobilization?.byNationId.values() ?? [])].reduce((sum, item) => sum + item.demobilized, 0),
+    militaryAccessGrants: world.militaryAccess?.grants.filter((grant) => grant.revokedAtSlowTick === undefined).length ?? 0, alliedRequestsAccepted: world.alliedWarRequests?.requests.filter((request) => request.status === "accepted").length ?? 0,
+    volunteerMissions: world.volunteers?.missions.length ?? 0, volunteersReturned: world.volunteers?.missions.reduce((sum, mission) => sum + mission.returnedUnits, 0) ?? 0,
     factions: world.factions?.factions.length ?? 0, factionMembers: world.factions?.factionByNationId.size ?? 0,
     factionInterventions: world.factions?.interventions ?? 0, battleSamples: actualBattles, eventCount: world.events?.length ?? 0 }));
 }
