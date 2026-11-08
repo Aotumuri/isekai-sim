@@ -4,6 +4,14 @@ This directory is the permanent measurement harness for the simulation. It does
 not create a Pixi renderer or DOM. World generation and simulation run directly
 in Node with a fixed seed.
 
+Negotiated peace checks the final legal ownership of both countries together.
+Ceded land must join retained territory or comprise a complete island; resource
+pockets and detached coastal districts are rejected. Each original land component
+must remain connected after concessions, while existing disconnected holdings
+are allowed. `regression/peace-borders.test.ts` covers these rules, simultaneous
+exchanges, stale offers and AI concession selection. Already existing borders are
+not automatically reassigned by this rule.
+
 ## Commands
 
 ```bash

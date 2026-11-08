@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createSocietyWorld } from "../helpers/society-world";
 import { declareWar, findWar } from "../../src/sim/war-state";
-import { getWarNegotiation, whitePeaceTerms, proposePeaceTerms, assessPeaceOffer, acceptPeaceOffer, updateWarNegotiations, getWarAdvantage, getPeaceUrgency } from "../../src/sim/war-negotiations";
+import { getWarNegotiation, whitePeaceTerms, proposePeaceTerms, assessPeaceOffer, acceptPeaceOffer, updateWarNegotiations, getWarAdvantage, getPeaceUrgency, getPeaceTermsIssue } from "../../src/sim/war-negotiations";
 import { getDomesticUnrest } from "../../src/sim/domestic-unrest";
 import { getOwnerByMesoId } from "../../src/sim/world-cache";
 import { getUnitCombatStrength } from "../../src/sim/unit-strength";
@@ -16,12 +16,15 @@ function scene() {
   a.warCooperation = b.warCooperation = 1;
   const war = declareWar(world.wars, a.id, b.id, 0)!;
   const negotiation = getWarNegotiation(world, war);
-  const parcel = (id: typeof a.id) => [...getOwnerByMesoId(world)].find(([region, owner]) => owner === id && region !== world.nations.find((nation) => nation.id === id)!.capitalMesoId)![0];
+  const parcel = (id: typeof a.id) => [...getOwnerByMesoId(world)].find(([region, owner]) => owner === id && region !== world.nations.find((nation) => nation.id === id)!.capitalMesoId && !getPeaceTermsIssue(world, id === a.id ? b.id : a.id, id, { ...whitePeaceTerms(), demandedRegionIds: [region] }))![0];
   return { world, a, b, c, war, negotiation, parcel };
 }
 test("both sides publish standing opening conditions without instantly ending the war", () => {
   const { world, a, b, negotiation } = scene();
   assert(negotiation.offers.has(a.id)); assert(negotiation.offers.has(b.id));
+  for (const [proposer, recipient] of [[a.id, b.id], [b.id, a.id]]) {
+    assert.equal(getPeaceTermsIssue(world, proposer, recipient, negotiation.offers.get(proposer)!.terms), null);
+  }
   updateWarNegotiations(world); assert(findWar(world.wars, a.id, b.id));
 });
 test("domestic crisis makes pragmatic governments accept an exit while intransigent governments resist", () => {
@@ -45,7 +48,10 @@ test("territory demands and reparations make acceptance harder and a winning cou
 test("accepted territory exchanges and reparations settle atomically, preserve other wars and relieve domestic danger", () => {
   const { world, a, b, c, parcel } = scene();
   declareWar(world.wars, a.id, c.id, 0);
-  const demanded = parcel(b.id), offered = parcel(a.id);
+  const owners = getOwnerByMesoId(world);
+  const pair = [...owners].filter(([id, owner]) => owner === b.id && id !== b.capitalMesoId).flatMap(([demanded]) => [...owners].filter(([id, owner]) => owner === a.id && id !== a.capitalMesoId).map(([offered]) => ({ demanded, offered }))).find(({ demanded, offered }) => !getPeaceTermsIssue(world, a.id, b.id, { ...whitePeaceTerms(), demandedRegionIds: [demanded], offeredRegionIds: [offered] }));
+  assert(pair, "fixture needs a valid exchange along the border");
+  const { demanded, offered } = pair;
   const unrest = getDomesticUnrest(world, b.id); unrest.pressure = 85; unrest.lowSupportSeconds = 250;
   const troop = world.units.find((unit) => unit.nationId === b.id)!; troop.regionId = demanded;
   world.occupation.mesoById.set(demanded, a.id); world.occupation.version++;
