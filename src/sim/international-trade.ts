@@ -79,9 +79,13 @@ export function isTradeRouteOpen(world: WorldState, a: NationId, b: NationId, ro
   if (isAtWar(a, b, wars) || route.regionIds.length < 2) return false;
   const owner = (id: MesoRegionId) => world.occupation.mesoById.get(id) ?? owners.get(id);
   if (owner(route.regionIds[0]!) !== a || owner(route.regionIds.at(-1)!) !== b) return false;
+  if (!isNationRegionSupplied(world, a, route.regionIds[0]!) || !isNationRegionSupplied(world, b, route.regionIds.at(-1)!)) return false;
+  if (route.maritime && (regions.get(route.regionIds[0]!)?.building !== "port" || regions.get(route.regionIds.at(-1)!)?.building !== "port")) return false;
   for (let index = 0; index < route.regionIds.length; index += 1) {
     const id = route.regionIds[index]!;
     if (!regions.has(id) || (index > 0 && !(getNeighborsById(world).get(route.regionIds[index - 1]!) ?? []).includes(id))) return false;
+    if (!route.maritime && regions.get(id)?.type === "sea") return false;
+    if (route.maritime && index > 0 && index < route.regionIds.length - 1 && regions.get(id)?.type !== "sea") return false;
     if (regions.get(id)?.type !== "sea") {
       if (owner(id) !== a && owner(id) !== b) return false;
       continue;
@@ -96,14 +100,14 @@ export function isTradeRouteOpen(world: WorldState, a: NationId, b: NationId, ro
   return true;
 }
 
-const VALUES: Record<TradeResource, number> = { steel: 1, fuel: 1.4, weapons: 2.4 };
+export const TRADE_RESOURCE_VALUES: Record<TradeResource, number> = { steel: 1, fuel: 1.4, weapons: 2.4 };
 export function proposeResourceTrade(world: WorldState, sellerId: NationId, buyerId: NationId,
   offeredResource: TradeResource, offeredAmount: number, requestedResource: TradeResource, requestedAmount: number): boolean {
   if (getWarDeclarationMode(world) !== "diplomacy" || !world.settings?.tradeEnabled || sellerId === buyerId ||
     offeredResource === requestedResource || !TRADE_RESOURCES.includes(offeredResource) || !TRADE_RESOURCES.includes(requestedResource) ||
     !Number.isFinite(offeredAmount) || !Number.isFinite(requestedAmount) || offeredAmount <= 0 || requestedAmount <= 0) return false;
   if (!hasTreaty(world, sellerId, buyerId, "trade") && !hasTreaty(world, sellerId, buyerId, "alliance")) return false;
-  const ratio = offeredAmount * VALUES[offeredResource] / (requestedAmount * VALUES[requestedResource]);
+  const ratio = offeredAmount * TRADE_RESOURCE_VALUES[offeredResource] / (requestedAmount * TRADE_RESOURCE_VALUES[requestedResource]);
   if (ratio < 0.8 || ratio > 1.25) return false;
   const state = getInternationalTradeState(world);
   if (state.deals.filter((deal) => deal.status === "in-transit").length >= 32 || state.deals.some((deal) => deal.status === "in-transit" &&
@@ -163,7 +167,7 @@ export function updateInternationalTrade(world: WorldState): void {
     const requested = TRADE_RESOURCES.find((resource) => resource !== offered && surplus(b, resource) > 1.5 && surplus(a, resource) < surplus(b, resource) * 0.6);
     if (!offered || !requested) continue;
     const amount = Math.min(12, (a.resources[offered] - resourceReserve(a, offered)) * 0.15,
-      (b.resources[requested] - resourceReserve(b, requested)) * VALUES[requested] / VALUES[offered] * 0.15);
-    if (amount >= 1) proposeResourceTrade(world, a.id, b.id, offered, amount, requested, amount * VALUES[offered] / VALUES[requested]);
+      (b.resources[requested] - resourceReserve(b, requested)) * TRADE_RESOURCE_VALUES[requested] / TRADE_RESOURCE_VALUES[offered] * 0.15);
+    if (amount >= 1) proposeResourceTrade(world, a.id, b.id, offered, amount, requested, amount * TRADE_RESOURCE_VALUES[offered] / TRADE_RESOURCE_VALUES[requested]);
   }
 }

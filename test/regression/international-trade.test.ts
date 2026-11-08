@@ -64,3 +64,37 @@ test("AI trades complementary surpluses and suspends dispatch when trading is di
   updateInternationalTrade(world);
   assert(getInternationalTradeState(world).deals.every((deal) => deal.status !== "in-transit"));
 });
+
+test("maritime trade pays charter fuel and returns cargo when a third-party navy blockades its route", async () => {
+  const { createMacroRegionId } = await import("../../src/worldgen/macro-region");
+  const { createWorldCache } = await import("../../src/sim/world-cache");
+  const { createUnitForType } = await import("../../src/sim/create-units");
+  const { createUnitId } = await import("../../src/sim/unit");
+  const world = createSocietyWorld(), [a, b, c] = world.nations.slice(0, 3);
+  assert(a && b && c);
+  const ids = [a.capitalMesoId, b.capitalMesoId, c.capitalMesoId];
+  const sea = "trade-sea" as typeof a.capitalMesoId;
+  const template = world.mesoRegions[0]!;
+  world.mesoRegions = [...ids.map((id) => ({ ...template, id, type: "land" as const, building: "port" as const,
+    neighbors: [{ id: sea, hasRiver: false }] })), { ...template, id: sea, type: "sea", building: null,
+    neighbors: ids.map((id) => ({ id, hasRiver: false })) }];
+  world.nations = [a, b, c];
+  world.macroRegions = [a, b, c].map((nation, index) => {
+    const id = createMacroRegionId(index); nation.macroRegionIds = [id];
+    return { id, nationId: nation.id, mesoRegionIds: [ids[index]!], isCore: true };
+  });
+  world.units = []; world.cache = createWorldCache(); world.mapVersion += 1; world.territoryVersion += 1; world.buildingVersion += 1;
+  a.resources.steel = 100; a.resources.fuel = 100; b.resources.weapons = 100;
+  updateSupplyAssessment(world);
+  const relation = getRelation(world, a.id, b.id); relation.opinion = 80; relation.trust = 80;
+  assert(proposeTreaty(world, a.id, b.id, "trade"));
+  assert(proposeResourceTrade(world, a.id, b.id, "steel", 12, "weapons", 5));
+  assert(a.resources.fuel < 100);
+  const paidFuel = a.resources.fuel;
+  world.units.push(createUnitForType(createUnitId(world.unitIdCounter++), c.id, sea, "CombatShip"));
+  declareWar(world.wars, a.id, c.id, 0);
+  updateInternationalTrade(world);
+  assert.equal(getInternationalTradeState(world).deals[0]!.status, "returned");
+  assert.equal(a.resources.steel, 100);
+  assert.equal(a.resources.fuel, paidFuel);
+});
