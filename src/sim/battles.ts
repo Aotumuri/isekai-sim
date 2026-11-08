@@ -736,7 +736,7 @@ function applyDamage(
       unit.manpower = Math.max(0, unit.manpower - manpowerDamage * weight);
     }
     if (orgDamage > 0) {
-      unit.org = Math.max(0, unit.org - orgDamage * weight);
+      unit.org = Math.max(0, unit.org - orgDamage * weight / (unit.design?.reliability ?? 1));
     }
     manpowerLoss += Math.max(0, prevManpower - unit.manpower);
     orgLoss += Math.max(0, prevOrg - unit.org);

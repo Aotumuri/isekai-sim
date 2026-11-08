@@ -1,3 +1,4 @@
+import { updateEquipmentRefits } from "./equipment-development";
 import { updateResearch } from "./research";
 import { updateDiplomaticPeace } from "./diplomatic-peace";
 import { updateDiplomaticCrises } from "./diplomatic-crises";
@@ -172,6 +173,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateSupplyAssessment(world);
   updateProduction(world);
   updateResearch(world);
+  updateEquipmentRefits(world);
   updateIsolationEffects(world);
   updateLandFronts(world);
   prepareFrontDistanceFields(world);

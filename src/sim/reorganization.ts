@@ -823,7 +823,7 @@ function recoverUnit(
 
   const availableOrganizationRecovery = Math.min(
     Math.max(0, 1 - finiteNumber(unit.org)),
-    settings.organizationRecoveryPerSlowTick * multiplier,
+    settings.organizationRecoveryPerSlowTick * multiplier * (unit.design?.recovery ?? 1),
   );
   const organization = supplied ? availableOrganizationRecovery : 0;
   const organizationDenied = supplied ? 0 : availableOrganizationRecovery;

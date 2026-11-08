@@ -1,7 +1,8 @@
 import type { UnitState } from "./unit";
 
 export function getUnitCombatStrength(unit: UnitState): number {
-  return getUnitDamageWeight(unit) * Math.max(0, unit.combatPower);
+  return getUnitDamageWeight(unit) * Math.max(0, unit.combatPower) *
+    (unit.design?.firepower ?? 1) * (unit.design?.reliability ?? 1);
 }
 
 export function getUnitDamageWeight(unit: UnitState): number {

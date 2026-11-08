@@ -1,3 +1,4 @@
+import type { WeaponDesign } from "./research";
 import type { EquipmentKey } from "../data/equipment-catalog";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
@@ -15,6 +16,7 @@ export interface UnitEquipmentSlot {
 }
 
 export interface UnitState {
+  design?: WeaponDesign;
   id: UnitId;
   nationId: NationId;
   regionId: MesoRegionId;

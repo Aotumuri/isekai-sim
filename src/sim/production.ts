@@ -1,3 +1,5 @@
+import { equipNewUnit, getDevelopedUnitWeaponCost } from "./equipment-development";
+import { getNationalDesign, type WeaponDesign } from "./research";
 import { WORLD_BALANCE } from "../data/balance";
 import type { MacroRegion } from "../worldgen/macro-region";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
@@ -171,6 +173,7 @@ function updateProductionInternal(world: WorldState): void {
     resourceOutputs,
     fuelDemandByNation,
     flowByNation,
+    world,
   );
 
   const production = WORLD_BALANCE.production;
@@ -259,6 +262,7 @@ function updateProductionInternal(world: WorldState): void {
     if (world.time.slowTick < nation.nextUnitProductionTick) {
       continue;
     }
+    const design = getNationalDesign(world, nation.id);
     const currentCounts = unitCountsByNation.get(nation.id) ?? { land: 0, naval: 0 };
     let currentLandCount = currentCounts.land;
     let currentNavalCount = currentCounts.naval;
@@ -350,13 +354,13 @@ function updateProductionInternal(world: WorldState): void {
           performance.now() - supplyStartedAt,
         );
       }
-      const unitType = pickAffordableUnitType(nation.resources, world.simRng);
+      const unitType = pickAffordableUnitType(nation.resources, world.simRng, design);
       if (!unitType) {
         recordResourceBlock(world, nation.resources);
         return false;
       }
       const flow = flowByNation.get(nation.id);
-      if (!consumeResourcesForUnit(nation.resources, unitType, flow?.usage)) {
+      if (!consumeResourcesForUnit(nation.resources, unitType, flow?.usage, design)) {
         recordResourceBlock(world, nation.resources);
         return false;
       }
@@ -379,13 +383,13 @@ function updateProductionInternal(world: WorldState): void {
       const diagnostics = world.productionDiagnostics;
       diagnostics.attemptedProductions += 1;
       world.instrumentation?.incrementCounter("production.attempted");
-      const unitType = pickNavalUnitType(nation.resources, forcedType);
+      const unitType = pickNavalUnitType(nation.resources, forcedType, design);
       if (!unitType) {
         recordResourceBlock(world, nation.resources, "naval");
         return false;
       }
       const flow = flowByNation.get(nation.id);
-      if (!consumeResourcesForUnit(nation.resources, unitType, flow?.usage)) {
+      if (!consumeResourcesForUnit(nation.resources, unitType, flow?.usage, design)) {
         recordResourceBlock(world, nation.resources, "naval");
         return false;
       }
@@ -556,7 +560,7 @@ function createUnitForWorld(
 ): UnitState {
   const unitId = createUnitId(world.unitIdCounter);
   world.unitIdCounter += 1;
-  return createUnitForType(unitId, nationId, regionId, unitType);
+  return equipNewUnit(world, createUnitForType(unitId, nationId, regionId, unitType));
 }
 
 function createEmptyFlow(): NationResourceFlow {
@@ -689,7 +693,7 @@ function collectResourceOutputs(
 function collectFuelDemandByNation(units: UnitState[]): Map<NationId, number> {
   const demands = new Map<NationId, number>();
   for (const unit of units) {
-    const fuelUse = getUnitFuelUse(unit.type);
+    const fuelUse = getUnitFuelUse(unit.type) * (unit.design?.fuelUse ?? 1);
     if (fuelUse <= 0) {
       continue;
     }
@@ -703,9 +707,10 @@ function applyResourceOutputs(
   outputs: Map<NationId, ResourceOutput>,
   fuelDemandByNation: Map<NationId, number>,
   flowByNation: Map<NationId, NationResourceFlow>,
+  world: WorldState,
 ): Map<NationId, boolean> {
   const outputBalance = WORLD_BALANCE.resources.output;
-  const steelPerWeapon = Math.max(0, Math.round(outputBalance.steelPerWeapon));
+  const baseSteelPerWeapon = Math.max(0, Math.round(outputBalance.steelPerWeapon));
   const fuelAvailability = new Map<NationId, boolean>();
 
   for (const nation of nations) {
@@ -713,6 +718,7 @@ function applyResourceOutputs(
       continue;
     }
     const resources = nation.resources;
+    const steelPerWeapon = baseSteelPerWeapon * getNationalDesign(world, nation.id).steelCost;
     const flow = getFlow(flowByNation, nation.id);
     const output = outputs.get(nation.id);
     if (output) {
@@ -762,7 +768,7 @@ function applyFuelStatus(
   fuelAvailableByNation: Map<NationId, boolean>,
 ): void {
   for (const unit of units) {
-    const fuelUse = getUnitFuelUse(unit.type);
+    const fuelUse = getUnitFuelUse(unit.type) * (unit.design?.fuelUse ?? 1);
     if (fuelUse <= 0) {
       continue;
     }
@@ -784,9 +790,10 @@ function applyFuelStatus(
 function pickAffordableUnitType(
   resources: NationResources,
   rng: WorldState["simRng"],
+  design?: WeaponDesign,
 ): UnitType | null {
-  const canInfantry = canAffordUnit(resources, "Infantry");
-  const canTank = canAffordUnit(resources, "Tank");
+  const canInfantry = canAffordUnit(resources, "Infantry", design);
+  const canTank = canAffordUnit(resources, "Tank", design);
   if (canInfantry && canTank) {
     const tankShare = clamp(WORLD_BALANCE.unit.tankShare, 0, 1);
     return rng.nextFloat() < tankShare ? "Tank" : "Infantry";
@@ -803,19 +810,21 @@ function pickAffordableUnitType(
 function pickNavalUnitType(
   resources: NationResources,
   forcedType: NavalUnitType,
+  design?: WeaponDesign,
 ): NavalUnitType | null {
-  return canAffordUnit(resources, forcedType) ? forcedType : null;
+  return canAffordUnit(resources, forcedType, design) ? forcedType : null;
 }
 
 function consumeResourcesForUnit(
   resources: NationResources,
   unitType: UnitType,
   usage?: NationResources,
+  design?: WeaponDesign,
 ): boolean {
-  if (!canAffordUnit(resources, unitType)) {
+  if (!canAffordUnit(resources, unitType, design)) {
     return false;
   }
-  const weaponCost = getUnitWeaponCost(unitType);
+  const weaponCost = getDevelopedUnitWeaponCost(unitType, design);
   const manpowerCost = getUnitManpowerCost(unitType);
   resources.weapons = Math.max(0, resources.weapons - weaponCost);
   resources.manpower = Math.max(0, resources.manpower - manpowerCost);
@@ -826,8 +835,8 @@ function consumeResourcesForUnit(
   return true;
 }
 
-function canAffordUnit(resources: NationResources, unitType: UnitType): boolean {
-  const weaponCost = getUnitWeaponCost(unitType);
+function canAffordUnit(resources: NationResources, unitType: UnitType, design?: WeaponDesign): boolean {
+  const weaponCost = getDevelopedUnitWeaponCost(unitType, design);
   const manpowerCost = getUnitManpowerCost(unitType);
   return resources.weapons >= weaponCost && resources.manpower >= manpowerCost;
 }

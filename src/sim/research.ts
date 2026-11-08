@@ -23,6 +23,7 @@ export interface ResearchPortfolio {
 export interface ResearchState {
   byNationId: Map<NationId, ResearchPortfolio>;
   lastSlowTick: number;
+  lastRetrofitSlowTick: number;
   weaponsSpent: number;
   steelSpent: number;
   retrofits: number;
@@ -43,7 +44,7 @@ export function emptyResearchLevels(): ResearchLevels {
   return { firepower: 0, reliability: 0, materials: 0, fuel: 0, logistics: 0, production: 0 };
 }
 export function getResearchState(world: WorldState): ResearchState {
-  return world.research ??= { byNationId: new Map(), lastSlowTick: -1, weaponsSpent: 0,
+  return world.research ??= { byNationId: new Map(), lastSlowTick: -1, lastRetrofitSlowTick: -10, weaponsSpent: 0,
     steelSpent: 0, retrofits: 0, licensesShared: 0 };
 }
 export function getResearchPortfolio(world: WorldState, nationId: NationId): ResearchPortfolio {
