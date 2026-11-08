@@ -73,7 +73,9 @@ export function updateAlliedWarRequests(world: WorldState): void {
   for (const request of state.requests) if (request.status === "pending") {
     const war = findWar(world.wars, request.callerId, request.enemyId);
     if (now >= request.expiresAtSlowTick) request.status = "expired";
-    else if (!war || war.id !== request.rootWarId || war.startedAtFastTick !== request.rootStartedAt || !eligible(world, request.callerId, request.allyId, request.enemyId)) request.status = "stale";
+    else if (!war || war.id !== request.rootWarId || war.startedAtFastTick !== request.rootStartedAt) request.status = "stale";
+    else if (findWar(world.wars, request.allyId, request.enemyId) && !findWar(world.wars, request.callerId, request.allyId)) request.status = "accepted";
+    else if (!eligible(world, request.callerId, request.allyId, request.enemyId)) request.status = "stale";
     else if (now - request.createdAtSlowTick >= 10) respondToAlliedWarRequest(world, request.allyId, request.id, willAcceptAlliedWarRequest(world, request));
   }
   if (now - state.lastAISlowTick < 30) return;
@@ -86,4 +88,11 @@ export function updateAlliedWarRequests(world: WorldState): void {
       if (ally && requestAlliedWarEntry(world, caller, ally.id, enemy)) break;
     }
   }
+}
+
+export function withdrawAlliedWarRequest(world: WorldState, callerId: NationId, requestId: number): boolean {
+  const request = world.alliedWarRequests?.requests.find((item) => item.id === requestId && item.callerId === callerId && item.status === "pending");
+  if (!request) return false; request.status = "withdrawn";
+  recordSimulationEvent(world, { category: "military", nationIds: [callerId, request.allyId], message: `${callerId} withdrew its call to war.` });
+  return true;
 }

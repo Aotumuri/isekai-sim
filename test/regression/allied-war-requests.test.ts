@@ -44,3 +44,10 @@ test("AI may decline overextension and requests expire without forcing war", () 
   world.time.slowTick = next.expiresAtSlowTick; updateAlliedWarRequests(world);
   assert.equal(next.status, "expired");
 });
+
+
+test("an ally that already joined through its obligations fulfills the pending request", () => {
+  const { world, caller, ally, enemy } = scene(); const request = requestAlliedWarEntry(world, caller, ally, enemy)!;
+  declareWar(world.wars, ally, enemy, 1); world.time.slowTick = 2; updateAlliedWarRequests(world);
+  assert.equal(request.status, "accepted"); assert.equal(world.wars.length, 2);
+});
