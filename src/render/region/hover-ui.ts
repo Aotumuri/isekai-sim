@@ -24,15 +24,16 @@ export function attachRegionHoverUI(renderer: Renderer, world: WorldState): void
     mesoById.set(meso.id, meso);
   }
   const macroByMesoId = new Map<string, MacroRegion>();
-  for (const macro of world.macroRegions) {
-    for (const mesoId of macro.mesoRegionIds) {
-      macroByMesoId.set(mesoId, macro);
-    }
-  }
   const nationById = new Map<string, Nation>();
-  for (const nation of world.nations) {
-    nationById.set(nation.id, nation);
-  }
+  let cachedTerritoryVersion = -1;
+  const refreshTerritory = () => {
+    if (cachedTerritoryVersion === world.territoryVersion) return false;
+    macroByMesoId.clear(); nationById.clear();
+    for (const macro of world.macroRegions) for (const id of macro.mesoRegionIds) macroByMesoId.set(id, macro);
+    for (const nation of world.nations) nationById.set(nation.id, nation);
+    cachedTerritoryVersion = world.territoryVersion;
+    return true;
+  };
   let unitsByMesoId = new Map<string, UnitState[]>();
   let cachedUnitTick = -1;
 
@@ -83,7 +84,8 @@ export function attachRegionHoverUI(renderer: Renderer, world: WorldState): void
       return;
     }
 
-    if (activeRegionId !== region.id || lastInfoTick !== world.time.fastTick) {
+    const territoryChanged = refreshTerritory();
+    if (territoryChanged || activeRegionId !== region.id || lastInfoTick !== world.time.fastTick) {
       activeRegionId = region.id;
       lastInfoTick = world.time.fastTick;
       const meso = region.mesoRegionId ? mesoById.get(region.mesoRegionId) ?? null : null;
