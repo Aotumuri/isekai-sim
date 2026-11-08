@@ -313,3 +313,7 @@ Select a nation and press **C**, or choose **Claims**, to view its territorial i
 Click any country in this mode to immediately view that country's claims. Hold **Space** over a district to inspect its claim strength, previous tenure, resource interest and active ultimatum status. **C** again or **Esc** returns to the previous map mode. Claims mode requires a selected nation; selecting open sea clears the reference and returns to Political.
 
 Validation: `test/regression/claim-map.test.ts` covers selection, return behavior, historical/resource interest, formal demands, withdrawn demands, returned territory, tooltip details and the bounded color scale. `test/visual/territorial-claims.html` provides a paused historical dispute with an active ultimatum; press C to inspect its overlay.
+
+### Faction leadership
+
+The founder is the first leader. The Factions panel and map legend name the current leader. Only the current leader can hand leadership to another viable member (opinion 25, trust 55, 10 influence) or expel a member (10 influence, entire faction at peace). Leadership remains stable rather than switching whenever army sizes fluctuate. A departing or defeated leader is replaced deterministically using military strength, territory and member confidence; founding history remains unchanged. Succession is recorded in world history.

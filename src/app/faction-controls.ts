@@ -1,7 +1,7 @@
 import { ideologyAffinityLabel } from "../sim/ideology-relations";
 import type { NationId } from "../worldgen/nation";
 import type { WorldState } from "../sim/world-state";
-import { createFaction, getNationFaction, joinFaction, leaveFaction, setNationIdeology, getFactionCohesion, getFactionAdmissionIssue, type WarObligation } from "../sim/factions";
+import { createFaction, getNationFaction, joinFaction, leaveFaction, setNationIdeology, getFactionCohesion, getFactionAdmissionIssue, transferFactionLeadership, expelFactionMember, type WarObligation } from "../sim/factions";
 import { createIdeology, getIdeologies, getNationIdeology, getNationName } from "../sim/nation-identity";
 import { getWarDeclarationMode } from "../sim/simulation-settings";
 const esc = (text: unknown) => String(text).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]!));
@@ -35,10 +35,10 @@ export function attachFactionControls(root: HTMLElement, world: WorldState, sele
     }
     if (document.activeElement !== input("national-ideology")) input("national-ideology").value = getNationIdeology(world, nationId).id;
     const faction = getNationFaction(world, nationId), mode = getWarDeclarationMode(world) === "diplomacy";
-    view("membership").innerHTML = faction ? `<div class="society-country"><strong>${esc(faction.name)}</strong><small>${faction.memberIds.map((id) => esc(getNationName(world, id))).join(" · ")}<br>Defense: ${faction.charter.defensiveObligation} / Offense: ${faction.charter.offensiveObligation}</small></div>` : '<p class="society-note">Non-aligned. Join a compatible faction or establish your own.</p>';
+    view("membership").innerHTML = faction ? `<div class="society-country"><strong>${esc(faction.name)}</strong><small>Leader: ${esc(getNationName(world, faction.leaderId))}<br>${faction.memberIds.map((id) => esc(getNationName(world, id))).join(" · ")}<br>Defense: ${faction.charter.defensiveObligation} / Offense: ${faction.charter.offensiveObligation}</small>${faction.leaderId === nationId ? `<p class="society-note">Leader authority: hand over to a trusted member (opinion 25, trust 55), or expel a member while the entire faction is at peace.</p>${faction.memberIds.filter((id) => id !== nationId).map((id) => `<div class="society-actions"><button type="button" data-faction-action="leadership" data-member-id="${esc(id)}">Hand leadership to ${esc(getNationName(world, id))} · 10</button><button type="button" data-faction-action="expel" data-member-id="${esc(id)}">Expel ${esc(getNationName(world, id))} · 10</button></div>`).join("")}` : `<p class="society-note">Only the faction leader can hand over leadership or expel members.</p>`}</div>` : '<p class="society-note">Non-aligned. Join a compatible faction or establish your own.</p>';
     view("directory").innerHTML = (world.factions?.factions ?? []).map((item) => {
       const cohesion = getFactionCohesion(world, item), issue = getFactionAdmissionIssue(world, nationId, item);
-      return `<article class="faction-entry"><strong>${esc(item.name)}</strong><p>${item.memberIds.map((id) => esc(getNationName(world, id))).join(" · ")}</p><p class="society-note">${item.charter.allowedIdeologyIds.map((id) => esc(ideologies.find((ideology) => ideology.id === id)?.name ?? id)).join(" / ")}<br>Defense: ${item.charter.defensiveObligation} · Offense: ${item.charter.offensiveObligation} · Personality-based admission: ${item.charter.considerPersonality ? "Yes" : "No"}<br>${item.memberIds.length < 2 ? "Founding member; awaiting partners" : `Internal ideology: ${ideologyAffinityLabel(cohesion.affinity)} · Average opinion ${Math.round(cohesion.opinion)} / trust ${Math.round(cohesion.trust)}`}</p>${!faction && issue ? `<p class="society-note">${esc(issue)}</p>` : ""}<button type="button" data-faction-action="join" data-faction-id="${esc(item.id)}" ${issue || !mode ? "disabled" : ""}>Join · 5 influence</button></article>`; }).join("") || '<p class="society-note">No factions have been established.</p>';
+      return `<article class="faction-entry"><strong>${esc(item.name)}</strong><p>Leader: ${esc(getNationName(world, item.leaderId))}</p><p>${item.memberIds.map((id) => esc(getNationName(world, id))).join(" · ")}</p><p class="society-note">${item.charter.allowedIdeologyIds.map((id) => esc(ideologies.find((ideology) => ideology.id === id)?.name ?? id)).join(" / ")}<br>Defense: ${item.charter.defensiveObligation} · Offense: ${item.charter.offensiveObligation} · Personality-based admission: ${item.charter.considerPersonality ? "Yes" : "No"}<br>${item.memberIds.length < 2 ? "Founding member; awaiting partners" : `Internal ideology: ${ideologyAffinityLabel(cohesion.affinity)} · Average opinion ${Math.round(cohesion.opinion)} / trust ${Math.round(cohesion.trust)}`}</p>${!faction && issue ? `<p class="society-note">${esc(issue)}</p>` : ""}<button type="button" data-faction-action="join" data-faction-id="${esc(item.id)}" ${issue || !mode ? "disabled" : ""}>Join · 5 influence</button></article>`; }).join("") || '<p class="society-note">No factions have been established.</p>';
     (root.querySelector('[data-faction-action="create"]') as HTMLButtonElement).disabled = !!faction || !mode;
     (root.querySelector('[data-faction-action="leave"]') as HTMLButtonElement).disabled = !faction || !mode;
   };
@@ -58,8 +58,10 @@ export function attachFactionControls(root: HTMLElement, world: WorldState, sele
     }, input("name").value);
     if (button.dataset.factionAction === "leave") success = leaveFaction(world, selected());
     if (button.dataset.factionAction === "join") success = joinFaction(world, selected(), button.dataset.factionId!);
+    if (button.dataset.factionAction === "leadership") success = transferFactionLeadership(world, selected(), button.dataset.memberId as NationId);
+    if (button.dataset.factionAction === "expel") success = expelFactionMember(world, selected(), button.dataset.memberId as NationId);
     if (button.dataset.factionAction === "ideology") success = !!createIdeology(world, input("custom-name").value);
-    feedback(success ? "Faction or ideology updated." : "Requirements not met: check ideology, membership, relations, influence and personality acceptance."); update();
+    feedback(success ? "Faction or ideology updated." : "Requirements not met: check ideology, membership, relations, influence and personality acceptance. Leadership transfer requires opinion 25 and trust 55; expulsion requires every member to be at peace."); update();
   });
   return { update };
 }

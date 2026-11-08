@@ -121,6 +121,44 @@ export function joinFaction(world: WorldState, nationId: NationId, factionId: st
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [nationId, faction.leaderId], message: `${getNationName(world, nationId)} joined ${faction.name}.` });
   return true;
 }
+/** A stable government leads until it withdraws, capitulates, or voluntarily hands over. */
+export function getFactionSuccessors(world: WorldState, faction: Faction): NationId[] {
+  return faction.memberIds.filter((id) => world.nations.some((nation) => nation.id === id && isNationActive(nation)))
+    .sort((a, b) => {
+      const score = (id: NationId) => {
+        const nation = world.nations.find((item) => item.id === id)!;
+        const confidence = faction.memberIds.filter((member) => member !== id).reduce((sum, member) => sum + getRelation(world, id, member).trust, 0);
+        return Math.sqrt(getNationalMilitaryStrength(world, id)) + nation.macroRegionIds.length * 5 + confidence * 0.1;
+      };
+      return score(b) - score(a) || a.localeCompare(b);
+    });
+}
+export function ensureFactionLeadership(world: WorldState, faction: Faction): void {
+  if (faction.memberIds.includes(faction.leaderId) && world.nations.some((nation) => nation.id === faction.leaderId && isNationActive(nation))) return;
+  const successor = getFactionSuccessors(world, faction)[0];
+  if (!successor || successor === faction.leaderId) return;
+  const previous = faction.leaderId; faction.leaderId = successor; getFactionState(world).version++;
+  recordSimulationEvent(world, { category: "diplomacy", nationIds: [previous, successor],
+    message: `${getNationName(world, successor)} succeeded ${getNationName(world, previous)} as leader of ${faction.name}.` });
+}
+export function transferFactionLeadership(world: WorldState, leaderId: NationId, successorId: NationId): boolean {
+  const faction = getNationFaction(world, leaderId);
+  if (getWarDeclarationMode(world) !== "diplomacy" || !faction || faction.leaderId !== leaderId || leaderId === successorId ||
+    !faction.memberIds.includes(successorId) || !getFactionSuccessors(world, faction).includes(successorId)) return false;
+  const relation = getRelation(world, leaderId, successorId);
+  if (relation.opinion < 25 || relation.trust < 55 || !spendInfluence(world, leaderId, 10)) return false;
+  faction.leaderId = successorId; getFactionState(world).version++;
+  recordSimulationEvent(world, { category: "diplomacy", nationIds: [leaderId, successorId],
+    message: `${getNationName(world, leaderId)} handed leadership of ${faction.name} to ${getNationName(world, successorId)}.` });
+  return true;
+}
+export function expelFactionMember(world: WorldState, leaderId: NationId, memberId: NationId): boolean {
+  const faction = getNationFaction(world, leaderId);
+  if (getWarDeclarationMode(world) !== "diplomacy" || !faction || faction.leaderId !== leaderId || leaderId === memberId ||
+    !faction.memberIds.includes(memberId) || faction.memberIds.some((id) => world.wars.some((war) => war.nationAId === id || war.nationBId === id)) ||
+    !spendInfluence(world, leaderId, 10)) return false;
+  return leaveFaction(world, memberId, `expelled by leader ${getNationName(world, leaderId)}`);
+}
 export function leaveFaction(world: WorldState, nationId: NationId, reason = "withdrawal"): boolean {
   const faction = getNationFaction(world, nationId);
   if (!faction) return false;
@@ -133,7 +171,7 @@ export function leaveFaction(world: WorldState, nationId: NationId, reason = "wi
     relation.trust = Math.max(0, relation.trust - 10); relation.opinion = Math.max(-100, relation.opinion - 8);
   }
   if (!faction.memberIds.length) state.factions = state.factions.filter((item) => item !== faction);
-  else if (faction.leaderId === nationId) faction.leaderId = faction.memberIds[0]!;
+  else ensureFactionLeadership(world, faction);
   state.version += 1;
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [nationId], message: `${getNationName(world, nationId)} left ${faction.name} (${reason}).` });
   return true;
@@ -242,6 +280,7 @@ export function updateFactions(world: WorldState): void {
   for (const faction of [...state.factions]) for (const id of [...faction.memberIds]) {
     if (!activeIds.has(id) || !faction.charter.allowedIdeologyIds.includes(getNationIdeology(world, id).id)) leaveFaction(world, id, "membership no longer eligible");
   }
+  for (const faction of state.factions) ensureFactionLeadership(world, faction);
   reviewFactionCohesion(world);
   for (const nation of active) {
     if (getNationFaction(world, nation.id)) continue;

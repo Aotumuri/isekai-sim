@@ -103,7 +103,7 @@ export function attachMapControls(root: HTMLElement, renderer: Renderer, world: 
     } else if (state.mode === "factions") {
       const factions = (world.factions?.factions ?? []).filter((faction) => faction.memberIds.some((id) => active.some((nation) => nation.id === id)));
       const nonAligned = active.filter((nation) => !getNationFaction(world, nation.id)).length;
-      view("legend").innerHTML = `<h2>Faction colors</h2>${factions.map((faction) => `<span class="map-legend-item"><i style="background:${color(getFactionColor(faction.id))}"></i>${esc(faction.name)} · ${faction.memberIds.filter((id) => active.some((nation) => nation.id === id)).length}</span>`).join("")}<span class="map-legend-item"><i style="background:#7b8899"></i>Non-aligned · ${nonAligned}</span><button type="button" data-map-action="factions">Manage factions</button>`;
+      view("legend").innerHTML = `<h2>Faction colors</h2>${factions.map((faction) => `<span class="map-legend-item"><i style="background:${color(getFactionColor(faction.id))}"></i>${esc(faction.name)} · Leader: ${esc(getNationName(world, faction.leaderId))} · ${faction.memberIds.filter((id) => active.some((nation) => nation.id === id)).length}</span>`).join("")}<span class="map-legend-item"><i style="background:#7b8899"></i>Non-aligned · ${nonAligned}</span><button type="button" data-map-action="factions">Manage factions</button>`;
     } else view("legend").innerHTML = state.mode === "debug" ? '<span>Debug view: original district grid, occupation overlays and operational markers.</span>' : "";
     if (state.mode !== "debug" && state.occupations) {
       const occupations = getOccupationSummary(world);
