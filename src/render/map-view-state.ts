@@ -12,12 +12,15 @@ export function getMapView(world: WorldState): MapViewState {
 export function setMapMode(world: WorldState, mode: MapMode): boolean {
   const view = getMapView(world);
   if (mode === "diplomacy" && !view.selectedNationId) return false;
-  if (mode === "diplomacy" && view.mode !== "diplomacy") view.diplomaticFocusId = view.selectedNationId;
+  if (mode === "diplomacy") { view.diplomaticFocusId = view.selectedNationId; view.targetNationId = null; }
   view.mode = mode; view.revision += 1; return true;
 }
 export function selectMapNation(world: WorldState, nationId: NationId | null): void {
   const view = getMapView(world);
-  if (view.mode === "diplomacy" && view.diplomaticFocusId) view.targetNationId = nationId === view.diplomaticFocusId ? null : nationId;
-  else { view.selectedNationId = nationId; view.targetNationId = null; }
+  const previousFocus = view.diplomaticFocusId;
+  view.selectedNationId = nationId;
+  view.diplomaticFocusId = nationId;
+  view.targetNationId = view.mode === "diplomacy" && previousFocus !== nationId ? previousFocus : null;
+  if (!nationId && view.mode === "diplomacy") { view.mode = "political"; view.targetNationId = null; }
   view.revision += 1;
 }

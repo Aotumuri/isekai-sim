@@ -3,9 +3,11 @@ import { Container } from "pixi.js";
 export const WORLD_LAYER_ORDER = [
   "FrontDebug",
   "UnitEffect",
+  "NationLabels",
   "Unit",
   "CityCapitalResourceIcons",
   "TerritoryEffects",
+  "PlayerMap",
   "NationFill",
   "MacroBorder",
   "MesoBorder",

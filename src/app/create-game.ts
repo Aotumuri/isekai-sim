@@ -1,3 +1,5 @@
+import { attachMapControls } from "./map-controls";
+import { attachPlayerMap } from "../render/player-map";
 import { attachSocietyPanel } from "./society-panel";
 import { createWorldConfig } from "../data/world-config";
 import { drawCityCapitalIcons } from "../render/draw/city-capital-icons";
@@ -61,6 +63,9 @@ export function createGame(root: HTMLElement): void {
   attachTimeControls(clock);
   const timeHud = attachTimeHud(renderer);
   const frontDebugOverlay = attachFrontDebugOverlay(renderer, world);
+  const playerMap = attachPlayerMap(renderer, world);
+  const mapControls = attachMapControls(root, renderer, world, frontDebugOverlay, societyPanel);
+  playerMap.update();
   let lastOccupationVersion = world.occupation.version;
   let lastTerritoryVersion = world.territoryVersion;
   let lastBuildingVersion = world.buildingVersion;
@@ -105,6 +110,8 @@ export function createGame(root: HTMLElement): void {
       );
     }
     timeHud.update(world.time, clock);
+    mapControls.update();
+    playerMap.update();
     societyPanel.update();
     nationInfoBar.update();
     frontDebugOverlay.update();

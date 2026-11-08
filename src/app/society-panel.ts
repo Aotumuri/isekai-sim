@@ -1,6 +1,6 @@
 import { attachFactionControls } from "./faction-controls";
 import { getNationName, getNationIdeology } from "../sim/nation-identity";
-import { getMapView } from "../render/map-view-state";
+import { getMapView, setMapMode, selectMapNation } from "../render/map-view-state";
 import type { NationId } from "../worldgen/nation";
 import { getNationCharacter } from "../sim/nation-character";
 import { breakTreaty, improveRelations, proposeTreaty, relationKey } from "../sim/diplomacy";
@@ -27,7 +27,7 @@ const RESOURCE_NAMES: Record<TradeResource, string> = { steel: "Steel", fuel: "F
 const RESEARCH_STATUS = { researching: "Researching", "saving resources": "Saving research funds", "capital isolated": "Capital isolated", complete: "Research complete", paused: "Preparing" };
 const esc = (value: unknown) => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]!));
 
-export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: SimClock): { update: () => void; openDiplomacy: () => void; openFactions: () => void } {
+export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: SimClock): { update: () => void; openDiplomacy: () => void; openFactions: () => void; close: () => void } {
   const wrapper = document.createElement("div"); wrapper.className = "society-ui";
   const branchOptions = RESEARCH_BRANCHES.map((branch) => `<option value="${branch}">${BRANCH_NAMES[branch]}</option>`).join("");
   const resourceOptions = Object.entries(RESOURCE_NAMES).map(([value, label]) => `<option value="${value}">${label}</option>`).join("");
@@ -75,7 +75,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
   const nationSelect = control("nation") as HTMLSelectElement, partnerSelect = control("partner") as HTMLSelectElement;
   (control("import") as HTMLSelectElement).value = "weapons";
   const feedback = wrapper.querySelector<HTMLElement>(".society-feedback")!;
-  const factions = attachFactionControls(wrapper.querySelector<HTMLElement>("[data-faction-ui]")!, world, () => nationSelect.value as NationId, (message) => { feedback.textContent = message; });
+  const factions = attachFactionControls(wrapper.querySelector<HTMLElement>("[data-faction-ui]")!, world, () => nationSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   let visible = false, lastRender = -Infinity, cachedNationIds = "";
   let lastPaused: boolean | undefined;
   let lastSelected: NationId | null = null, lastTarget: NationId | null = null;
@@ -105,8 +105,9 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       cachedNationIds = ids;
     }
     const map = getMapView(world);
-    if (map.selectedNationId !== lastSelected && active.some((nation) => nation.id === map.selectedNationId)) {
-      nationSelect.value = map.selectedNationId!; lastSelected = map.selectedNationId;
+    const actor = map.mode === "diplomacy" ? map.diplomaticFocusId : map.selectedNationId;
+    if (actor !== lastSelected && active.some((nation) => nation.id === actor)) {
+      nationSelect.value = actor!; lastSelected = actor;
     }
     if (map.targetNationId !== lastTarget && active.some((nation) => nation.id === map.targetNationId)) {
       partnerSelect.value = map.targetNationId!; lastTarget = map.targetNationId;
@@ -130,7 +131,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     view("crisis").innerHTML = crisis ? `<div class="society-crisis">Ultimatum: ${n(crisis.aggressorId)} → ${n(crisis.aggressorId === a ? b : a)}<br>Negotiation deadline: ${Math.max(0, crisis.deadlineSlowTick - world.time.slowTick)}s${crisis.aggressorId !== a ? '<div class="society-actions"><button type="button" data-action="negotiate">Negotiate · 15</button><button type="button" data-action="concede">Concede 30 weapons</button><button type="button" data-action="reject">Reject</button></div>' : ""}</div>` : "";
     const offered = control("export").value as TradeResource, requested = control("import").value as TradeResource;
     const amount = Number(control("amount").value);
-    setText("exchange", `${Number.isFinite(amount) ? amount : 0} ${RESOURCE_NAMES[offered]} ↔ ${(Number.isFinite(amount) ? amount * TRADE_RESOURCE_VALUES[offered] / TRADE_RESOURCE_VALUES[requested] : 0).toFixed(1)} ${RESOURCE_NAMES[requested]}.Requires an agreement, open route and surplus resources.`);
+    setText("exchange", `${Number.isFinite(amount) ? amount : 0} ${RESOURCE_NAMES[offered]} ↔ ${(Number.isFinite(amount) ? amount * TRADE_RESOURCE_VALUES[offered] / TRADE_RESOURCE_VALUES[requested] : 0).toFixed(1)} ${RESOURCE_NAMES[requested]}. Requires an agreement, open route and surplus resources.`);
     const trades = (world.internationalTrade?.deals ?? []).filter((deal) => deal.sellerId === a || deal.buyerId === a).slice(-4);
     const aid = (world.armsAid?.shipments ?? []).filter((shipment) => shipment.donorId === a || shipment.recipientId === a).slice(-3);
     const statusName = { "in-transit": "In transit", delivered: "Delivered", returned: "Returned" };
@@ -174,9 +175,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       else portfolio.investment = target.value as ResearchPortfolio["investment"];
       feedback.textContent = "Research policy updated for the next evaluation. Existing progress is preserved.";
     } else if (target.dataset.control === "nation") {
-      const map = getMapView(world); map.selectedNationId = nationSelect.value as NationId;
-      if (map.mode === "diplomacy") map.diplomaticFocusId = map.selectedNationId;
-      map.revision += 1;
+      selectMapNation(world, nationSelect.value as NationId);
       if (nationSelect.value === partnerSelect.value) partnerSelect.value = world.nations.find((nation) => isNationActive(nation) && nation.id !== nationSelect.value)?.id ?? "";
     }
     update(true);
@@ -186,6 +185,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button");
     if (!button) return;
     if (button.dataset.tab) {
+      if (button.dataset.tab === "factions") setMapMode(world, "factions");
       for (const pane of wrapper.querySelectorAll<HTMLElement>("[data-pane]")) pane.hidden = pane.dataset.pane !== button.dataset.tab;
       for (const tab of wrapper.querySelectorAll<HTMLElement>("[data-tab]")) tab.setAttribute("aria-pressed", String(tab === button));
       update(true); return;
@@ -233,5 +233,5 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     for (const tab of wrapper.querySelectorAll<HTMLElement>("[data-tab]")) tab.setAttribute("aria-pressed", String(tab.dataset.tab === name));
     update(true);
   };
-  return { update: () => update(), openDiplomacy: () => openPane("diplomacy"), openFactions: () => openPane("factions") };
+  return { update: () => update(), openDiplomacy: () => openPane("diplomacy"), openFactions: () => openPane("factions"), close: () => setVisible(false) };
 }

@@ -1,15 +1,15 @@
+import { getMapView } from "./map-view-state";
+import { getNationName } from "../sim/nation-identity";
 import { Container, Graphics, Text, TextStyle, type FederatedPointerEvent } from "pixi.js";
 import { summarizeNavy } from "./naval-status";
 import { WORLD_BALANCE } from "../data/balance";
 import type { NationRuntime } from "../sim/nation-runtime";
 import type { UnitState } from "../sim/unit";
 import type { WorldState } from "../sim/world-state";
-import type { Vec2 } from "../utils/vector";
 import type { MacroRegion } from "../worldgen/macro-region";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { Renderer } from "./renderer";
-import { buildRegionBounds, findRegion } from "./region/hit-test";
 
 const PANEL_BG = 0x0f1826;
 const PANEL_BORDER = 0x1f2d43;
@@ -207,7 +207,6 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
   sidebarBg.on("pointerdown", (event) => event.stopPropagation());
   sidebarBg.on("pointertap", (event) => event.stopPropagation());
 
-  const boundsByIndex = buildRegionBounds(world.microRegions);
   const mesoById = new Map<MesoRegionId, MesoRegion>();
   for (const meso of world.mesoRegions) {
     mesoById.set(meso.id, meso);
@@ -222,56 +221,6 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
   let lastSidebarWidth = -1;
   let lastMaskWidth = -1;
   let lastMaskHeight = -1;
-  let cachedTerritoryVersion = -1;
-  let macroByMesoId = new Map<MesoRegionId, MacroRegion>();
-
-  const ensureMacroIndex = (): void => {
-    if (cachedTerritoryVersion === world.territoryVersion && macroByMesoId.size > 0) {
-      return;
-    }
-    macroByMesoId = new Map<MesoRegionId, MacroRegion>();
-    for (const macro of world.macroRegions) {
-      for (const mesoId of macro.mesoRegionIds) {
-        macroByMesoId.set(mesoId, macro);
-      }
-    }
-    cachedTerritoryVersion = world.territoryVersion;
-  };
-
-  const selectNationFromScreen = (screenPos: Vec2): void => {
-    const worldPos = renderer.worldContainer.toLocal(screenPos);
-    const region = findRegion(worldPos, world.microRegions, boundsByIndex);
-    if (!region || !region.mesoRegionId) {
-      selectedNationId = null;
-      lastUpdateMs = -Infinity;
-      return;
-    }
-    ensureMacroIndex();
-    const macro = macroByMesoId.get(region.mesoRegionId);
-    if (!macro) {
-      selectedNationId = null;
-      lastUpdateMs = -Infinity;
-      return;
-    }
-    selectedNationId = macro.nationId;
-    lastUpdateMs = -Infinity;
-  };
-
-  renderer.app.stage.eventMode = "static";
-  renderer.app.stage.hitArea = renderer.app.screen;
-
-  const handleSelect = (event: { global: Vec2; button?: number }): void => {
-    if (typeof event.button === "number" && event.button !== 0) {
-      return;
-    }
-    const worldWidth = Math.max(0, renderer.app.screen.width - renderer.uiRightWidth);
-    if (event.global.x > worldWidth) {
-      return;
-    }
-    selectNationFromScreen({ x: event.global.x, y: event.global.y });
-  };
-
-  renderer.app.stage.on("pointertap", handleSelect);
   tabContainer.on("pointertap", (event: FederatedPointerEvent) => {
     event.stopPropagation();
     isExpanded = !isExpanded;
@@ -280,6 +229,8 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
   });
 
   const update = (force = false): void => {
+    const selected = getMapView(world).selectedNationId;
+    if (selectedNationId !== selected) { selectedNationId = selected; lastUpdateMs = -Infinity; }
     const now = renderer.app.ticker.lastTime;
     const screen = renderer.app.screen;
     const screenChanged = screen.width !== lastScreenWidth || screen.height !== lastScreenHeight;
@@ -799,7 +750,7 @@ function buildNationStats(
   );
   const actualSurrenderScore = nation.surrenderScore;
 
-  const displayName = formatNationName(nation.id);
+  const displayName = getNationName(world, nation.id);
 
   return {
     displayName,
@@ -945,14 +896,6 @@ function computeRoleMultiplier(
     aggressorRatio * cooperationBalance.aggressorPenaltyMultiplier +
     defenderRatio * cooperationBalance.defenderPenaltyMultiplier
   );
-}
-
-function formatNationName(nationId: NationId): string {
-  const prefix = "nation-";
-  if (nationId.startsWith(prefix)) {
-    return `Nation ${nationId.slice(prefix.length)}`;
-  }
-  return nationId;
 }
 
 function formatNumber(value: number): string {

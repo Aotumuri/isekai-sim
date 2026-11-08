@@ -1,3 +1,5 @@
+import { getNationName, getNationIdeology } from "../../sim/nation-identity";
+import { getNationFaction } from "../../sim/factions";
 import { formatCoastalSupportStatus, formatNavalUnitStatus } from "../naval-status";
 import type { WorldState } from "../../sim/world-state";
 import { EQUIPMENT_CATALOG } from "../../data/equipment-catalog";
@@ -15,6 +17,15 @@ export function formatRegionTooltip(
   units: UnitState[],
   world?: WorldState,
 ): string {
+  if (world?.mapView && world.mapView.mode !== "debug") {
+    const lines = nation ? [getNationName(world, nation.id), getNationIdeology(world, nation.id).name,
+      `Faction: ${getNationFaction(world, nation.id)?.name ?? "Non-aligned"}`] : [region.isSea ? "Open sea" : "Unclaimed territory"];
+    if (meso?.building) lines.push(`Building: ${formatBuilding(meso.building)}`);
+    if (meso?.resource) lines.push(`Resource: ${formatResource(meso.resource)}`);
+    if (meso) lines.push(...formatCoastalSupportStatus(world, meso.id));
+    lines.push(...formatUnitLines(units, world));
+    return lines.join("\n");
+  }
   const terrain = region.isSea ? "Sea" : region.isRiver ? "River" : "Land";
   const elevation = region.elevation.toFixed(3);
 
@@ -116,7 +127,7 @@ function formatUnitLines(units: UnitState[], world?: WorldState): string[] {
   for (const unit of shown) {
     const orgPercent = Math.round(unit.org * 100);
     lines.push(
-      `Unit: ${unit.nationId} ${unit.type} (MP ${unit.manpower}, Org ${orgPercent}%)`,
+      `Unit: ${world?.mapView?.mode && world.mapView.mode !== "debug" ? getNationName(world, unit.nationId) : unit.nationId} ${unit.type} (MP ${unit.manpower}, Org ${orgPercent}%)`,
     );
     if (unit.design && unit.design.generation > 0) lines.push(
       `Design: ${unit.design.manufacturerId} / Gen ${unit.design.generation} / Power x${unit.design.firepower.toFixed(2)} / Reliability x${unit.design.reliability.toFixed(2)}`,

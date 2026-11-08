@@ -1,3 +1,4 @@
+import { getNationName } from "../sim/nation-identity";
 import { getCoastalSupportModifier } from "../sim/coastal-support";
 import { getNavalUnitOwnership } from "../sim/naval-strategy";
 import type { UnitState } from "../sim/unit";
@@ -51,6 +52,6 @@ export function formatCoastalSupportStatus(world: WorldState, coastId: MesoRegio
     mission.type === "SUPPORT" && mission.targetCoastId === coastId).map((mission) => mission.nationId));
   return [...nations].sort().slice(0, 3).map((nationId) => {
     const bonus = Math.round((getCoastalSupportModifier(world, nationId, coastId) - 1) * 100);
-    return `Shore support: ${nationId} ${bonus > 0 ? `+${bonus}% organization pressure` : "not on station / contested"}`;
+    return `Shore support: ${getNationName(world, nationId)} ${bonus > 0 ? `+${bonus}% organization pressure` : "not on station / contested"}`;
   });
 }
