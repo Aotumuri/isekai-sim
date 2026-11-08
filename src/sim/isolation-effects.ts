@@ -1,3 +1,5 @@
+import { hasMilitaryAccess } from "./military-access";
+import { getOwnerByMesoId } from "./world-cache";
 import { WORLD_BALANCE } from "../data/balance";
 import type { UnitId, UnitState } from "./unit";
 import type { WorldState } from "./world-state";
@@ -182,9 +184,13 @@ export function getUnitIsolationEffect(
 }
 
 function getUnitSupplyComponent(world: WorldState, unit: UnitState) {
-  const componentId = world.supplyAssessment.assessmentByNationId
+  let componentId = world.supplyAssessment.assessmentByNationId
     .get(unit.nationId)
     ?.componentIdByRegionId.get(unit.regionId);
+  if (!componentId) {
+    const host = world.occupation.mesoById.get(unit.regionId) ?? getOwnerByMesoId(world).get(unit.regionId);
+    if (host && hasMilitaryAccess(world, unit.nationId, host)) componentId = world.supplyAssessment.assessmentByNationId.get(host)?.componentIdByRegionId.get(unit.regionId);
+  }
   return componentId
     ? world.supplyAssessment.componentById.get(componentId)
     : undefined;

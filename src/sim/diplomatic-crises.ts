@@ -1,4 +1,4 @@
-import { withdrawMilitaryVisitors } from "./military-access";
+import { prepareMilitaryAccessForWar } from "./military-access";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import { getForeignClaims, getTerritorialClaim } from "./territorial-claims";
 import { canTransferTerritories, transferTerritories } from "./territory-transfer";
@@ -94,10 +94,7 @@ export function startDiplomaticWar(world: WorldState, aggressorId: NationId, tar
   if (getWarDeclarationMode(world) !== "diplomacy" || isDiplomaticallyProtected(world, aggressorId, targetId)) return false;
   if (![aggressorId, targetId].every((id) => world.nations.some((nation) => nation.id === id && isNationActive(nation)))) return false;
   if (findWar(world.wars, aggressorId, targetId)) return false;
-  if (world.militaryAccess?.grants.some((grant) => (grant.hostId === aggressorId && grant.guestId === targetId) || (grant.hostId === targetId && grant.guestId === aggressorId))) {
-    withdrawMilitaryVisitors(world, aggressorId, targetId);
-    withdrawMilitaryVisitors(world, targetId, aggressorId);
-  }
+  prepareMilitaryAccessForWar(world, aggressorId, targetId);
   const war = declareWar(world.wars, aggressorId, targetId, world.time.fastTick);
   if (!war) return false;
   war.cause = cause;

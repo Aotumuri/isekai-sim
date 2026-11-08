@@ -43,7 +43,7 @@ export function sendVolunteers(world: WorldState, donorId: NationId, recipientId
   const state = getVolunteerState(world), outstanding = state.missions.filter((mission) => ["outbound", "active", "recall-requested", "returning"].includes(mission.status));
   if (state.missions.some((mission) => mission.donorId === donorId && mission.recipientId === recipientId && mission.endedAtSlowTick !== undefined && world.time.slowTick - mission.endedAtSlowTick < 120) || outstanding.length >= 20 || outstanding.some((mission) => mission.donorId === donorId && mission.recipientId === recipientId) ||
     outstanding.filter((mission) => mission.donorId === donorId).reduce((sum, mission) => sum + mission.unitIds.length, 0) + count > 8) return null;
-  const donor = world.nations.find((nation) => nation.id === donorId)!, recipient = world.nations.find((nation) => nation.id === recipientId)!;
+  const donor = world.nations.find((nation) => nation.id === donorId)!;
   const owners = getOwnerByMesoId(world), own = world.units.filter((unit) => unit.nationId === donorId && unit.domain === "land" && !unit.volunteerOriginId);
   if (own.length - count < 3) return null;
   const candidates = own.filter((unit) => owners.get(unit.regionId) === donorId && !unit.moveToId && unit.org >= 0.6 && unit.manpower > 0 &&

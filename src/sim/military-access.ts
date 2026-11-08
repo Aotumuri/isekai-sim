@@ -11,7 +11,7 @@ import { findWar } from "./war-state";
 
 export interface MilitaryAccessGrant {
   hostId: NationId; guestId: NationId; expiresAtSlowTick: number;
-  revokedAtSlowTick?: number; reason?: string;
+  revokedAtSlowTick?: number; reason?: string; repatriated?: boolean;
 }
 export interface MilitaryAccessState {
   grants: MilitaryAccessGrant[]; version: number; lastAISlowTick: number;
@@ -33,7 +33,8 @@ function issueMilitaryAccess(world: WorldState, hostId: NationId, guestId: Natio
     ![hostId, guestId].every((id) => world.nations.some((nation) => nation.id === id && nation.macroRegionIds.length))) return false;
   const relation = getRelation(world, hostId, guestId), state = getMilitaryAccessState(world);
   if (relation.trust < 60 || relation.opinion < 20 || relation.crisis || hasMilitaryAccess(world, guestId, hostId) ||
-    state.grants.filter((grant) => grant.revokedAtSlowTick === undefined).length >= 64 || !spendInfluence(world, payerId, 6)) return false;
+    state.grants.filter((grant) => grant.revokedAtSlowTick === undefined).length >= 64 ||
+    (state.grants.length >= 128 && !state.grants.some((grant) => grant.hostId === hostId && grant.guestId === guestId)) || !spendInfluence(world, payerId, 6)) return false;
   state.grants = state.grants.filter((grant) => !(grant.hostId === hostId && grant.guestId === guestId));
   state.grants.push({ hostId, guestId, expiresAtSlowTick: world.time.slowTick + 400 }); state.version++;
   recordSimulationEvent(world, { category: "military", nationIds: [hostId, guestId], message: `${hostId} granted military access and local logistics to ${guestId} for 400 seconds.` });
@@ -50,15 +51,16 @@ export function revokeMilitaryAccess(world: WorldState, hostId: NationId, guestI
   const grant = world.militaryAccess?.grants.find((item) => item.hostId === hostId && item.guestId === guestId && item.revokedAtSlowTick === undefined);
   if (!grant) return false;
   grant.revokedAtSlowTick = world.time.slowTick; grant.reason = reason; world.militaryAccess!.version++;
-  for (const [id, order] of world.militaryAccess!.orders) if (order.nationId === guestId) world.militaryAccess!.orders.delete(id);
+  for (const [id, order] of world.militaryAccess!.orders) if (order.nationId === guestId && getOwnerByMesoId(world).get(order.destinationId) === hostId) world.militaryAccess!.orders.delete(id);
   recordSimulationEvent(world, { category: "military", nationIds: [hostId, guestId], message: `${hostId} ended military access for ${guestId} (${reason}); neutral visitors must leave.` });
   return true;
 }
 export function withdrawMilitaryVisitors(world: WorldState, guestId: NationId, hostId: NationId): number {
   const home = world.nations.find((nation) => nation.id === guestId && nation.macroRegionIds.length); if (!home) return 0;
   const owners = getOwnerByMesoId(world); let returned = 0;
-  for (const unit of world.units) if (unit.nationId === guestId && unit.domain === "land" && owners.get(unit.regionId) === hostId) {
-    unit.regionId = home.capitalMesoId; unit.moveTargetId = null; unit.moveFromId = null; unit.moveToId = null; unit.moveProgressMs = 0;
+  for (const unit of world.units) if (unit.nationId === guestId && unit.domain === "land" && (owners.get(unit.regionId) === hostId || owners.get(world.militaryAccess?.orders.get(unit.id)?.destinationId as MesoRegionId) === hostId)) {
+    if (owners.get(unit.regionId) === hostId) unit.regionId = home.capitalMesoId;
+    unit.moveTargetId = null; unit.moveFromId = null; unit.moveToId = null; unit.moveProgressMs = 0;
     unit.org *= 0.85; world.militaryAccess?.orders.delete(unit.id); returned++;
   }
   return returned;
@@ -118,7 +120,9 @@ export function updateMilitaryAccess(world: WorldState): void {
   const state = world.militaryAccess ?? (getWarDeclarationMode(world) === "diplomacy" ? getMilitaryAccessState(world) : undefined); if (!state) return;
   for (const grant of state.grants) {
     if (grant.revokedAtSlowTick === undefined && !hasMilitaryAccess(world, grant.guestId, grant.hostId)) revokeMilitaryAccess(world, grant.hostId, grant.guestId, "expired, unsafe or insufficient trust");
-    if (grant.revokedAtSlowTick !== undefined && (findWar(world.wars, grant.guestId, grant.hostId) || world.time.slowTick - grant.revokedAtSlowTick >= 15)) withdrawMilitaryVisitors(world, grant.guestId, grant.hostId);
+    if (grant.revokedAtSlowTick !== undefined && !grant.repatriated && (findWar(world.wars, grant.guestId, grant.hostId) || world.time.slowTick - grant.revokedAtSlowTick >= 15)) {
+      withdrawMilitaryVisitors(world, grant.guestId, grant.hostId); grant.repatriated = true;
+    }
   }
   state.grants = state.grants.filter((grant) => grant.revokedAtSlowTick === undefined || world.time.slowTick - grant.revokedAtSlowTick < 60);
   applyMilitaryStagingOrders(world);
@@ -131,5 +135,14 @@ export function updateMilitaryAccess(world: WorldState): void {
     for (const [host, guest] of [[a, b], [b, a]]) if (!issued.has(host) && getNationCharacter(world, host).cooperation >= 0.6 && !hasMilitaryAccess(world, guest, host)) {
       if (grantMilitaryAccess(world, host, guest)) issued.add(host);
     }
+  }
+}
+
+/** End prewar visitor rights once; subsequent attacking armies are ordinary belligerents. */
+export function prepareMilitaryAccessForWar(world: WorldState, a: NationId, b: NationId): void {
+  for (const grant of world.militaryAccess?.grants ?? []) if (grant.revokedAtSlowTick === undefined &&
+    ((grant.guestId === a && grant.hostId === b) || (grant.guestId === b && grant.hostId === a))) {
+    revokeMilitaryAccess(world, grant.hostId, grant.guestId, "war declared");
+    withdrawMilitaryVisitors(world, grant.guestId, grant.hostId); grant.repatriated = true;
   }
 }

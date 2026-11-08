@@ -1,3 +1,4 @@
+import { updateIsolationEffects } from "../../src/sim/isolation-effects";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createSocietyWorld } from "../helpers/society-world";
@@ -58,4 +59,22 @@ test("access cannot be used to pre-position an instant invasion against the host
   assert(startDiplomaticWar(world, guest, host));
   assert.equal(unit.regionId, world.nations.find((nation) => nation.id === guest)!.capitalMesoId);
   assert.equal(hasMilitaryAccess(world, guest, host), false);
+});
+
+
+test("revoked access does not repeatedly repatriate ordinary invading troops after war begins", () => {
+  const { world, guest, host, next } = accessScene(); assert(grantMilitaryAccess(world, host, guest));
+  const unit = createUnitForType(createUnitId(world.unitIdCounter++), guest, next, "Infantry"); world.units = [unit];
+  assert(startDiplomaticWar(world, guest, host)); unit.regionId = next;
+  world.time.slowTick += 1; updateMilitaryAccess(world);
+  assert.equal(unit.regionId, next);
+});
+
+
+test("visitors share the host's isolation consequences as well as its supply", () => {
+  const { world, guest, host, next } = accessScene(); assert(grantMilitaryAccess(world, host, guest)); updateSupplyAssessment(world);
+  const componentId = world.supplyAssessment.assessmentByNationId.get(host)!.componentIdByRegionId.get(next)!;
+  const component = world.supplyAssessment.componentById.get(componentId)!; component.supplied = false; component.isolatedSinceTick = 0;
+  const unit = createUnitForType(createUnitId(world.unitIdCounter++), guest, next, "Infantry"); world.units = [unit];
+  world.time.fastTick = 300; const org = unit.org; updateIsolationEffects(world); assert(unit.org < org);
 });

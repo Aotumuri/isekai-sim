@@ -1,3 +1,4 @@
+import { updateCivilWar } from "../../src/sim/civil-war";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createSocietyWorld } from "../helpers/society-world";
@@ -74,4 +75,18 @@ test("a recipient cannot exceed its hard cap when recruits fill the slots during
   for (let i = actual; i < 300; i++) world.units.push(createUnitForType(createUnitId(world.unitIdCounter++), host.id, host.capitalMesoId, "Infantry"));
   world.time.slowTick = mission.arrivesAtSlowTick; updateVolunteers(world); assert.equal(mission.status, "returning");
   assert.equal(world.units.filter((unit) => unit.nationId === host.id && unit.domain === "land").length, 300);
+});
+
+
+test("foreign volunteers retain their mission allegiance when a recipient province rebels", () => {
+  const { world, donor, host } = scene(); const mission = sendVolunteers(world, donor.id, host.id, 2)!;
+  world.time.slowTick = mission.arrivesAtSlowTick; updateVolunteers(world);
+  const capitalMacro = world.macroRegions.find((macro) => macro.mesoRegionIds.includes(host.capitalMesoId))!;
+  const target = world.macroRegions.find((macro) => macro.nationId === host.id && macro.id !== capitalMacro.id)!.mesoRegionIds[0];
+  const hostRegions = new Set(world.macroRegions.filter((macro) => macro.nationId === host.id).flatMap((macro) => macro.mesoRegionIds));
+  for (const region of world.mesoRegions) if (hostRegions.has(region.id) && region.id !== host.capitalMesoId) region.building = null;
+  world.mesoRegions.find((region) => region.id === target)!.building = "city";
+  const volunteer = world.units.find((unit) => unit.volunteerMissionId === mission.id)!; volunteer.regionId = target;
+  host.warCooperation = 0; const before = world.nations.length; updateCivilWar(world);
+  assert.equal(world.nations.length, before + 1); assert.equal(volunteer.nationId, host.id); assert.equal(volunteer.volunteerOriginId, donor.id);
 });

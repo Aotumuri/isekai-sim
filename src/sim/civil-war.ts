@@ -252,7 +252,7 @@ function reassignUnitsToRebels(
 ): number {
   let assigned = 0;
   for (const unit of units) {
-    if (unit.nationId !== nationId) {
+    if (unit.nationId !== nationId || unit.volunteerOriginId) {
       continue;
     }
     if (!rebelMesoIds.has(unit.regionId)) {
