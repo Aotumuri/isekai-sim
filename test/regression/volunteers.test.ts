@@ -1,3 +1,4 @@
+import { connectedRegionGroups } from "../../src/sim/peace-borders";
 import { updateProduction } from "../../src/sim/production";
 import { getMilitaryAccessState } from "../../src/sim/military-access";
 import { updateCivilWar } from "../../src/sim/civil-war";
@@ -5,7 +6,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createSocietyWorld } from "../helpers/society-world";
 import { getRelation, getDiplomacyState } from "../../src/sim/diplomacy";
-import { getAdjacentNationPairs } from "../../src/sim/world-cache";
+import { getAdjacentNationPairs, getNeighborsById, getOwnerByMesoId } from "../../src/sim/world-cache";
 import { findTradeRoute } from "../../src/sim/international-trade";
 import { updateSupplyAssessment } from "../../src/sim/supply-assessment";
 import { createUnitForType } from "../../src/sim/create-units";
@@ -88,13 +89,21 @@ test("foreign volunteers retain their mission allegiance when a recipient provin
   world.time.slowTick = mission.arrivesAtSlowTick; updateVolunteers(world);
   const capitalMacro = world.macroRegions.find((macro) => macro.mesoRegionIds.includes(host.capitalMesoId))!;
   const target = world.macroRegions.find((macro) => macro.nationId === host.id && macro.id !== capitalMacro.id)!.mesoRegionIds[0];
+  const originalCapital = host.capitalMesoId;
   const hostRegions = new Set(world.macroRegions.filter((macro) => macro.nationId === host.id).flatMap((macro) => macro.mesoRegionIds));
   for (const region of world.mesoRegions) if (hostRegions.has(region.id) && region.id !== host.capitalMesoId) region.building = null;
   world.mesoRegions.find((region) => region.id === target)!.building = "city";
   const volunteer = world.units.find((unit) => unit.volunteerMissionId === mission.id)!; volunteer.regionId = target;
   host.warCooperation = 0; const before = world.nations.length;
   updateCivilWar(world); world.time.slowTick += 300; updateCivilWar(world);
-  assert.equal(world.nations.length, before + 1); assert.equal(volunteer.nationId, host.id); assert.equal(volunteer.volunteerOriginId, donor.id);
+  assert.equal(world.nations.length, before + 1);
+  const owners = getOwnerByMesoId(world);
+  assert.equal(owners.get(target), world.nations.at(-1)?.id);
+  assert.equal(owners.get(originalCapital), host.id);
+  const remaining = new Set([...hostRegions].filter((id) => owners.get(id) === host.id));
+  assert.equal(connectedRegionGroups(remaining, getNeighborsById(world)).length, 1);
+  assert.equal(volunteer.nationId, host.id);
+  assert.equal(volunteer.volunteerOriginId, donor.id);
 });
 
 

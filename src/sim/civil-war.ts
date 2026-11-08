@@ -6,7 +6,7 @@ import { WORLD_BALANCE } from "../data/balance";
 import type { MacroRegion, MacroRegionId } from "../worldgen/macro-region";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import { createNationId, type NationId } from "../worldgen/nation";
-import type { SeededRng } from "../utils/seeded-rng";
+import { connectedRegionGroups } from "./peace-borders";
 import {
   createNationResourceFlow,
   createNationResources,
@@ -18,7 +18,7 @@ import { inheritTerritorialClaims, updateTerritorialClaims } from "./territorial
 import type { UnitState } from "./unit";
 import { declareWar } from "./war-state";
 import type { WorldState } from "./world-state";
-import { getMacroAdjacency, getMesoById } from "./world-cache";
+import { getMacroAdjacency, getMesoById, getNeighborsById } from "./world-cache";
 
 export function updateCivilWar(world: WorldState): void {
   if (world.nations.length === 0) {
@@ -54,24 +54,18 @@ export function updateCivilWar(world: WorldState): void {
       world.occupation.mesoById,
       nation.capitalMesoId,
     );
-    if (cityCandidates.length === 0) {
-      continue;
+    let uprising = pickRebelTerritory(world, nation, cityCandidates, mesoToMacro, macroAdjacency);
+    if (!uprising) {
+      const alternateSeats = world.macroRegions.filter((macro) => macro.nationId === nation.id)
+        .flatMap((macro) => {
+          const seat = macro.mesoRegionIds.find((id) => mesoById.get(id)?.type === "land" &&
+            mesoById.get(id)?.building === null && !world.occupation.mesoById.has(id));
+          return seat ? [seat] : [];
+        });
+      uprising = pickRebelTerritory(world, nation, alternateSeats, mesoToMacro, macroAdjacency);
     }
-    const cityMesoId = cityCandidates[world.simRng.nextInt(cityCandidates.length)];
-    const cityMacroId = mesoToMacro.get(cityMesoId);
-    if (!cityMacroId) {
-      continue;
-    }
-
-    const rebelMacroIds = pickRebelMacroIds(
-      nation,
-      cityMacroId,
-      macroAdjacency,
-      world.simRng,
-    );
-    if (rebelMacroIds.size === 0) {
-      continue;
-    }
+    if (!uprising) continue;
+    const { cityMesoId, rebelMacroIds } = uprising;
 
     const rebelMesoIds = collectMesoIdsForMacros(
       world.macroRegions,
@@ -222,39 +216,54 @@ function collectCityCandidates(
   return candidates;
 }
 
-function pickRebelMacroIds(
+function pickRebelTerritory(
+  world: WorldState,
   nation: NationRuntime,
-  cityMacroId: MacroRegionId,
+  cities: MesoRegionId[],
+  mesoToMacro: Map<MesoRegionId, MacroRegionId>,
   macroAdjacency: Map<MacroRegionId, Set<MacroRegionId>>,
-  rng: SeededRng,
-): Set<MacroRegionId> {
-  const nationMacroIds = new Set(nation.macroRegionIds);
-  if (!nationMacroIds.has(cityMacroId)) {
-    return new Set();
-  }
-
-  const rebelMacroIds = new Set<MacroRegionId>([cityMacroId]);
-  const neighbors = [...(macroAdjacency.get(cityMacroId) ?? [])].filter((id) =>
-    nationMacroIds.has(id),
-  );
-  for (const neighbor of neighbors) {
-    rebelMacroIds.add(neighbor);
-  }
-
-  const maxAllowed = nationMacroIds.size - 1;
-  if (maxAllowed <= 0) {
-    return new Set();
-  }
-  if (rebelMacroIds.size > maxAllowed) {
-    const extras = neighbors.filter((id) => id !== cityMacroId);
-    while (rebelMacroIds.size > maxAllowed && extras.length > 0) {
-      const removeIndex = rng.nextInt(extras.length);
-      const removeId = extras.splice(removeIndex, 1)[0];
-      rebelMacroIds.delete(removeId);
+): { cityMesoId: MesoRegionId; rebelMacroIds: Set<MacroRegionId> } | undefined {
+  if (!cities.length) return;
+  const capitalProvince = mesoToMacro.get(nation.capitalMesoId);
+  const provinces = new Map(world.macroRegions.filter((macro) => macro.nationId === nation.id)
+    .map((macro) => [macro.id, macro.mesoRegionIds]));
+  const regions = getMesoById(world), neighbors = getNeighborsById(world);
+  const parentLand = new Set([...provinces.values()].flat().filter((id) => regions.get(id)?.type !== "sea"));
+  const originalComponents = connectedRegionGroups(parentLand, neighbors);
+  const split = (macroIds: Set<MacroRegionId>) => {
+    const rebelLand = new Set([...macroIds].flatMap((id) => provinces.get(id) ?? []).filter((id) => parentLand.has(id)));
+    if (connectedRegionGroups(rebelLand, neighbors).length !== 1) return null;
+    for (const component of originalComponents) {
+      if (!component.some((id) => rebelLand.has(id))) continue;
+      const remaining = new Set(component.filter((id) => !rebelLand.has(id)));
+      if (connectedRegionGroups(remaining, neighbors).length > 1) return null;
     }
-  }
+    return rebelLand;
+  };
 
-  return rebelMacroIds;
+  // Try the randomly chosen city first, then another when it would sever a corridor.
+  const first = world.simRng.nextInt(cities.length);
+  let inlandUprising: ReturnType<typeof pickRebelTerritory>;
+  for (let offset = 0; offset < cities.length; offset += 1) {
+    const cityMesoId = cities[(first + offset) % cities.length];
+    const seed = mesoToMacro.get(cityMesoId);
+    if (!seed || seed === capitalProvince) continue;
+    const rebelMacroIds = new Set([seed]);
+    let rebelLand = split(rebelMacroIds);
+    for (const id of macroAdjacency.get(seed) ?? []) {
+      if (id === capitalProvince || !provinces.has(id) || rebelMacroIds.size >= provinces.size - 1) continue;
+      const expanded = split(new Set([...rebelMacroIds, id]));
+      if (expanded) {
+        rebelMacroIds.add(id);
+        rebelLand = expanded;
+      }
+    }
+    if (!rebelLand) continue;
+    const uprising = { cityMesoId, rebelMacroIds };
+    if ([...rebelLand].some((id) => (neighbors.get(id) ?? []).some((next) => !parentLand.has(next)))) return uprising;
+    inlandUprising ??= uprising;
+  }
+  return inlandUprising;
 }
 
 function reassignUnitsToRebels(
