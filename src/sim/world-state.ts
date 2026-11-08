@@ -1,3 +1,4 @@
+import type { ArmsAidState } from "./arms-aid";
 import type { InternationalTradeState } from "./international-trade";
 import type { ResearchState } from "./research";
 import type { DiplomacyState } from "./diplomacy";
@@ -44,6 +45,7 @@ export interface WorldState {
   diplomacy?: DiplomacyState;
   research?: ResearchState;
   internationalTrade?: InternationalTradeState;
+  armsAid?: ArmsAidState;
   worldSeed?: number;
   events?: SimulationEvent[];
   width: number;
