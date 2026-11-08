@@ -16,7 +16,8 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
   const layer = renderer.worldLayers.layers.PlayerMap;
   const fills = new Map<NationId, Graphics>(), borders = new Map<NationId, Graphics>();
   const outlines = new Map<NationId, Segment[]>();
-  const labels = new Container(), selection = new Graphics();
+  const labels = new Container(), selection = new Graphics(), parcelSelection = new Graphics();
+  const districtOutlines = new Map<MesoRegionId, Segment[]>();
   let geometryKey = "", colorKey = "", labelKey = "", lastZoom = -1, occupationKey = "";
   let occupationLayer = new Container();
   const occupationEntries = new Map<MesoRegionId, Graphics>();
@@ -37,7 +38,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
     for (const segment of segments) { graphics.moveTo(segment.a.x, segment.a.y); graphics.lineTo(segment.b.x, segment.b.y); }
   };
   const rebuild = () => {
-    clearLayer(layer); fills.clear(); borders.clear(); outlines.clear(); occupationEntries.clear(); microByMeso.clear();
+    clearLayer(layer); fills.clear(); borders.clear(); outlines.clear(); occupationEntries.clear(); microByMeso.clear(); districtOutlines.clear();
     occupationLayer = new Container(); occupationKey = "";
     // clearLayer destroys children; replace the two reusable overlay containers below.
     const provinces = new Graphics(), districts = new Graphics(), ocean = new Graphics();
@@ -66,6 +67,9 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
           otherOwner, neighbor.mesoRegionId ? provinceByMeso.get(neighbor.mesoRegionId) : undefined);
         if (kind === "none" && !(owner && otherOwner && region.mesoRegionId !== neighbor.mesoRegionId)) continue;
         const segments = findSharedSegments(region, neighbor);
+        if (region.mesoRegionId !== neighbor.mesoRegionId) for (const id of [region.mesoRegionId, neighbor.mesoRegionId]) if (id) {
+          const list = districtOutlines.get(id) ?? []; list.push(...segments); districtOutlines.set(id, list);
+        }
         if (kind === "national") {
           for (const id of [owner, otherOwner]) if (id) { const list = outlines.get(id) ?? []; list.push(...segments); outlines.set(id, list); }
           if (owner) stroke(borders.get(owner)!, segments); if (otherOwner) stroke(borders.get(otherOwner)!, segments); }
@@ -82,7 +86,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
     // Labels live in a separate layer so geometry rebuilds cannot destroy them.
     colorKey = ""; labelKey = "";
   };
-  renderer.worldLayers.layers.NationLabels.addChild(labels, selection);
+  renderer.worldLayers.layers.NationLabels.addChild(labels, selection, parcelSelection);
   const update = () => {
     const view = getMapView(world), debug = view.mode === "debug";
     layer.visible = !debug; renderer.worldLayers.layers.NationLabels.visible = true; labels.visible = !debug && view.labels;
@@ -123,7 +127,12 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
     const nextLabels = `${nextGeometry}:${view.revision}:${world.factions?.version ?? 0}`;
     const labelsChanged = nextLabels !== labelKey;
     if (labelsChanged) {
-      labelKey = nextLabels; clearLayer(labels); selection.clear();
+      labelKey = nextLabels; clearLayer(labels); selection.clear(); parcelSelection.clear();
+      const preview = new Set(view.territoryPreviewIds ?? []);
+      parcelSelection.beginFill(0xffd35c, 0.38);
+      for (const id of preview) for (const micro of microByMeso.get(id) ?? []) polygons(parcelSelection, micro.polygon);
+      parcelSelection.endFill(); parcelSelection.lineStyle(2.4, 0xffdb73, 1);
+      for (const id of preview) stroke(parcelSelection, districtOutlines.get(id) ?? []);
       if (view.selectedNationId) { selection.lineStyle(3.2, 0xfff5cf, 0.95); stroke(selection, outlines.get(view.selectedNationId) ?? []); }
       for (const anchor of getNationLabelAnchors(world)) {
         const faction = getNationFaction(world, anchor.nationId);

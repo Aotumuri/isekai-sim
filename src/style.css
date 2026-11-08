@@ -107,3 +107,12 @@ canvas {
 .map-message { color: #f0c590; margin: 5px 0 0; }.map-message:empty { display: none; }
 @media(max-width:720px) { .map-controls { width: min(350px,calc(100vw - 24px)); right: 12px; top: 150px; } }
 .map-legend-item i.occupation-swatch { width: 24px; background: repeating-linear-gradient(45deg,#dfb975 0 3px,#30455a 3px 8px); }
+
+.territory-parcels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.territory-parcels h3 { font-size: 13px; margin: 8px 0; }
+.territory-parcels section > div { max-height: 270px; overflow: auto; border: 1px solid #394b61; border-radius: 6px; padding: 6px; }
+.territory-province { margin-bottom: 6px; font-size: 12px; }
+.territory-province summary { cursor: pointer; padding: 5px 0; color: #bcd3e6; }
+.territory-province label { display: flex; align-items: center; gap: 5px; padding: 4px 0; }
+.territory-province input { width: auto; }
+@media (max-width: 600px) { .territory-parcels { grid-template-columns: 1fr; } }

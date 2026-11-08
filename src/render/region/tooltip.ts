@@ -22,6 +22,7 @@ export function formatRegionTooltip(
     const lines = nation ? [getNationName(world, nation.id), getNationIdeology(world, nation.id).name,
       `Faction: ${getNationFaction(world, nation.id)?.name ?? "Non-aligned"}`] : [region.isSea ? "Open sea" : "Unclaimed territory"];
     if (meso) {
+      lines.push(`District ${meso.id.replace("meso-", "")}`);
       const owner = getOwnerByMesoId(world).get(meso.id), occupier = world.occupation.mesoById.get(meso.id);
       if (owner && occupier && owner !== occupier) lines.push(`Owned by: ${getNationName(world, owner)}`, `Occupied by: ${getNationName(world, occupier)}`);
     }

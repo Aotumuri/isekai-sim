@@ -1,7 +1,9 @@
+import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { WorldState } from "../sim/world-state";
 export type MapMode = "political" | "diplomacy" | "factions" | "debug";
 export interface MapViewState {
+  territoryPreviewIds?: MesoRegionId[];
   mode: MapMode; selectedNationId: NationId | null; diplomaticFocusId: NationId | null;
   targetNationId: NationId | null; provinceBorders: boolean; districtBorders: boolean; labels: boolean; occupations: boolean; revision: number;
 }
