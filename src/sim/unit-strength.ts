@@ -2,7 +2,7 @@ import type { UnitState } from "./unit";
 
 export function getUnitCombatStrength(unit: UnitState): number {
   return getUnitDamageWeight(unit) * Math.max(0, unit.combatPower) *
-    (unit.design?.firepower ?? 1) * (unit.design?.reliability ?? 1);
+    (unit.design?.firepower ?? 1) * (unit.design?.reliability ?? 1) * (unit.design?.handling ?? 1);
 }
 
 export function getUnitDamageWeight(unit: UnitState): number {
@@ -22,3 +22,5 @@ function getAverageEquipmentFill(unit: UnitState): number {
   }
   return sum / unit.equipment.length;
 }
+
+export function getUnitProtection(unit: UnitState): number { return Math.max(1, unit.design?.armor ?? 1); }

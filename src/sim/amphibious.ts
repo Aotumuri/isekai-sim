@@ -1,3 +1,6 @@
+import { getMoveTicksPerRegion } from "./movement";
+import { getDesignTransportCapacity, getFleetTransportCapacity, planTransportLoading } from "./unit-capabilities";
+import { getNationalDesign } from "./research";
 import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
@@ -20,7 +23,7 @@ import { isNationActive } from "./nation-active";
 const PREPARATION_TIMEOUT_TICKS = 2400;
 
 export type AmphibiousPhase = "preparing" | "embarking" | "escort-wait" | "transporting" | "landed" | "cancelled";
-export type AmphibiousCancellationReason = "transport-lost" | "escort-lost" | "convoy-lost" | "assets-not-assembled" | "departure-port-lost" | "target-invalid" | "route-invalid" | "war-ended" | "force-lost" | "preparation-timeout" | "strategic-capital-critical";
+export type AmphibiousCancellationReason = "transport-lost" | "transport-capacity" | "escort-lost" | "convoy-lost" | "assets-not-assembled" | "departure-port-lost" | "target-invalid" | "route-invalid" | "war-ended" | "force-lost" | "preparation-timeout" | "strategic-capital-critical";
 export type AmphibiousValidationPhase = "planning" | "assembly" | "ready" | "voyage" | "landing";
 export type AmphibiousValidationOwner = "strategic-planning" | "fleet-assembly" | "operation-readiness" | "convoy" | "landing";
 export type AmphibiousLaunchRejectionReason = "insufficient-strategic-window" | "positioning-unreachable";
@@ -599,14 +602,10 @@ export function updateAmphibiousOperations(world: WorldState): void {
         return true;
       });
       if (!fleetAtPort) continue;
-      const capacity = Math.max(1, WORLD_BALANCE.unit.navalTransportCapacity ?? 10);
-      for (let index = 0; index < force.length; index += 1) {
-        const transport = transports[Math.floor(index / capacity)];
-        if (!transport) break;
-        const unit = force[index]!;
-        resetMovement(unit);
-        unit.amphibiousEmbarkRequested = false;
-        transport.cargoUnits.push(unit);
+      const loading = planTransportLoading(transports, force);
+      if (!loading) { cancelOperation(world, operation, "transport-capacity", "ready", unitById); continue; }
+      for (const { transport, cargo } of loading) for (const unit of cargo) {
+        resetMovement(unit); unit.amphibiousEmbarkRequested = false; transport.cargoUnits.push(unit);
       }
       const cargoIds = new Set(force.map((unit) => unit.id));
       world.units = world.units.filter((unit) => !cargoIds.has(unit.id));
@@ -857,7 +856,7 @@ function estimateAssaultStrength(
     const directDistance = Math.hypot(center.x - destinationCenter.x, center.y - destinationCenter.y);
     const estimatedSegments = Math.max(1, Math.ceil(directDistance / averageRegionSpan));
     const progressTicks = Math.floor(Math.max(0, unit.moveProgressMs) / FAST_TICK_MS);
-    const arrivalTicks = Math.max(0, estimatedSegments * Math.max(1, unit.moveTicksPerRegion) - progressTicks);
+    const arrivalTicks = Math.max(0, estimatedSegments * getMoveTicksPerRegion(unit) - progressTicks);
     if (arrivalTicks > mediumWindow) continue;
     if (arrivalTicks <= shortWindow) shortReactionStrength += strength;
     else mediumReactionStrength += strength;
@@ -961,8 +960,8 @@ function applyCandidateToDemand(world: WorldState, demand: AmphibiousCapabilityD
   const requirement = deriveForceRequirement(world, demand.nationId, demand.departurePortId,
     demand.requiredLandingStrength);
   demand.desiredLandingUnitCount = requirement.landUnitCount;
-  demand.desiredTransportCount = requirement.transportCount;
-  demand.desiredEscortCount = requirement.escortCount;
+  demand.desiredTransportCount = hasCompleteFleetLease(demand) ? demand.assignedTransportIds.length : requirement.transportCount;
+  demand.desiredEscortCount = hasCompleteFleetLease(demand) ? demand.assignedEscortIds.length : requirement.escortCount;
   refreshFleetReadinessTarget(world, demand);
 }
 
@@ -1046,7 +1045,7 @@ function refreshCapabilityProgress(world: WorldState, demand: AmphibiousCapabili
   if (reinforcementForceReady && !forceReady) {
     demand.desiredLandingUnitCount = demand.availableLandingUnitCount;
     demand.desiredTransportCount = Math.max(1, Math.ceil(demand.availableLandingUnitCount /
-      Math.max(1, WORLD_BALANCE.unit.navalTransportCapacity ?? 10)));
+      getDesignTransportCapacity(getNationalDesign(world, demand.nationId, "TransportShip"))));
     demand.desiredEscortCount = Math.max(1, Math.ceil(demand.desiredTransportCount /
       Math.max(1, WORLD_BALANCE.unit.amphibiousAssault.escortsPerTransports)));
   }
@@ -1067,12 +1066,10 @@ function refreshCapabilityProgress(world: WorldState, demand: AmphibiousCapabili
   }
   const fleetReachable = hasCompleteFleetLease(demand);
   const emergencyReady = emergencyForceReady &&
-    fleetReachable && demand.availableTransportCount >= Math.ceil(demand.availableLandingUnitCount /
-      Math.max(1, WORLD_BALANCE.unit.navalTransportCapacity ?? 10)) &&
+    fleetReachable && getFleetTransportCapacity(demand.assignedTransportIds.flatMap((id) => { const unit = unitById.get(id); return unit ? [unit] : []; })) >= demand.availableLandingUnitCount &&
     demand.availableEscortCount >= Math.min(demand.desiredEscortCount, demand.availableTransportCount);
   const reinforcementReady = reinforcementForceReady && fleetReachable &&
-    demand.availableTransportCount >= Math.ceil(demand.availableLandingUnitCount /
-      Math.max(1, WORLD_BALANCE.unit.navalTransportCapacity ?? 10)) &&
+    getFleetTransportCapacity(demand.assignedTransportIds.flatMap((id) => { const unit = unitById.get(id); return unit ? [unit] : []; })) >= demand.availableLandingUnitCount &&
     demand.availableEscortCount >= Math.min(demand.desiredEscortCount, demand.availableTransportCount);
   demand.launchReady = fleetReachable && forceReady || emergencyReady || reinforcementReady;
   if (!fleetReachable || !forceReady) {
@@ -1114,14 +1111,25 @@ function attemptFleetLease(
 ): void {
   const state = world.amphibiousOperations;
   state.fleetLeaseAttempts += 1;
-  if (transports.length >= demand.desiredTransportCount && escorts.length >= demand.desiredEscortCount) {
-    demand.assignedTransportIds = transports.slice(0, demand.desiredTransportCount).map((unit) => unit.id);
-    demand.assignedEscortIds = escorts.slice(0, demand.desiredEscortCount).map((unit) => unit.id);
+  const required = demand.assignedLandingUnitIds.length || demand.desiredLandingUnitCount;
+  const chosen: UnitState[] = [];
+  for (const transport of transports) { chosen.push(transport); if (getFleetTransportCapacity(chosen) >= required) break; }
+  const capacity = getFleetTransportCapacity(chosen);
+  const neededEscorts = Math.max(1, Math.ceil(chosen.length / Math.max(1, WORLD_BALANCE.unit.amphibiousAssault.escortsPerTransports)));
+  if (capacity >= required && chosen.length && escorts.length >= neededEscorts) {
+    demand.desiredTransportCount = chosen.length; demand.desiredEscortCount = neededEscorts;
+    demand.assignedTransportIds = chosen.map((unit) => unit.id);
+    demand.assignedEscortIds = escorts.slice(0, neededEscorts).map((unit) => unit.id);
     demand.availableTransportCount = demand.assignedTransportIds.length;
     demand.availableEscortCount = demand.assignedEscortIds.length;
     demand.fleetLeaseStartedAtTick = world.time.fastTick;
     state.successfulFleetLeases += 1;
     return;
+  }
+  if (capacity < required) {
+    demand.desiredTransportCount = Math.max(demand.desiredTransportCount, transports.length + Math.ceil((required - capacity) /
+      getDesignTransportCapacity(getNationalDesign(world, demand.nationId, "TransportShip"))));
+    demand.desiredEscortCount = Math.max(1, Math.ceil(demand.desiredTransportCount / Math.max(1, WORLD_BALANCE.unit.amphibiousAssault.escortsPerTransports)));
   }
   state.failedFleetLeaseAttempts += 1;
   if (transports.length > 0 || escorts.length > 0) {
@@ -1164,7 +1172,7 @@ function estimateAssemblyTicks(
   let maximum = 0;
   for (const id of demand.assignedLandingUnitIds) {
     const unit = unitById.get(id);
-    if (unit) maximum = Math.max(maximum, (distance.get(unit.regionId) ?? 0) * Math.max(1, Math.round(unit.moveTicksPerRegion)));
+    if (unit) maximum = Math.max(maximum, (distance.get(unit.regionId) ?? 0) * getMoveTicksPerRegion(unit));
   }
   for (const id of [...demand.assignedTransportIds, ...demand.assignedEscortIds]) {
     const unit = unitById.get(id);
@@ -1256,7 +1264,7 @@ function createOperation(world: WorldState, demand: AmphibiousCapabilityDemand, 
     strength / Math.max(0.5, demand.requiredLandingStrength) >= 0.35;
   const escorts = demand.assignedEscortIds.map((id) => unitById.get(id))
     .filter((unit): unit is UnitState => !!unit);
-  const transportsPresent = transports.length > 0;
+  const transportsPresent = transports.length > 0 && getFleetTransportCapacity(transports) >= units.length;
   const transportsOperational = transports.every((transport) => isOperationalTransport(transport, candidate.nationId) &&
     Number.isFinite(transport.moveTicksPerRegion));
   const transportsAtDeparture = transports.every((transport) => transport.regionId === candidate.departure);
@@ -1356,7 +1364,7 @@ function createOperation(world: WorldState, demand: AmphibiousCapabilityDemand, 
   state.totalAssignedAssaultStrength += strength;
   state.utilizationSamples += 1;
   state.totalTransportUtilization += units.length /
-    Math.max(1, transports.length * (WORLD_BALANCE.unit.navalTransportCapacity ?? 10));
+    Math.max(1, getFleetTransportCapacity(transports));
   state.totalEscortUtilization += demand.desiredEscortCount / Math.max(1, escorts.length);
   state.landingSiteSamples += 1;
   state.totalLandingScore += candidate.score;
@@ -1410,6 +1418,7 @@ export function getAmphibiousOperationValidation(
     ? transports.flatMap((transport) => transport?.cargoUnits ?? [])
     : op.assignedUnitIds.map((id) => units.get(id)).filter(Boolean);
   if (liveForce.length === 0) failures.push("force-lost");
+  if (getFleetTransportCapacity(transports.filter((unit): unit is UnitState => !!unit)) < liveForce.length) failures.push("transport-capacity");
   if (phase === "ready") {
     const forceAssembled = op.phase === "escort-wait"
       ? liveForce.length > 0
@@ -1643,8 +1652,7 @@ function updateBridgeheadCampaigns(world: WorldState): void {
       ? world.amphibiousOperations.capabilityDemands.find((item) => item.id === campaign.activeDemandId)
       : undefined;
     if (demand?.operationId) {
-      campaign.currentTransportCapacity = demand.assignedTransportIds.length *
-        Math.max(1, WORLD_BALANCE.unit.navalTransportCapacity ?? 10);
+      campaign.currentTransportCapacity = getFleetTransportCapacity(demand.assignedTransportIds.flatMap((id) => { const unit = world.units.find((item) => item.id === id); return unit ? [unit] : []; }));
       campaign.currentEscortCapacity = demand.assignedEscortIds.length;
       campaign.activeOperationId = demand.operationId;
       campaign.pendingTransportCount = demand.desiredTransportCount;
@@ -1654,8 +1662,7 @@ function updateBridgeheadCampaigns(world: WorldState): void {
       continue;
     }
     if (demand && isActiveCapabilityDemand(demand)) {
-      campaign.currentTransportCapacity = demand.assignedTransportIds.length *
-        Math.max(1, WORLD_BALANCE.unit.navalTransportCapacity ?? 10);
+      campaign.currentTransportCapacity = getFleetTransportCapacity(demand.assignedTransportIds.flatMap((id) => { const unit = world.units.find((item) => item.id === id); return unit ? [unit] : []; }));
       campaign.currentEscortCapacity = demand.assignedEscortIds.length;
       campaign.pendingTransportCount = demand.desiredTransportCount;
       campaign.pendingEscortCount = demand.desiredEscortCount;
@@ -1663,8 +1670,7 @@ function updateBridgeheadCampaigns(world: WorldState): void {
       continue;
     }
     campaign.activeDemandId = null;
-    campaign.currentTransportCapacity = findAvailableTransports(world, campaign.nationId,
-      campaign.departurePortId).length * Math.max(1, WORLD_BALANCE.unit.navalTransportCapacity ?? 10);
+    campaign.currentTransportCapacity = getFleetTransportCapacity(findAvailableTransports(world, campaign.nationId, campaign.departurePortId));
     campaign.currentEscortCapacity = findAvailableEscorts(world, campaign.nationId,
       campaign.departurePortId).length;
     const candidate = reinforcementCandidate(world, campaign,
@@ -1891,8 +1897,8 @@ function assessLaunchFeasibility(
   const estimatedEscortDelayTicks = 0;
   const estimatedEmbarkationTicks = 1;
   const convoyMoveTicks = Math.max(1,
-    ...transports.map((transport) => transport.moveTicksPerRegion),
-    ...escorts.map((escort) => escort.moveTicksPerRegion));
+    ...transports.map(getMoveTicksPerRegion),
+    ...escorts.map(getMoveTicksPerRegion));
   const estimatedVoyageTicks = Math.max(0, candidate.route.length - 1) * Math.round(convoyMoveTicks);
   const estimatedLandingTicks = 1;
   const estimatedCompletionTicks = estimatedEmbarkationTicks +
@@ -1949,7 +1955,7 @@ function bridgeheadOpportunityWindow(): OpportunityWindowEstimate {
 
 function positioningTicks(unit: UnitState, segments: number | null): number {
   if (segments === null) return PREPARATION_TIMEOUT_TICKS + 1;
-  const perSegment = Math.max(1, Math.round(unit.moveTicksPerRegion));
+  const perSegment = getMoveTicksPerRegion(unit);
   const progressTicks = Math.floor(Math.max(0, unit.moveProgressMs) / FAST_TICK_MS);
   return Math.max(0, segments * perSegment - progressTicks);
 }
@@ -2162,7 +2168,7 @@ function deriveForceRequirement(
     landUnitCount += Math.ceil((requiredStrength - assembledStrength) / Math.max(0.5, averageStrength));
   }
   landUnitCount = Math.max(1, landUnitCount);
-  const transportCapacity = Math.max(1, WORLD_BALANCE.unit.navalTransportCapacity ?? 10);
+  const transportCapacity = getDesignTransportCapacity(getNationalDesign(world, nationId, "TransportShip"));
   const transportCount = Math.max(1, Math.ceil(landUnitCount / transportCapacity));
   const escortCount = Math.max(1, Math.ceil(transportCount /
     Math.max(1, WORLD_BALANCE.unit.amphibiousAssault.escortsPerTransports)));

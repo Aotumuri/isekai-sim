@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createUnitForType } from "../../src/sim/create-units";
 import { getDevelopedUnitWeaponCost, refitUnit } from "../../src/sim/equipment-development";
-import { designFromResearch, emptyResearchLevels, getResearchPortfolio } from "../../src/sim/research";
+import { designFromResearch, emptyResearchLevels, getResearchPortfolio, EQUIPMENT_FAMILIES } from "../../src/sim/research";
 import { updateProduction } from "../../src/sim/production";
 import { updateSupplyAssessment } from "../../src/sim/supply-assessment";
 import { getUnitCombatStrength } from "../../src/sim/unit-strength";
@@ -19,14 +19,14 @@ function preparedWorld() {
 
 test("new production fields researched designs and pays their actual weapons cost", () => {
   const { world, nation, portfolio } = preparedWorld();
-  portfolio.levels.firepower = 5; portfolio.levels.reliability = 5;
+  for (const family of EQUIPMENT_FAMILIES) { const program = getResearchPortfolio(world, nation.id, family); program.levels.firepower = family === "TransportShip" ? 0 : 5; program.levels.reliability = 5; }
   nation.nextUnitProductionTick = 0;
   const originalIds = new Set(world.units.map((unit) => unit.id));
   updateProduction(world);
   const built = world.units.filter((unit) => unit.nationId === nation.id && !originalIds.has(unit.id));
   assert(built.length > 0);
   for (const unit of built) {
-    assert.equal(unit.design?.generation, 10);
+    assert.equal(unit.design?.generation, unit.type === "TransportShip" ? 5 : 10);
     assert(getUnitCombatStrength(unit) > getUnitCombatStrength({ ...unit, design: undefined }));
     assert(getDevelopedUnitWeaponCost(unit.type, unit.design) > getDevelopedUnitWeaponCost(unit.type));
   }

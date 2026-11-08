@@ -1,3 +1,4 @@
+import { getDesignUtility } from "./unit-capabilities";
 import { areFactionPartners } from "./factions";
 import type { NationId } from "../worldgen/nation";
 import { getDiplomacyState, getRelation, hasTreaty } from "./diplomacy";
@@ -5,7 +6,7 @@ import { canRefitUnit, getDevelopedUnitWeaponCost } from "./equipment-developmen
 import { changeResource, findTradeRoute, getInternationalTradeState, isTradeRouteOpen, type TradeRoute } from "./international-trade";
 import { getNationCharacter } from "./nation-character";
 import { isNationActive } from "./nation-active";
-import { getNationalDesign, type WeaponDesign } from "./research";
+import { getNationalDesign, EQUIPMENT_FAMILIES, type EquipmentFamily, type WeaponDesign } from "./research";
 import { getWarDeclarationMode, recordSimulationEvent } from "./simulation-settings";
 import { buildWarAdjacency, isAtWar } from "./war-state";
 import type { WorldState } from "./world-state";
@@ -33,8 +34,8 @@ export function canSupportNation(world: WorldState, donorId: NationId, recipient
   return friendly && ![...(wars.get(recipientId) ?? [])].some((enemy) => hasTreaty(world, donorId, enemy, "alliance"));
 }
 
-export function sendArmsAid(world: WorldState, donorId: NationId, recipientId: NationId, weapons = 20): boolean {
-  if (!world.settings?.armsAidEnabled || !Number.isFinite(weapons) || weapons < 5 || weapons > 50 ||
+export function sendArmsAid(world: WorldState, donorId: NationId, recipientId: NationId, weapons = 20, family: EquipmentFamily = "Infantry"): boolean {
+  if (!EQUIPMENT_FAMILIES.includes(family) || !world.settings?.armsAidEnabled || !Number.isFinite(weapons) || weapons < 5 || weapons > 50 ||
     !canSupportNation(world, donorId, recipientId)) return false;
   const donor = world.nations.find((nation) => nation.id === donorId && isNationActive(nation));
   const recipient = world.nations.find((nation) => nation.id === recipientId && isNationActive(nation));
@@ -49,7 +50,7 @@ export function sendArmsAid(world: WorldState, donorId: NationId, recipientId: N
   changeResource(donor, "weapons", -weapons);
   if (fuel) { changeResource(donor, "fuel", -fuel); getInternationalTradeState(world).fuelSpent += fuel; }
   state.shipments.push({ id: `aid-${state.nextShipmentNumber++}`, donorId, recipientId, weapons,
-    design: getNationalDesign(world, donorId), route, arrivesAtSlowTick: world.time.slowTick + Math.max(3, Math.ceil(route.regionIds.length * 1.5)), status: "in-transit" });
+    design: getNationalDesign(world, donorId, family), route, arrivesAtSlowTick: world.time.slowTick + Math.max(3, Math.ceil(route.regionIds.length * 1.5)), status: "in-transit" });
   recordSimulationEvent(world, { category: "aid", nationIds: [donorId, recipientId],
     message: `${donorId} sent ${weapons} weapons to ${recipientId}.` });
   return true;
@@ -59,10 +60,10 @@ function fieldImportedEquipment(world: WorldState, shipment: ArmsAidShipment): v
   if (shipment.design.generation === 0) return;
   const nation = world.nations.find((item) => item.id === shipment.recipientId)!;
   let remaining = shipment.weapons;
-  for (const unit of world.units.filter((item) => item.nationId === nation.id).sort((a, b) => a.id.localeCompare(b.id))) {
+  for (const unit of world.units.filter((item) => item.nationId === nation.id && item.type === (shipment.design.family ?? "Infantry")).sort((a, b) => a.id.localeCompare(b.id))) {
     if (!canRefitUnit(world, unit)) continue;
-    const oldStrength = (unit.design?.firepower ?? 1) * (unit.design?.reliability ?? 1);
-    if (shipment.design.firepower * shipment.design.reliability <= oldStrength * 1.02) continue;
+    const oldStrength = getDesignUtility(unit.design);
+    if (getDesignUtility(shipment.design) <= oldStrength * 1.02) continue;
     const cost = Math.max(1, Math.ceil(getDevelopedUnitWeaponCost(unit.type, shipment.design) * 0.5));
     if (remaining < cost || nation.resources.weapons < cost) continue;
     changeResource(nation, "weapons", -cost); remaining -= cost;
@@ -108,15 +109,19 @@ export function updateArmsAid(world: WorldState): void {
   const wars = buildWarAdjacency(world.wars);
   for (const donor of world.nations.filter(isNationActive)) {
     if (donor.resources.weapons < 70 || getNationCharacter(world, donor.id).cooperation < 0.5) continue;
-    const design = getNationalDesign(world, donor.id);
-    const recipient = world.nations.filter(isNationActive).filter((nation) => {
+        const recipient = world.nations.filter(isNationActive).filter((nation) => {
       if (nation.id === donor.id || !canSupportNation(world, donor.id, nation.id)) return false;
       const wartimeShortage = nation.resources.weapons < 35 && (wars.get(nation.id)?.size ?? 0) > 0;
-      const alliedModernization = design.generation > 0 && hasTreaty(world, donor.id, nation.id, "alliance") &&
+      const alliedModernization = hasTreaty(world, donor.id, nation.id, "alliance") &&
         world.units.some((unit) => unit.nationId === nation.id && canRefitUnit(world, unit) &&
-          design.firepower * design.reliability > (unit.design?.firepower ?? 1) * (unit.design?.reliability ?? 1) * 1.02);
+          getDesignUtility(getNationalDesign(world, donor.id, unit.type)) > getDesignUtility(unit.design) * 1.02);
       return wartimeShortage || alliedModernization;
     }).sort((a, b) => a.resources.weapons - b.resources.weapons || a.id.localeCompare(b.id))[0];
-    if (recipient) sendArmsAid(world, donor.id, recipient.id, 20);
+    if (recipient) {
+      const unit = world.units.filter((item) => item.nationId === recipient.id && canRefitUnit(world, item))
+        .sort((a, b) => (getDesignUtility(getNationalDesign(world, donor.id, b.type)) - getDesignUtility(b.design)) -
+          (getDesignUtility(getNationalDesign(world, donor.id, a.type)) - getDesignUtility(a.design)))[0];
+      sendArmsAid(world, donor.id, recipient.id, 20, unit?.type ?? "Infantry");
+    }
   }
 }

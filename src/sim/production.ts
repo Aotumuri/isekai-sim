@@ -267,7 +267,8 @@ function updateProductionInternal(world: WorldState): void {
     const landCapacity = mobilization ? getArmyLimits(world, nation, mobilization).authorized : legacyLandCapacity;
     const recruitmentBatch = mobilization ? Math.max(1, Math.ceil(landCapacity * 0.035)) : Number.POSITIVE_INFINITY;
     let recruited = 0;
-    const design = getNationalDesign(world, nation.id);
+    const designs = { Infantry: getNationalDesign(world, nation.id, "Infantry"), Tank: getNationalDesign(world, nation.id, "Tank"),
+      CombatShip: getNationalDesign(world, nation.id, "CombatShip"), TransportShip: getNationalDesign(world, nation.id, "TransportShip") };
     const currentCounts = unitCountsByNation.get(nation.id) ?? { land: 0, naval: 0 };
     let currentLandCount = currentCounts.land;
     let currentNavalCount = currentCounts.naval;
@@ -360,13 +361,13 @@ function updateProductionInternal(world: WorldState): void {
           performance.now() - supplyStartedAt,
         );
       }
-      const unitType = pickAffordableUnitType(nation.resources, world.simRng, design);
+      const unitType = pickAffordableUnitType(nation.resources, world.simRng, designs);
       if (!unitType) {
         recordResourceBlock(world, nation.resources);
         return false;
       }
       const flow = flowByNation.get(nation.id);
-      if (!consumeResourcesForUnit(nation.resources, unitType, flow?.usage, design)) {
+      if (!consumeResourcesForUnit(nation.resources, unitType, flow?.usage, designs[unitType])) {
         recordResourceBlock(world, nation.resources);
         return false;
       }
@@ -390,13 +391,13 @@ function updateProductionInternal(world: WorldState): void {
       const diagnostics = world.productionDiagnostics;
       diagnostics.attemptedProductions += 1;
       world.instrumentation?.incrementCounter("production.attempted");
-      const unitType = pickNavalUnitType(nation.resources, forcedType, design);
+      const unitType = pickNavalUnitType(nation.resources, forcedType, designs[forcedType]);
       if (!unitType) {
         recordResourceBlock(world, nation.resources, "naval");
         return false;
       }
       const flow = flowByNation.get(nation.id);
-      if (!consumeResourcesForUnit(nation.resources, unitType, flow?.usage, design)) {
+      if (!consumeResourcesForUnit(nation.resources, unitType, flow?.usage, designs[unitType])) {
         recordResourceBlock(world, nation.resources, "naval");
         return false;
       }
@@ -420,7 +421,7 @@ function updateProductionInternal(world: WorldState): void {
           world.instrumentation?.incrementCounter("production.naval.fulfilled.reserve");
         }
       }
-      if (reason !== "transport") recordCombatShipFulfilled(world, reason, getDevelopedUnitWeaponCost(unitType, design));
+      if (reason !== "transport") recordCombatShipFulfilled(world, reason, getDevelopedUnitWeaponCost(unitType, designs[unitType]));
       return true;
     };
 
@@ -797,10 +798,10 @@ function applyFuelStatus(
 function pickAffordableUnitType(
   resources: NationResources,
   rng: WorldState["simRng"],
-  design?: WeaponDesign,
+  designs?: Partial<Record<UnitType, WeaponDesign>>,
 ): UnitType | null {
-  const canInfantry = canAffordUnit(resources, "Infantry", design);
-  const canTank = canAffordUnit(resources, "Tank", design);
+  const canInfantry = canAffordUnit(resources, "Infantry", designs?.Infantry);
+  const canTank = canAffordUnit(resources, "Tank", designs?.Tank);
   if (canInfantry && canTank) {
     const tankShare = clamp(WORLD_BALANCE.unit.tankShare, 0, 1);
     return rng.nextFloat() < tankShare ? "Tank" : "Infantry";

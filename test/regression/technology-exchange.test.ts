@@ -25,3 +25,16 @@ test("technology licenses accelerate domestic research, cost resources and canno
   world.settings!.researchEnabled = false; world.time.slowTick += 120;
   assert.equal(licenseTechnology(world, a.id, b.id, "reliability"), false);
 });
+
+test("technology licensing transfers only the specified equipment program", () => {
+  const world = createSocietyWorld(), [a, b] = world.nations;
+  b.resources.weapons = b.resources.steel = 100;
+  const relation = getRelation(world, a.id, b.id); relation.trust = relation.opinion = 80;
+  relation.treaties.push({ type: "alliance", expiresAtSlowTick: 1000 });
+  getDiplomacyState(world).influenceByNationId.set(a.id, 100);
+  getResearchPortfolio(world, a.id, "Tank").levels.armor = 5;
+  assert(licenseTechnology(world, a.id, b.id, "armor", "Tank"));
+  assert(getResearchPortfolio(world, b.id, "Tank").progress.armor > 0);
+  assert.equal(getResearchPortfolio(world, b.id).progress.armor, 0);
+  assert(!licenseTechnology(world, a.id, b.id, "armor", "Infantry"));
+});

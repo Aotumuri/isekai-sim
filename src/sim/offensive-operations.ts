@@ -1,3 +1,4 @@
+import { getMoveTicksPerRegion } from "./movement";
 import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
@@ -1960,7 +1961,7 @@ function estimateManifestAssignment(
   const requiredEdges = Math.max(0, controlledDistance - stagingRadius);
   const movingTowardApproach =
     unit.moveTargetId === approachRegionId || unit.moveToId === approachRegionId;
-  const moveTicksPerRegion = Math.max(1, Math.round(unit.moveTicksPerRegion));
+  const moveTicksPerRegion = getMoveTicksPerRegion(unit);
   const creditedProgressTicks = movingTowardApproach
     ? Math.min(moveTicksPerRegion, unit.moveProgressMs / FAST_TICK_MS)
     : 0;

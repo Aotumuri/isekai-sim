@@ -1,3 +1,4 @@
+import { getDesignUtility } from "./unit-capabilities";
 import { WORLD_BALANCE } from "../data/balance";
 import { isAmphibiousOwnedUnit } from "./amphibious";
 import { getNationalDesign, getResearchState, type WeaponDesign } from "./research";
@@ -12,13 +13,13 @@ export function getDevelopedUnitWeaponCost(type: UnitType, design?: WeaponDesign
   return Math.ceil(WORLD_BALANCE.unit.types[type].weaponCost * (design?.weaponCost ?? 1) - 1e-9);
 }
 export function equipNewUnit(world: WorldState, unit: UnitState): UnitState {
-  if (world.research?.byNationId.has(unit.nationId)) unit.design = getNationalDesign(world, unit.nationId);
+  if (world.research?.byNationId.has(unit.nationId)) unit.design = getNationalDesign(world, unit.nationId, unit.type);
   return unit;
 }
 export function canRefitUnit(world: WorldState, unit: UnitState): boolean {
   const region = getMesoById(world).get(unit.regionId);
   const owner = world.occupation.mesoById.get(unit.regionId) ?? getOwnerByMesoId(world).get(unit.regionId);
-  return unit.manpower > 0 && unit.org >= 0.55 && !unit.moveToId && owner === unit.nationId &&
+  return !unit.cargoUnits.length && unit.manpower > 0 && unit.org >= 0.55 && !unit.moveToId && owner === unit.nationId &&
     !!region?.building && isNationRegionSupplied(world, unit.nationId, unit.regionId) &&
     !isAmphibiousOwnedUnit(world, unit.id) && !world.battles.some((battle) => battle.mesoId === unit.regionId &&
       (battle.attackerNationId === unit.nationId || battle.defenderNationId === unit.nationId));
@@ -27,14 +28,14 @@ export function refitUnit(world: WorldState, unitId: UnitId): boolean {
   if (!world.settings?.researchEnabled) return false;
   const unit = world.units.find((item) => item.id === unitId);
   if (!unit || !canRefitUnit(world, unit)) return false;
-  const design = getNationalDesign(world, unit.nationId);
+  const design = getNationalDesign(world, unit.nationId, unit.type);
   if (design.generation <= (unit.design?.generation ?? 0)) return false;
   // An imported weapon is kept until the domestic design actually catches up.
-  if (unit.design && design.firepower * design.reliability < unit.design.firepower * unit.design.reliability * 0.95) return false;
+  if (unit.design && getDesignUtility(design) < getDesignUtility(unit.design) * 0.95) return false;
   const nation = world.nations.find((item) => item.id === unit.nationId && isNationActive(item));
   if (!nation) return false;
   const weapons = Math.max(1, Math.ceil(getDevelopedUnitWeaponCost(unit.type, design) * 0.25));
-  const steel = Math.max(1, (design.generation - (unit.design?.generation ?? 0)) * 0.5);
+  const steel = Math.max(1, (design.generation - (unit.design?.generation ?? 0)) * 0.5 * design.steelCost);
   if (nation.resources.weapons < weapons + 6 || nation.resources.steel < steel + 6) return false;
   nation.resources.weapons -= weapons; nation.resources.steel -= steel;
   nation.resourceFlow.usage.weapons += weapons; nation.resourceFlow.delta.weapons -= weapons;
@@ -42,10 +43,10 @@ export function refitUnit(world: WorldState, unitId: UnitId): boolean {
   unit.design = design; unit.org = Math.max(0.55, unit.org - 0.03);
   const research = getResearchState(world);
   research.retrofits += 1;
-  if (research.refitAnnouncedGenerationByNationId.get(unit.nationId) !== design.generation) {
-    research.refitAnnouncedGenerationByNationId.set(unit.nationId, design.generation);
+  if (research.refitAnnouncedGenerationByNationId.get(`${unit.nationId}|${unit.type}`) !== design.generation) {
+    research.refitAnnouncedGenerationByNationId.set(`${unit.nationId}|${unit.type}`, design.generation);
     recordSimulationEvent(world, { category: "research", nationIds: [unit.nationId],
-      message: `${unit.nationId} began fielding generation ${design.generation} equipment; supplied units refit gradually.` });
+      message: `${unit.nationId} began fielding generation ${design.generation} ${unit.type} equipment; supplied units refit gradually.` });
   }
   return true;
 }

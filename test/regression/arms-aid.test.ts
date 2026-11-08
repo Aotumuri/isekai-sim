@@ -63,3 +63,21 @@ test("allies proactively supply modernization equipment even during peace", () =
   assert.equal(getArmsAidState(world).shipments.length, 1);
   assert.equal(getArmsAidState(world).shipments[0]!.recipientId, recipient.id);
 });
+
+test("tank aid upgrades tanks without installing tank research on infantry", async () => {
+  const { createUnitForType } = await import("../../src/sim/create-units");
+  const { createUnitId } = await import("../../src/sim/unit");
+  const { world, donor, recipient } = aidWorld();
+  donor.resources.weapons = 200; recipient.resources.weapons = 100;
+  getResearchPortfolio(world, donor.id, "Tank").levels.armor = 5;
+  const tank = createUnitForType(createUnitId(world.unitIdCounter++), recipient.id, recipient.capitalMesoId, "Tank");
+  const infantry = createUnitForType(createUnitId(world.unitIdCounter++), recipient.id, recipient.capitalMesoId, "Infantry");
+  world.units = [tank, infantry];
+  assert(sendArmsAid(world, donor.id, recipient.id, 50, "Tank"));
+  const shipment = getArmsAidState(world).shipments[0]!;
+  world.time.slowTick = shipment.arrivesAtSlowTick; getArmsAidState(world).lastAISlowTick = world.time.slowTick;
+  updateArmsAid(world);
+  assert.equal(tank.design?.family, "Tank"); assert(tank.design!.armor! > 1);
+  assert.equal(infantry.design, undefined);
+  assert.equal(getResearchPortfolio(world, recipient.id, "Tank").levels.armor, 0);
+});

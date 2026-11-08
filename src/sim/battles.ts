@@ -1,3 +1,4 @@
+import { getUnitProtection } from "./unit-strength";
 import { getCoastalSupportModifier } from "./coastal-support";
 import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegionId } from "../worldgen/meso-region";
@@ -733,10 +734,10 @@ function applyDamage(
     const prevManpower = unit.manpower;
     const prevOrg = unit.org;
     if (manpowerDamage > 0) {
-      unit.manpower = Math.max(0, unit.manpower - manpowerDamage * weight);
+      unit.manpower = Math.max(0, unit.manpower - manpowerDamage * weight / getUnitProtection(unit));
     }
     if (orgDamage > 0) {
-      unit.org = Math.max(0, unit.org - orgDamage * weight / (unit.design?.reliability ?? 1));
+      unit.org = Math.max(0, unit.org - orgDamage * weight / ((unit.design?.reliability ?? 1) * getUnitProtection(unit)));
     }
     manpowerLoss += Math.max(0, prevManpower - unit.manpower);
     orgLoss += Math.max(0, prevOrg - unit.org);
