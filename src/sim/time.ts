@@ -10,6 +10,7 @@ export interface SimTime {
 }
 
 export interface SimClock {
+  paused?: boolean;
   accumulatorMs: number;
   slowAccumulatorMs: number;
   speedIndex: number;

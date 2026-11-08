@@ -28,3 +28,16 @@ test("national characters are deterministic and do not consume the simulation RN
   assert.equal(first.simRng.nextFloat(), second.simRng.nextFloat());
   assert(new Set(expected.map((character) => character.doctrine)).size > 1);
 });
+
+test("pausing stops time without banking a burst of catch-up ticks", async () => {
+  const { createSimClock } = await import("../../src/sim/time");
+  const { updateSimulation } = await import("../../src/sim/update");
+  const world = createSocietyWorld(), clock = createSimClock();
+  clock.paused = true;
+  updateSimulation(world, clock, 10_000);
+  assert.equal(world.time.fastTick, 0);
+  assert.equal(clock.accumulatorMs, 0);
+  clock.paused = false; clock.speedIndex = 2;
+  updateSimulation(world, clock, 100);
+  assert.equal(world.time.fastTick, 1);
+});

@@ -118,6 +118,9 @@ function formatUnitLines(units: UnitState[], world?: WorldState): string[] {
     lines.push(
       `Unit: ${unit.nationId} ${unit.type} (MP ${unit.manpower}, Org ${orgPercent}%)`,
     );
+    if (unit.design && unit.design.generation > 0) lines.push(
+      `Design: ${unit.design.manufacturerId} / Gen ${unit.design.generation} / Power x${unit.design.firepower.toFixed(2)} / Reliability x${unit.design.reliability.toFixed(2)}`,
+    );
     const navalStatus = world ? formatNavalUnitStatus(world, unit) : null;
     if (navalStatus) lines.push(navalStatus);
     const equipment = formatUnitEquipment(unit);

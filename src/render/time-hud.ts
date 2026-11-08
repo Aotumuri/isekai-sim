@@ -39,7 +39,7 @@ export function attachTimeHud(renderer: Renderer): TimeHud {
   const update = (time: SimTime, clock: SimClock): void => {
     const nextText = [
       `Time ${formatClock(time.elapsedMs)}`,
-      `Speed x${formatSpeed(getSpeedMultiplier(clock))}`,
+      clock.paused ? "Paused" : `Speed x${formatSpeed(getSpeedMultiplier(clock))}`,
       "Keys [ ] or 1-8",
       "Hold Space: Region / naval orders",
       "F: Toggle Debug",

@@ -1,3 +1,4 @@
+import { attachSocietyPanel } from "./society-panel";
 import { createWorldConfig } from "../data/world-config";
 import { drawCityCapitalIcons } from "../render/draw/city-capital-icons";
 import { drawMesoBorders } from "../render/draw/meso-borders";
@@ -56,6 +57,7 @@ export function createGame(root: HTMLElement): void {
   attachRegionHoverUI(renderer, world);
   const nationInfoBar = attachNationInfoBar(renderer, world);
   const clock = createSimClock();
+  const societyPanel = attachSocietyPanel(root, world, clock);
   attachTimeControls(clock);
   const timeHud = attachTimeHud(renderer);
   const frontDebugOverlay = attachFrontDebugOverlay(renderer, world);
@@ -103,6 +105,7 @@ export function createGame(root: HTMLElement): void {
       );
     }
     timeHud.update(world.time, clock);
+    societyPanel.update();
     nationInfoBar.update();
     frontDebugOverlay.update();
     drawUnits(

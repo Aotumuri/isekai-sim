@@ -40,9 +40,13 @@ export function refitUnit(world: WorldState, unitId: UnitId): boolean {
   nation.resourceFlow.usage.weapons += weapons; nation.resourceFlow.delta.weapons -= weapons;
   nation.resourceFlow.usage.steel += steel; nation.resourceFlow.delta.steel -= steel;
   unit.design = design; unit.org = Math.max(0.55, unit.org - 0.03);
-  getResearchState(world).retrofits += 1;
-  recordSimulationEvent(world, { category: "research", nationIds: [unit.nationId],
-    message: `${unit.nationId} refitted ${unit.type} ${unit.id} to generation ${design.generation}.` });
+  const research = getResearchState(world);
+  research.retrofits += 1;
+  if (research.refitAnnouncedGenerationByNationId.get(unit.nationId) !== design.generation) {
+    research.refitAnnouncedGenerationByNationId.set(unit.nationId, design.generation);
+    recordSimulationEvent(world, { category: "research", nationIds: [unit.nationId],
+      message: `${unit.nationId} began fielding generation ${design.generation} equipment; supplied units refit gradually.` });
+  }
   return true;
 }
 export function updateEquipmentRefits(world: WorldState): void {

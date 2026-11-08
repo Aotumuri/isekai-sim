@@ -10,6 +10,7 @@ const DIGIT_PREFIX = "Digit";
 
 export function attachTimeControls(clock: SimClock): void {
   window.addEventListener("keydown", (event) => {
+    if (event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.closest("input,select,textarea,button"))) return;
     if (event.code === "BracketRight") {
       if (increaseSpeed(clock)) {
         event.preventDefault();

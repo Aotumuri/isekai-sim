@@ -68,6 +68,7 @@ const MAX_FAST_TICKS_PER_FRAME = 8;
 const FAST_TICK_BUDGET_MS = 8;
 
 export function updateSimulation(world: WorldState, clock: SimClock, deltaMs: number): void {
+  if (clock.paused) return;
   const clampedDelta = Math.min(MAX_FRAME_MS, Math.max(0, deltaMs));
   const scaledMs = clampedDelta * getSpeedMultiplier(clock);
   if (scaledMs <= 0) {

@@ -27,6 +27,7 @@ export interface ResearchState {
   weaponsSpent: number;
   steelSpent: number;
   retrofits: number;
+  refitAnnouncedGenerationByNationId: Map<NationId, number>;
   licensesShared: number;
   lastLicenseSlowTick: number;
   licenseCooldowns: Map<string, number>;
@@ -47,7 +48,7 @@ export function emptyResearchLevels(): ResearchLevels {
 }
 export function getResearchState(world: WorldState): ResearchState {
   return world.research ??= { byNationId: new Map(), lastSlowTick: -1, lastRetrofitSlowTick: -10, weaponsSpent: 0,
-    steelSpent: 0, retrofits: 0, licensesShared: 0, lastLicenseSlowTick: -60, licenseCooldowns: new Map() };
+    steelSpent: 0, retrofits: 0, refitAnnouncedGenerationByNationId: new Map(), licensesShared: 0, lastLicenseSlowTick: -60, licenseCooldowns: new Map() };
 }
 export function getResearchPortfolio(world: WorldState, nationId: NationId): ResearchPortfolio {
   const state = getResearchState(world);
@@ -105,7 +106,9 @@ export function updateResearch(world: WorldState): void {
   if (state.lastSlowTick === world.time.slowTick) return;
   state.lastSlowTick = world.time.slowTick;
   const active = new Set(world.nations.filter(isNationActive).map((nation) => nation.id));
-  for (const id of state.byNationId.keys()) if (!active.has(id)) state.byNationId.delete(id);
+  for (const id of state.byNationId.keys()) if (!active.has(id)) {
+    state.byNationId.delete(id); state.refitAnnouncedGenerationByNationId.delete(id);
+  }
   const cities = getCityTargetsByNation(world);
   for (const nation of world.nations.filter(isNationActive)) {
     const portfolio = getResearchPortfolio(world, nation.id);
