@@ -135,6 +135,15 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     const design = getNationalDesign(world, a);
     view("design").innerHTML = [["威力", design.firepower], ["安定性", design.reliability], ["必要武器", design.weaponCost], ["製造鉄鋼", design.steelCost], ["燃料消費", design.fuelUse], ["組織回復", design.recovery]].map(([label, value]) => `<span>${label}<strong>×${Number(value).toFixed(2)}</strong></span>`).join("");
     view("events").innerHTML = [...(world.events ?? [])].slice(-40).reverse().map((event) => `<article class="society-event"><time>${Math.floor(event.tick / 600)}:${String(Math.floor(event.tick / 10) % 60).padStart(2, "0")}</time><span>${esc(event.message)}</span></article>`).join("") || '<p class="society-note">交渉・交易・研究の出来事がここに記録されます。</p>';
+    for (const button of panel.querySelectorAll<HTMLButtonElement>("button[data-action]")) {
+      const action = button.dataset.action;
+      if (["improve", "pact", "trade-pact", "alliance", "aid", "peace", "crisis", "negotiate", "concede", "reject", "break-alliance", "break-pact", "break-trade", "exchange", "license"].includes(action ?? "")) {
+        button.disabled = mode !== "diplomacy" || a === b || !active.some((item) => item.id === b) ||
+          (action === "aid" && !settings.armsAidEnabled) || (action === "exchange" && !settings.tradeEnabled) ||
+          (action === "license" && !settings.researchEnabled);
+      }
+      if (action === "refit") button.disabled = !settings.researchEnabled;
+    }
   };
 
   wrapper.addEventListener("change", (event) => {
