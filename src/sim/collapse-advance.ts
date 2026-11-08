@@ -1,6 +1,7 @@
 import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
+import { isAmphibiousOwnedUnit } from "./amphibious";
 import { getEnemyStrengthByRegion, getFrontDistanceField } from "./ai-geography";
 import { getCapitalDefenseAssessment } from "./capital-defense";
 import { getFrontlineCoverage } from "./frontline-coverage";
@@ -154,19 +155,34 @@ function assessOpportunity(world: WorldState, topology: CollapseOpportunity) {
   const candidates = [{ sector: selectedSector, target: selectTarget(world, nationId, enemyNationId, [selectedSector], undefined, new Set(), topology) }].filter((item): item is { sector: OperationalSector; target: NonNullable<ReturnType<typeof selectTarget>> } => !!item.target);
   const selected = candidates[0]; if (!selected) return null;
   const units = eligibleUnits(world, selected.sector, nationId);
-  if (units.length === 0) return null;
-  return { ...selected, units };
+  if (units.length > 0) return { ...selected, units };
+
+  // An empty sector can be held by the same detachment that advances into it.
+  if (topology.enemyStrength > 0 || topology.defenderStrength > 0) return null;
+  const enemy = getOpposingFrontSide(selectedSector, nationId);
+  const neighbors = getNeighborsById(world);
+  const hostileStrength = getEnemyStrengthByRegion(world, nationId);
+  const defenders = eligibleUnits(world, selectedSector, nationId, true);
+  for (const regionId of enemy?.borderRegionIds ?? []) {
+    if (controlledBy(world, regionId) !== enemyNationId ||
+      nearbyStrength(regionId, hostileStrength, neighbors, 1) > 0) continue;
+    const adjacent = neighbors.get(regionId) ?? [];
+    const unit = defenders.find((item) => adjacent.includes(item.regionId) &&
+      controlledBy(world, item.regionId) === nationId);
+    if (unit) return { sector: selectedSector, target: { regionId }, units: [unit] };
+  }
+  return null;
 }
 
-function eligibleUnits(world: WorldState, sector: OperationalSector, nationId: NationId): UnitState[] {
+function eligibleUnits(world: WorldState, sector: OperationalSector, nationId: NationId, includeDefenders = false): UnitState[] {
   const allocation = getFrontAllocation(world, sector.id, nationId); if (!allocation) return [];
-  const protectedIds = new Set(getFrontlineCoverage(world, sector.id, nationId)?.positions.flatMap((p) => p.defenderUnitIds) ?? []);
+  const protectedIds = new Set(includeDefenders ? [] : getFrontlineCoverage(world, sector.id, nationId)?.positions.flatMap((p) => p.defenderUnitIds) ?? []);
   for (const id of world.strategicReserves.reserveNationByUnitId.keys()) protectedIds.add(id);
   for (const id of world.reorganization.planIdByUnitId.keys()) protectedIds.add(id);
   for (const plan of world.retreatPlans.plans) for (const id of [...plan.rearguardUnitIds, ...plan.retreatingUnitIds]) protectedIds.add(id);
   for (const id of world.offensiveOperations.operationIdByUnitId.keys()) protectedIds.add(id);
   const byId = new Map(world.units.map((unit) => [unit.id, unit]));
-  return allocation.unitIds.map((id) => byId.get(id)).filter((unit): unit is UnitState => !!unit && unit.nationId === nationId && unit.domain === "land" && unit.org > 0 && finiteStrength(unit) > 0 && !protectedIds.has(unit.id)).sort((a, b) => finiteStrength(b) - finiteStrength(a) || compareIds(a.id, b.id));
+  return allocation.unitIds.map((id) => byId.get(id)).filter((unit): unit is UnitState => !!unit && unit.nationId === nationId && unit.domain === "land" && unit.org > 0 && finiteStrength(unit) > 0 && !protectedIds.has(unit.id) && !isAmphibiousOwnedUnit(world, unit.id)).sort((a, b) => finiteStrength(b) - finiteStrength(a) || compareIds(a.id, b.id));
 }
 
 function selectUnits(units: UnitState[]): UnitState[] { const s = WORLD_BALANCE.war.landFront.collapseAdvance; const count = Math.min(s.maximumUnits, units.length, Math.max(s.minimumUnits, Math.ceil(units.length * s.forceFraction))); return units.slice(0, count); }

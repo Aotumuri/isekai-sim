@@ -68,8 +68,8 @@ import {
   createNationResources,
   type NationRuntime,
 } from "../../src/sim/nation-runtime";
-import { createOccupationState } from "../../src/sim/occupation";
-import { createSimTime } from "../../src/sim/time";
+import { createOccupationState, updateOccupation } from "../../src/sim/occupation";
+import { createSimTime, FAST_TICK_MS } from "../../src/sim/time";
 import { createUnitId, type LandUnitType, type UnitType } from "../../src/sim/unit";
 import { getUnitCombatStrength } from "../../src/sim/unit-strength";
 import { declareWar } from "../../src/sim/war-state";
@@ -1955,6 +1955,24 @@ test("open reachable enemy territory starts a concentrated Collapse Advance", ()
   assert.equal(diagnostic.inactivityCategory, "healthy-waiting");
   assert.equal(diagnostic.inactivityReason, "collapse-opportunity");
   assert.equal(diagnostic.artificialInactivity, false);
+});
+
+test("the sole front defender advances into a completely empty pocket", () => {
+  const world = createIsolatedPocketWorld();
+  world.units = world.units.filter((unit) => unit.nationId === NATION_A).slice(0, 1);
+  updateAllocationSystem(world);
+  updateFrontlineCoverage(world);
+  updateCollapseAdvances(world);
+
+  const advance = world.collapseAdvances.advanceByNationId.get(NATION_A);
+  assert(advance);
+  assert.equal(advance.currentTargetRegionId, id("pocket-city"));
+  for (let tick = 0; tick < 100; tick += 1) {
+    world.time.fastTick += 1;
+    repositionUnits(world, FAST_TICK_MS);
+    updateOccupation(world);
+  }
+  assert.equal(world.occupation.mesoById.get(id("pocket-city")), NATION_A);
 });
 
 test("a valid normal Operation suppresses Collapse Advance and prevents duplicate units", () => {
