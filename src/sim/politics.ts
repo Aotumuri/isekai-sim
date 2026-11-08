@@ -16,6 +16,8 @@ export interface NationalPolitics {
   nextMandateAt: number;
   consecutiveMandates: number;
   nextSupportReviewAt: number;
+  nextForeignCampaignAt?: number;
+  nextIncomingCampaignAt?: number;
 }
 
 const ELECTION_INTERVAL = 420;

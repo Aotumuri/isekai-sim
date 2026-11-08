@@ -93,7 +93,9 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
   (control("import") as HTMLSelectElement).value = "weapons";
   const feedback = wrapper.querySelector<HTMLElement>(".society-feedback")!;
   const exileControls = attachExileControls(wrapper.querySelector<HTMLElement>("[data-exile-ui]")!, world, () => nationSelect.value as NationId, (id) => { selectMapNation(world, id); nationSelect.value = id; update(true); });
-  const politics = attachPoliticsControls(wrapper.querySelector<HTMLElement>("[data-politics-ui]")!, world);
+  const politics = attachPoliticsControls(wrapper.querySelector<HTMLElement>("[data-politics-ui]")!, world,
+    () => nationSelect.value as NationId, () => partnerSelect.value as NationId,
+    (message) => { feedback.textContent = message; update(true); });
   const peaceControls = attachPeaceControls(wrapper.querySelector<HTMLElement>("[data-peace-ui]")!, world, () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   const factions = attachFactionControls(wrapper.querySelector<HTMLElement>("[data-faction-ui]")!, world, () => nationSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   const territories = attachTerritoryControls(wrapper.querySelector<HTMLElement>("[data-territory-ui]")!, world, () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });

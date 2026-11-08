@@ -1,3 +1,4 @@
+import { updateForeignPoliticalInfluence } from "./political-influence";
 import { updateNationalPolitics } from "./politics";
 import { updateExileGovernments } from "./exile-government";
 import { updateVolunteers } from "./volunteers";
@@ -180,6 +181,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   world.time.slowTick += 1;
   updateExileGovernments(world);
   updateTerritorialClaims(world);
+  updateForeignPoliticalInfluence(world);
   updateNationalPolitics(world);
   updateDiplomaticRelations(world);
   updateMilitaryAccess(world);

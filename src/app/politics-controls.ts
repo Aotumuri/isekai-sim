@@ -1,5 +1,7 @@
+import { getPoliticalCampaignIssue, launchPoliticalCampaign, POLITICAL_CAMPAIGN_COST } from "../sim/political-influence";
+import type { NationId } from "../worldgen/nation";
 import { getNationCharacter } from "../sim/nation-character";
-import { getIdeologies } from "../sim/nation-identity";
+import { getIdeologies, getNationName } from "../sim/nation-identity";
 import type { NationRuntime } from "../sim/nation-runtime";
 import { getNationalPolitics } from "../sim/politics";
 import { getWarDeclarationMode } from "../sim/simulation-settings";
@@ -8,7 +10,21 @@ import type { WorldState } from "../sim/world-state";
 const esc = (value: string) => value.replace(/[&<>"']/g, (char) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
 
-export function attachPoliticsControls(root: HTMLElement, world: WorldState) {
+export function attachPoliticsControls(
+  root: HTMLElement,
+  world: WorldState,
+  selected: () => NationId,
+  partner: () => NationId,
+  feedback: (message: string) => void,
+) {
+  root.addEventListener("click", (event) => {
+    if (!(event.target as HTMLElement).closest("[data-political-campaign]")) return;
+    event.stopPropagation();
+    const a = selected(), b = partner();
+    const success = launchPoliticalCampaign(world, a, b);
+    feedback(success ? "Political campaign launched. Support changes now; seats and government change at the next mandate."
+      : getPoliticalCampaignIssue(world, a, b) ?? "The campaign could not be launched.");
+  });
   return {
     update(nation: NationRuntime): void {
       const politics = getNationalPolitics(world, nation);
@@ -18,6 +34,10 @@ export function attachPoliticsControls(root: HTMLElement, world: WorldState) {
       const democracy = politics.system === "democracy";
       const active = getWarDeclarationMode(world) === "diplomacy" && nation.macroRegionIds.length > 0;
       const next = Math.max(0, politics.nextMandateAt - world.time.slowTick);
+      const target = partner();
+      const issue = getPoliticalCampaignIssue(world, nation.id, target);
+      const partnerNation = world.nations.find((item) => item.id === target && item.macroRegionIds.length > 0);
+      const partnerPolitics = partnerNation ? getNationalPolitics(world, partnerNation) : undefined;
       const parties = [...politics.support].sort((a, b) => (politics.seats.get(b[0]) ?? 0) - (politics.seats.get(a[0]) ?? 0) || b[1] - a[1]);
       root.innerHTML = `<h2>${democracy ? "Parliamentary democracy" : "Monarchy"}</h2>
         <p><strong>Governing ideology:</strong> ${name(politics.governingIdeologyId)}</p>
@@ -25,7 +45,12 @@ export function attachPoliticsControls(root: HTMLElement, world: WorldState) {
         · Doctrine: ${character.doctrine} · Aggression ${Math.round(character.aggression * 100)}% · Cooperation ${Math.round(character.cooperation * 100)}%</p>
         <p class="society-note">${democracy ? "Elections convert public support into 100 seats. A majority coalition governs." : "Court support shapes succession. A challenger needs an eight-point lead to change royal policy."}</p>
         <table><thead><tr><th>Ideology</th><th>${democracy ? "Public support" : "Court support"}</th>${democracy ? "<th>Seats</th>" : ""}<th>Role</th></tr></thead>
-        <tbody>${parties.map(([id, share]) => `<tr><td>${name(id)}</td><td>${share}%</td>${democracy ? `<td>${politics.seats.get(id) ?? 0}</td>` : ""}<td>${id === politics.governingIdeologyId ? "Leads government" : politics.coalition.includes(id) ? "Coalition" : "Opposition"}</td></tr>`).join("")}</tbody></table>`;
+        <tbody>${parties.map(([id, share]) => `<tr><td>${name(id)}</td><td>${share}%</td>${democracy ? `<td>${politics.seats.get(id) ?? 0}</td>` : ""}<td>${id === politics.governingIdeologyId ? "Leads government" : politics.coalition.includes(id) ? "Coalition" : "Opposition"}</td></tr>`).join("")}</tbody></table>
+        <h2>Foreign political outreach</h2>
+        <p class="society-note">Promote your governing ideology in ${esc(getNationName(world, target))}. Supporting a rival movement raises diplomatic tension.</p>
+        ${partnerPolitics ? `<p class="society-note">Partner government: ${name(partnerPolitics.governingIdeologyId)} · Local support for ${name(politics.governingIdeologyId)}: ${partnerPolitics.support.get(politics.governingIdeologyId) ?? 0}%.</p>` : ""}
+        <button type="button" data-political-campaign ${issue ? "disabled" : ""}>Promote ${name(politics.governingIdeologyId)} · ${POLITICAL_CAMPAIGN_COST} influence</button>
+        ${issue ? `<p class="society-note">${esc(issue)}</p>` : ""}`;
     },
   };
 }
