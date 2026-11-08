@@ -14,7 +14,22 @@
     "benchmark": "node --import tsx test/benchmark/run-benchmark.ts",
     "benchmark:quick": "node --import tsx test/benchmark/run-benchmark.ts --quick",
     "benchmark:compare": "node --import tsx test/benchmark/compare-results.ts",
-    "diagnostic:two-island": "node --import tsx test/diagnostics/two-island-campaign.ts"
+    "diagnostic:two-island": "node --import tsx test/diagnostics/two-island-campaign.ts",
+    "diagnose:fleet-ready": "node --import tsx test/diagnostics/fleet-ready-capability-demand.ts",
+    "diagnose:strategic-window-ab": "node --import tsx test/diagnostics/strategic-window-ab.ts",
+    "diagnose:strategic-window-accepts": "node --import tsx test/diagnostics/strategic-window-accepts.ts",
+    "diagnose:war-attribution": "node --import tsx test/diagnostics/strategic-window-war-attribution.ts",
+    "diagnose:strategic-window": "node --import tsx test/diagnostics/strategic-window-components.ts",
+    "diagnose:surrender-resistance": "node --import tsx test/diagnostics/surrender-resistance.ts",
+    "diagnose:war-window": "node --import tsx test/diagnostics/war-window.ts",
+    "diagnose:war-window-model": "node --import tsx test/diagnostics/war-window-model.ts",
+    "diagnose:war-window-stability": "node --import tsx test/diagnostics/war-window-stability.ts",
+    "diagnose:amphibious-feasibility": "node --import tsx test/diagnostics/amphibious-feasibility.ts",
+    "diagnose:amphibious-hybrid": "node --import tsx test/diagnostics/amphibious-hybrid.ts",
+    "diagnose:amphibious-capital-aborts": "node --import tsx test/diagnostics/amphibious-capital-aborts.ts",
+    "diagnose:amphibious-hybrid-v2": "node --import tsx test/diagnostics/amphibious-hybrid-v2.ts",
+    "diagnose:amphibious-hybrid-aborts": "node --import tsx test/diagnostics/amphibious-hybrid-aborts.ts",
+    "diagnose:amphibious-capital-launch-state": "node --import tsx test/diagnostics/amphibious-capital-launch-state.ts"
   },
   "dependencies": {
     "d3-delaunay": "^6.0.4",

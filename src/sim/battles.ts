@@ -1,3 +1,4 @@
+import { getCoastalSupportModifier } from "./coastal-support";
 import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
@@ -199,7 +200,8 @@ function updateLandBattles(
           defenders,
           removedUnitIds,
           now,
-          directions.modifier,
+          directions.modifier * getCoastalSupportModifier(world, attackerNation, mesoId),
+          getCoastalSupportModifier(world, defenderNation, mesoId),
         );
         if (outcome) {
           battle.attackerManpowerLoss += outcome.attackerManpowerLoss;
@@ -537,6 +539,7 @@ export function resolveBattle(
   removedUnitIds: Set<UnitId>,
   now: number,
   defenderOrganizationPressure = 1,
+  attackerOrganizationPressure = 1,
 ): {
   attackerManpowerLoss: number;
   defenderManpowerLoss: number;
@@ -558,7 +561,8 @@ export function resolveBattle(
 
   const damageToA = strengthB > 0 ? DAMAGE_PER_TICK * (strengthB / DAMAGE_SCALE) : 0;
   const damageToB = strengthA > 0 ? DAMAGE_PER_TICK * (strengthA / DAMAGE_SCALE) : 0;
-  const orgDamageToA = strengthB > 0 ? ORG_DAMAGE_PER_TICK * (strengthB / ORG_DAMAGE_SCALE) : 0;
+  const orgDamageToA = strengthB > 0
+    ? ORG_DAMAGE_PER_TICK * (strengthB / ORG_DAMAGE_SCALE) * attackerOrganizationPressure : 0;
   const orgDamageToB = strengthA > 0
     ? ORG_DAMAGE_PER_TICK * (strengthA / ORG_DAMAGE_SCALE) * defenderOrganizationPressure
     : 0;

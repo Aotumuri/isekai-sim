@@ -1137,9 +1137,9 @@ function drawMaritimeSupplyLinks(layer: Container, world: WorldState): void {
 }
 
 function drawNavalMissions(layer: Container, world: WorldState): void {
-  const markers = { ESCORT: "E", RAID: "R", INTERCEPT: "I", BLOCKADE: "B", RESERVE: "N" } as const;
+  const markers = { ESCORT: "E", RAID: "R", INTERCEPT: "I", BLOCKADE: "B", SUPPORT: "S", RESERVE: "N" } as const;
   const colors = { ESCORT: 0x40c4ff, RAID: 0xff3d81, INTERCEPT: 0xffd740,
-    BLOCKADE: 0xff7043, RESERVE: 0x82b1ff } as const;
+    BLOCKADE: 0xff7043, SUPPORT: 0xffd54f, RESERVE: 0x82b1ff } as const;
   for (const mission of world.supplyAssessment.navalStrategy.missions) {
     for (const shipId of mission.shipIds) {
       const ship = world.units.find((unit) => unit.id === shipId);
@@ -1296,7 +1296,8 @@ export function formatNavalMission(world: WorldState, shipId: string): string {
   const target = mission.targetConvoyId ? `convoy ${mission.targetConvoyId}`
     : mission.targetLinkId ? `link ${mission.targetLinkId}`
       : mission.targetPortId ? `port ${mission.targetPortId}`
-        : mission.targetShipId ? `ship ${mission.targetShipId}` : "none";
+        : mission.targetCoastId ? `coast ${mission.targetCoastId}`
+          : mission.targetShipId ? `ship ${mission.targetShipId}` : "none";
   return ["NAVAL MISSION", `ship ${shipId}`, `mission ${mission.type}`, `mission id ${mission.id}`,
     `priority ${mission.priority.toFixed(1)}`, `target ${target}`,
     `reason ${mission.reasonFlags.join(", ") || "none"}`,
@@ -1314,7 +1315,7 @@ export function formatNavalStrategySummary(world: WorldState, nationId: string):
     `Reasons ${force?.reasons.join(", ") || "none"}`,
     `Production ${force && force.deficit > 0 && force.hasUsablePort ? "CombatShip requested" : "none"}`,
     `Escort ${count("ESCORT")}`, `Raid ${count("RAID")}`, `Intercept ${count("INTERCEPT")}`,
-    `Blockade ${count("BLOCKADE")}`, `Reserve ${count("RESERVE")}`].join("\n");
+    `Blockade ${count("BLOCKADE")}`, `Shore support ${count("SUPPORT")}`, `Reserve ${count("RESERVE")}`].join("\n");
 }
 
 function drawStrategicThreatSummary(layer: Container, world: WorldState): void {

@@ -305,6 +305,7 @@ export type SimulationCounterName =
   | "navalStrategy.ships.escort"
   | "navalStrategy.ships.raid"
   | "navalStrategy.ships.intercept"
+  | "navalStrategy.ships.support"
   | "navalStrategy.ships.blockade"
   | "navalStrategy.ships.reserve"
   | "navalStrategy.ships.unassigned"

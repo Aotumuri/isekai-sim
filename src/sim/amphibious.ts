@@ -20,7 +20,7 @@ import { isNationActive } from "./nation-active";
 const PREPARATION_TIMEOUT_TICKS = 2400;
 
 export type AmphibiousPhase = "preparing" | "embarking" | "escort-wait" | "transporting" | "landed" | "cancelled";
-export type AmphibiousCancellationReason = "transport-lost" | "escort-lost" | "convoy-lost" | "assets-not-assembled" | "departure-port-lost" | "target-invalid" | "route-invalid" | "war-ended" | "force-lost" | "preparation-timeout";
+export type AmphibiousCancellationReason = "transport-lost" | "escort-lost" | "convoy-lost" | "assets-not-assembled" | "departure-port-lost" | "target-invalid" | "route-invalid" | "war-ended" | "force-lost" | "preparation-timeout" | "strategic-capital-critical";
 export type AmphibiousValidationPhase = "planning" | "assembly" | "ready" | "voyage" | "landing";
 export type AmphibiousValidationOwner = "strategic-planning" | "fleet-assembly" | "operation-readiness" | "convoy" | "landing";
 export type AmphibiousLaunchRejectionReason = "insufficient-strategic-window" | "positioning-unreachable";
@@ -83,6 +83,90 @@ export interface AmphibiousCapabilityDemand {
   kind: "landing" | "bridgehead-reinforcement";
   bridgeheadCampaignId: string | null;
   waveNumber: number | null;
+}
+
+/** Optional diagnostic-only observer. It does not participate in simulation decisions. */
+export interface AmphibiousOperationConnectionDiagnostic {
+  demandId: string;
+  tick: number;
+  stage: "candidate" | "operation-creation";
+  candidateAvailable?: boolean;
+  gates: Record<string, boolean | number | null>;
+  failedGates: string[];
+  launchFeasibility?: AmphibiousLaunchFeasibilityDiagnostic;
+}
+
+/** Exact inputs and intermediate values used by a launch-feasibility decision. */
+export interface AmphibiousLaunchFeasibilityDiagnostic {
+  estimatedAssemblyTicks: number;
+  estimatedTransportDelayTicks: number;
+  estimatedEscortDelayTicks: number;
+  estimatedEmbarkationTicks: number;
+  estimatedVoyageTicks: number;
+  estimatedLandingTicks: number;
+  estimatedLaunchTicks: number;
+  estimatedCompletionTicks: number;
+  routeSegmentCount: number;
+  convoyMoveTicks: number;
+  opportunityWindowTicks: number;
+  safetyMarginTicks: number;
+  safetyMarginThresholdTicks: 0;
+  rejectionCondition: "safety-margin-negative" | "accepted";
+  reason: AmphibiousLaunchRejectionReason | null;
+  reasonFlags: string[];
+  opportunityWindow: {
+    source: "strategic" | "bridgehead-priority";
+    surrenderThreshold: number | null;
+    enemySurrenderScore: number | null;
+    resistance: number | null;
+    resistanceWindowTicks: number | null;
+    warAgeTicks: number | null;
+    ageWindowTicks: number | null;
+    afterAgeCapTicks: number | null;
+    strategicProgressScore: number | null;
+    strategicProgressMultiplier: number | null;
+    afterStrategicProgressTicks: number | null;
+    activeLandOffensiveCount: number | null;
+    activeLandOffensiveMultiplier: number | null;
+    afterActiveLandOffensiveTicks: number | null;
+    enemyCapitalThreat: string | null;
+    afterEnemyCapitalCapTicks: number | null;
+    ownCapitalThreat: string | null;
+    afterOwnCapitalCapTicks: number | null;
+    finalWindowTicks: number;
+  };
+}
+
+export interface AmphibiousDiagnosticObserver {
+  onOperationConnection?(event: AmphibiousOperationConnectionDiagnostic): void;
+  onOperationLifecycle?(event: { tick: number; operationId: string; demandId: string | null; campaignId: string | null; phase: string; decision: "continue" | "abort" | "launch" | "landed" | "cancelled"; reason: string | null; destinationPortId: string; destinationOwnerId: string | null; remainingRouteSegments: number; ownCapitalThreat: string | null; enemyCapitalThreat: string | null; warActive: boolean }): void;
+}
+
+export type AmphibiousStrategicWindowDiagnosticPolicy = "baseline-360" | "relaxed-540" | "soft-0.75";
+
+let amphibiousDiagnosticObserver: AmphibiousDiagnosticObserver | null = null;
+let amphibiousStrategicWindowDiagnosticPolicy: AmphibiousStrategicWindowDiagnosticPolicy | null = null;
+let amphibiousHybridDiagnosticPolicy = false;
+let amphibiousHybridV2DiagnosticPolicy = false;
+
+/** Installs a temporary observer for diagnostics. Passing null removes it. */
+export function setAmphibiousDiagnosticObserver(observer: AmphibiousDiagnosticObserver | null): void {
+  amphibiousDiagnosticObserver = observer;
+}
+
+/** Diagnostic-only override. Normal gameplay always uses the null/default policy. */
+export function setAmphibiousStrategicWindowDiagnosticPolicy(
+  policy: AmphibiousStrategicWindowDiagnosticPolicy | null,
+): void {
+  amphibiousStrategicWindowDiagnosticPolicy = policy;
+}
+/** Diagnostic-only experimental lifecycle switch. Normal gameplay keeps this false. */
+export function setAmphibiousHybridDiagnosticPolicy(enabled: boolean): void { amphibiousHybridDiagnosticPolicy = enabled; }
+/** Diagnostic-only v2: hold before launch while the canonical capital state is critical. */
+export function setAmphibiousHybridV2DiagnosticPolicy(enabled: boolean): void { amphibiousHybridV2DiagnosticPolicy = enabled; }
+
+function reportOperationConnection(event: AmphibiousOperationConnectionDiagnostic): void {
+  amphibiousDiagnosticObserver?.onOperationConnection?.(event);
 }
 
 /** A durable, per-nation minimum fleet provisioned for an active maritime war. */
@@ -423,6 +507,21 @@ export function updateAmphibiousPlanning(world: WorldState): void {
     const candidate = opportunityValid
       ? chooseCandidate(world, demand.nationId, demand.enemyNationId, ownPorts, enemyPorts)
       : null;
+    if (demand.readyAtTick !== null) reportOperationConnection({
+      demandId: demand.id, tick: world.time.fastTick, stage: "candidate", candidateAvailable: candidate !== null,
+      gates: {
+        warActive: isAtWar(demand.nationId, demand.enemyNationId, warAdjacency), controlledDeparturePortCount: ownPorts.length,
+        validDestinationPortCount: enemyPorts.length, strategicOpportunity: isStrategicOpportunity(world, demand.nationId, demand.enemyNationId),
+        candidateAvailable: candidate !== null,
+      },
+      failedGates: [
+        ...(!isAtWar(demand.nationId, demand.enemyNationId, warAdjacency) ? ["war-ended"] : []),
+        ...(ownPorts.length === 0 ? ["no-controlled-departure-port"] : []),
+        ...(enemyPorts.length === 0 ? ["no-valid-destination-port"] : []),
+        ...(!isStrategicOpportunity(world, demand.nationId, demand.enemyNationId) ? ["strategic-opportunity-lost"] : []),
+        ...(opportunityValid && candidate === null ? ["no-valid-candidate"] : []),
+      ],
+    });
     if (!candidate) {
       expireCapabilityDemand(world, demand);
       continue;
@@ -519,6 +618,10 @@ export function updateAmphibiousOperations(world: WorldState): void {
     const transports = operation.transportIds.map((id) => unitById.get(id))
       .filter((unit): unit is UnitState => !!unit);
     if (operation.phase === "escort-wait") {
+      if (amphibiousHybridV2DiagnosticPolicy && getCapitalDefenseAssessment(world, operation.nationId)?.threatLevel === "critical") {
+        reportLifecycle(world, operation, "continue", "held-capital-critical");
+        continue;
+      }
       if (operation.escortIds.length < operation.requiredEscortCount) {
         world.amphibiousOperations.escortWaitingTicks += 1;
         continue;
@@ -540,6 +643,7 @@ export function updateAmphibiousOperations(world: WorldState): void {
       operation.phase = "transporting";
       operation.phaseStartedAtTick = world.time.fastTick;
       operation.launchedAtTick = world.time.fastTick;
+      reportLifecycle(world, operation, "launch", null);
       world.amphibiousOperations.launchedOperations += 1;
       world.amphibiousOperations.readyToLaunchLatencySamples += 1;
       world.amphibiousOperations.totalReadyToLaunchLatencyTicks +=
@@ -547,6 +651,14 @@ export function updateAmphibiousOperations(world: WorldState): void {
       continue;
     }
     if (operation.phase === "transporting") {
+      const ownThreat = getCapitalDefenseAssessment(world, operation.nationId)?.threatLevel;
+      const enemyThreat = getCapitalDefenseAssessment(world, operation.enemyNationId)?.threatLevel;
+      if (amphibiousHybridDiagnosticPolicy && ownThreat === "critical") {
+        reportLifecycle(world, operation, "abort", "strategic-capital-critical");
+        cancelOperation(world, operation, "strategic-capital-critical", "voyage", unitById);
+        continue;
+      }
+      if (amphibiousHybridDiagnosticPolicy) reportLifecycle(world, operation, "continue", null);
       world.amphibiousOperations.convoyTravelTicks += 1;
       if (!transports.every((transport) => transport.regionId === operation.destinationPortId)) continue;
       for (const transport of transports) {
@@ -558,11 +670,18 @@ export function updateAmphibiousOperations(world: WorldState): void {
         transport.cargoUnits = [];
       }
       completeOperation(world, operation);
+      reportLifecycle(world, operation, "landed", null);
     }
   }
   evaluateBeachheads(world);
   rebuildOwnership(world);
   if (world.instrumentation) world.amphibiousOperations.movementCpuMs += performance.now() - startedAt;
+}
+
+function reportLifecycle(world: WorldState, operation: AmphibiousOperation, decision: "continue" | "abort" | "launch" | "landed" | "cancelled", reason: string | null): void {
+  const demand = world.amphibiousOperations.capabilityDemands.find((item) => item.operationId === operation.id);
+  const routeIndex = operation.routeRegionIds.indexOf(operation.transportIds.map((id) => world.units.find((unit) => unit.id === id)?.regionId).find(Boolean) ?? operation.departurePortId);
+  amphibiousDiagnosticObserver?.onOperationLifecycle?.({ tick: world.time.fastTick, operationId: operation.id, demandId: demand?.id ?? null, campaignId: operation.bridgeheadCampaignId, phase: operation.phase, decision, reason, destinationPortId: operation.destinationPortId, destinationOwnerId: getOwnerByMesoId(world).get(operation.destinationPortId) ?? null, remainingRouteSegments: Math.max(0, operation.routeRegionIds.length - 1 - Math.max(0, routeIndex)), ownCapitalThreat: getCapitalDefenseAssessment(world, operation.nationId)?.threatLevel ?? null, enemyCapitalThreat: getCapitalDefenseAssessment(world, operation.enemyNationId)?.threatLevel ?? null, warActive: isAtWar(operation.nationId, operation.enemyNationId, buildWarAdjacency(world.wars)) });
 }
 
 export function isAmphibiousOwnedUnit(world: WorldState, unitId: UnitId): boolean {
@@ -1127,9 +1246,6 @@ function createOperation(world: WorldState, demand: AmphibiousCapabilityDemand, 
   const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
   const transports = demand.assignedTransportIds.map((id) => unitById.get(id))
     .filter((unit): unit is UnitState => !!unit);
-  if (transports.length === 0 || transports.some((transport) =>
-    !isOperationalTransport(transport, candidate.nationId) || !Number.isFinite(transport.moveTicksPerRegion) ||
-    transport.regionId !== candidate.departure)) return null;
   const units = demand.assignedLandingUnitIds.map((id) => unitById.get(id)).filter((unit): unit is UnitState => !!unit);
   const strength = units.reduce((sum, unit) => sum + getUnitCombatStrength(unit), 0);
   const emergencyReady = estimateOpportunityWindow(world, candidate.nationId, candidate.enemyId).ticks <=
@@ -1138,19 +1254,71 @@ function createOperation(world: WorldState, demand: AmphibiousCapabilityDemand, 
       WORLD_BALANCE.unit.amphibiousAssault.emergencyMinimumAssaultRatio;
   const reinforcementReady = demand.kind === "bridgehead-reinforcement" &&
     strength / Math.max(0.5, demand.requiredLandingStrength) >= 0.35;
-  if (units.length === 0 || strength < demand.requiredLandingStrength && !emergencyReady && !reinforcementReady) return null;
   const escorts = demand.assignedEscortIds.map((id) => unitById.get(id))
     .filter((unit): unit is UnitState => !!unit);
-  if (escorts.length < Math.min(demand.desiredEscortCount, transports.length) || escorts.some((escort) =>
-    !isOperationalCombatShip(escort, candidate.nationId) || !Number.isFinite(escort.moveTicksPerRegion) ||
-    escort.regionId !== candidate.departure)) return null;
-  if (units.some((unit) => unit.regionId !== candidate.departure)) return null;
-  const feasibility = assessLaunchFeasibility(world, candidate, transports, escorts);
-  recordFeasibilitySample(world, feasibility);
-  if (!feasibility.accepted) {
+  const transportsPresent = transports.length > 0;
+  const transportsOperational = transports.every((transport) => isOperationalTransport(transport, candidate.nationId) &&
+    Number.isFinite(transport.moveTicksPerRegion));
+  const transportsAtDeparture = transports.every((transport) => transport.regionId === candidate.departure);
+  const landingForceSufficient = units.length > 0 &&
+    (strength >= demand.requiredLandingStrength || emergencyReady || reinforcementReady);
+  const escortsSufficient = escorts.length >= Math.min(demand.desiredEscortCount, transports.length);
+  const escortsOperational = escorts.every((escort) => isOperationalCombatShip(escort, candidate.nationId) &&
+    Number.isFinite(escort.moveTicksPerRegion));
+  const escortsAtDeparture = escorts.every((escort) => escort.regionId === candidate.departure);
+  const landForceAtDeparture = units.every((unit) => unit.regionId === candidate.departure);
+  const prerequisitesSatisfied = transportsPresent && transportsOperational && transportsAtDeparture && landingForceSufficient &&
+    escortsSufficient && escortsOperational && escortsAtDeparture && landForceAtDeparture;
+  const feasibilityAssessment = prerequisitesSatisfied ? assessLaunchFeasibility(world, candidate, transports, escorts) : null;
+  const feasibility = feasibilityAssessment?.feasibility ?? null;
+  const activeOperationConflictCount = world.amphibiousOperations.operations.filter((operation) =>
+    operation.nationId === demand.nationId && operation.id !== demand.operationId &&
+    operation.phase !== "landed" && operation.phase !== "cancelled").length;
+  reportOperationConnection({
+    demandId: demand.id, tick: world.time.fastTick, stage: "operation-creation",
+    gates: {
+      transportsPresent, transportsOperational, transportsAtDeparture,
+      landingForceSufficient, landForceAtDeparture, escortsSufficient, escortsOperational, escortsAtDeparture,
+      assignedTransportCount: transports.length, requiredTransportCount: demand.desiredTransportCount,
+      assignedEscortCount: escorts.length, requiredEscortCount: demand.desiredEscortCount,
+      assignedLandingUnitCount: units.length, requiredLandingUnitCount: demand.desiredLandingUnitCount,
+      assignedLandingStrength: strength, requiredLandingStrength: demand.requiredLandingStrength,
+      routeStoredValid: isStoredRouteValid(world, candidate.route, candidate.departure, candidate.destination),
+      departurePortControlled: isEffectivelyControlledPort(world, candidate.nationId, candidate.departure),
+      destinationPortValid: candidate.kind === "bridgehead-reinforcement"
+        ? world.amphibiousOperations.bridgeheadCampaigns.some((campaign) => campaign.id === demand.bridgeheadCampaignId &&
+          campaign.status === "active") && (isEffectivelyControlledPort(world, candidate.nationId, candidate.destination) ||
+          isValidTargetPort(world, candidate.nationId, candidate.enemyId, candidate.destination))
+        : isValidTargetPort(world, candidate.nationId, candidate.enemyId, candidate.destination),
+      completeFleetLease: hasCompleteFleetLease(demand), activeOperationConflictCount,
+      feasibilityAccepted: feasibility?.accepted ?? null,
+    },
+    failedGates: [
+      ...(!transportsPresent ? ["no-assigned-transports"] : []),
+      ...(!transportsOperational ? ["transport-not-operational"] : []),
+      ...(!transportsAtDeparture ? ["transport-not-at-departure"] : []),
+      ...(!landingForceSufficient ? ["landing-force-insufficient"] : []),
+      ...(!escortsSufficient ? ["escort-count-insufficient"] : []),
+      ...(!escortsOperational ? ["escort-not-operational"] : []),
+      ...(!escortsAtDeparture ? ["escort-not-at-departure"] : []),
+      ...(!landForceAtDeparture ? ["land-force-not-at-departure"] : []),
+      ...(!isStoredRouteValid(world, candidate.route, candidate.departure, candidate.destination) ? ["route-invalid"] : []),
+      ...(!isEffectivelyControlledPort(world, candidate.nationId, candidate.departure) ? ["departure-port-not-controlled"] : []),
+      ...(!hasCompleteFleetLease(demand) ? ["fleet-lease-incomplete"] : []),
+      ...(feasibility !== null && !feasibility.accepted ? [`launch-feasibility:${feasibility.reason}`] : []),
+    ],
+    launchFeasibility: feasibilityAssessment?.diagnostic,
+  });
+  if (!transportsPresent || !transportsOperational || !transportsAtDeparture) return null;
+  if (!landingForceSufficient) return null;
+  if (!escortsSufficient || !escortsOperational || !escortsAtDeparture) return null;
+  if (!landForceAtDeparture) return null;
+  const acceptedFeasibility = feasibility!;
+  recordFeasibilitySample(world, acceptedFeasibility);
+  if (!acceptedFeasibility.accepted) {
     world.amphibiousOperations.operationsRejected += 1;
     world.amphibiousOperations.launchRejections.push({
-      ...feasibility, nationId: candidate.nationId, enemyNationId: candidate.enemyId,
+      ...acceptedFeasibility, nationId: candidate.nationId, enemyNationId: candidate.enemyId,
       departurePortId: candidate.departure, destinationPortId: candidate.destination,
       falsePositiveEvaluated: false,
     });
@@ -1175,7 +1343,7 @@ function createOperation(world: WorldState, demand: AmphibiousCapabilityDemand, 
     immediateDefenderStrength: candidate.immediateDefenderStrength,
     reactionStrength: candidate.reactionStrength, selectedReason: candidate.selectedReason,
     targetTypes: candidate.targetTypes,
-    launchFeasibility: feasibility, launchedAtTick: null,
+    launchFeasibility: acceptedFeasibility, launchedAtTick: null,
     beachheadOutcome: "pending", beachheadEvaluatedAtTick: null,
     kind: demand.kind, bridgeheadCampaignId: demand.bridgeheadCampaignId,
     waveNumber: demand.waveNumber };
@@ -1278,6 +1446,7 @@ function cancelOperation(world: WorldState, op: AmphibiousOperation, reason: Amp
   for (const id of [...op.assignedUnitIds, ...op.transportIds, ...op.escortIds]) { const unit = units.get(id); if (unit) resetMovement(unit); }
   for (const convoyId of op.convoyIds) removeAmphibiousConvoy(world, convoyId);
   op.phase = "cancelled"; op.cancellationReason = reason; op.completedAtTick = world.time.fastTick;
+  reportLifecycle(world, op, "cancelled", reason);
   op.preparationLeaseEndedAtTick ??= world.time.fastTick;
   world.amphibiousOperations.cancelledPlans += 1; world.amphibiousOperations.failedLandings += 1;
   if (phase === "ready") world.amphibiousOperations.readyFailures += 1;
@@ -1687,7 +1856,7 @@ function assessLaunchFeasibility(
   candidate: LandingCandidate,
   transports: readonly UnitState[],
   escorts: readonly UnitState[],
-): AmphibiousLaunchFeasibility {
+): { feasibility: AmphibiousLaunchFeasibility; diagnostic: AmphibiousLaunchFeasibilityDiagnostic } {
   const estimatedAssemblyTicks = 0;
   const estimatedTransportDelayTicks = 0;
   const estimatedEscortDelayTicks = 0;
@@ -1700,18 +1869,52 @@ function assessLaunchFeasibility(
   const estimatedCompletionTicks = estimatedEmbarkationTicks +
     estimatedVoyageTicks + estimatedLandingTicks;
   const opportunity = candidate.kind === "bridgehead-reinforcement"
-    ? { ticks: PREPARATION_TIMEOUT_TICKS, reasons: ["bridgehead-priority"] }
+    ? bridgeheadOpportunityWindow()
     : estimateOpportunityWindow(world, candidate.nationId, candidate.enemyId);
-  const safetyMarginTicks = opportunity.ticks - estimatedCompletionTicks;
+  const estimatedLaunchTicks = estimatedAssemblyTicks + estimatedTransportDelayTicks + estimatedEscortDelayTicks + estimatedEmbarkationTicks;
+  const requiredFeasibilityTicks = amphibiousHybridDiagnosticPolicy ? estimatedLaunchTicks : estimatedCompletionTicks;
+  const safetyMarginTicks = opportunity.ticks - requiredFeasibilityTicks;
   const reason: AmphibiousLaunchRejectionReason | null = safetyMarginTicks < 0
     ? "insufficient-strategic-window" : null;
-  return {
+  const feasibility = {
     evaluatedAtTick: world.time.fastTick,
     estimatedAssemblyTicks, estimatedTransportDelayTicks, estimatedEscortDelayTicks,
     estimatedEmbarkationTicks, estimatedVoyageTicks, estimatedLandingTicks,
     estimatedCompletionTicks, estimatedCompletionTick: world.time.fastTick + estimatedCompletionTicks,
     estimatedOpportunityWindowTicks: opportunity.ticks, safetyMarginTicks,
     accepted: reason === null, reason, reasonFlags: opportunity.reasons,
+  };
+  return {
+    feasibility,
+    diagnostic: {
+      estimatedAssemblyTicks, estimatedTransportDelayTicks, estimatedEscortDelayTicks,
+      estimatedEmbarkationTicks, estimatedVoyageTicks, estimatedLandingTicks,
+      estimatedLaunchTicks,
+      estimatedCompletionTicks, routeSegmentCount: Math.max(0, candidate.route.length - 1), convoyMoveTicks,
+      opportunityWindowTicks: opportunity.ticks, safetyMarginTicks, safetyMarginThresholdTicks: 0,
+      rejectionCondition: safetyMarginTicks < 0 ? "safety-margin-negative" : "accepted",
+      reason, reasonFlags: opportunity.reasons, opportunityWindow: opportunity.diagnostic,
+    },
+  };
+}
+
+interface OpportunityWindowEstimate {
+  ticks: number;
+  reasons: string[];
+  diagnostic: AmphibiousLaunchFeasibilityDiagnostic["opportunityWindow"];
+}
+
+function bridgeheadOpportunityWindow(): OpportunityWindowEstimate {
+  return {
+    ticks: PREPARATION_TIMEOUT_TICKS, reasons: ["bridgehead-priority"],
+    diagnostic: {
+      source: "bridgehead-priority", surrenderThreshold: null, enemySurrenderScore: null, resistance: null,
+      resistanceWindowTicks: null, warAgeTicks: null, ageWindowTicks: null, afterAgeCapTicks: null,
+      strategicProgressScore: null, strategicProgressMultiplier: null, afterStrategicProgressTicks: null,
+      activeLandOffensiveCount: null, activeLandOffensiveMultiplier: null, afterActiveLandOffensiveTicks: null,
+      enemyCapitalThreat: null, afterEnemyCapitalCapTicks: null, ownCapitalThreat: null,
+      afterOwnCapitalCapTicks: null, finalWindowTicks: PREPARATION_TIMEOUT_TICKS,
+    },
   };
 }
 
@@ -1726,37 +1929,65 @@ function estimateOpportunityWindow(
   world: WorldState,
   nationId: NationId,
   enemyId: NationId,
-): { ticks: number; reasons: string[] } {
+): OpportunityWindowEstimate {
   const reasons: string[] = [];
   const war = findWar(world.wars, nationId, enemyId);
   const warAge = war ? Math.max(0, world.time.fastTick - war.startedAtFastTick) : 0;
   const enemy = world.nations.find((nation) => nation.id === enemyId);
   const threshold = Math.max(0.001, WORLD_BALANCE.war.surrender.threshold);
   const resistance = clamp(1 - (enemy?.surrenderScore ?? 0) / threshold, 0, 1);
-  let window = Math.round(120 + resistance * 1080);
+  const resistanceWindowTicks = Math.round(120 + resistance * 1080);
+  let window = resistanceWindowTicks;
   reasons.push(`enemy-resistance:${resistance.toFixed(2)}`);
   const ageWindow = Math.max(240, Math.round(1200 - Math.max(0, warAge - 800) * 0.25));
   if (ageWindow < window) reasons.push("mature-war");
   window = Math.min(window, ageWindow);
+  const afterAgeCapTicks = window;
 
   const progress = getStrategicProgressAssessment(world, nationId, enemyId);
+  let strategicProgressMultiplier: number | null = null;
   if (progress && progress.score > 0) {
-    window = Math.round(window * (1 - Math.min(0.35, progress.score / 100 * 0.35)));
+    strategicProgressMultiplier = 1 - Math.min(0.35, progress.score / 100 * 0.35);
+    window = Math.round(window * strategicProgressMultiplier);
     reasons.push("existing-strategic-progress");
   }
+  const afterStrategicProgressTicks = window;
   const activeOffensives = world.offensiveOperations.operations.filter((operation) =>
     operation.nationId === nationId && operation.enemyNationId === enemyId && operation.outcome === null).length;
-  if (activeOffensives > 0) {
-    window = Math.round(window * Math.max(0.65, 1 - activeOffensives * 0.1));
+  const activeLandOffensiveMultiplier = activeOffensives > 0 ? Math.max(0.65, 1 - activeOffensives * 0.1) : null;
+  if (activeLandOffensiveMultiplier !== null) {
+    window = Math.round(window * activeLandOffensiveMultiplier);
     reasons.push("active-land-offensive");
   }
+  const afterActiveLandOffensiveTicks = window;
   const enemyCapital = getCapitalDefenseAssessment(world, enemyId)?.threatLevel;
   if (enemyCapital === "critical") { window = Math.min(window, 180); reasons.push("enemy-capital-critical"); }
-  else if (enemyCapital === "threatened") { window = Math.min(window, 360); reasons.push("enemy-capital-threatened"); }
+  else if (enemyCapital === "threatened") {
+    if (amphibiousStrategicWindowDiagnosticPolicy === "relaxed-540") {
+      window = Math.min(window, 540); reasons.push("enemy-capital-threatened:relaxed-540");
+    } else if (amphibiousStrategicWindowDiagnosticPolicy === "soft-0.75") {
+      window = Math.round(window * 0.75); reasons.push("enemy-capital-threatened:soft-0.75");
+    } else {
+      window = Math.min(window, 360); reasons.push("enemy-capital-threatened");
+    }
+  }
+  const afterEnemyCapitalCapTicks = window;
   const ownCapital = getCapitalDefenseAssessment(world, nationId)?.threatLevel;
   if (ownCapital === "critical") { window = Math.min(window, 120); reasons.push("own-capital-critical"); }
   else if (ownCapital === "threatened") { window = Math.min(window, 300); reasons.push("own-capital-threatened"); }
-  return { ticks: Math.max(0, window), reasons };
+  const afterOwnCapitalCapTicks = window;
+  const finalWindowTicks = Math.max(0, window);
+  return {
+    ticks: finalWindowTicks, reasons,
+    diagnostic: {
+      source: "strategic", surrenderThreshold: threshold, enemySurrenderScore: enemy?.surrenderScore ?? null,
+      resistance, resistanceWindowTicks, warAgeTicks: warAge, ageWindowTicks: ageWindow, afterAgeCapTicks,
+      strategicProgressScore: progress?.score ?? null, strategicProgressMultiplier, afterStrategicProgressTicks,
+      activeLandOffensiveCount: activeOffensives, activeLandOffensiveMultiplier, afterActiveLandOffensiveTicks,
+      enemyCapitalThreat: enemyCapital ?? null, afterEnemyCapitalCapTicks,
+      ownCapitalThreat: ownCapital ?? null, afterOwnCapitalCapTicks, finalWindowTicks,
+    },
+  };
 }
 
 function recordFeasibilitySample(world: WorldState, feasibility: AmphibiousLaunchFeasibility): void {

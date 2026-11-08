@@ -1,0 +1,2480 @@
+{
+  "experiment": {
+    "sourceReport": "diagnostics/war-window-report.json",
+    "sourceSeeds": {
+      "first": 822748319788,
+      "count": 30
+    },
+    "split": {
+      "training": {
+        "firstSeed": 822748319788,
+        "seedCount": 20,
+        "seedRange": "822748319788-822748319807"
+      },
+      "evaluation": {
+        "firstSeed": 822748319808,
+        "seedCount": 10,
+        "rule": "all later deterministic seeds"
+      }
+    },
+    "resolvedOnlyLimitation": "Right-censored observations are excluded from exact lifetime/error and feasibility metrics; they are not treated as failures."
+  },
+  "dataQuality": {
+    "sourceObservationCount": 33644,
+    "resolvedObservationCount": 23257,
+    "trainResolvedObservationCount": 15668,
+    "evaluationResolvedObservationCount": 7589,
+    "trainUniqueWarInstances": 159,
+    "evaluationUniqueWarInstances": 71
+  },
+  "minSideResistanceCalibration": {
+    "train": [
+      {
+        "bucket": "[0.0, 0.1)",
+        "observationCount": 1000,
+        "uniqueWarInstanceCount": 47,
+        "actualRemainingWarTicks": {
+          "mean": 339.363,
+          "median": 176,
+          "p10": 22,
+          "p25": 66,
+          "p75": 564,
+          "p90": 940.4000000000001
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 1000,
+          "meanPredictionError": -161.987,
+          "medianPredictionError": 25.5,
+          "meanAbsoluteError": 261.461,
+          "overpredictionRate": 0.531,
+          "overprediction100Rate": 0.252,
+          "overprediction250Rate": 0,
+          "overprediction500Rate": 0,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 375
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 277
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 177
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 78
+            }
+          }
+        }
+      },
+      {
+        "bucket": "[0.1, 0.2)",
+        "observationCount": 461,
+        "uniqueWarInstanceCount": 61,
+        "actualRemainingWarTicks": {
+          "mean": 299.7830802603037,
+          "median": 118,
+          "p10": 20,
+          "p25": 48,
+          "p75": 276,
+          "p90": 1264
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 461,
+          "meanPredictionError": -11.783080260303688,
+          "medianPredictionError": 179,
+          "meanAbsoluteError": 303.175704989154,
+          "overpredictionRate": 0.7440347071583514,
+          "overprediction100Rate": 0.665943600867679,
+          "overprediction250Rate": 0.1822125813449024,
+          "overprediction500Rate": 0,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 202,
+              "trueSafeRateAmongAllowed": 0.21782178217821782,
+              "falseSafeRateAmongAllowed": 0.7821782178217822,
+              "falseNegativeRate": 0.6,
+              "coverageOfGenuinelySafeOpportunities": 0.4,
+              "genuinelySafeCount": 110
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 84
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 64
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 63
+            }
+          }
+        }
+      },
+      {
+        "bucket": "[0.2, 0.3)",
+        "observationCount": 477,
+        "uniqueWarInstanceCount": 72,
+        "actualRemainingWarTicks": {
+          "mean": 169.83647798742138,
+          "median": 122,
+          "p10": 16,
+          "p25": 56,
+          "p75": 252,
+          "p90": 343.60000000000014
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 477,
+          "meanPredictionError": 223.22851153039832,
+          "medianPredictionError": 281,
+          "meanAbsoluteError": 252.14675052410902,
+          "overpredictionRate": 0.960167714884696,
+          "overprediction100Rate": 0.8301886792452831,
+          "overprediction250Rate": 0.5807127882599581,
+          "overprediction500Rate": 0,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 477,
+              "trueSafeRateAmongAllowed": 0.15513626834381553,
+              "falseSafeRateAmongAllowed": 0.8448637316561844,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 74
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 10
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 6
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 6
+            }
+          }
+        }
+      },
+      {
+        "bucket": "[0.3, 0.4)",
+        "observationCount": 687,
+        "uniqueWarInstanceCount": 70,
+        "actualRemainingWarTicks": {
+          "mean": 321.8486171761281,
+          "median": 242,
+          "p10": 52,
+          "p25": 141,
+          "p75": 407,
+          "p90": 701.9999999999998
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 687,
+          "meanPredictionError": 186.60407569141194,
+          "medianPredictionError": 268,
+          "meanAbsoluteError": 297.83842794759823,
+          "overpredictionRate": 0.8617176128093159,
+          "overprediction100Rate": 0.7627365356622998,
+          "overprediction250Rate": 0.5458515283842795,
+          "overprediction500Rate": 0.01601164483260553,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 687,
+              "trueSafeRateAmongAllowed": 0.3799126637554585,
+              "falseSafeRateAmongAllowed": 0.6200873362445415,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 261
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 465,
+              "trueSafeRateAmongAllowed": 0.21505376344086022,
+              "falseSafeRateAmongAllowed": 0.7849462365591398,
+              "falseNegativeRate": 0.07407407407407407,
+              "coverageOfGenuinelySafeOpportunities": 0.9259259259259259,
+              "genuinelySafeCount": 108
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 59
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 27
+            }
+          }
+        }
+      },
+      {
+        "bucket": "[0.4, 0.5)",
+        "observationCount": 1200,
+        "uniqueWarInstanceCount": 73,
+        "actualRemainingWarTicks": {
+          "mean": 507.00083333333333,
+          "median": 380,
+          "p10": 72,
+          "p25": 212,
+          "p75": 662,
+          "p90": 1202.2000000000003
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 1200,
+          "meanPredictionError": 97.6675,
+          "medianPredictionError": 248,
+          "meanAbsoluteError": 360.91583333333335,
+          "overpredictionRate": 0.7075,
+          "overprediction100Rate": 0.6008333333333333,
+          "overprediction250Rate": 0.495,
+          "overprediction500Rate": 0.15083333333333335,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 1200,
+              "trueSafeRateAmongAllowed": 0.6241666666666666,
+              "falseSafeRateAmongAllowed": 0.37583333333333335,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 749
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 1200,
+              "trueSafeRateAmongAllowed": 0.38333333333333336,
+              "falseSafeRateAmongAllowed": 0.6166666666666667,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 460
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 266
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 173
+            }
+          }
+        }
+      },
+      {
+        "bucket": "[0.5, 0.6)",
+        "observationCount": 1239,
+        "uniqueWarInstanceCount": 83,
+        "actualRemainingWarTicks": {
+          "mean": 484.4406779661017,
+          "median": 432,
+          "p10": 88,
+          "p25": 190,
+          "p75": 672,
+          "p90": 998
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 1239,
+          "meanPredictionError": 231.5092816787732,
+          "medianPredictionError": 278,
+          "meanAbsoluteError": 359.0411622276029,
+          "overpredictionRate": 0.7723970944309927,
+          "overprediction100Rate": 0.7255851493139629,
+          "overprediction250Rate": 0.5439870863599677,
+          "overprediction500Rate": 0.26069410815173527,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 1239,
+              "trueSafeRateAmongAllowed": 0.6658595641646489,
+              "falseSafeRateAmongAllowed": 0.3341404358353511,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 825
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 1239,
+              "trueSafeRateAmongAllowed": 0.40839386602098465,
+              "falseSafeRateAmongAllowed": 0.5916061339790153,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 506
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 235,
+              "trueSafeRateAmongAllowed": 0.19574468085106383,
+              "falseSafeRateAmongAllowed": 0.8042553191489362,
+              "falseNegativeRate": 0.8174603174603174,
+              "coverageOfGenuinelySafeOpportunities": 0.18253968253968253,
+              "genuinelySafeCount": 252
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 123
+            }
+          }
+        }
+      },
+      {
+        "bucket": "[0.6, 0.7)",
+        "observationCount": 1478,
+        "uniqueWarInstanceCount": 85,
+        "actualRemainingWarTicks": {
+          "mean": 577.2550744248986,
+          "median": 486,
+          "p10": 152.70000000000002,
+          "p25": 266,
+          "p75": 828,
+          "p90": 1160
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 1478,
+          "meanPredictionError": 248.58660351826794,
+          "medianPredictionError": 340,
+          "meanAbsoluteError": 407.03315290933693,
+          "overpredictionRate": 0.7489851150202977,
+          "overprediction100Rate": 0.6826792963464141,
+          "overprediction250Rate": 0.5784844384303113,
+          "overprediction500Rate": 0.31732070365358594,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 1478,
+              "trueSafeRateAmongAllowed": 0.70297699594046,
+              "falseSafeRateAmongAllowed": 0.2970230040595399,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 1039
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 1478,
+              "trueSafeRateAmongAllowed": 0.4824086603518268,
+              "falseSafeRateAmongAllowed": 0.5175913396481732,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 713
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 1478,
+              "trueSafeRateAmongAllowed": 0.2943166441136671,
+              "falseSafeRateAmongAllowed": 0.7056833558863329,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 435
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 241
+            }
+          }
+        }
+      },
+      {
+        "bucket": "[0.7, 0.8)",
+        "observationCount": 1485,
+        "uniqueWarInstanceCount": 95,
+        "actualRemainingWarTicks": {
+          "mean": 774.4053872053872,
+          "median": 632,
+          "p10": 106,
+          "p25": 342,
+          "p75": 1096,
+          "p90": 1695.2000000000003
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 1485,
+          "meanPredictionError": 160.03838383838385,
+          "medianPredictionError": 301,
+          "meanAbsoluteError": 509.83232323232323,
+          "overpredictionRate": 0.6942760942760943,
+          "overprediction100Rate": 0.6370370370370371,
+          "overprediction250Rate": 0.5542087542087543,
+          "overprediction500Rate": 0.32592592592592595,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 1485,
+              "trueSafeRateAmongAllowed": 0.7885521885521886,
+              "falseSafeRateAmongAllowed": 0.21144781144781144,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 1171
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 1485,
+              "trueSafeRateAmongAllowed": 0.6148148148148148,
+              "falseSafeRateAmongAllowed": 0.3851851851851852,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 913
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 1485,
+              "trueSafeRateAmongAllowed": 0.4175084175084175,
+              "falseSafeRateAmongAllowed": 0.5824915824915825,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 620
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 426
+            }
+          }
+        }
+      },
+      {
+        "bucket": "[0.8, 0.9)",
+        "observationCount": 2759,
+        "uniqueWarInstanceCount": 121,
+        "actualRemainingWarTicks": {
+          "mean": 988.590068865531,
+          "median": 932,
+          "p10": 268,
+          "p25": 576,
+          "p75": 1325,
+          "p90": 1744.4000000000005
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 2759,
+          "meanPredictionError": 51.97680318956144,
+          "medianPredictionError": 103,
+          "meanAbsoluteError": 457.6578470460312,
+          "overpredictionRate": 0.5762957593330917,
+          "overprediction100Rate": 0.5027183762232693,
+          "overprediction250Rate": 0.3997825299021385,
+          "overprediction500Rate": 0.2301558535701341,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 2759,
+              "trueSafeRateAmongAllowed": 0.8887277999275099,
+              "falseSafeRateAmongAllowed": 0.11127220007249003,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 2452
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 2759,
+              "trueSafeRateAmongAllowed": 0.7948532076839434,
+              "falseSafeRateAmongAllowed": 0.20514679231605654,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 2193
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 2759,
+              "trueSafeRateAmongAllowed": 0.6299383834722726,
+              "falseSafeRateAmongAllowed": 0.37006161652772745,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 1738
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 2412,
+              "trueSafeRateAmongAllowed": 0.44859038142620233,
+              "falseSafeRateAmongAllowed": 0.5514096185737977,
+              "falseNegativeRate": 0.12671509281678772,
+              "coverageOfGenuinelySafeOpportunities": 0.8732849071832123,
+              "genuinelySafeCount": 1239
+            }
+          }
+        }
+      },
+      {
+        "bucket": "[0.9, 1.0]",
+        "observationCount": 4882,
+        "uniqueWarInstanceCount": 130,
+        "actualRemainingWarTicks": {
+          "mean": 1296.8260958623514,
+          "median": 1262,
+          "p10": 306,
+          "p25": 693,
+          "p75": 1888,
+          "p90": 2295.600000000002
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 4882,
+          "meanPredictionError": -127.65649324047521,
+          "medianPredictionError": -84.5,
+          "meanAbsoluteError": 625.1685784514543,
+          "overpredictionRate": 0.46497337156902907,
+          "overprediction100Rate": 0.420319541171651,
+          "overprediction250Rate": 0.3510856206472757,
+          "overprediction500Rate": 0.23269151986890618,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 4882,
+              "trueSafeRateAmongAllowed": 0.9039328144203196,
+              "falseSafeRateAmongAllowed": 0.09606718557968046,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 4413
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 4882,
+              "trueSafeRateAmongAllowed": 0.8273248668578451,
+              "falseSafeRateAmongAllowed": 0.17267513314215485,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 4039
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 4882,
+              "trueSafeRateAmongAllowed": 0.7216304793117575,
+              "falseSafeRateAmongAllowed": 0.2783695206882425,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 3523
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 4882,
+              "trueSafeRateAmongAllowed": 0.6065137238836542,
+              "falseSafeRateAmongAllowed": 0.39348627611634573,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 2961
+            }
+          }
+        }
+      }
+    ],
+    "evaluation": [
+      {
+        "bucket": "[0.0, 0.1)",
+        "observationCount": 356,
+        "uniqueWarInstanceCount": 39,
+        "actualRemainingWarTicks": {
+          "mean": 113.24719101123596,
+          "median": 71,
+          "p10": 9.5,
+          "p25": 26,
+          "p75": 148.75,
+          "p90": 294.5
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 356,
+          "meanPredictionError": 51.31460674157304,
+          "medianPredictionError": 91.5,
+          "meanAbsoluteError": 106.59550561797752,
+          "overpredictionRate": 0.7752808988764045,
+          "overprediction100Rate": 0.3792134831460674,
+          "overprediction250Rate": 0,
+          "overprediction500Rate": 0,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 34
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 8
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": null,
+              "coverageOfGenuinelySafeOpportunities": null,
+              "genuinelySafeCount": 0
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": null,
+              "coverageOfGenuinelySafeOpportunities": null,
+              "genuinelySafeCount": 0
+            }
+          }
+        }
+      },
+      {
+        "bucket": "[0.1, 0.2)",
+        "observationCount": 258,
+        "uniqueWarInstanceCount": 32,
+        "actualRemainingWarTicks": {
+          "mean": 215.37596899224806,
+          "median": 117,
+          "p10": 21,
+          "p25": 47.25,
+          "p75": 348,
+          "p90": 594.0000000000001
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 258,
+          "meanPredictionError": 62.333333333333336,
+          "medianPredictionError": 178.5,
+          "meanAbsoluteError": 191.72868217054264,
+          "overpredictionRate": 0.6666666666666666,
+          "overprediction100Rate": 0.5891472868217055,
+          "overprediction250Rate": 0.07751937984496124,
+          "overprediction500Rate": 0,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 60,
+              "trueSafeRateAmongAllowed": 0.4,
+              "falseSafeRateAmongAllowed": 0.6,
+              "falseNegativeRate": 0.6923076923076923,
+              "coverageOfGenuinelySafeOpportunities": 0.3076923076923077,
+              "genuinelySafeCount": 78
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 28
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 11
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": null,
+              "coverageOfGenuinelySafeOpportunities": null,
+              "genuinelySafeCount": 0
+            }
+          }
+        }
+      },
+      {
+        "bucket": "[0.2, 0.3)",
+        "observationCount": 245,
+        "uniqueWarInstanceCount": 19,
+        "actualRemainingWarTicks": {
+          "mean": 405.8530612244898,
+          "median": 398,
+          "p10": 56,
+          "p25": 191,
+          "p75": 518,
+          "p90": 917
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 245,
+          "meanPredictionError": -10.844897959183674,
+          "medianPredictionError": 3,
+          "meanAbsoluteError": 199.88979591836735,
+          "overpredictionRate": 0.5061224489795918,
+          "overprediction100Rate": 0.3551020408163265,
+          "overprediction250Rate": 0.1836734693877551,
+          "overprediction500Rate": 0,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 245,
+              "trueSafeRateAmongAllowed": 0.6204081632653061,
+              "falseSafeRateAmongAllowed": 0.3795918367346939,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 152
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 70
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 31
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 17
+            }
+          }
+        }
+      },
+      {
+        "bucket": "[0.3, 0.4)",
+        "observationCount": 226,
+        "uniqueWarInstanceCount": 24,
+        "actualRemainingWarTicks": {
+          "mean": 574.3849557522124,
+          "median": 599.5,
+          "p10": 74,
+          "p25": 157,
+          "p75": 740.25,
+          "p90": 1286
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 226,
+          "meanPredictionError": -81.91592920353982,
+          "medianPredictionError": -132.5,
+          "meanAbsoluteError": 343.70353982300884,
+          "overpredictionRate": 0.38495575221238937,
+          "overprediction100Rate": 0.37610619469026546,
+          "overprediction250Rate": 0.3053097345132743,
+          "overprediction500Rate": 0,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 226,
+              "trueSafeRateAmongAllowed": 0.6814159292035398,
+              "falseSafeRateAmongAllowed": 0.3185840707964602,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 154
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 98,
+              "trueSafeRateAmongAllowed": 0.4387755102040816,
+              "falseSafeRateAmongAllowed": 0.5612244897959183,
+              "falseNegativeRate": 0.6861313868613139,
+              "coverageOfGenuinelySafeOpportunities": 0.31386861313868614,
+              "genuinelySafeCount": 137
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 53
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 35
+            }
+          }
+        }
+      },
+      {
+        "bucket": "[0.4, 0.5)",
+        "observationCount": 461,
+        "uniqueWarInstanceCount": 34,
+        "actualRemainingWarTicks": {
+          "mean": 783.1518438177874,
+          "median": 769,
+          "p10": 106,
+          "p25": 232,
+          "p75": 1159,
+          "p90": 1509
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 461,
+          "meanPredictionError": -169.11930585683297,
+          "medianPredictionError": -152,
+          "meanAbsoluteError": 447.527114967462,
+          "overpredictionRate": 0.3557483731019523,
+          "overprediction100Rate": 0.30151843817787416,
+          "overprediction250Rate": 0.279826464208243,
+          "overprediction500Rate": 0.07592190889370933,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 461,
+              "trueSafeRateAmongAllowed": 0.735357917570499,
+              "falseSafeRateAmongAllowed": 0.2646420824295011,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 339
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 461,
+              "trueSafeRateAmongAllowed": 0.7093275488069414,
+              "falseSafeRateAmongAllowed": 0.29067245119305857,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 327
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 238
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 147
+            }
+          }
+        }
+      },
+      {
+        "bucket": "[0.5, 0.6)",
+        "observationCount": 613,
+        "uniqueWarInstanceCount": 32,
+        "actualRemainingWarTicks": {
+          "mean": 814.7944535073409,
+          "median": 522,
+          "p10": 79.4,
+          "p25": 207,
+          "p75": 1528,
+          "p90": 1907.0000000000007
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 613,
+          "meanPredictionError": -103.79771615008157,
+          "medianPredictionError": 159,
+          "meanAbsoluteError": 615.2300163132137,
+          "overpredictionRate": 0.531810766721044,
+          "overprediction100Rate": 0.5138662316476346,
+          "overprediction250Rate": 0.47145187601957583,
+          "overprediction500Rate": 0.27895595432300163,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 613,
+              "trueSafeRateAmongAllowed": 0.5921696574225123,
+              "falseSafeRateAmongAllowed": 0.4078303425774878,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 363
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 613,
+              "trueSafeRateAmongAllowed": 0.5106035889070146,
+              "falseSafeRateAmongAllowed": 0.4893964110929853,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 313
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 61,
+              "trueSafeRateAmongAllowed": 0.36065573770491804,
+              "falseSafeRateAmongAllowed": 0.639344262295082,
+              "falseNegativeRate": 0.9219858156028369,
+              "coverageOfGenuinelySafeOpportunities": 0.07801418439716312,
+              "genuinelySafeCount": 282
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 223
+            }
+          }
+        }
+      },
+      {
+        "bucket": "[0.6, 0.7)",
+        "observationCount": 349,
+        "uniqueWarInstanceCount": 39,
+        "actualRemainingWarTicks": {
+          "mean": 478.78510028653295,
+          "median": 278,
+          "p10": 54.60000000000003,
+          "p25": 136,
+          "p75": 449,
+          "p90": 1226.3999999999935
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 349,
+          "meanPredictionError": 352.5329512893983,
+          "medianPredictionError": 542,
+          "meanAbsoluteError": 635.8911174785101,
+          "overpredictionRate": 0.8481375358166189,
+          "overprediction100Rate": 0.8481375358166189,
+          "overprediction250Rate": 0.8166189111747851,
+          "overprediction500Rate": 0.5300859598853869,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 349,
+              "trueSafeRateAmongAllowed": 0.47277936962750716,
+              "falseSafeRateAmongAllowed": 0.5272206303724928,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 165
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 349,
+              "trueSafeRateAmongAllowed": 0.1977077363896848,
+              "falseSafeRateAmongAllowed": 0.8022922636103151,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 69
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 349,
+              "trueSafeRateAmongAllowed": 0.1518624641833811,
+              "falseSafeRateAmongAllowed": 0.8481375358166189,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 53
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 53
+            }
+          }
+        }
+      },
+      {
+        "bucket": "[0.7, 0.8)",
+        "observationCount": 849,
+        "uniqueWarInstanceCount": 52,
+        "actualRemainingWarTicks": {
+          "mean": 520.6725559481744,
+          "median": 372,
+          "p10": 118,
+          "p25": 212,
+          "p75": 556,
+          "p90": 1233.0000000000005
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 849,
+          "meanPredictionError": 411.4970553592462,
+          "medianPredictionError": 574,
+          "meanAbsoluteError": 615.4240282685512,
+          "overpredictionRate": 0.8621908127208481,
+          "overprediction100Rate": 0.8621908127208481,
+          "overprediction250Rate": 0.8445229681978799,
+          "overprediction500Rate": 0.6113074204946997,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 849,
+              "trueSafeRateAmongAllowed": 0.6313309776207303,
+              "falseSafeRateAmongAllowed": 0.36866902237926974,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 536
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 849,
+              "trueSafeRateAmongAllowed": 0.32744405182567726,
+              "falseSafeRateAmongAllowed": 0.6725559481743227,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 278
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 849,
+              "trueSafeRateAmongAllowed": 0.14723203769140164,
+              "falseSafeRateAmongAllowed": 0.8527679623085983,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 125
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 117
+            }
+          }
+        }
+      },
+      {
+        "bucket": "[0.8, 0.9)",
+        "observationCount": 925,
+        "uniqueWarInstanceCount": 52,
+        "actualRemainingWarTicks": {
+          "mean": 682.811891891892,
+          "median": 652,
+          "p10": 248,
+          "p25": 391,
+          "p75": 848,
+          "p90": 1076
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 925,
+          "meanPredictionError": 362.7124324324324,
+          "medianPredictionError": 387,
+          "meanAbsoluteError": 461.64,
+          "overpredictionRate": 0.894054054054054,
+          "overprediction100Rate": 0.841081081081081,
+          "overprediction250Rate": 0.6572972972972972,
+          "overprediction500Rate": 0.38054054054054054,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 925,
+              "trueSafeRateAmongAllowed": 0.8378378378378378,
+              "falseSafeRateAmongAllowed": 0.16216216216216217,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 775
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 925,
+              "trueSafeRateAmongAllowed": 0.6637837837837838,
+              "falseSafeRateAmongAllowed": 0.3362162162162162,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 614
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 925,
+              "trueSafeRateAmongAllowed": 0.372972972972973,
+              "falseSafeRateAmongAllowed": 0.6270270270270271,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 345
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 837,
+              "trueSafeRateAmongAllowed": 0.14217443249701314,
+              "falseSafeRateAmongAllowed": 0.8578255675029869,
+              "falseNegativeRate": 0.04032258064516129,
+              "coverageOfGenuinelySafeOpportunities": 0.9596774193548387,
+              "genuinelySafeCount": 124
+            }
+          }
+        }
+      },
+      {
+        "bucket": "[0.9, 1.0]",
+        "observationCount": 3307,
+        "uniqueWarInstanceCount": 64,
+        "actualRemainingWarTicks": {
+          "mean": 1273.594496522528,
+          "median": 1141,
+          "p10": 398,
+          "p25": 766,
+          "p75": 1747,
+          "p90": 2421
+        },
+        "currentLinearMinSideMetrics": {
+          "observationCount": 3307,
+          "meanPredictionError": -110.6078016328999,
+          "medianPredictionError": 16,
+          "meanAbsoluteError": 560.5140610825522,
+          "overpredictionRate": 0.5089204717266405,
+          "overprediction100Rate": 0.4457211974599335,
+          "overprediction250Rate": 0.32597520411248865,
+          "overprediction500Rate": 0.19897187783489567,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 3307,
+              "trueSafeRateAmongAllowed": 0.9298457816752344,
+              "falseSafeRateAmongAllowed": 0.07015421832476565,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 3075
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 3307,
+              "trueSafeRateAmongAllowed": 0.8605987299667373,
+              "falseSafeRateAmongAllowed": 0.13940127003326278,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 2846
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 3307,
+              "trueSafeRateAmongAllowed": 0.7583912912004839,
+              "falseSafeRateAmongAllowed": 0.24160870879951618,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 2508
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 3307,
+              "trueSafeRateAmongAllowed": 0.6017538554581191,
+              "falseSafeRateAmongAllowed": 0.39824614454188084,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 1990
+            }
+          }
+        }
+      }
+    ]
+  },
+  "candidates": [
+    {
+      "name": "A-current-linear-min-side",
+      "rules": "round(120 + 1080 * min(attackerResistance, defenderResistance))",
+      "train": {
+        "observationWeighted": {
+          "observationCount": 15668,
+          "meanPredictionError": 38.074546847076846,
+          "medianPredictionError": 143,
+          "meanAbsoluteError": 464.4825121266275,
+          "overpredictionRate": 0.6208833290783763,
+          "overprediction100Rate": 0.5420602501914731,
+          "overprediction250Rate": 0.4147944855756957,
+          "overprediction500Rate": 0.20672708705642073,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 14409,
+              "trueSafeRateAmongAllowed": 0.7653549864667916,
+              "falseSafeRateAmongAllowed": 0.2346450135332084,
+              "falseNegativeRate": 0.038451477896939576,
+              "coverageOfGenuinelySafeOpportunities": 0.9615485221030604,
+              "genuinelySafeCount": 11469
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 13508,
+              "trueSafeRateAmongAllowed": 0.6606455433816998,
+              "falseSafeRateAmongAllowed": 0.33935445661830027,
+              "falseNegativeRate": 0.04073954638288724,
+              "coverageOfGenuinelySafeOpportunities": 0.9592604536171128,
+              "genuinelySafeCount": 9303
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 10839,
+              "trueSafeRateAmongAllowed": 0.5869545160992712,
+              "falseSafeRateAmongAllowed": 0.41304548390072887,
+              "falseNegativeRate": 0.10896358543417367,
+              "coverageOfGenuinelySafeOpportunities": 0.8910364145658264,
+              "genuinelySafeCount": 7140
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 7294,
+              "trueSafeRateAmongAllowed": 0.554291198245133,
+              "falseSafeRateAmongAllowed": 0.445708801754867,
+              "falseNegativeRate": 0.24245830991193554,
+              "coverageOfGenuinelySafeOpportunities": 0.7575416900880645,
+              "genuinelySafeCount": 5337
+            }
+          }
+        },
+        "warInstanceWeighted": {
+          "representativeWithinWar": "median actual remaining lifetime observation",
+          "observationCount": 159,
+          "meanPredictionError": 393.47798742138366,
+          "medianPredictionError": 376,
+          "meanAbsoluteError": 515.062893081761,
+          "overpredictionRate": 0.8301886792452831,
+          "overprediction100Rate": 0.7295597484276729,
+          "overprediction250Rate": 0.610062893081761,
+          "overprediction500Rate": 0.4276729559748428,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 152,
+              "trueSafeRateAmongAllowed": 0.5723684210526315,
+              "falseSafeRateAmongAllowed": 0.4276315789473684,
+              "falseNegativeRate": 0.011363636363636364,
+              "coverageOfGenuinelySafeOpportunities": 0.9886363636363636,
+              "genuinelySafeCount": 88
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 144,
+              "trueSafeRateAmongAllowed": 0.4375,
+              "falseSafeRateAmongAllowed": 0.5625,
+              "falseNegativeRate": 0.015625,
+              "coverageOfGenuinelySafeOpportunities": 0.984375,
+              "genuinelySafeCount": 64
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 116,
+              "trueSafeRateAmongAllowed": 0.29310344827586204,
+              "falseSafeRateAmongAllowed": 0.7068965517241379,
+              "falseNegativeRate": 0.17073170731707318,
+              "coverageOfGenuinelySafeOpportunities": 0.8292682926829268,
+              "genuinelySafeCount": 41
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 75,
+              "trueSafeRateAmongAllowed": 0.12,
+              "falseSafeRateAmongAllowed": 0.88,
+              "falseNegativeRate": 0.625,
+              "coverageOfGenuinelySafeOpportunities": 0.375,
+              "genuinelySafeCount": 24
+            }
+          }
+        }
+      },
+      "evaluation": {
+        "observationWeighted": {
+          "observationCount": 7589,
+          "meanPredictionError": 41.33772565555409,
+          "medianPredictionError": 160,
+          "meanAbsoluteError": 503.6985110027672,
+          "overpredictionRate": 0.6176044274607986,
+          "overprediction100Rate": 0.5525102121491633,
+          "overprediction250Rate": 0.42693371985768874,
+          "overprediction500Rate": 0.2529977599156674,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 7035,
+              "trueSafeRateAmongAllowed": 0.7936034115138593,
+              "falseSafeRateAmongAllowed": 0.20639658848614073,
+              "falseNegativeRate": 0.015517545406453889,
+              "coverageOfGenuinelySafeOpportunities": 0.9844824545935461,
+              "genuinelySafeCount": 5671
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 6602,
+              "trueSafeRateAmongAllowed": 0.6800969403211148,
+              "falseSafeRateAmongAllowed": 0.31990305967888516,
+              "falseNegativeRate": 0.042643923240938165,
+              "coverageOfGenuinelySafeOpportunities": 0.9573560767590619,
+              "genuinelySafeCount": 4690
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 5491,
+              "trueSafeRateAmongAllowed": 0.5560007284647606,
+              "falseSafeRateAmongAllowed": 0.4439992715352395,
+              "falseNegativeRate": 0.16264399341744376,
+              "coverageOfGenuinelySafeOpportunities": 0.8373560065825563,
+              "genuinelySafeCount": 3646
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 4144,
+              "trueSafeRateAmongAllowed": 0.5089285714285714,
+              "falseSafeRateAmongAllowed": 0.49107142857142855,
+              "falseNegativeRate": 0.22062084257206208,
+              "coverageOfGenuinelySafeOpportunities": 0.779379157427938,
+              "genuinelySafeCount": 2706
+            }
+          }
+        },
+        "warInstanceWeighted": {
+          "representativeWithinWar": "median actual remaining lifetime observation",
+          "observationCount": 71,
+          "meanPredictionError": 362.92957746478874,
+          "medianPredictionError": 397,
+          "meanAbsoluteError": 517.9718309859155,
+          "overpredictionRate": 0.7746478873239436,
+          "overprediction100Rate": 0.7464788732394366,
+          "overprediction250Rate": 0.704225352112676,
+          "overprediction500Rate": 0.43661971830985913,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 69,
+              "trueSafeRateAmongAllowed": 0.5942028985507246,
+              "falseSafeRateAmongAllowed": 0.4057971014492754,
+              "falseNegativeRate": 0,
+              "coverageOfGenuinelySafeOpportunities": 1,
+              "genuinelySafeCount": 41
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 64,
+              "trueSafeRateAmongAllowed": 0.5,
+              "falseSafeRateAmongAllowed": 0.5,
+              "falseNegativeRate": 0.1111111111111111,
+              "coverageOfGenuinelySafeOpportunities": 0.8888888888888888,
+              "genuinelySafeCount": 36
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 48,
+              "trueSafeRateAmongAllowed": 0.20833333333333334,
+              "falseSafeRateAmongAllowed": 0.7916666666666666,
+              "falseNegativeRate": 0.4117647058823529,
+              "coverageOfGenuinelySafeOpportunities": 0.5882352941176471,
+              "genuinelySafeCount": 17
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 35,
+              "trueSafeRateAmongAllowed": 0.14285714285714285,
+              "falseSafeRateAmongAllowed": 0.8571428571428571,
+              "falseNegativeRate": 0.5,
+              "coverageOfGenuinelySafeOpportunities": 0.5,
+              "genuinelySafeCount": 10
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "B-fitted-linear-min-side",
+      "rules": "max(0, round(-35.559 + 1248.972 * minSideResistance)); fitted only on first 20 seeds",
+      "train": {
+        "observationWeighted": {
+          "observationCount": 15668,
+          "meanPredictionError": 0.13224406433495023,
+          "medianPredictionError": 86,
+          "meanAbsoluteError": 452.7541485830993,
+          "overpredictionRate": 0.5645902476384989,
+          "overprediction100Rate": 0.48793719683431197,
+          "overprediction250Rate": 0.3602246617309165,
+          "overprediction500Rate": 0.1839417921878989,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 13890,
+              "trueSafeRateAmongAllowed": 0.7874010079193664,
+              "falseSafeRateAmongAllowed": 0.21259899208063354,
+              "falseNegativeRate": 0.046385909843927105,
+              "coverageOfGenuinelySafeOpportunities": 0.9536140901560729,
+              "genuinelySafeCount": 11469
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 12717,
+              "trueSafeRateAmongAllowed": 0.6820791067075568,
+              "falseSafeRateAmongAllowed": 0.31792089329244316,
+              "falseNegativeRate": 0.06761259808663872,
+              "coverageOfGenuinelySafeOpportunities": 0.9323874019133613,
+              "genuinelySafeCount": 9303
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 10271,
+              "trueSafeRateAmongAllowed": 0.6090935644046344,
+              "falseSafeRateAmongAllowed": 0.3909064355953656,
+              "falseNegativeRate": 0.12380952380952381,
+              "coverageOfGenuinelySafeOpportunities": 0.8761904761904762,
+              "genuinelySafeCount": 7140
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 6952,
+              "trueSafeRateAmongAllowed": 0.5592635212888377,
+              "falseSafeRateAmongAllowed": 0.4407364787111623,
+              "falseNegativeRate": 0.2715008431703204,
+              "coverageOfGenuinelySafeOpportunities": 0.7284991568296796,
+              "genuinelySafeCount": 5337
+            }
+          }
+        },
+        "warInstanceWeighted": {
+          "representativeWithinWar": "median actual remaining lifetime observation",
+          "observationCount": 159,
+          "meanPredictionError": 358.188679245283,
+          "medianPredictionError": 326,
+          "meanAbsoluteError": 503.0691823899371,
+          "overpredictionRate": 0.7358490566037735,
+          "overprediction100Rate": 0.7044025157232704,
+          "overprediction250Rate": 0.5849056603773585,
+          "overprediction500Rate": 0.41509433962264153,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 150,
+              "trueSafeRateAmongAllowed": 0.58,
+              "falseSafeRateAmongAllowed": 0.42,
+              "falseNegativeRate": 0.011363636363636364,
+              "coverageOfGenuinelySafeOpportunities": 0.9886363636363636,
+              "genuinelySafeCount": 88
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 138,
+              "trueSafeRateAmongAllowed": 0.427536231884058,
+              "falseSafeRateAmongAllowed": 0.572463768115942,
+              "falseNegativeRate": 0.078125,
+              "coverageOfGenuinelySafeOpportunities": 0.921875,
+              "genuinelySafeCount": 64
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 112,
+              "trueSafeRateAmongAllowed": 0.2857142857142857,
+              "falseSafeRateAmongAllowed": 0.7142857142857143,
+              "falseNegativeRate": 0.21951219512195122,
+              "coverageOfGenuinelySafeOpportunities": 0.7804878048780488,
+              "genuinelySafeCount": 41
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 67,
+              "trueSafeRateAmongAllowed": 0.11940298507462686,
+              "falseSafeRateAmongAllowed": 0.8805970149253731,
+              "falseNegativeRate": 0.6666666666666666,
+              "coverageOfGenuinelySafeOpportunities": 0.3333333333333333,
+              "genuinelySafeCount": 24
+            }
+          }
+        }
+      },
+      "evaluation": {
+        "observationWeighted": {
+          "observationCount": 7589,
+          "meanPredictionError": 10.655027012781657,
+          "medianPredictionError": 120,
+          "meanAbsoluteError": 499.6875741204375,
+          "overpredictionRate": 0.5742522071419159,
+          "overprediction100Rate": 0.5104756884965082,
+          "overprediction250Rate": 0.41085782052971404,
+          "overprediction500Rate": 0.23823955725392015,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 6816,
+              "trueSafeRateAmongAllowed": 0.8044307511737089,
+              "falseSafeRateAmongAllowed": 0.1955692488262911,
+              "falseNegativeRate": 0.03315111973196967,
+              "coverageOfGenuinelySafeOpportunities": 0.9668488802680303,
+              "genuinelySafeCount": 5671
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 6435,
+              "trueSafeRateAmongAllowed": 0.6853146853146853,
+              "falseSafeRateAmongAllowed": 0.3146853146853147,
+              "falseNegativeRate": 0.05970149253731343,
+              "coverageOfGenuinelySafeOpportunities": 0.9402985074626866,
+              "genuinelySafeCount": 4690
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 5336,
+              "trueSafeRateAmongAllowed": 0.5646551724137931,
+              "falseSafeRateAmongAllowed": 0.4353448275862069,
+              "falseNegativeRate": 0.17361492046077895,
+              "coverageOfGenuinelySafeOpportunities": 0.826385079539221,
+              "genuinelySafeCount": 3646
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 4076,
+              "trueSafeRateAmongAllowed": 0.5171736997055937,
+              "falseSafeRateAmongAllowed": 0.48282630029440626,
+              "falseNegativeRate": 0.22099039172209903,
+              "coverageOfGenuinelySafeOpportunities": 0.779009608277901,
+              "genuinelySafeCount": 2706
+            }
+          }
+        },
+        "warInstanceWeighted": {
+          "representativeWithinWar": "median actual remaining lifetime observation",
+          "observationCount": 71,
+          "meanPredictionError": 329.4366197183099,
+          "medianPredictionError": 352,
+          "meanAbsoluteError": 509.88732394366195,
+          "overpredictionRate": 0.7605633802816901,
+          "overprediction100Rate": 0.7183098591549296,
+          "overprediction250Rate": 0.647887323943662,
+          "overprediction500Rate": 0.4225352112676056,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 68,
+              "trueSafeRateAmongAllowed": 0.5882352941176471,
+              "falseSafeRateAmongAllowed": 0.4117647058823529,
+              "falseNegativeRate": 0.024390243902439025,
+              "coverageOfGenuinelySafeOpportunities": 0.975609756097561,
+              "genuinelySafeCount": 41
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 61,
+              "trueSafeRateAmongAllowed": 0.5081967213114754,
+              "falseSafeRateAmongAllowed": 0.4918032786885246,
+              "falseNegativeRate": 0.1388888888888889,
+              "coverageOfGenuinelySafeOpportunities": 0.8611111111111112,
+              "genuinelySafeCount": 36
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 48,
+              "trueSafeRateAmongAllowed": 0.20833333333333334,
+              "falseSafeRateAmongAllowed": 0.7916666666666666,
+              "falseNegativeRate": 0.4117647058823529,
+              "coverageOfGenuinelySafeOpportunities": 0.5882352941176471,
+              "genuinelySafeCount": 17
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 31,
+              "trueSafeRateAmongAllowed": 0.16129032258064516,
+              "falseSafeRateAmongAllowed": 0.8387096774193549,
+              "falseNegativeRate": 0.5,
+              "coverageOfGenuinelySafeOpportunities": 0.5,
+              "genuinelySafeCount": 10
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "C-piecewise-bucket-median",
+      "rules": "training-set median actual remaining lifetime for min-side resistance bucket",
+      "train": {
+        "observationWeighted": {
+          "observationCount": 15668,
+          "meanPredictionError": -77.52833801378605,
+          "medianPredictionError": 0,
+          "meanAbsoluteError": 428.0442941026296,
+          "overpredictionRate": 0.4978299719172836,
+          "overprediction100Rate": 0.3849885116160327,
+          "overprediction250Rate": 0.2584886392647434,
+          "overprediction500Rate": 0.12962726576461578,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 13043,
+              "trueSafeRateAmongAllowed": 0.8164532699532316,
+              "falseSafeRateAmongAllowed": 0.18354673004676839,
+              "falseNegativeRate": 0.07149707908274479,
+              "coverageOfGenuinelySafeOpportunities": 0.9285029209172552,
+              "genuinelySafeCount": 11469
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 9126,
+              "trueSafeRateAmongAllowed": 0.7829278983125137,
+              "falseSafeRateAmongAllowed": 0.2170721016874863,
+              "falseNegativeRate": 0.23196818230678276,
+              "coverageOfGenuinelySafeOpportunities": 0.7680318176932173,
+              "genuinelySafeCount": 9303
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 7641,
+              "trueSafeRateAmongAllowed": 0.6885224447061903,
+              "falseSafeRateAmongAllowed": 0.3114775552938097,
+              "falseNegativeRate": 0.2631652661064426,
+              "coverageOfGenuinelySafeOpportunities": 0.7368347338935575,
+              "genuinelySafeCount": 7140
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 4882,
+              "trueSafeRateAmongAllowed": 0.6065137238836542,
+              "falseSafeRateAmongAllowed": 0.39348627611634573,
+              "falseNegativeRate": 0.4451939291736931,
+              "coverageOfGenuinelySafeOpportunities": 0.554806070826307,
+              "genuinelySafeCount": 5337
+            }
+          }
+        },
+        "warInstanceWeighted": {
+          "representativeWithinWar": "median actual remaining lifetime observation",
+          "observationCount": 159,
+          "meanPredictionError": 257.12578616352204,
+          "medianPredictionError": 186,
+          "meanAbsoluteError": 487.0377358490566,
+          "overpredictionRate": 0.6981132075471698,
+          "overprediction100Rate": 0.5723270440251572,
+          "overprediction250Rate": 0.44654088050314467,
+          "overprediction500Rate": 0.33962264150943394,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 141,
+              "trueSafeRateAmongAllowed": 0.5815602836879432,
+              "falseSafeRateAmongAllowed": 0.41843971631205673,
+              "falseNegativeRate": 0.06818181818181818,
+              "coverageOfGenuinelySafeOpportunities": 0.9318181818181818,
+              "genuinelySafeCount": 88
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 96,
+              "trueSafeRateAmongAllowed": 0.3958333333333333,
+              "falseSafeRateAmongAllowed": 0.6041666666666666,
+              "falseNegativeRate": 0.40625,
+              "coverageOfGenuinelySafeOpportunities": 0.59375,
+              "genuinelySafeCount": 64
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 79,
+              "trueSafeRateAmongAllowed": 0.26582278481012656,
+              "falseSafeRateAmongAllowed": 0.7341772151898734,
+              "falseNegativeRate": 0.4878048780487805,
+              "coverageOfGenuinelySafeOpportunities": 0.5121951219512195,
+              "genuinelySafeCount": 41
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 39,
+              "trueSafeRateAmongAllowed": 0.10256410256410256,
+              "falseSafeRateAmongAllowed": 0.8974358974358975,
+              "falseNegativeRate": 0.8333333333333334,
+              "coverageOfGenuinelySafeOpportunities": 0.16666666666666666,
+              "genuinelySafeCount": 24
+            }
+          }
+        }
+      },
+      "evaluation": {
+        "observationWeighted": {
+          "observationCount": 7589,
+          "meanPredictionError": -36.73224403742258,
+          "medianPredictionError": 106,
+          "meanAbsoluteError": 476.8995915140335,
+          "overpredictionRate": 0.6027144551324285,
+          "overprediction100Rate": 0.5065225984978258,
+          "overprediction250Rate": 0.3448412175517196,
+          "overprediction500Rate": 0.15641059428119647,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 6504,
+              "trueSafeRateAmongAllowed": 0.8076568265682657,
+              "falseSafeRateAmongAllowed": 0.19234317343173432,
+              "falseNegativeRate": 0.07370834068065597,
+              "coverageOfGenuinelySafeOpportunities": 0.926291659319344,
+              "genuinelySafeCount": 5671
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 5081,
+              "trueSafeRateAmongAllowed": 0.7356819523715804,
+              "falseSafeRateAmongAllowed": 0.2643180476284196,
+              "falseNegativeRate": 0.20298507462686566,
+              "coverageOfGenuinelySafeOpportunities": 0.7970149253731343,
+              "genuinelySafeCount": 4690
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 4232,
+              "trueSafeRateAmongAllowed": 0.6741493383742911,
+              "falseSafeRateAmongAllowed": 0.32585066162570886,
+              "falseNegativeRate": 0.2174986286341196,
+              "coverageOfGenuinelySafeOpportunities": 0.7825013713658804,
+              "genuinelySafeCount": 3646
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 3307,
+              "trueSafeRateAmongAllowed": 0.6017538554581191,
+              "falseSafeRateAmongAllowed": 0.39824614454188084,
+              "falseNegativeRate": 0.2645971914264597,
+              "coverageOfGenuinelySafeOpportunities": 0.7354028085735402,
+              "genuinelySafeCount": 2706
+            }
+          }
+        },
+        "warInstanceWeighted": {
+          "representativeWithinWar": "median actual remaining lifetime observation",
+          "observationCount": 71,
+          "meanPredictionError": 244.6056338028169,
+          "medianPredictionError": 286,
+          "meanAbsoluteError": 490.2112676056338,
+          "overpredictionRate": 0.6619718309859155,
+          "overprediction100Rate": 0.6338028169014085,
+          "overprediction250Rate": 0.5211267605633803,
+          "overprediction500Rate": 0.29577464788732394,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 62,
+              "trueSafeRateAmongAllowed": 0.5806451612903226,
+              "falseSafeRateAmongAllowed": 0.41935483870967744,
+              "falseNegativeRate": 0.12195121951219512,
+              "coverageOfGenuinelySafeOpportunities": 0.8780487804878049,
+              "genuinelySafeCount": 41
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 47,
+              "trueSafeRateAmongAllowed": 0.5106382978723404,
+              "falseSafeRateAmongAllowed": 0.48936170212765956,
+              "falseNegativeRate": 0.3333333333333333,
+              "coverageOfGenuinelySafeOpportunities": 0.6666666666666666,
+              "genuinelySafeCount": 36
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 36,
+              "trueSafeRateAmongAllowed": 0.25,
+              "falseSafeRateAmongAllowed": 0.75,
+              "falseNegativeRate": 0.47058823529411764,
+              "coverageOfGenuinelySafeOpportunities": 0.5294117647058824,
+              "genuinelySafeCount": 17
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 22,
+              "trueSafeRateAmongAllowed": 0.22727272727272727,
+              "falseSafeRateAmongAllowed": 0.7727272727272727,
+              "falseNegativeRate": 0.5,
+              "coverageOfGenuinelySafeOpportunities": 0.5,
+              "genuinelySafeCount": 10
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "C-piecewise-bucket-p25",
+      "rules": "training-set p25 actual remaining lifetime for min-side resistance bucket",
+      "train": {
+        "observationWeighted": {
+          "observationCount": 15668,
+          "meanPredictionError": -413.27310441664537,
+          "medianPredictionError": -262,
+          "meanAbsoluteError": 509.4432601480725,
+          "overpredictionRate": 0.24853203982639777,
+          "overprediction100Rate": 0.14768955833546082,
+          "overprediction250Rate": 0.07754659177942302,
+          "overprediction500Rate": 0.015254020934388563,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 9126,
+              "trueSafeRateAmongAllowed": 0.8805610344071882,
+              "falseSafeRateAmongAllowed": 0.11943896559281175,
+              "falseNegativeRate": 0.29932862498910107,
+              "coverageOfGenuinelySafeOpportunities": 0.7006713750108989,
+              "genuinelySafeCount": 11469
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 7641,
+              "trueSafeRateAmongAllowed": 0.815600052349169,
+              "falseSafeRateAmongAllowed": 0.18439994765083104,
+              "falseNegativeRate": 0.33010856712888315,
+              "coverageOfGenuinelySafeOpportunities": 0.6698914328711169,
+              "genuinelySafeCount": 9303
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 7140
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 5337
+            }
+          }
+        },
+        "warInstanceWeighted": {
+          "representativeWithinWar": "median actual remaining lifetime observation",
+          "observationCount": 159,
+          "meanPredictionError": -69.81132075471699,
+          "medianPredictionError": -36,
+          "meanAbsoluteError": 376.12578616352204,
+          "overpredictionRate": 0.4591194968553459,
+          "overprediction100Rate": 0.37735849056603776,
+          "overprediction250Rate": 0.2830188679245283,
+          "overprediction500Rate": 0.1069182389937107,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 96,
+              "trueSafeRateAmongAllowed": 0.5416666666666666,
+              "falseSafeRateAmongAllowed": 0.4583333333333333,
+              "falseNegativeRate": 0.4090909090909091,
+              "coverageOfGenuinelySafeOpportunities": 0.5909090909090909,
+              "genuinelySafeCount": 88
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 79,
+              "trueSafeRateAmongAllowed": 0.3670886075949367,
+              "falseSafeRateAmongAllowed": 0.6329113924050633,
+              "falseNegativeRate": 0.546875,
+              "coverageOfGenuinelySafeOpportunities": 0.453125,
+              "genuinelySafeCount": 64
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 41
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 24
+            }
+          }
+        }
+      },
+      "evaluation": {
+        "observationWeighted": {
+          "observationCount": 7589,
+          "meanPredictionError": -413.0641718276453,
+          "medianPredictionError": -234,
+          "meanAbsoluteError": 519.9436025826855,
+          "overpredictionRate": 0.2858084069047305,
+          "overprediction100Rate": 0.17643958360785347,
+          "overprediction250Rate": 0.08156542363947819,
+          "overprediction500Rate": 0.017393595994202135,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 5081,
+              "trueSafeRateAmongAllowed": 0.863215902381421,
+              "falseSafeRateAmongAllowed": 0.13678409761857901,
+              "falseNegativeRate": 0.2265914300828778,
+              "coverageOfGenuinelySafeOpportunities": 0.7734085699171221,
+              "genuinelySafeCount": 5671
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 4232,
+              "trueSafeRateAmongAllowed": 0.8175803402646503,
+              "falseSafeRateAmongAllowed": 0.1824196597353497,
+              "falseNegativeRate": 0.2622601279317697,
+              "coverageOfGenuinelySafeOpportunities": 0.7377398720682303,
+              "genuinelySafeCount": 4690
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 3646
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 2706
+            }
+          }
+        },
+        "warInstanceWeighted": {
+          "representativeWithinWar": "median actual remaining lifetime observation",
+          "observationCount": 71,
+          "meanPredictionError": -102.3943661971831,
+          "medianPredictionError": -17,
+          "meanAbsoluteError": 362,
+          "overpredictionRate": 0.49295774647887325,
+          "overprediction100Rate": 0.38028169014084506,
+          "overprediction250Rate": 0.22535211267605634,
+          "overprediction500Rate": 0.056338028169014086,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 47,
+              "trueSafeRateAmongAllowed": 0.6170212765957447,
+              "falseSafeRateAmongAllowed": 0.3829787234042553,
+              "falseNegativeRate": 0.2926829268292683,
+              "coverageOfGenuinelySafeOpportunities": 0.7073170731707317,
+              "genuinelySafeCount": 41
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 36,
+              "trueSafeRateAmongAllowed": 0.5,
+              "falseSafeRateAmongAllowed": 0.5,
+              "falseNegativeRate": 0.5,
+              "coverageOfGenuinelySafeOpportunities": 0.5,
+              "genuinelySafeCount": 36
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 17
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 0,
+              "trueSafeRateAmongAllowed": null,
+              "falseSafeRateAmongAllowed": null,
+              "falseNegativeRate": 1,
+              "coverageOfGenuinelySafeOpportunities": 0,
+              "genuinelySafeCount": 10
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "D-min-side-with-threatened-360-critical-180-cap",
+      "rules": "A, capped at 360 when either capital is threatened and at 180 when either is critical",
+      "train": {
+        "observationWeighted": {
+          "observationCount": 15668,
+          "meanPredictionError": -384.2434260913965,
+          "medianPredictionError": -228.5,
+          "meanAbsoluteError": 532.9950217002809,
+          "overpredictionRate": 0.3339928516721981,
+          "overprediction100Rate": 0.23136328823078886,
+          "overprediction250Rate": 0.09618330354863416,
+          "overprediction500Rate": 0.040273168241000766,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 9778,
+              "trueSafeRateAmongAllowed": 0.826651667007568,
+              "falseSafeRateAmongAllowed": 0.173348332992432,
+              "falseNegativeRate": 0.29523062167582176,
+              "coverageOfGenuinelySafeOpportunities": 0.7047693783241782,
+              "genuinelySafeCount": 11469
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 3465,
+              "trueSafeRateAmongAllowed": 0.7893217893217893,
+              "falseSafeRateAmongAllowed": 0.2106782106782107,
+              "falseNegativeRate": 0.7060088143609589,
+              "coverageOfGenuinelySafeOpportunities": 0.2939911856390412,
+              "genuinelySafeCount": 9303
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 3313,
+              "trueSafeRateAmongAllowed": 0.7038937518865077,
+              "falseSafeRateAmongAllowed": 0.2961062481134923,
+              "falseNegativeRate": 0.673389355742297,
+              "coverageOfGenuinelySafeOpportunities": 0.3266106442577031,
+              "genuinelySafeCount": 7140
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 2513,
+              "trueSafeRateAmongAllowed": 0.6920015917230402,
+              "falseSafeRateAmongAllowed": 0.3079984082769598,
+              "falseNegativeRate": 0.6741615139591531,
+              "coverageOfGenuinelySafeOpportunities": 0.3258384860408469,
+              "genuinelySafeCount": 5337
+            }
+          }
+        },
+        "warInstanceWeighted": {
+          "representativeWithinWar": "median actual remaining lifetime observation",
+          "observationCount": 159,
+          "meanPredictionError": -97.62893081761007,
+          "medianPredictionError": -5,
+          "meanAbsoluteError": 354.3333333333333,
+          "overpredictionRate": 0.49056603773584906,
+          "overprediction100Rate": 0.4088050314465409,
+          "overprediction250Rate": 0.18238993710691823,
+          "overprediction500Rate": 0.07547169811320754,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 99,
+              "trueSafeRateAmongAllowed": 0.6161616161616161,
+              "falseSafeRateAmongAllowed": 0.3838383838383838,
+              "falseNegativeRate": 0.3068181818181818,
+              "coverageOfGenuinelySafeOpportunities": 0.6931818181818182,
+              "genuinelySafeCount": 88
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 28,
+              "trueSafeRateAmongAllowed": 0.4642857142857143,
+              "falseSafeRateAmongAllowed": 0.5357142857142857,
+              "falseNegativeRate": 0.796875,
+              "coverageOfGenuinelySafeOpportunities": 0.203125,
+              "genuinelySafeCount": 64
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 24,
+              "trueSafeRateAmongAllowed": 0.3333333333333333,
+              "falseSafeRateAmongAllowed": 0.6666666666666666,
+              "falseNegativeRate": 0.8048780487804879,
+              "coverageOfGenuinelySafeOpportunities": 0.1951219512195122,
+              "genuinelySafeCount": 41
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 13,
+              "trueSafeRateAmongAllowed": 0.23076923076923078,
+              "falseSafeRateAmongAllowed": 0.7692307692307693,
+              "falseNegativeRate": 0.875,
+              "coverageOfGenuinelySafeOpportunities": 0.125,
+              "genuinelySafeCount": 24
+            }
+          }
+        }
+      },
+      "evaluation": {
+        "observationWeighted": {
+          "observationCount": 7589,
+          "meanPredictionError": -447.95533008301487,
+          "medianPredictionError": -268,
+          "meanAbsoluteError": 576.4797733561734,
+          "overpredictionRate": 0.2970088285676637,
+          "overprediction100Rate": 0.1947555672684148,
+          "overprediction250Rate": 0.08235604163921466,
+          "overprediction500Rate": 0.03478719198840427,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 4164,
+              "trueSafeRateAmongAllowed": 0.8614313160422671,
+              "falseSafeRateAmongAllowed": 0.13856868395773295,
+              "falseNegativeRate": 0.3674836889437489,
+              "coverageOfGenuinelySafeOpportunities": 0.6325163110562511,
+              "genuinelySafeCount": 5671
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 1468,
+              "trueSafeRateAmongAllowed": 0.8235694822888283,
+              "falseSafeRateAmongAllowed": 0.17643051771117166,
+              "falseNegativeRate": 0.7422174840085288,
+              "coverageOfGenuinelySafeOpportunities": 0.25778251599147123,
+              "genuinelySafeCount": 4690
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 1395,
+              "trueSafeRateAmongAllowed": 0.7462365591397849,
+              "falseSafeRateAmongAllowed": 0.2537634408602151,
+              "falseNegativeRate": 0.7144816236972024,
+              "coverageOfGenuinelySafeOpportunities": 0.2855183763027976,
+              "genuinelySafeCount": 3646
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 1314,
+              "trueSafeRateAmongAllowed": 0.654490106544901,
+              "falseSafeRateAmongAllowed": 0.3455098934550989,
+              "falseNegativeRate": 0.6821877309682187,
+              "coverageOfGenuinelySafeOpportunities": 0.3178122690317812,
+              "genuinelySafeCount": 2706
+            }
+          }
+        },
+        "warInstanceWeighted": {
+          "representativeWithinWar": "median actual remaining lifetime observation",
+          "observationCount": 71,
+          "meanPredictionError": -171.2394366197183,
+          "medianPredictionError": -94,
+          "meanAbsoluteError": 350.3380281690141,
+          "overpredictionRate": 0.43661971830985913,
+          "overprediction100Rate": 0.3380281690140845,
+          "overprediction250Rate": 0.11267605633802817,
+          "overprediction500Rate": 0.04225352112676056,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 38,
+              "trueSafeRateAmongAllowed": 0.631578947368421,
+              "falseSafeRateAmongAllowed": 0.3684210526315789,
+              "falseNegativeRate": 0.4146341463414634,
+              "coverageOfGenuinelySafeOpportunities": 0.5853658536585366,
+              "genuinelySafeCount": 41
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 9,
+              "trueSafeRateAmongAllowed": 0.7777777777777778,
+              "falseSafeRateAmongAllowed": 0.2222222222222222,
+              "falseNegativeRate": 0.8055555555555556,
+              "coverageOfGenuinelySafeOpportunities": 0.19444444444444445,
+              "genuinelySafeCount": 36
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 7,
+              "trueSafeRateAmongAllowed": 0.7142857142857143,
+              "falseSafeRateAmongAllowed": 0.2857142857142857,
+              "falseNegativeRate": 0.7058823529411765,
+              "coverageOfGenuinelySafeOpportunities": 0.29411764705882354,
+              "genuinelySafeCount": 17
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 7,
+              "trueSafeRateAmongAllowed": 0.2857142857142857,
+              "falseSafeRateAmongAllowed": 0.7142857142857143,
+              "falseNegativeRate": 0.8,
+              "coverageOfGenuinelySafeOpportunities": 0.2,
+              "genuinelySafeCount": 10
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "D-min-side-with-threatened-500-critical-240-cap",
+      "rules": "A, capped at 500 when either capital is threatened and at 240 when either is critical",
+      "train": {
+        "observationWeighted": {
+          "observationCount": 15668,
+          "meanPredictionError": -311.1947919326015,
+          "medianPredictionError": -151,
+          "meanAbsoluteError": 501.6848353331631,
+          "overpredictionRate": 0.3939877457237682,
+          "overprediction100Rate": 0.29608118458003574,
+          "overprediction250Rate": 0.13709471534337503,
+          "overprediction500Rate": 0.040273168241000766,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 9778,
+              "trueSafeRateAmongAllowed": 0.826651667007568,
+              "falseSafeRateAmongAllowed": 0.173348332992432,
+              "falseNegativeRate": 0.29523062167582176,
+              "coverageOfGenuinelySafeOpportunities": 0.7047693783241782,
+              "genuinelySafeCount": 11469
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 9431,
+              "trueSafeRateAmongAllowed": 0.7176333368677765,
+              "falseSafeRateAmongAllowed": 0.2823666631322235,
+              "falseNegativeRate": 0.27249274427604,
+              "coverageOfGenuinelySafeOpportunities": 0.72750725572396,
+              "genuinelySafeCount": 9303
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 3313,
+              "trueSafeRateAmongAllowed": 0.7038937518865077,
+              "falseSafeRateAmongAllowed": 0.2961062481134923,
+              "falseNegativeRate": 0.673389355742297,
+              "coverageOfGenuinelySafeOpportunities": 0.3266106442577031,
+              "genuinelySafeCount": 7140
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 2513,
+              "trueSafeRateAmongAllowed": 0.6920015917230402,
+              "falseSafeRateAmongAllowed": 0.3079984082769598,
+              "falseNegativeRate": 0.6741615139591531,
+              "coverageOfGenuinelySafeOpportunities": 0.3258384860408469,
+              "genuinelySafeCount": 5337
+            }
+          }
+        },
+        "warInstanceWeighted": {
+          "representativeWithinWar": "median actual remaining lifetime observation",
+          "observationCount": 159,
+          "meanPredictionError": -15.276729559748428,
+          "medianPredictionError": 61,
+          "meanAbsoluteError": 347.57861635220127,
+          "overpredictionRate": 0.5660377358490566,
+          "overprediction100Rate": 0.4716981132075472,
+          "overprediction250Rate": 0.29559748427672955,
+          "overprediction500Rate": 0.07547169811320754,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 99,
+              "trueSafeRateAmongAllowed": 0.6161616161616161,
+              "falseSafeRateAmongAllowed": 0.3838383838383838,
+              "falseNegativeRate": 0.3068181818181818,
+              "coverageOfGenuinelySafeOpportunities": 0.6931818181818182,
+              "genuinelySafeCount": 88
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 97,
+              "trueSafeRateAmongAllowed": 0.4639175257731959,
+              "falseSafeRateAmongAllowed": 0.5360824742268041,
+              "falseNegativeRate": 0.296875,
+              "coverageOfGenuinelySafeOpportunities": 0.703125,
+              "genuinelySafeCount": 64
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 24,
+              "trueSafeRateAmongAllowed": 0.3333333333333333,
+              "falseSafeRateAmongAllowed": 0.6666666666666666,
+              "falseNegativeRate": 0.8048780487804879,
+              "coverageOfGenuinelySafeOpportunities": 0.1951219512195122,
+              "genuinelySafeCount": 41
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 13,
+              "trueSafeRateAmongAllowed": 0.23076923076923078,
+              "falseSafeRateAmongAllowed": 0.7692307692307693,
+              "falseNegativeRate": 0.875,
+              "coverageOfGenuinelySafeOpportunities": 0.125,
+              "genuinelySafeCount": 24
+            }
+          }
+        }
+      },
+      "evaluation": {
+        "observationWeighted": {
+          "observationCount": 7589,
+          "meanPredictionError": -376.2125444722625,
+          "medianPredictionError": -187,
+          "meanAbsoluteError": 539.3072868625642,
+          "overpredictionRate": 0.3540650942153116,
+          "overprediction100Rate": 0.25655554091448146,
+          "overprediction250Rate": 0.11081828962972724,
+          "overprediction500Rate": 0.03478719198840427,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 4164,
+              "trueSafeRateAmongAllowed": 0.8614313160422671,
+              "falseSafeRateAmongAllowed": 0.13856868395773295,
+              "falseNegativeRate": 0.3674836889437489,
+              "coverageOfGenuinelySafeOpportunities": 0.6325163110562511,
+              "genuinelySafeCount": 5671
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 4015,
+              "trueSafeRateAmongAllowed": 0.748692403486924,
+              "falseSafeRateAmongAllowed": 0.251307596513076,
+              "falseNegativeRate": 0.35906183368869937,
+              "coverageOfGenuinelySafeOpportunities": 0.6409381663113006,
+              "genuinelySafeCount": 4690
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 1395,
+              "trueSafeRateAmongAllowed": 0.7462365591397849,
+              "falseSafeRateAmongAllowed": 0.2537634408602151,
+              "falseNegativeRate": 0.7144816236972024,
+              "coverageOfGenuinelySafeOpportunities": 0.2855183763027976,
+              "genuinelySafeCount": 3646
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 1314,
+              "trueSafeRateAmongAllowed": 0.654490106544901,
+              "falseSafeRateAmongAllowed": 0.3455098934550989,
+              "falseNegativeRate": 0.6821877309682187,
+              "coverageOfGenuinelySafeOpportunities": 0.3178122690317812,
+              "genuinelySafeCount": 2706
+            }
+          }
+        },
+        "warInstanceWeighted": {
+          "representativeWithinWar": "median actual remaining lifetime observation",
+          "observationCount": 71,
+          "meanPredictionError": -88.83098591549296,
+          "medianPredictionError": -34,
+          "meanAbsoluteError": 342.6056338028169,
+          "overpredictionRate": 0.49295774647887325,
+          "overprediction100Rate": 0.4225352112676056,
+          "overprediction250Rate": 0.19718309859154928,
+          "overprediction500Rate": 0.04225352112676056,
+          "feasibilityQuality": {
+            "300": {
+              "durationTicks": 300,
+              "allowedCount": 38,
+              "trueSafeRateAmongAllowed": 0.631578947368421,
+              "falseSafeRateAmongAllowed": 0.3684210526315789,
+              "falseNegativeRate": 0.4146341463414634,
+              "coverageOfGenuinelySafeOpportunities": 0.5853658536585366,
+              "genuinelySafeCount": 41
+            },
+            "500": {
+              "durationTicks": 500,
+              "allowedCount": 37,
+              "trueSafeRateAmongAllowed": 0.5675675675675675,
+              "falseSafeRateAmongAllowed": 0.43243243243243246,
+              "falseNegativeRate": 0.4166666666666667,
+              "coverageOfGenuinelySafeOpportunities": 0.5833333333333334,
+              "genuinelySafeCount": 36
+            },
+            "750": {
+              "durationTicks": 750,
+              "allowedCount": 7,
+              "trueSafeRateAmongAllowed": 0.7142857142857143,
+              "falseSafeRateAmongAllowed": 0.2857142857142857,
+              "falseNegativeRate": 0.7058823529411765,
+              "coverageOfGenuinelySafeOpportunities": 0.29411764705882354,
+              "genuinelySafeCount": 17
+            },
+            "1000": {
+              "durationTicks": 1000,
+              "allowedCount": 7,
+              "trueSafeRateAmongAllowed": 0.2857142857142857,
+              "falseSafeRateAmongAllowed": 0.7142857142857143,
+              "falseNegativeRate": 0.8,
+              "coverageOfGenuinelySafeOpportunities": 0.2,
+              "genuinelySafeCount": 10
+            }
+          }
+        }
+      }
+    }
+  ],
+  "selectionGuidance": {
+    "primaryEvaluationCriteria": [
+      "evaluation falseSafeRate at 500/750/1000 operation durations",
+      "evaluation >250 and >500 tick overprediction rates",
+      "evaluation coverage of genuinely safe operations",
+      "simplicity when differences are small"
+    ],
+    "doNotUseTrainingForChoice": true,
+    "capitalAdjustmentInterpretation": "Compare D candidates to A on evaluation only; a cap is worthwhile only if it materially lowers false-safe rates without unacceptable coverage loss."
+  }
+}

@@ -1,0 +1,936 @@
+{
+  "experiment": {
+    "sourceReport": "diagnostics/war-window-report.json",
+    "split": {
+      "trainingSeeds": "822748319788-822748319807",
+      "evaluationSeeds": "822748319808-822748319817"
+    },
+    "rightCensoring": "Excluded from exact-lifetime metrics; never counted as failures."
+  },
+  "bucketStability": {
+    "observationWeightedPerSeed": [
+      {
+        "bucket": "[0.0, 0.1)",
+        "seedsContainingObservations": 24,
+        "uniqueWarInstances": 86,
+        "perSeedMedianDistribution": {
+          "median": 62,
+          "p25": 28,
+          "p75": 93.5,
+          "min": 7,
+          "max": 572
+        }
+      },
+      {
+        "bucket": "[0.1, 0.2)",
+        "seedsContainingObservations": 28,
+        "uniqueWarInstances": 93,
+        "perSeedMedianDistribution": {
+          "median": 77,
+          "p25": 41.75,
+          "p75": 232.25,
+          "min": 11,
+          "max": 1279
+        }
+      },
+      {
+        "bucket": "[0.2, 0.3)",
+        "seedsContainingObservations": 27,
+        "uniqueWarInstances": 91,
+        "perSeedMedianDistribution": {
+          "median": 122,
+          "p25": 52.5,
+          "p75": 290.5,
+          "min": 7,
+          "max": 1011
+        }
+      },
+      {
+        "bucket": "[0.3, 0.4)",
+        "seedsContainingObservations": 25,
+        "uniqueWarInstances": 94,
+        "perSeedMedianDistribution": {
+          "median": 227,
+          "p25": 96,
+          "p75": 401,
+          "min": 22,
+          "max": 1341
+        }
+      },
+      {
+        "bucket": "[0.4, 0.5)",
+        "seedsContainingObservations": 29,
+        "uniqueWarInstances": 107,
+        "perSeedMedianDistribution": {
+          "median": 286,
+          "p25": 126,
+          "p75": 492,
+          "min": 12,
+          "max": 1721
+        }
+      },
+      {
+        "bucket": "[0.5, 0.6)",
+        "seedsContainingObservations": 26,
+        "uniqueWarInstances": 115,
+        "perSeedMedianDistribution": {
+          "median": 330,
+          "p25": 128.5,
+          "p75": 560.25,
+          "min": 37,
+          "max": 1569
+        }
+      },
+      {
+        "bucket": "[0.6, 0.7)",
+        "seedsContainingObservations": 29,
+        "uniqueWarInstances": 124,
+        "perSeedMedianDistribution": {
+          "median": 326,
+          "p25": 173,
+          "p75": 556,
+          "min": 31,
+          "max": 1961
+        }
+      },
+      {
+        "bucket": "[0.7, 0.8)",
+        "seedsContainingObservations": 30,
+        "uniqueWarInstances": 147,
+        "perSeedMedianDistribution": {
+          "median": 403,
+          "p25": 256.5,
+          "p75": 713,
+          "min": 70,
+          "max": 1745
+        }
+      },
+      {
+        "bucket": "[0.8, 0.9)",
+        "seedsContainingObservations": 30,
+        "uniqueWarInstances": 173,
+        "perSeedMedianDistribution": {
+          "median": 679,
+          "p25": 349,
+          "p75": 1079.75,
+          "min": 111,
+          "max": 1960
+        }
+      },
+      {
+        "bucket": "[0.9, 1.0]",
+        "seedsContainingObservations": 30,
+        "uniqueWarInstances": 194,
+        "perSeedMedianDistribution": {
+          "median": 1009.75,
+          "p25": 690,
+          "p75": 1535.5,
+          "min": 204,
+          "max": 2310
+        }
+      }
+    ],
+    "warInstanceWeightedPerSeed": [
+      {
+        "bucket": "[0.0, 0.1)",
+        "seedsContainingObservations": 24,
+        "uniqueWarInstances": 86,
+        "perSeedMedianDistribution": {
+          "median": 50,
+          "p25": 17.75,
+          "p75": 93.5,
+          "min": 7,
+          "max": 629
+        }
+      },
+      {
+        "bucket": "[0.1, 0.2)",
+        "seedsContainingObservations": 28,
+        "uniqueWarInstances": 93,
+        "perSeedMedianDistribution": {
+          "median": 70,
+          "p25": 27,
+          "p75": 232.25,
+          "min": 7,
+          "max": 716
+        }
+      },
+      {
+        "bucket": "[0.2, 0.3)",
+        "seedsContainingObservations": 27,
+        "uniqueWarInstances": 91,
+        "perSeedMedianDistribution": {
+          "median": 97,
+          "p25": 52.5,
+          "p75": 277,
+          "min": 7,
+          "max": 1011
+        }
+      },
+      {
+        "bucket": "[0.3, 0.4)",
+        "seedsContainingObservations": 25,
+        "uniqueWarInstances": 94,
+        "perSeedMedianDistribution": {
+          "median": 189.5,
+          "p25": 74,
+          "p75": 272,
+          "min": 27,
+          "max": 1341
+        }
+      },
+      {
+        "bucket": "[0.4, 0.5)",
+        "seedsContainingObservations": 29,
+        "uniqueWarInstances": 107,
+        "perSeedMedianDistribution": {
+          "median": 264.5,
+          "p25": 121,
+          "p75": 352,
+          "min": 12,
+          "max": 871
+        }
+      },
+      {
+        "bucket": "[0.5, 0.6)",
+        "seedsContainingObservations": 26,
+        "uniqueWarInstances": 115,
+        "perSeedMedianDistribution": {
+          "median": 252.75,
+          "p25": 115.5,
+          "p75": 450.75,
+          "min": 41,
+          "max": 1197
+        }
+      },
+      {
+        "bucket": "[0.6, 0.7)",
+        "seedsContainingObservations": 29,
+        "uniqueWarInstances": 124,
+        "perSeedMedianDistribution": {
+          "median": 331.5,
+          "p25": 168,
+          "p75": 606,
+          "min": 23,
+          "max": 1397
+        }
+      },
+      {
+        "bucket": "[0.7, 0.8)",
+        "seedsContainingObservations": 30,
+        "uniqueWarInstances": 147,
+        "perSeedMedianDistribution": {
+          "median": 373.5,
+          "p25": 189.25,
+          "p75": 580.75,
+          "min": 62,
+          "max": 1335
+        }
+      },
+      {
+        "bucket": "[0.8, 0.9)",
+        "seedsContainingObservations": 30,
+        "uniqueWarInstances": 173,
+        "perSeedMedianDistribution": {
+          "median": 552,
+          "p25": 318.875,
+          "p75": 710.875,
+          "min": 111,
+          "max": 1655
+        }
+      },
+      {
+        "bucket": "[0.9, 1.0]",
+        "seedsContainingObservations": 30,
+        "uniqueWarInstances": 194,
+        "perSeedMedianDistribution": {
+          "median": 761,
+          "p25": 483,
+          "p75": 1232.5,
+          "min": 82,
+          "max": 2240
+        }
+      }
+    ],
+    "interpretation": "Each per-seed value is a median; the displayed distribution prevents long-running seeds from dominating."
+  },
+  "candidateDefinitions": {
+    "exactTrainingBucketMedians": [
+      176,
+      118,
+      122,
+      242,
+      380,
+      432,
+      486,
+      632,
+      932,
+      1262
+    ],
+    "monotonicBandBoundaries": [
+      0,
+      0.2,
+      0.5,
+      0.8,
+      0.9,
+      1
+    ],
+    "rationale": "The first two 0.1 buckets have similarly short central lifetimes; .2-.4 and .5-.7 have unstable adjacent bucket medians, so they are deliberately pooled; .8-.9 and .9-1.0 retain the consistently longer upper-resistance regimes."
+  },
+  "comparison": [
+    {
+      "name": "A-current-linear-min-side",
+      "rules": "round(120 + 1080r)",
+      "evaluation": {
+        "observationWeighted": {
+          "observationCount": 7589,
+          "meanPredictionError": 41.33772565555409,
+          "medianPredictionError": 160,
+          "meanAbsoluteError": 503.6985110027672,
+          "overprediction250Rate": 0.42693371985768874,
+          "overprediction500Rate": 0.2529977599156674,
+          "feasibility": {
+            "300": {
+              "allowedCount": 7035,
+              "falseSafeRate": 0.20639658848614073,
+              "coverage": 0.9844824545935461
+            },
+            "500": {
+              "allowedCount": 6602,
+              "falseSafeRate": 0.31990305967888516,
+              "coverage": 0.9573560767590619
+            },
+            "750": {
+              "allowedCount": 5491,
+              "falseSafeRate": 0.4439992715352395,
+              "coverage": 0.8373560065825563
+            },
+            "1000": {
+              "allowedCount": 4144,
+              "falseSafeRate": 0.49107142857142855,
+              "coverage": 0.779379157427938
+            }
+          }
+        },
+        "warInstanceWeighted": {
+          "representativeWithinWar": "median actual remaining lifetime observation",
+          "observationCount": 71,
+          "meanPredictionError": 362.92957746478874,
+          "medianPredictionError": 397,
+          "meanAbsoluteError": 517.9718309859155,
+          "overprediction250Rate": 0.704225352112676,
+          "overprediction500Rate": 0.43661971830985913,
+          "feasibility": {
+            "300": {
+              "allowedCount": 69,
+              "falseSafeRate": 0.4057971014492754,
+              "coverage": 1
+            },
+            "500": {
+              "allowedCount": 64,
+              "falseSafeRate": 0.5,
+              "coverage": 0.8888888888888888
+            },
+            "750": {
+              "allowedCount": 48,
+              "falseSafeRate": 0.7916666666666666,
+              "coverage": 0.5882352941176471
+            },
+            "1000": {
+              "allowedCount": 35,
+              "falseSafeRate": 0.8571428571428571,
+              "coverage": 0.5
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "B-fitted-linear-min-side",
+      "rules": "max(0, round(-35.559 + 1248.972r)); fit on first 20 seeds",
+      "evaluation": {
+        "observationWeighted": {
+          "observationCount": 7589,
+          "meanPredictionError": 10.655027012781657,
+          "medianPredictionError": 120,
+          "meanAbsoluteError": 499.6875741204375,
+          "overprediction250Rate": 0.41085782052971404,
+          "overprediction500Rate": 0.23823955725392015,
+          "feasibility": {
+            "300": {
+              "allowedCount": 6816,
+              "falseSafeRate": 0.1955692488262911,
+              "coverage": 0.9668488802680303
+            },
+            "500": {
+              "allowedCount": 6435,
+              "falseSafeRate": 0.3146853146853147,
+              "coverage": 0.9402985074626866
+            },
+            "750": {
+              "allowedCount": 5336,
+              "falseSafeRate": 0.4353448275862069,
+              "coverage": 0.826385079539221
+            },
+            "1000": {
+              "allowedCount": 4076,
+              "falseSafeRate": 0.48282630029440626,
+              "coverage": 0.779009608277901
+            }
+          }
+        },
+        "warInstanceWeighted": {
+          "representativeWithinWar": "median actual remaining lifetime observation",
+          "observationCount": 71,
+          "meanPredictionError": 329.4366197183099,
+          "medianPredictionError": 352,
+          "meanAbsoluteError": 509.88732394366195,
+          "overprediction250Rate": 0.647887323943662,
+          "overprediction500Rate": 0.4225352112676056,
+          "feasibility": {
+            "300": {
+              "allowedCount": 68,
+              "falseSafeRate": 0.4117647058823529,
+              "coverage": 0.975609756097561
+            },
+            "500": {
+              "allowedCount": 61,
+              "falseSafeRate": 0.4918032786885246,
+              "coverage": 0.8611111111111112
+            },
+            "750": {
+              "allowedCount": 48,
+              "falseSafeRate": 0.7916666666666666,
+              "coverage": 0.5882352941176471
+            },
+            "1000": {
+              "allowedCount": 31,
+              "falseSafeRate": 0.8387096774193549,
+              "coverage": 0.5
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "C-exact-0.1-bucket-median",
+      "rules": "first-20-seed bucket medians",
+      "evaluation": {
+        "observationWeighted": {
+          "observationCount": 7589,
+          "meanPredictionError": -36.73224403742258,
+          "medianPredictionError": 106,
+          "meanAbsoluteError": 476.8995915140335,
+          "overprediction250Rate": 0.3448412175517196,
+          "overprediction500Rate": 0.15641059428119647,
+          "feasibility": {
+            "300": {
+              "allowedCount": 6504,
+              "falseSafeRate": 0.19234317343173432,
+              "coverage": 0.926291659319344
+            },
+            "500": {
+              "allowedCount": 5081,
+              "falseSafeRate": 0.2643180476284196,
+              "coverage": 0.7970149253731343
+            },
+            "750": {
+              "allowedCount": 4232,
+              "falseSafeRate": 0.32585066162570886,
+              "coverage": 0.7825013713658804
+            },
+            "1000": {
+              "allowedCount": 3307,
+              "falseSafeRate": 0.39824614454188084,
+              "coverage": 0.7354028085735402
+            }
+          }
+        },
+        "warInstanceWeighted": {
+          "representativeWithinWar": "median actual remaining lifetime observation",
+          "observationCount": 71,
+          "meanPredictionError": 244.6056338028169,
+          "medianPredictionError": 286,
+          "meanAbsoluteError": 490.2112676056338,
+          "overprediction250Rate": 0.5211267605633803,
+          "overprediction500Rate": 0.29577464788732394,
+          "feasibility": {
+            "300": {
+              "allowedCount": 62,
+              "falseSafeRate": 0.41935483870967744,
+              "coverage": 0.8780487804878049
+            },
+            "500": {
+              "allowedCount": 47,
+              "falseSafeRate": 0.48936170212765956,
+              "coverage": 0.6666666666666666
+            },
+            "750": {
+              "allowedCount": 36,
+              "falseSafeRate": 0.75,
+              "coverage": 0.5294117647058824
+            },
+            "1000": {
+              "allowedCount": 22,
+              "falseSafeRate": 0.7727272727272727,
+              "coverage": 0.5
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "M1-five-band-rounded",
+      "rules": "r<.2→150; .2≤r<.5→300; .5≤r<.8→500; .8≤r<.9→850; r≥.9→1200",
+      "evaluation": {
+        "observationWeighted": {
+          "observationCount": 7589,
+          "meanPredictionError": -79.89260772170246,
+          "medianPredictionError": 73,
+          "meanAbsoluteError": 458.8413493213862,
+          "overprediction250Rate": 0.29832652523389114,
+          "overprediction500Rate": 0.12056924495981025,
+          "feasibility": {
+            "300": {
+              "allowedCount": 6975,
+              "falseSafeRate": 0.20301075268817204,
+              "coverage": 0.9802503967554224
+            },
+            "500": {
+              "allowedCount": 6043,
+              "falseSafeRate": 0.3182194274367036,
+              "coverage": 0.8784648187633263
+            },
+            "750": {
+              "allowedCount": 4232,
+              "falseSafeRate": 0.32585066162570886,
+              "coverage": 0.7825013713658804
+            },
+            "1000": {
+              "allowedCount": 3307,
+              "falseSafeRate": 0.39824614454188084,
+              "coverage": 0.7354028085735402
+            }
+          }
+        },
+        "warInstanceWeighted": {
+          "representativeWithinWar": "median actual remaining lifetime observation",
+          "observationCount": 71,
+          "meanPredictionError": 205.33802816901408,
+          "medianPredictionError": 227,
+          "meanAbsoluteError": 464.85915492957747,
+          "overprediction250Rate": 0.49295774647887325,
+          "overprediction500Rate": 0.2676056338028169,
+          "feasibility": {
+            "300": {
+              "allowedCount": 69,
+              "falseSafeRate": 0.4057971014492754,
+              "coverage": 1
+            },
+            "500": {
+              "allowedCount": 57,
+              "falseSafeRate": 0.5263157894736842,
+              "coverage": 0.75
+            },
+            "750": {
+              "allowedCount": 36,
+              "falseSafeRate": 0.75,
+              "coverage": 0.5294117647058824
+            },
+            "1000": {
+              "allowedCount": 22,
+              "falseSafeRate": 0.7727272727272727,
+              "coverage": 0.5
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "M2-five-band-cautious-middle",
+      "rules": "r<.2→150; .2≤r<.5→250; .5≤r<.8→450; .8≤r<.9→800; r≥.9→1150",
+      "evaluation": {
+        "observationWeighted": {
+          "observationCount": 7589,
+          "meanPredictionError": -125.84727895638424,
+          "medianPredictionError": 38,
+          "meanAbsoluteError": 454.98524179733823,
+          "overprediction250Rate": 0.25036236658321254,
+          "overprediction500Rate": 0.10488865463170378,
+          "feasibility": {
+            "300": {
+              "allowedCount": 6043,
+              "falseSafeRate": 0.1868277345689227,
+              "coverage": 0.8665138423558455
+            },
+            "500": {
+              "allowedCount": 4232,
+              "falseSafeRate": 0.1824196597353497,
+              "coverage": 0.7377398720682303
+            },
+            "750": {
+              "allowedCount": 4232,
+              "falseSafeRate": 0.32585066162570886,
+              "coverage": 0.7825013713658804
+            },
+            "1000": {
+              "allowedCount": 3307,
+              "falseSafeRate": 0.39824614454188084,
+              "coverage": 0.7354028085735402
+            }
+          }
+        },
+        "warInstanceWeighted": {
+          "representativeWithinWar": "median actual remaining lifetime observation",
+          "observationCount": 71,
+          "meanPredictionError": 156.74647887323943,
+          "medianPredictionError": 177,
+          "meanAbsoluteError": 450.07042253521126,
+          "overprediction250Rate": 0.4225352112676056,
+          "overprediction500Rate": 0.2676056338028169,
+          "feasibility": {
+            "300": {
+              "allowedCount": 57,
+              "falseSafeRate": 0.43859649122807015,
+              "coverage": 0.7804878048780488
+            },
+            "500": {
+              "allowedCount": 36,
+              "falseSafeRate": 0.5,
+              "coverage": 0.5
+            },
+            "750": {
+              "allowedCount": 36,
+              "falseSafeRate": 0.75,
+              "coverage": 0.5294117647058824
+            },
+            "1000": {
+              "allowedCount": 22,
+              "falseSafeRate": 0.7727272727272727,
+              "coverage": 0.5
+            }
+          }
+        }
+      }
+    }
+  ],
+  "sensitivity": [
+    {
+      "base": "M1-five-band-rounded",
+      "variants": [
+        {
+          "deltaTicksAppliedToEveryBand": -100,
+          "rules": "r<.2→150; .2≤r<.5→300; .5≤r<.8→500; .8≤r<.9→850; r≥.9→1200; each band -100",
+          "evaluation": {
+            "observationWeighted": {
+              "observationCount": 7589,
+              "meanPredictionError": -179.89260772170246,
+              "medianPredictionError": -27,
+              "meanAbsoluteError": 454.223876663592,
+              "overprediction250Rate": 0.21373039926208987,
+              "overprediction500Rate": 0.08920806430359732,
+              "feasibility": {
+                "300": {
+                  "allowedCount": 6043,
+                  "falseSafeRate": 0.1868277345689227,
+                  "coverage": 0.8665138423558455
+                },
+                "500": {
+                  "allowedCount": 4232,
+                  "falseSafeRate": 0.1824196597353497,
+                  "coverage": 0.7377398720682303
+                },
+                "750": {
+                  "allowedCount": 4232,
+                  "falseSafeRate": 0.32585066162570886,
+                  "coverage": 0.7825013713658804
+                },
+                "1000": {
+                  "allowedCount": 3307,
+                  "falseSafeRate": 0.39824614454188084,
+                  "coverage": 0.7354028085735402
+                }
+              }
+            },
+            "warInstanceWeighted": {
+              "representativeWithinWar": "median actual remaining lifetime observation",
+              "observationCount": 71,
+              "meanPredictionError": 105.33802816901408,
+              "medianPredictionError": 127,
+              "meanAbsoluteError": 435.6478873239437,
+              "overprediction250Rate": 0.4084507042253521,
+              "overprediction500Rate": 0.22535211267605634,
+              "feasibility": {
+                "300": {
+                  "allowedCount": 57,
+                  "falseSafeRate": 0.43859649122807015,
+                  "coverage": 0.7804878048780488
+                },
+                "500": {
+                  "allowedCount": 36,
+                  "falseSafeRate": 0.5,
+                  "coverage": 0.5
+                },
+                "750": {
+                  "allowedCount": 36,
+                  "falseSafeRate": 0.75,
+                  "coverage": 0.5294117647058824
+                },
+                "1000": {
+                  "allowedCount": 22,
+                  "falseSafeRate": 0.7727272727272727,
+                  "coverage": 0.5
+                }
+              }
+            }
+          }
+        },
+        {
+          "deltaTicksAppliedToEveryBand": 100,
+          "rules": "r<.2→150; .2≤r<.5→300; .5≤r<.8→500; .8≤r<.9→850; r≥.9→1200; each band +100",
+          "evaluation": {
+            "observationWeighted": {
+              "observationCount": 7589,
+              "meanPredictionError": 20.107392278297535,
+              "medianPredictionError": 173,
+              "meanAbsoluteError": 480.4866253788378,
+              "overprediction250Rate": 0.3954407695348531,
+              "overprediction500Rate": 0.18131506127289498,
+              "feasibility": {
+                "300": {
+                  "allowedCount": 6975,
+                  "falseSafeRate": 0.20301075268817204,
+                  "coverage": 0.9802503967554224
+                },
+                "500": {
+                  "allowedCount": 6043,
+                  "falseSafeRate": 0.3182194274367036,
+                  "coverage": 0.8784648187633263
+                },
+                "750": {
+                  "allowedCount": 4232,
+                  "falseSafeRate": 0.32585066162570886,
+                  "coverage": 0.7825013713658804
+                },
+                "1000": {
+                  "allowedCount": 3307,
+                  "falseSafeRate": 0.39824614454188084,
+                  "coverage": 0.7354028085735402
+                }
+              }
+            },
+            "warInstanceWeighted": {
+              "representativeWithinWar": "median actual remaining lifetime observation",
+              "observationCount": 71,
+              "meanPredictionError": 305.3380281690141,
+              "medianPredictionError": 327,
+              "meanAbsoluteError": 499.61971830985914,
+              "overprediction250Rate": 0.5633802816901409,
+              "overprediction500Rate": 0.39436619718309857,
+              "feasibility": {
+                "300": {
+                  "allowedCount": 69,
+                  "falseSafeRate": 0.4057971014492754,
+                  "coverage": 1
+                },
+                "500": {
+                  "allowedCount": 57,
+                  "falseSafeRate": 0.5263157894736842,
+                  "coverage": 0.75
+                },
+                "750": {
+                  "allowedCount": 36,
+                  "falseSafeRate": 0.75,
+                  "coverage": 0.5294117647058824
+                },
+                "1000": {
+                  "allowedCount": 22,
+                  "falseSafeRate": 0.7727272727272727,
+                  "coverage": 0.5
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "base": "M2-five-band-cautious-middle",
+      "variants": [
+        {
+          "deltaTicksAppliedToEveryBand": -100,
+          "rules": "r<.2→150; .2≤r<.5→250; .5≤r<.8→450; .8≤r<.9→800; r≥.9→1150; each band -100",
+          "evaluation": {
+            "observationWeighted": {
+              "observationCount": 7589,
+              "meanPredictionError": -225.84727895638423,
+              "medianPredictionError": -62,
+              "meanAbsoluteError": 458.2278297535907,
+              "overprediction250Rate": 0.18131506127289498,
+              "overprediction500Rate": 0.07444986164185005,
+              "feasibility": {
+                "300": {
+                  "allowedCount": 6043,
+                  "falseSafeRate": 0.1868277345689227,
+                  "coverage": 0.8665138423558455
+                },
+                "500": {
+                  "allowedCount": 4232,
+                  "falseSafeRate": 0.1824196597353497,
+                  "coverage": 0.7377398720682303
+                },
+                "750": {
+                  "allowedCount": 3307,
+                  "falseSafeRate": 0.24160870879951618,
+                  "coverage": 0.6878771256171147
+                },
+                "1000": {
+                  "allowedCount": 3307,
+                  "falseSafeRate": 0.39824614454188084,
+                  "coverage": 0.7354028085735402
+                }
+              }
+            },
+            "warInstanceWeighted": {
+              "representativeWithinWar": "median actual remaining lifetime observation",
+              "observationCount": 71,
+              "meanPredictionError": 56.74647887323944,
+              "medianPredictionError": 77,
+              "meanAbsoluteError": 421.5633802816901,
+              "overprediction250Rate": 0.39436619718309857,
+              "overprediction500Rate": 0.2112676056338028,
+              "feasibility": {
+                "300": {
+                  "allowedCount": 57,
+                  "falseSafeRate": 0.43859649122807015,
+                  "coverage": 0.7804878048780488
+                },
+                "500": {
+                  "allowedCount": 36,
+                  "falseSafeRate": 0.5,
+                  "coverage": 0.5
+                },
+                "750": {
+                  "allowedCount": 22,
+                  "falseSafeRate": 0.6363636363636364,
+                  "coverage": 0.47058823529411764
+                },
+                "1000": {
+                  "allowedCount": 22,
+                  "falseSafeRate": 0.7727272727272727,
+                  "coverage": 0.5
+                }
+              }
+            }
+          }
+        },
+        {
+          "deltaTicksAppliedToEveryBand": 100,
+          "rules": "r<.2→150; .2≤r<.5→250; .5≤r<.8→450; .8≤r<.9→800; r≥.9→1150; each band +100",
+          "evaluation": {
+            "observationWeighted": {
+              "observationCount": 7589,
+              "meanPredictionError": -25.84727895638424,
+              "medianPredictionError": 138,
+              "meanAbsoluteError": 469.9982869943339,
+              "overprediction250Rate": 0.34774015021741994,
+              "overprediction500Rate": 0.14837264461720912,
+              "feasibility": {
+                "300": {
+                  "allowedCount": 6975,
+                  "falseSafeRate": 0.20301075268817204,
+                  "coverage": 0.9802503967554224
+                },
+                "500": {
+                  "allowedCount": 6043,
+                  "falseSafeRate": 0.3182194274367036,
+                  "coverage": 0.8784648187633263
+                },
+                "750": {
+                  "allowedCount": 4232,
+                  "falseSafeRate": 0.32585066162570886,
+                  "coverage": 0.7825013713658804
+                },
+                "1000": {
+                  "allowedCount": 3307,
+                  "falseSafeRate": 0.39824614454188084,
+                  "coverage": 0.7354028085735402
+                }
+              }
+            },
+            "warInstanceWeighted": {
+              "representativeWithinWar": "median actual remaining lifetime observation",
+              "observationCount": 71,
+              "meanPredictionError": 256.7464788732394,
+              "medianPredictionError": 277,
+              "meanAbsoluteError": 482.5774647887324,
+              "overprediction250Rate": 0.5492957746478874,
+              "overprediction500Rate": 0.28169014084507044,
+              "feasibility": {
+                "300": {
+                  "allowedCount": 69,
+                  "falseSafeRate": 0.4057971014492754,
+                  "coverage": 1
+                },
+                "500": {
+                  "allowedCount": 57,
+                  "falseSafeRate": 0.5263157894736842,
+                  "coverage": 0.75
+                },
+                "750": {
+                  "allowedCount": 36,
+                  "falseSafeRate": 0.75,
+                  "coverage": 0.5294117647058824
+                },
+                "1000": {
+                  "allowedCount": 22,
+                  "falseSafeRate": 0.7727272727272727,
+                  "coverage": 0.5
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "capitalThreatAsSeparateRiskSignal": {
+    "either-critical": {
+      "observationCount": 3188,
+      "actualRemainingWarTicks": {
+        "median": 512,
+        "p25": 203.5
+      },
+      "allowedByBestMonotonicAt500": {
+        "allowedCount": 2170,
+        "falseSafeRate": 0.4497695852534562,
+        "coverage": 0.7356746765249538
+      }
+    },
+    "either-threatened-or-critical": {
+      "observationCount": 6008,
+      "actualRemainingWarTicks": {
+        "median": 628,
+        "p25": 260
+      },
+      "allowedByBestMonotonicAt500": {
+        "allowedCount": 4609,
+        "falseSafeRate": 0.3645042308526795,
+        "coverage": 0.841424877908647
+      }
+    },
+    "neither-threatened": {
+      "observationCount": 1581,
+      "actualRemainingWarTicks": {
+        "median": 1096,
+        "p25": 546
+      },
+      "allowedByBestMonotonicAt500": {
+        "allowedCount": 1434,
+        "falseSafeRate": 0.1694560669456067,
+        "coverage": 0.9851116625310173
+      }
+    }
+  },
+  "limitation": "This is a deterministic temporal seed split, not independent future-world validation. Results establish relative stability and safety/coverage trade-offs, not a guaranteed lifetime forecast."
+}

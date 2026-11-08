@@ -61,6 +61,8 @@ export const WORLD_BALANCE = {
         switchingThreshold: 15,
         localInterceptRouteSteps: 6,
         blockadeMinimumTargetScore: 75,
+        shoreSupportBonusPerShip: 0.12,
+        maximumShoreSupportBonus: 0.25,
       },
     },
     tankShare: 0.2,

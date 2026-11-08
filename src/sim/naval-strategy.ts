@@ -1,3 +1,4 @@
+import { canReachCoast, getCoastalSeaRegions, getCoastalSupportTargets } from "./coastal-support";
 import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
@@ -11,7 +12,7 @@ import { isNationActive } from "./nation-active";
 import { buildWarAdjacency, isAtWar } from "./war-state";
 import { isAmphibiousOwnedUnit } from "./amphibious";
 
-export type NavalMissionType = "ESCORT" | "RAID" | "INTERCEPT" | "BLOCKADE" | "RESERVE";
+export type NavalMissionType = "ESCORT" | "RAID" | "INTERCEPT" | "BLOCKADE" | "SUPPORT" | "RESERVE";
 export type NavalMissionStatus = "ACTIVE" | "UNAVAILABLE";
 
 export interface NavalMission {
@@ -23,6 +24,7 @@ export interface NavalMission {
   targetConvoyId?: string;
   targetPortId?: MesoRegionId;
   targetSeaRegionId?: MesoRegionId;
+  targetCoastId?: MesoRegionId;
   targetShipId?: UnitId;
   priority: number;
   createdTick: number;
@@ -135,6 +137,7 @@ interface MissionCandidate {
   targetConvoyId?: string;
   targetPortId?: MesoRegionId;
   targetSeaRegionId?: MesoRegionId;
+  targetCoastId?: MesoRegionId;
   targetShipId?: UnitId;
   emergency?: boolean;
   slotIndex?: number;
@@ -271,7 +274,7 @@ export function updateNavalStrategy(world: WorldState): void {
         nationId, type: candidate.type, shipIds: [...shipIds].sort(compareIds),
         targetLinkId: candidate.targetLinkId, targetConvoyId: candidate.targetConvoyId,
         targetPortId: candidate.targetPortId, targetSeaRegionId: candidate.targetSeaRegionId,
-        targetShipId: candidate.targetShipId, priority: candidate.priority,
+        targetShipId: candidate.targetShipId, targetCoastId: candidate.targetCoastId, priority: candidate.priority,
         createdTick: previous?.createdTick ?? world.time.fastTick,
         status: fuelUnavailable ? "UNAVAILABLE" : "ACTIVE",
         reasonFlags: [...candidate.reasonFlags, ...(fuelUnavailable ? ["fuel-unavailable"] : [])],
@@ -413,6 +416,11 @@ function buildCandidates(world: WorldState, nationId: NationId): MissionCandidat
       priority: 70 + assessment.targetPriority.total * 0.5, targetLinkId: link.id,
       targetPortId: link.sourcePortId, reasonFlags: ["important-enemy-port", "persistent-interdiction"] });
   }
+  for (const coastId of getCoastalSupportTargets(world, nationId)) {
+    if (!canReachCoast(world, nationId, coastId)) continue;
+    result.push({ key: `SUPPORT:${nationId}:${coastId}`, nationId, type: "SUPPORT",
+      priority: 190, targetCoastId: coastId, reasonFlags: ["coastal-fire-support"] });
+  }
   return result.sort((a, b) => b.priority - a.priority || compareIds(a.key, b.key));
 }
 
@@ -431,7 +439,8 @@ function assessDesiredNavalForce(
   const escortDemand = Math.min(2, world.supplyAssessment.maritimeEscorts.demands
     .filter((demand) => demand.nationId === nationId)
     .reduce((sum, demand) => sum + demand.requiredEscortCount, 0));
-  const offensiveOpportunityDemand = world.supplyAssessment.maritimeInterdiction.assessments
+  const coastalOpportunity = getCoastalSupportTargets(world, nationId).some((id) => canReachCoast(world, nationId, id));
+  const offensiveOpportunityDemand = coastalOpportunity || world.supplyAssessment.maritimeInterdiction.assessments
     .some((assessment) => assessment.attackerNationId === nationId &&
       assessment.targetPriority.total >= OFFENSIVE_BOOTSTRAP_MINIMUM_SCORE) ? 1 : 0;
   const warAdjacency = buildWarAdjacency(world.wars);
@@ -451,7 +460,9 @@ function assessDesiredNavalForce(
     ...(baselineCombatShips ? ["baseline-fleet"] : []),
     ...(meaningfulOwnLinks.length ? ["own-maritime-supply"] : []),
     ...(escortDemand ? ["escort-deficit"] : []),
-    ...(offensiveOpportunityDemand ? ["offensive-bootstrap", "enemy-maritime-supply"] : []),
+    ...(offensiveOpportunityDemand ? ["offensive-bootstrap"] : []),
+    ...(coastalOpportunity ? ["coastal-fire-support"] : []),
+    ...(offensiveOpportunityDemand && !coastalOpportunity ? ["enemy-maritime-supply"] : []),
     ...(interceptionDemand ? ["interception-threat"] : []),
     ...(enemyNavalThreatDemand ? ["naval-threat"] : []),
     ...(reserveTarget ? ["reserve-restoration"] : []),
@@ -514,7 +525,7 @@ function updateFleetLifecycleMetrics(
       state.zeroFleetSinceTickByNationId.delete(force.nationId);
     }
     const hasOffensiveMission = missions.some((mission) => mission.nationId === force.nationId &&
-      (mission.type === "RAID" || mission.type === "BLOCKADE"));
+      (mission.type === "RAID" || mission.type === "BLOCKADE" || mission.type === "SUPPORT"));
     if (hasOffensiveMission && !state.firstOffensiveMissionTickByNationId.has(force.nationId)) {
       state.firstOffensiveMissionTickByNationId.set(force.nationId, world.time.fastTick);
       const firstShipTick = state.firstCombatShipTickByNationId.get(force.nationId);
@@ -539,10 +550,13 @@ function chooseShip(
     const target = candidate.targetShipId
       ? world.units.find((unit) => unit.id === candidate.targetShipId)?.regionId
       : candidate.targetPortId ?? candidate.targetSeaRegionId;
-    const route = target ? buildNavalPositioningRoute(world, ship.regionId, [target]) : [ship.regionId];
-    costs.set(ship.id, protectedCommitment + (route.length || 10_000));
+    const targets = candidate.targetCoastId ? getCoastalSeaRegions(world, candidate.targetCoastId) : target ? [target] : [];
+    const route = targets.length ? buildNavalPositioningRoute(world, ship.regionId, targets) : [ship.regionId];
+    const unreachable = route.length === 0 || (candidate.type === "INTERCEPT" &&
+      route.length - 1 > WORLD_BALANCE.unit.naval.strategy.localInterceptRouteSteps);
+    costs.set(ship.id, unreachable ? Number.POSITIVE_INFINITY : protectedCommitment + route.length);
   }
-  return [...ships].sort((a, b) => {
+  return ships.filter((ship) => Number.isFinite(costs.get(ship.id))).sort((a, b) => {
     return (costs.get(a.id) ?? 0) - (costs.get(b.id) ?? 0) || compareIds(a.id, b.id);
   })[0];
 }
@@ -564,15 +578,15 @@ function isSuppliedPort(world: WorldState, nationId: NationId, regionId: MesoReg
   return !!componentId && assessment?.componentById.get(componentId)?.supplied === true;
 }
 
-/** Executes only INTERCEPT and RESERVE positioning; other missions use existing systems. */
+/** Positions interception, shore support and reserve missions. */
 export function updateNavalStrategyMovement(world: WorldState, dtMs: number): void {
   const state = world.supplyAssessment.navalStrategy;
-  if (!state.missions.some((mission) => mission.type === "INTERCEPT" || mission.type === "RESERVE")) return;
+  if (!state.missions.some((mission) => mission.type === "INTERCEPT" || mission.type === "RESERVE" || mission.type === "SUPPORT")) return;
   const startedAt = world.instrumentation ? performance.now() : 0;
   const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
   const neighbors = getNeighborsById(world);
   for (const mission of state.missions) {
-    if (mission.type !== "INTERCEPT" && mission.type !== "RESERVE") continue;
+    if (mission.type !== "INTERCEPT" && mission.type !== "RESERVE" && mission.type !== "SUPPORT") continue;
     const liveTarget = mission.targetShipId ? unitById.get(mission.targetShipId)?.regionId : undefined;
     // Do not sail toward the last known position of a sunk invasion transport.
     if (mission.targetShipId && !liveTarget) {
@@ -583,7 +597,8 @@ export function updateNavalStrategyMovement(world: WorldState, dtMs: number): vo
       }
       continue;
     }
-    const target = liveTarget ?? mission.targetPortId ?? mission.targetSeaRegionId;
+    const supportTargets = mission.targetCoastId ? getCoastalSeaRegions(world, mission.targetCoastId) : [];
+    const target = liveTarget ?? mission.targetPortId ?? mission.targetSeaRegionId ?? supportTargets[0];
     if (!target) continue;
     for (const shipId of mission.shipIds) {
       const ship = unitById.get(shipId);
@@ -593,7 +608,9 @@ export function updateNavalStrategyMovement(world: WorldState, dtMs: number): vo
         continue;
       }
       const pathStartedAt = world.instrumentation ? performance.now() : 0;
-      const route = buildNavalPositioningRoute(world, ship.regionId, [target]);
+      const route = buildNavalPositioningRoute(world, ship.regionId, supportTargets.length ? supportTargets : [target]);
+      if (mission.type === "SUPPORT") mission.targetSeaRegionId = route.at(-1);
+      if (route.length === 1) { resetMovement(ship); continue; }
       if (world.instrumentation) state.pathfindingCpuMs += performance.now() - pathStartedAt;
       if (mission.type === "INTERCEPT" && route.length - 1 > WORLD_BALANCE.unit.naval.strategy.localInterceptRouteSteps) {
         mission.status = "UNAVAILABLE";
@@ -705,7 +722,7 @@ export function getNavalUnitOwnership(
 }
 
 function missionKey(mission: NavalMission): string {
-  const base = `${mission.type}:${mission.nationId}:${mission.targetShipId ?? mission.targetLinkId ?? mission.targetPortId ?? ""}`;
+  const base = `${mission.type}:${mission.nationId}:${mission.targetShipId ?? mission.targetLinkId ?? mission.targetPortId ?? mission.targetCoastId ?? ""}`;
   if (mission.type === "ESCORT") return `${base}:${mission.slotIndex ?? 0}`;
   if (mission.type === "RAID" && (mission.slotIndex ?? 0) > 0) return `${base}:reinforcement-${mission.slotIndex}`;
   return base;
@@ -721,10 +738,10 @@ function resetMovement(unit: UnitState): void {
 function recordMetrics(world: WorldState): void {
   const state = world.supplyAssessment.navalStrategy;
   world.instrumentation?.incrementCounter("navalStrategy.evaluations");
-  for (const type of ["ESCORT", "RAID", "INTERCEPT", "BLOCKADE", "RESERVE"] as const) {
+  for (const type of ["ESCORT", "RAID", "INTERCEPT", "BLOCKADE", "SUPPORT", "RESERVE"] as const) {
     world.instrumentation?.incrementCounter(`navalStrategy.ships.${type.toLowerCase()}` as
       | "navalStrategy.ships.escort" | "navalStrategy.ships.raid" | "navalStrategy.ships.intercept"
-      | "navalStrategy.ships.blockade" | "navalStrategy.ships.reserve",
+      | "navalStrategy.ships.blockade" | "navalStrategy.ships.support" | "navalStrategy.ships.reserve",
       state.missions.filter((mission) => mission.type === type).reduce((n, mission) => n + mission.shipIds.length, 0));
   }
   const operationalIds = new Set(world.units.filter((unit) => isOperationalCombatShip(unit))
