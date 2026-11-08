@@ -10,7 +10,7 @@ import type { UnitState } from "./unit";
 import { buildWarAdjacency, isAtWar } from "./war-state";
 import { isNationActive } from "./nation-active";
 import type { WorldState } from "./world-state";
-import { getMesoById } from "./world-cache";
+import { getMacroAdjacency, getMesoById } from "./world-cache";
 
 export function updateSurrender(world: WorldState): void {
   if (world.nations.length === 0) {
@@ -149,6 +149,8 @@ export function updateSurrender(world: WorldState): void {
       allocation,
       contributions,
       occupancyByMacro,
+      getMacroAdjacency(world),
+      new Map(world.macroRegions.map((macro) => [macro.id, macro.nationId])),
     );
 
     updateTerritorialClaims(world);
@@ -389,78 +391,55 @@ function assignMacroRegions(
   allocation: Map<NationId, number>,
   contributions: Map<NationId, number>,
   occupancyByMacro: Map<MacroRegion["id"], Map<NationId, number>>,
+  adjacency: ReadonlyMap<MacroRegion["id"], ReadonlySet<MacroRegion["id"]>>,
+  owners: ReadonlyMap<MacroRegion["id"], NationId>,
 ): Map<MacroRegion["id"], NationId> {
   const assignments = new Map<MacroRegion["id"], NationId>();
-  const remaining = new Map<NationId, number>();
-  for (const [nationId, count] of allocation.entries()) {
-    remaining.set(nationId, count);
-  }
+  const pending = new Set(macroIds);
+  const remaining = new Map(allocation);
+  const victors = [...allocation].filter(([, count]) => count > 0).map(([id]) => id);
+  const eligibleVictors = new Set(victors);
+  const hasQuota = (id: NationId) => Number((remaining.get(id) ?? 0) > 0);
+  const contribution = (id: NationId) => contributions.get(id) ?? 0;
+  const occupy = (id: MacroRegion["id"], victor: NationId) => occupancyByMacro.get(id)?.get(victor) ?? 0;
+  const assign = (id: MacroRegion["id"], victor: NationId) => {
+    pending.delete(id);
+    assignments.set(id, victor);
+    remaining.set(victor, (remaining.get(victor) ?? 0) - 1);
+  };
 
-  const macroScores = macroIds.map((macroId) => {
-    const counts = occupancyByMacro.get(macroId) ?? new Map<NationId, number>();
-    let bestNation: NationId | null = null;
-    let bestCount = 0;
-    for (const [nationId, count] of counts.entries()) {
-      if (count > bestCount) {
-        bestNation = nationId;
-        bestCount = count;
+  while (pending.size > 0) {
+    const frontier: { id: MacroRegion["id"]; victor: NationId; sharedBorder: number }[] = [];
+    for (const id of pending) {
+      const borderingVictors = new Map<NationId, number>();
+      for (const neighbor of adjacency.get(id) ?? []) {
+        const owner = assignments.get(neighbor) ?? owners.get(neighbor);
+        if (owner && eligibleVictors.has(owner)) borderingVictors.set(owner, (borderingVictors.get(owner) ?? 0) + 1);
       }
+      for (const [victor, sharedBorder] of borderingVictors) frontier.push({ id, victor, sharedBorder });
     }
-    return { macroId, counts, bestNation, bestCount };
-  });
 
-  macroScores.sort((a, b) => b.bestCount - a.bestCount);
-
-  for (const entry of macroScores) {
-    let chosen: NationId | null = null;
-    let bestCount = -1;
-    let bestWeight = -1;
-    for (const [nationId, count] of entry.counts.entries()) {
-      if ((remaining.get(nationId) ?? 0) <= 0) {
-        continue;
-      }
-      const weight = contributions.get(nationId) ?? 0;
-      if (count > bestCount || (count === bestCount && weight > bestWeight)) {
-        chosen = nationId;
-        bestCount = count;
-        bestWeight = weight;
-      }
-    }
-    if (!chosen) {
+    // Each concession grows from an existing border. Contribution targets can
+    // yield when another province would otherwise become a detached holding.
+    const next = frontier.sort((a, b) => hasQuota(b.victor) - hasQuota(a.victor) ||
+      occupy(b.id, b.victor) - occupy(a.id, a.victor) ||
+      b.sharedBorder - a.sharedBorder || contribution(b.victor) - contribution(a.victor) ||
+      a.id.localeCompare(b.id) || a.victor.localeCompare(b.victor))[0];
+    if (next) {
+      assign(next.id, next.victor);
       continue;
     }
-    assignments.set(entry.macroId, chosen);
-    remaining.set(chosen, (remaining.get(chosen) ?? 0) - 1);
-  }
 
-  const remainingMacroIds = macroIds.filter((macroId) => !assignments.has(macroId));
-  if (remainingMacroIds.length > 0) {
-    const remainingNations = [...remaining.entries()]
-      .filter(([, count]) => count > 0)
-      .sort((a, b) => {
-        if (a[1] !== b[1]) {
-          return b[1] - a[1];
-        }
-        return (contributions.get(b[0]) ?? 0) - (contributions.get(a[0]) ?? 0);
-      });
-    let index = 0;
-    for (const macroId of remainingMacroIds) {
-      if (remainingNations.length === 0) {
-        break;
-      }
-      const [nationId] = remainingNations[index % remainingNations.length];
-      assignments.set(macroId, nationId);
-      remaining.set(nationId, (remaining.get(nationId) ?? 0) - 1);
-      if ((remaining.get(nationId) ?? 0) <= 0) {
-        remainingNations.splice(index % remainingNations.length, 1);
-        if (remainingNations.length === 0) {
-          break;
-        }
-        index = 0;
-      } else {
-        index += 1;
-      }
+    // Overseas territories without a land connection to a victor are kept together.
+    const component = new Set<MacroRegion["id"]>([pending.values().next().value!]);
+    for (const id of component) {
+      for (const neighbor of adjacency.get(id) ?? []) if (pending.has(neighbor)) component.add(neighbor);
     }
+    const occupation = new Map(victors.map((victor) =>
+      [victor, [...component].reduce((total, id) => total + occupy(id, victor), 0)]));
+    const victor = victors.sort((a, b) => (occupation.get(b) ?? 0) - (occupation.get(a) ?? 0) ||
+      hasQuota(b) - hasQuota(a) || contribution(b) - contribution(a) || a.localeCompare(b))[0]!;
+    for (const id of component) assign(id, victor);
   }
 
   return assignments;

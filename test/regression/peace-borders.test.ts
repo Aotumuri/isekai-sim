@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { updateSurrender } from "../../src/sim/surrender";
 import test from "node:test";
 import { createSocietyWorld } from "../helpers/society-world";
 import { createMesoRegionId } from "../../src/worldgen/meso-region";
@@ -84,4 +85,30 @@ test("individually valid cessions cannot bypass validation of the combined excha
   assert.equal(getPeaceBorderIssue(world, leg(2)), null);
   assert.equal(getPeaceBorderIssue(world, [offer]), null);
   assert.match(getPeaceBorderIssue(world, [...leg(2), offer])!, /enclaves/);
+});
+
+test("surrender grows contiguous shares even when both victors occupied alternating provinces", () => {
+  const { world, a, b, c, id } = scene("abbbbcbb", [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [6, 7]]);
+  world.macroRegions = world.mesoRegions.map((region, index) => ({
+    id: createMacroRegionId(index), mesoRegionIds: [region.id],
+    nationId: index === 0 ? a.id : index === 5 ? c.id : b.id, isCore: true,
+  }));
+  for (const nation of [a, b, c]) {
+    nation.macroRegionIds = world.macroRegions.filter((macro) => macro.nationId === nation.id).map((macro) => macro.id);
+  }
+  world.mapVersion++;
+  world.territoryVersion++;
+  world.units = world.units.filter((unit) => unit.nationId !== b.id);
+  findWar(world.wars, a.id, b.id)!.contributionByNationId.set(a.id, 100);
+  declareWar(world.wars, c.id, b.id, 0)!.contributionByNationId.set(c.id, 100);
+  for (const [region, victor] of [[1, a], [2, c], [3, a], [4, c], [6, c], [7, a]] as const) {
+    world.occupation.mesoById.set(id(region), victor.id);
+  }
+
+  updateSurrender(world);
+  const owners = getOwnerByMesoId(world);
+  assert.deepEqual([0, 1, 2, 3, 4, 5].map((index) => owners.get(id(index))),
+    [a.id, a.id, a.id, a.id, c.id, c.id]);
+  assert.equal(owners.get(id(6)), owners.get(id(7)), "the offshore island changes hands as a unit");
+  assert.equal(b.macroRegionIds.length, 0);
 });
