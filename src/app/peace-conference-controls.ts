@@ -25,10 +25,11 @@ export function attachPeaceConferenceControls(root: HTMLElement, world: WorldSta
     button("accept").hidden = button("decline").hidden = !active;
     button("accept").disabled = !!active?.approvals.has(id);
     const name = (nation: NationId) => getNationName(world, nation);
+    const invited = [...new Set(wars.flatMap((war) => [war.nationAId, war.nationBId]))];
     status.textContent = active
       ? `${active.wars.length} wars · ${Math.max(0, active.expiresAt - world.time.slowTick)}s left. ${active.participants.map((nation) =>
         `${name(nation)} (${active.approvals.has(nation) ? "consented" : "pending"})`).join(", ")}. Terms: return occupations and sign a five-minute truce in every listed war.`
-      : `Invite the belligerents in ${wars.length} wars between these sides. Every participant must consent to status-quo peace. Other wars continue.`;
+      : `Invite ${invited.map(name).join(", ")} to settle ${wars.length} wars. Every participant must consent to status-quo peace. Other wars continue.`;
   }
 
   button("open").addEventListener("click", () => {
