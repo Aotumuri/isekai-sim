@@ -320,6 +320,34 @@ export function acceptPeaceOffer(world: WorldState, recipient: NationId, propose
   if (state.settlements.length > 40) state.settlements.splice(0, state.settlements.length - 40);
   return true;
 }
+function tryMutualCompromise(world: WorldState, negotiation: WarNegotiation): boolean {
+  const { a, b, automatic, offers } = negotiation;
+  if (!automatic.get(a) || !automatic.get(b) || getSeparatePeaceIssue(world, a, b)) return false;
+  const candidates: { proposer: NationId; recipient: NationId; terms: PeaceTerms; value: number }[] = [];
+  for (const [proposer, recipient] of [[a, b], [b, a]]) {
+    const requested = offers.get(proposer)!.terms.demandedWeapons;
+    const stock = world.nations.find(({ id }) => id === recipient)!.resources.weapons;
+    // Seek a face-saving payment against the announced demand, with a longer truce for both sides.
+    for (const payment of new Set([0, Math.min(15, requested, Math.floor(stock))])) {
+      const terms = { ...whitePeaceTerms(), demandedWeapons: payment, truceSeconds: 600 };
+      const theirs = assessPeaceOffer(world, recipient, proposer, terms);
+      const ours = assessPeaceOffer(world, proposer, recipient, { ...terms, demandedWeapons: 0, offeredWeapons: payment });
+      if (theirs.accepts && ours.accepts) candidates.push({ proposer, recipient, terms, value: Math.min(theirs.score, ours.score) });
+    }
+  }
+  const deal = candidates.sort((a, b) => b.value - a.value)[0];
+  if (!deal) return false;
+  const original = offers.get(deal.proposer)!;
+  offers.set(deal.proposer, { ...original, terms: deal.terms, revisedAtSlowTick: world.time.slowTick, revision: original.revision + 1, source: "automatic" });
+  if (!acceptPeaceOffer(world, deal.recipient, deal.proposer)) {
+    offers.set(deal.proposer, original);
+    return false;
+  }
+  recordSimulationEvent(world, { category: "diplomacy", nationIds: [a, b],
+    message: `${a} and ${b} found a mutual compromise: a longer truce and ${deal.terms.demandedWeapons} weapons in reparations.` });
+  return true;
+}
+
 export function updateWarNegotiations(world: WorldState): void {
   if (getWarDeclarationMode(world) !== "diplomacy") return;
   const state = getWarNegotiationState(world), live = new Set(world.wars.map(warFatigueKey));
@@ -344,10 +372,15 @@ export function updateWarNegotiations(world: WorldState): void {
         }
       }
     }
+    let settled = false;
     for (const [recipient, proposer] of [[negotiation.a, negotiation.b], [negotiation.b, negotiation.a]]) {
       const offer = negotiation.offers.get(proposer)!;
       if (!negotiation.automatic.get(recipient) || world.time.slowTick - offer.revisedAtSlowTick < 10) continue;
-      if (assessPeaceOffer(world, recipient, proposer, offer.terms).accepts && acceptPeaceOffer(world, recipient, proposer)) break;
+      if (assessPeaceOffer(world, recipient, proposer, offer.terms).accepts && acceptPeaceOffer(world, recipient, proposer)) {
+        settled = true;
+        break;
+      }
     }
+    if (!settled && world.time.fastTick - war.startedAtFastTick >= 900) tryMutualCompromise(world, negotiation);
   }
 }
