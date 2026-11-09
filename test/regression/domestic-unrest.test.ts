@@ -3,6 +3,7 @@ import test from "node:test";
 import { createSocietyWorld } from "../helpers/society-world";
 import { getDomesticUnrest, updateDomesticUnrest, canRevolt, recordRevolution, relieveUnrestAfterPeace } from "../../src/sim/domestic-unrest";
 import { updateCivilWar } from "../../src/sim/civil-war";
+import { getRegionalPopulations, POPULATION_DIMENSIONS, POPULATION_GROUPS } from "../../src/sim/regional-population";
 import { declareWar } from "../../src/sim/war-state";
 function scene() { const world = createSocietyWorld(), [nation, enemy] = world.nations; declareWar(world.wars, nation.id, enemy.id, 0); nation.warCooperation = 0; updateDomesticUnrest(world); return { world, nation, enemy }; }
 test("zero support must persist for at least five minutes instead of causing an immediate revolution", () => {
@@ -37,4 +38,50 @@ test("sustained moderate discontent is a crisis rather than an eligible revoluti
   const { world, nation } = scene(); nation.warCooperation = 0.3;
   world.time.slowTick = 360; updateDomesticUnrest(world);
   assert.equal(getDomesticUnrest(world, nation.id).phase, "crisis"); assert(!canRevolt(world, nation.id));
+});
+
+function identityScene() {
+  const world = createSocietyWorld();
+  const parent = world.nations.find((nation) => nation.macroRegionIds.length > 1)!;
+  const province = world.macroRegions.find((item) =>
+    item.nationId === parent.id && !item.mesoRegionIds.includes(parent.capitalMesoId))!;
+  const districts = world.mesoRegions.filter((region) => province.mesoRegionIds.includes(region.id));
+  const seat = districts.find((region) => region.type === "land" && region.building === null)!;
+  const populations = getRegionalPopulations(world);
+  for (const population of populations.values()) {
+    for (const dimension of POPULATION_DIMENSIONS) population[dimension] = [population.size, 0, 0, 0, 0, 0];
+  }
+  return { world, parent, province, districts, seat, populations };
+}
+
+for (const dimension of POPULATION_DIMENSIONS) {
+  test(`a revolution over ${dimension} begins where the affected group is concentrated`, () => {
+    const { world, parent, province, districts, seat, populations } = identityScene();
+    for (const district of districts) {
+      const population = populations.get(district.id)!;
+      const share = district.id === seat.id ? 1 : 0.65;
+      population[dimension] = [population.size * (1 - share), population.size * share, 0, 0, 0, 0];
+    }
+    const originalCount = world.nations.length;
+    const unrest = getDomesticUnrest(world, parent.id);
+    unrest.pressure = 60;
+    updateCivilWar(world);
+    assert.equal(world.nations.length, originalCount);
+
+    unrest.pressure = 100;
+    updateCivilWar(world);
+    assert.equal(world.nations.length, originalCount + 1);
+    const rebels = world.nations.at(-1)!;
+    assert.equal(rebels.capitalMesoId, seat.id);
+    assert.deepEqual(rebels.macroRegionIds, [province.id]);
+    assert.ok(world.events?.some(({ message }) => message.startsWith("Revolution") && message.includes(POPULATION_GROUPS[dimension][1]!)));
+  });
+}
+
+test("full peacetime unrest without a regional identity divide does not trigger separatism", () => {
+  const { world, parent } = identityScene();
+  const originalCount = world.nations.length;
+  getDomesticUnrest(world, parent.id).pressure = 100;
+  updateCivilWar(world);
+  assert.equal(world.nations.length, originalCount);
 });

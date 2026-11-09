@@ -1,8 +1,10 @@
-import { splitFoodSupply } from "./food-supply";
+import { isFamineRevolution, splitFoodSupply } from "./food-supply";
 import { splitTreasury } from "./treasury";
-import { updateDomesticUnrest, canRevolt, recordRevolution } from "./domestic-unrest";
+import { updateDomesticUnrest, canRevolt, getDomesticUnrest, recordRevolution } from "./domestic-unrest";
 import { establishRevolutionaryGovernment } from "./politics";
 import { getNationName } from "./nation-identity";
+import { POPULATION_GROUPS } from "./regional-population";
+import { rankRevolutionOrigins, type RevolutionOrigin } from "./revolution-origins";
 import { recordSimulationEvent } from "./simulation-settings";
 import { WORLD_BALANCE } from "../data/balance";
 import type { MacroRegion, MacroRegionId } from "../worldgen/macro-region";
@@ -42,21 +44,20 @@ export function updateCivilWar(world: WorldState): void {
   let buildingChanged = false;
 
   for (const nation of nationsSnapshot) {
-    if (!canRevolt(world, nation.id)) {
-      continue;
-    }
     if (nation.macroRegionIds.length <= 1) {
       continue;
     }
 
-    const cityCandidates = collectCityCandidates(
-      nation.id,
-      world.macroRegions,
-      mesoById,
-      world.occupation.mesoById,
-      nation.capitalMesoId,
-    );
-    let uprising = pickRebelTerritory(world, nation, cityCandidates, mesoToMacro, macroAdjacency);
+    const unrest = getDomesticUnrest(world, nation.id);
+    if (unrest.pressure < 100 || world.time.slowTick < unrest.cooldownUntilSlowTick) continue;
+    const origins = isFamineRevolution(world, nation.food) ? [] : rankRevolutionOrigins(world, nation);
+    let uprising = pickRebelTerritory(world, nation, [], mesoToMacro, macroAdjacency, origins);
+    if (!uprising && !canRevolt(world, nation.id)) continue;
+    if (!uprising) {
+      const cityCandidates = collectCityCandidates(nation.id, world.macroRegions, mesoById,
+        world.occupation.mesoById, nation.capitalMesoId);
+      uprising = pickRebelTerritory(world, nation, cityCandidates, mesoToMacro, macroAdjacency);
+    }
     if (!uprising) {
       const alternateSeats = world.macroRegions.filter((macro) => macro.nationId === nation.id)
         .flatMap((macro) => {
@@ -67,7 +68,7 @@ export function updateCivilWar(world: WorldState): void {
       uprising = pickRebelTerritory(world, nation, alternateSeats, mesoToMacro, macroAdjacency);
     }
     if (!uprising) continue;
-    const { cityMesoId, rebelMacroIds } = uprising;
+    const { cityMesoId, rebelMacroIds, origin } = uprising;
 
     const rebelMesoIds = collectMesoIdsForMacros(
       world.macroRegions,
@@ -156,8 +157,11 @@ export function updateCivilWar(world: WorldState): void {
     world.nations.push(newNation);
     establishRevolutionaryGovernment(world, nation, newNation);
     recordRevolution(world, nation.id, newNationId);
+    const cause = origin
+      ? `over ${origin.dimension === "faith" ? "religious" : origin.dimension === "ancestry" ? "ancestry-based" : "cultural"} tensions involving ${POPULATION_GROUPS[origin.dimension][origin.group]}`
+      : "after sustained domestic unrest";
     recordSimulationEvent(world, { category: "diplomacy", nationIds: [nation.id, newNationId],
-      message: `Revolution in ${getNationName(world, nation.id)} after sustained domestic unrest; ${getNationName(world, newNationId)} declared independence.` });
+      message: `Revolution in ${getNationName(world, nation.id)} ${cause}; ${getNationName(world, newNationId)} declared independence.` });
 
     const boost = Math.max(0, cooperationBalance.civilWarBoost);
     nation.warCooperationBoost = clamp(
@@ -226,8 +230,9 @@ function pickRebelTerritory(
   cities: MesoRegionId[],
   mesoToMacro: Map<MesoRegionId, MacroRegionId>,
   macroAdjacency: Map<MacroRegionId, Set<MacroRegionId>>,
-): { cityMesoId: MesoRegionId; rebelMacroIds: Set<MacroRegionId> } | undefined {
-  if (!cities.length) return;
+  origins: readonly RevolutionOrigin[] = [],
+): { cityMesoId: MesoRegionId; rebelMacroIds: Set<MacroRegionId>; origin?: RevolutionOrigin } | undefined {
+  if (!cities.length && !origins.length) return;
   const capitalProvince = mesoToMacro.get(nation.capitalMesoId);
   const provinces = new Map(world.macroRegions.filter((macro) => macro.nationId === nation.id)
     .map((macro) => [macro.id, macro.mesoRegionIds]));
@@ -244,6 +249,17 @@ function pickRebelTerritory(
     }
     return rebelLand;
   };
+
+  if (origins.length) {
+    const tested = new Set<MacroRegionId>();
+    for (const origin of origins) {
+      if (tested.has(origin.provinceId)) continue;
+      tested.add(origin.provinceId);
+      const rebelMacroIds = new Set([origin.provinceId]);
+      if (split(rebelMacroIds)) return { cityMesoId: origin.districtId, rebelMacroIds, origin };
+    }
+    return;
+  }
 
   // Try the randomly chosen city first, then another when it would sever a corridor.
   const first = world.simRng.nextInt(cities.length);
