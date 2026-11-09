@@ -1,4 +1,4 @@
-import { getPeaceBorderIssue, getWholeProvinces } from "../sim/peace-borders";
+import { getPeaceBorderIssue } from "../sim/peace-borders";
 import type { NationId } from "../worldgen/nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { WorldState } from "../sim/world-state";
@@ -20,8 +20,8 @@ export function attachTerritoryControls(root: HTMLElement, world: WorldState, se
     <h2>Territorial settlement</h2><p class="society-note">Choose individual districts or entire provinces below. Gold highlights show the selected parcels on the map. A cession automatically divides a province when necessary. Each nation must retain at least one district.</p>
     <div class="territory-parcels"><section><h3>Your offer / administrative split</h3><div data-territory-view="offered"></div></section><section><h3>Requested from partner</h3><div data-territory-view="requested"></div></section></div>
     <p class="society-note" data-territory-view="valuation"></p>
-    <div class="society-actions"><button type="button" data-territory-action="exchange">Propose territory exchange · 8</button><button type="button" data-territory-action="ultimatum" class="society-danger">Demand selected province · 12</button><button type="button" data-territory-action="split">Split selected province</button><button type="button" data-territory-action="clear">Clear parcels</button></div>
-    <p class="society-note">Ultimatums demand one whole province with a claim of at least 20 in one of its districts. Your offered parcels are not part of an ultimatum. The recipient can accept, negotiate or reject. Rejection may lead to war. A split requires a connected subset of one of your provinces.</p>
+    <div class="society-actions"><button type="button" data-territory-action="exchange">Propose territory exchange · 8</button><button type="button" data-territory-action="ultimatum" class="society-danger">Demand selected territory · 12</button><button type="button" data-territory-action="split">Split selected province</button><button type="button" data-territory-action="clear">Clear parcels</button></div>
+    <p class="society-note">For an ultimatum, each selected district needs a claim of at least 20. If the selection consists entirely of whole provinces, one qualifying district per province is enough. Your offered parcels are not part of an ultimatum. The recipient can accept, negotiate or reject. Rejection may lead to war. A split requires a connected subset of one of your provinces.</p>
     <h2>Port construction</h2><p class="society-note" data-territory-view="port"></p>
     <button type="button" data-territory-action="build-port">Build port · ${PORT_CONSTRUCTION_COST.steel} steel / ${PORT_CONSTRUCTION_COST.fuel} fuel</button>
     <div data-territory-view="crisis"></div><h2>Territorial offers</h2><p class="society-note">The recipient may respond here. AI reviews pending offers after 10 game seconds; proposals expire after 60. Values reflect resources, facilities, attachment and the capital.</p><div data-territory-view="offers"></div>`;
@@ -93,8 +93,8 @@ export function attachTerritoryControls(root: HTMLElement, world: WorldState, se
     }
     if (action === "exchange" || action === "ultimatum") {
       const offered = picked("offered"), requested = picked("requested");
-      if (action === "ultimatum" && getWholeProvinces(world, b, requested)?.length !== 1) {
-        feedback("Select one whole province on the partner’s side.");
+      if (action === "ultimatum" && !requested.length) {
+        feedback("Select territory on the partner’s side.");
         return;
       }
       const issue = getPeaceBorderIssue(world, [
