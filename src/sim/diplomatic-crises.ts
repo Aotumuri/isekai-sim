@@ -116,6 +116,9 @@ export function startDiplomaticWar(world: WorldState, aggressorId: NationId, tar
   if (!war) return false;
   war.cause = cause;
   const relation = getRelation(world, aggressorId, targetId);
+  if (relation.crisis?.aggressorId === aggressorId && relation.crisis.regionIds) {
+    war.ultimatumRegionIds = [...relation.crisis.regionIds];
+  }
   relation.crisis = null; relation.treaties = [];
   relation.opinion = -80; relation.trust = Math.max(0, relation.trust - 30); relation.tension = 100;
   getDiplomacyState(world).declarations += 1;

@@ -5,7 +5,7 @@ import { dividePartitionResources, getPartitionIssue, planLocalSubject, planPupp
 import { estimateAnnexationResistance, recordAnnexation } from "./annexation";
 import { getPuppetTermsIssue, installSubjectGovernment } from "./subject-governments";
 import { getRelation } from "./diplomacy";
-import { getPeaceBorderIssue, selectPeaceProvinces } from "./peace-borders";
+import { getPeaceBorderIssue, selectPeaceDistricts, selectPeaceProvinces } from "./peace-borders";
 import type { NationId } from "../worldgen/nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { WorldState } from "./world-state";
@@ -19,7 +19,7 @@ import { getUnitCombatStrength } from "./unit-strength";
 import { getForeignClaims } from "./territorial-claims";
 import { canTransferTerritories, transferTerritories, type TerritoryTransfer } from "./territory-transfer";
 import { changeResource } from "./international-trade";
-import { getOwnerByMesoId } from "./world-cache";
+import { getNeighborsById, getOwnerByMesoId } from "./world-cache";
 import { getWarDeclarationMode, hasPoliticalTurbulence, recordSimulationEvent } from "./simulation-settings";
 import { concludePeace, getWarFatigue, warFatigueKey } from "./diplomatic-peace";
 
@@ -113,29 +113,51 @@ function candidateDistricts(world: WorldState, taker: NationId, donor: NationId)
   return [...new Set([...occupied, ...claimed])].filter((id) => owners.get(id) === donor && id !== donorNation.capitalMesoId &&
     (!world.occupation.mesoById.has(id) || world.occupation.mesoById.get(id) === taker));
 }
-function automaticTerms(world: WorldState, proposer: NationId, target: NationId, opening = false): PeaceTerms {
+function openingTerms(world: WorldState, war: WarState, proposer: NationId, target: NationId): PeaceTerms {
+  const terms = whitePeaceTerms();
+  const treasury = world.nations.find((nation) => nation.id === target)!.resources.weapons;
+  terms.demandedWeapons = Math.min(60, Math.floor(treasury * 0.3));
+  if (war.aggressorId === proposer && war.ultimatumRegionIds?.length) {
+    terms.demandedRegionIds = [...war.ultimatumRegionIds];
+    if (!getPeaceTermsIssue(world, proposer, target, terms)) return terms;
+  }
+  const candidates = candidateDistricts(world, proposer, target);
+  terms.demandedRegionIds = selectPeaceProvinces(world, target, proposer, candidates);
+  if (!terms.demandedRegionIds.length) {
+    const owners = getOwnerByMesoId(world), neighbors = getNeighborsById(world);
+    const capital = world.nations.find((nation) => nation.id === target)?.capitalMesoId;
+    const border = ownedLand(world, target).filter((id) => id !== capital &&
+      (!world.occupation.mesoById.has(id) || world.occupation.mesoById.get(id) === proposer) &&
+      (neighbors.get(id) ?? []).some((neighbor) => owners.get(neighbor) === proposer));
+    terms.demandedRegionIds = selectPeaceProvinces(world, target, proposer, border, 1);
+    if (!terms.demandedRegionIds.length) terms.demandedRegionIds = selectPeaceDistricts(world, target, proposer, [...candidates, ...border], 1);
+  }
+  if (getPeaceTermsIssue(world, proposer, target, terms)) terms.demandedRegionIds = [];
+  return terms;
+}
+function automaticTerms(world: WorldState, proposer: NationId, target: NationId): PeaceTerms {
   const terms = whitePeaceTerms(), advantage = getWarAdvantage(world, proposer, target), urgency = getPeaceUrgency(world, proposer);
   const a = world.nations.find((nation) => nation.id === proposer)!, b = world.nations.find((nation) => nation.id === target)!;
-  const pursuingOpeningGoals = opening || getWarFatigue(world, proposer, target) < 35;
+  const pursuingOpeningGoals = getWarFatigue(world, proposer, target) < 35;
   const hardline = isFightOnGovernment(world, proposer);
   const aggressor = findWar(world.wars, proposer, target)?.aggressorId === proposer;
   if (advantage > 0.15 || hardline || (aggressor && pursuingOpeningGoals && urgency < 0.55)) {
     const candidates = candidateDistricts(world, proposer, target).filter((id) => estimateAnnexationResistance(world, proposer, id) < 0.55);
     if (hardline) for (const id of ownedLand(world, target)) if (id !== b.capitalMesoId && !candidates.includes(id) &&
       (!world.occupation.mesoById.has(id) || world.occupation.mesoById.get(id) === proposer)) candidates.push(id);
-    if (!opening && advantage > 0.45 && getNationCharacter(world, proposer).aggression >= 0.65 &&
+    if (advantage > 0.45 && getNationCharacter(world, proposer).aggression >= 0.65 &&
       !getPuppetTermsIssue(world, proposer, target)) {
       terms.puppetTarget = true;
       if (advantage > 0.65) terms.partition = planPuppetPartition(world, proposer, target, []);
     } else {
       terms.demandedRegionIds = selectPeaceProvinces(world, target, proposer, candidates);
-      if (!opening && advantage > 0.35 && hasPoliticalTurbulence(world) &&
+      if (advantage > 0.35 && hasPoliticalTurbulence(world) &&
         terms.demandedRegionIds.some((id) => estimateAnnexationResistance(world, proposer, id) >= 0.4) &&
         planLocalSubject(world, proposer, target, terms.demandedRegionIds)) terms.localSubject = true;
     }
     terms.demandedWeapons = Math.min(hardline ? 40 : 30, Math.floor(b.resources.weapons * (hardline ? 0.35 : 0.15)),
       Math.max(pursuingOpeningGoals || hardline ? 15 : 0, Math.floor(advantage * 40)));
-  } else if (!opening && (advantage < -0.15 || urgency >= 0.55)) {
+  } else if (advantage < -0.15 || urgency >= 0.55) {
     terms.offeredRegionIds = selectPeaceProvinces(world, proposer, target, candidateDistricts(world, target, proposer));
     terms.offeredWeapons = Math.min(25, Math.floor(a.resources.weapons * 0.15));
     terms.truceSeconds = 600;
@@ -150,7 +172,7 @@ export function getWarNegotiation(world: WorldState, war: WarState): WarNegotiat
     state.active.set(key, negotiation);
     for (const [proposer, target] of [[negotiation.a, negotiation.b], [negotiation.b, negotiation.a]]) {
       negotiation.automatic.set(proposer, true); negotiation.lastRevisionSlowTick.set(proposer, world.time.slowTick);
-      negotiation.offers.set(proposer, { proposerId: proposer, terms: automaticTerms(world, proposer, target, true), revisedAtSlowTick: world.time.slowTick, revision: 0, source: "opening" });
+      negotiation.offers.set(proposer, { proposerId: proposer, terms: openingTerms(world, war, proposer, target), revisedAtSlowTick: world.time.slowTick, revision: 0, source: "opening" });
     }
     recordSimulationEvent(world, { category: "diplomacy", nationIds: [negotiation.a, negotiation.b],
       message: `${getNationName(world, negotiation.a)} and ${getNationName(world, negotiation.b)} published opening peace conditions.` });

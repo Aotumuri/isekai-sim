@@ -1,3 +1,4 @@
+import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { MacroRegionId } from "../worldgen/macro-region";
 
@@ -5,6 +6,7 @@ export type WarId = string & { __brand: "WarId" };
 
 export interface WarState {
   cause?: "diplomatic-crisis" | "defensive-alliance" | "faction-obligation" | "allied-request" | "subject-uprising";
+  ultimatumRegionIds?: MesoRegionId[];
   uprisingProvinces?: MacroRegionId[];
   id: WarId;
   nationAId: NationId;
