@@ -4,7 +4,7 @@ import { dividePartitionResources, getPartitionIssue, planLocalSubject, planPupp
 import { estimateAnnexationResistance, recordAnnexation } from "./annexation";
 import { getPuppetTermsIssue, installSubjectGovernment } from "./subject-governments";
 import { getRelation } from "./diplomacy";
-import { getPeaceBorderIssue, getWholeProvinces, selectPeaceProvinces } from "./peace-borders";
+import { getPeaceBorderIssue, selectPeaceProvinces } from "./peace-borders";
 import type { NationId } from "../worldgen/nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { WorldState } from "./world-state";
@@ -68,14 +68,7 @@ function legsFor(proposer: NationId, target: NationId, terms: PeaceTerms): Terri
 }
 export function getPeaceTermsIssue(world: WorldState, proposer: NationId, target: NationId, terms: PeaceTerms): string | null {
   if (getWarDeclarationMode(world) !== "diplomacy" || !findWar(world.wars, proposer, target)) return "These nations are not negotiating an active war.";
-  const validSize = (owner: NationId, ids: MesoRegionId[]) => {
-    if (!Array.isArray(ids)) return false;
-    const provinces = getWholeProvinces(world, owner, ids);
-    return provinces ? provinces.length <= 3 : ids.length <= 8;
-  };
-  if (!validSize(target, terms.demandedRegionIds) || !validSize(proposer, terms.offeredRegionIds)) {
-    return "Select up to three whole provinces on each side.";
-  }
+  if (!Array.isArray(terms.demandedRegionIds) || !Array.isArray(terms.offeredRegionIds)) return "Select valid territories.";
   if (![terms.demandedWeapons, terms.offeredWeapons].every((amount) => Number.isInteger(amount) && amount >= 0 && amount <= 100) ||
     (terms.demandedWeapons > 0 && terms.offeredWeapons > 0) || !Number.isInteger(terms.truceSeconds) || terms.truceSeconds < 180 || terms.truceSeconds > 900) return "Check reparations and the truce duration.";
   if (terms.puppetTarget || terms.partition) {
@@ -126,7 +119,6 @@ function automaticTerms(world: WorldState, proposer: NationId, target: NationId,
   const hardline = isFightOnGovernment(world, proposer);
   const aggressor = findWar(world.wars, proposer, target)?.aggressorId === proposer;
   if (advantage > 0.15 || hardline || (aggressor && pursuingOpeningGoals && urgency < 0.55)) {
-    const cap = Math.floor(ownedLand(world, target).length * 0.25);
     const candidates = candidateDistricts(world, proposer, target).filter((id) => estimateAnnexationResistance(world, proposer, id) < 0.55);
     if (hardline) for (const id of ownedLand(world, target)) if (id !== b.capitalMesoId && !candidates.includes(id) &&
       (!world.occupation.mesoById.has(id) || world.occupation.mesoById.get(id) === proposer)) candidates.push(id);
@@ -135,7 +127,7 @@ function automaticTerms(world: WorldState, proposer: NationId, target: NationId,
       terms.puppetTarget = true;
       if (advantage > 0.65) terms.partition = planPuppetPartition(world, proposer, target, []);
     } else {
-      terms.demandedRegionIds = selectPeaceProvinces(world, target, proposer, candidates, 2, cap);
+      terms.demandedRegionIds = selectPeaceProvinces(world, target, proposer, candidates);
       if (!opening && advantage > 0.35 && hasPoliticalTurbulence(world) &&
         terms.demandedRegionIds.some((id) => estimateAnnexationResistance(world, proposer, id) >= 0.4) &&
         planLocalSubject(world, proposer, target, terms.demandedRegionIds)) terms.localSubject = true;
@@ -143,8 +135,7 @@ function automaticTerms(world: WorldState, proposer: NationId, target: NationId,
     terms.demandedWeapons = Math.min(hardline ? 40 : 30, Math.floor(b.resources.weapons * (hardline ? 0.35 : 0.15)),
       Math.max(pursuingOpeningGoals || hardline ? 15 : 0, Math.floor(advantage * 40)));
   } else if (!opening && (advantage < -0.15 || urgency >= 0.55)) {
-    const cap = Math.floor(ownedLand(world, proposer).length * (urgency >= 0.8 ? 0.25 : 0.15));
-    terms.offeredRegionIds = selectPeaceProvinces(world, proposer, target, candidateDistricts(world, target, proposer), 1, cap);
+    terms.offeredRegionIds = selectPeaceProvinces(world, proposer, target, candidateDistricts(world, target, proposer));
     terms.offeredWeapons = Math.min(25, Math.floor(a.resources.weapons * 0.15));
     terms.truceSeconds = 600;
   }

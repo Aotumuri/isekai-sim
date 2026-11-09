@@ -102,8 +102,8 @@ export function selectPeaceProvinces(
   from: NationId,
   to: NationId,
   candidates: readonly MesoRegionId[],
-  provinceLimit: number,
-  districtLimit: number,
+  provinceLimit = Infinity,
+  districtLimit = Infinity,
 ): MesoRegionId[] {
   const priority = new Set(candidates);
   if (!priority.size) return [];
