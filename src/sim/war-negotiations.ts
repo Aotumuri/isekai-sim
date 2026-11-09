@@ -246,9 +246,14 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
   const domestic = urgency * 42;
   const forecast = -getWarTrend(negotiation, recipient) * 45;
   const competingWars = competingWarPressure(world, recipient, proposer);
-  const pressure = fatigue * 0.7 + Math.min(18, ageSeconds * 0.025) + occupationRatio(world, recipient, proposer) * 45 + militaryLoss * 15 + Math.max(0, -advantage) * 30 + (1 - nation.warCooperation) * 12 + domestic + forecast + competingWars;
   const totalValue = getNationalTerritorialValue(world, recipient);
-  const landCost = getTerritorialValue(world, recipient, terms.demandedRegionIds) / totalValue * 100 +
+  const occupied = ownedLand(world, recipient).filter((id) => world.occupation.mesoById.get(id) === proposer);
+  const occupiedValue = getTerritorialValue(world, recipient, occupied) / totalValue;
+  const pressure = fatigue * 0.7 + Math.min(18, ageSeconds * 0.025) + occupiedValue * 45 + militaryLoss * 15 + Math.max(0, -advantage) * 30 + (1 - nation.warCooperation) * 12 + domestic + forecast + competingWars;
+  const occupiedSet = new Set(occupied);
+  const securedDemands = terms.demandedRegionIds.filter((id) => occupiedSet.has(id));
+  const landCost = (getTerritorialValue(world, recipient, terms.demandedRegionIds) -
+    getTerritorialValue(world, recipient, securedDemands) * 0.35) / totalValue * 100 +
     (terms.demandedRegionIds.includes(nation.capitalMesoId) ? 25 : 0);
   const landBenefit = getTerritorialValue(world, recipient, terms.offeredRegionIds) / totalValue * 80;
   const paymentCost = terms.demandedWeapons / Math.max(10, nation.resources.weapons) * 25;
