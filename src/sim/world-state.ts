@@ -1,3 +1,5 @@
+import type { RegionalPopulation } from "./regional-population";
+import type { MesoRegionId as PopulationRegionId } from "../worldgen/meso-region";
 import type { WarNegotiationState } from "./war-negotiations";
 import type { DomesticUnrestState } from "./domestic-unrest";
 import type { ExileGovernmentState } from "./exile-government";
@@ -66,6 +68,7 @@ export interface WorldState {
   diplomacy?: DiplomacyState;
   research?: ResearchState;
   internationalTrade?: InternationalTradeState;
+  regionalPopulations?: Map<PopulationRegionId, RegionalPopulation>;
   armsAid?: ArmsAidState;
   worldSeed?: number;
   customIdeologies?: Ideology[];

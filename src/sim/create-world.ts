@@ -1,3 +1,4 @@
+import { getRegionalPopulations } from "./regional-population";
 import { getTerritorialClaims } from "./territorial-claims";
 import { assignNationIdentities } from "./nation-identity";
 import { createSimulationSettings } from "./simulation-settings";
@@ -191,6 +192,7 @@ export function createWorld(config: WorldConfig): WorldState {
     time,
   };
   assignNationIdentities(world);
+  getRegionalPopulations(world);
   getTerritorialClaims(world);
   return world;
 }
