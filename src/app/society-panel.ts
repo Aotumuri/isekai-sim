@@ -82,7 +82,15 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
         <h2>Technology licensing</h2><div class="society-trade-form"><label>Technology to license<select data-control="license" aria-label="Licensed technology">${branchOptions}</select></label><button type="button" data-action="license">License to selected partner</button></div><p class="society-note">Licenses the selected equipment program only. Requires an alliance or trade pact, trust 55 and a technology advantage. Costs 5 influence; the partner pays 4 weapons and 2 steel to accelerate its research.</p>
       </section>
       <section data-pane="factions" hidden><div data-faction-ui></div></section>
-      <section data-pane="history" hidden><div class="society-events" data-view="events"></div><p class="society-note">The latest 200 events are retained; the newest 40 are shown here.</p></section>
+      <section data-pane="history" hidden>
+        <div class="society-selectors"><label>Event category<select data-control="event-category">
+          <option value="">All categories</option><option value="military">Military</option>
+          <option value="diplomacy">Diplomacy</option><option value="politics">Politics</option>
+          <option value="trade">Trade</option><option value="aid">Aid</option><option value="research">Research</option>
+        </select></label><label>Countries<select data-control="event-nations">
+          <option value="">All countries</option><option value="selected">Selected country</option>
+        </select></label></div>
+        <div class="society-events" data-view="events"></div><p class="society-note">The latest 200 events are retained; the newest 40 matching events are shown here.</p></section>
     </section>`;
   root.appendChild(wrapper);
   const n = (id: NationId) => esc(getNationName(world, id));
@@ -213,7 +221,11 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     else stats.push(["Protection", `×${(design.armor ?? 1).toFixed(2)}`], ["Speed", `×${(design.mobility ?? 1).toFixed(2)}`], ["Fuel use", `×${design.fuelUse.toFixed(2)}`]);
     if (family === "TransportShip") stats.push(["Cargo capacity", `${getDesignTransportCapacity(design)} units`]);
     view("design").innerHTML = stats.map(([label, value]) => `<span>${label}<strong>${value}</strong></span>`).join("");
-    view("events").innerHTML = [...(world.events ?? [])].slice(-40).reverse().map((event) => `<article class="society-event"><time>${Math.floor(event.tick / 600)}:${String(Math.floor(event.tick / 10) % 60).padStart(2, "0")}</time><span>${esc(event.message)}</span></article>`).join("") || '<p class="society-note">Diplomacy, trade, research and mobilization events appear here.</p>';
+    const category = control("event-category").value;
+    const selectedOnly = control("event-nations").value === "selected";
+    const events = (world.events ?? []).filter((event) =>
+      (!category || event.category === category) && (!selectedOnly || event.nationIds.includes(a)));
+    view("events").innerHTML = events.slice(-40).reverse().map((event) => `<article class="society-event"><time>${Math.floor(event.tick / 600)}:${String(Math.floor(event.tick / 10) % 60).padStart(2, "0")}</time><span>${esc(event.message)}</span></article>`).join("") || '<p class="society-note">No events match the current filters.</p>';
     for (const button of panel.querySelectorAll<HTMLButtonElement>("button[data-action]")) {
       const action = button.dataset.action;
       if (["improve", "pact", "trade-pact", "alliance", "aid", "peace", "crisis", "negotiate", "concede", "reject", "break-alliance", "break-pact", "break-trade", "exchange", "license"].includes(action ?? "")) {
