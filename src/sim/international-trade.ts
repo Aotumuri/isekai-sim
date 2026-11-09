@@ -1,3 +1,4 @@
+import { isTradeEmbargoed } from "./trade-embargo";
 import { exchangePortPopulation } from "./population-migration";
 import { areFactionPartners } from "./factions";
 import type { MesoRegionId } from "../worldgen/meso-region";
@@ -46,7 +47,7 @@ export function resourceReserve(nation: NationRuntime, resource: TradeResource):
 export function findTradeRoute(world: WorldState, a: NationId, b: NationId): TradeRoute | null {
   const first = world.nations.find((nation) => nation.id === a && isNationActive(nation));
   const second = world.nations.find((nation) => nation.id === b && isNationActive(nation));
-  if (!first || !second || a === b || isAtWar(a, b, buildWarAdjacency(world.wars))) return null;
+  if (!first || !second || a === b || isTradeEmbargoed(world, a, b) || isAtWar(a, b, buildWarAdjacency(world.wars))) return null;
   if (!isNationRegionSupplied(world, a, first.capitalMesoId) || !isNationRegionSupplied(world, b, second.capitalMesoId)) return null;
   const regions = getMesoById(world), neighbors = getNeighborsById(world), owners = getOwnerByMesoId(world);
   const owner = (id: MesoRegionId) => world.occupation.mesoById.get(id) ?? owners.get(id);
@@ -79,7 +80,7 @@ export function findTradeRoute(world: WorldState, a: NationId, b: NationId): Tra
 
 export function isTradeRouteOpen(world: WorldState, a: NationId, b: NationId, route: TradeRoute): boolean {
   const wars = buildWarAdjacency(world.wars), regions = getMesoById(world), owners = getOwnerByMesoId(world);
-  if (isAtWar(a, b, wars) || route.regionIds.length < 2) return false;
+  if (isTradeEmbargoed(world, a, b) || isAtWar(a, b, wars) || route.regionIds.length < 2) return false;
   const owner = (id: MesoRegionId) => world.occupation.mesoById.get(id) ?? owners.get(id);
   if (owner(route.regionIds[0]!) !== a || owner(route.regionIds.at(-1)!) !== b) return false;
   if (!isNationRegionSupplied(world, a, route.regionIds[0]!) || !isNationRegionSupplied(world, b, route.regionIds.at(-1)!)) return false;
@@ -169,7 +170,7 @@ export function updateInternationalTrade(world: WorldState): void {
       const seller = world.nations.find((nation) => nation.id === deal.sellerId), buyer = world.nations.find((nation) => nation.id === deal.buyerId);
       const agreement = areFactionPartners(world, deal.sellerId, deal.buyerId) || hasTreaty(world, deal.sellerId, deal.buyerId, "trade") || hasTreaty(world, deal.sellerId, deal.buyerId, "alliance");
       const canTrade = world.settings?.diplomacyEnabled && world.settings.tradeEnabled && seller && buyer &&
-        isNationActive(seller) && isNationActive(buyer) && agreement;
+        isNationActive(seller) && isNationActive(buyer) && agreement && !isTradeEmbargoed(world, deal.sellerId, deal.buyerId);
       const open = canTrade && isTradeRouteOpen(world, deal.sellerId, deal.buyerId, deal.route);
       if (canTrade && !open && rerouteTrade(world, deal, seller, buyer)) continue;
       if (!open) {

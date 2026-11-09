@@ -1,3 +1,4 @@
+import type { NationId } from "../worldgen/nation";
 import type { AgriculturalLand } from "../worldgen/agricultural-land";
 import type { PublicWork } from "./public-works";
 import type { Annexation } from "./annexation";
@@ -70,6 +71,7 @@ export interface WorldState {
   settings?: SimulationSettings;
   diplomacy?: DiplomacyState;
   research?: ResearchState;
+  tradeEmbargoes?: Map<NationId, Set<NationId>>;
   internationalTrade?: InternationalTradeState;
   lastTaxCollectionTick?: number;
   publicWorks?: Map<MesoRegionId, PublicWork>;
