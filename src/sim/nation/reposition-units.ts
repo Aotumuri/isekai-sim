@@ -1,3 +1,4 @@
+import { applyCrisisDeployments } from "../crisis-deployment";
 import { getMilitaryRoutingOwners, applyMilitaryStagingOrders } from "../military-access";
 import type { WorldState } from "../world-state";
 import type { UnitState } from "../unit";
@@ -207,6 +208,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     updateAssignmentRuntimeSources(runtime, world, landUnits);
   }
 
+  applyCrisisDeployments(world);
   applyMilitaryStagingOrders(world);
   const movementStartedAt = instrumentation ? performance.now() : 0;
   for (const group of runtime.movementGroups) {
