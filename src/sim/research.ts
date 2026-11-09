@@ -1,3 +1,4 @@
+import { spendTreasury } from "./treasury";
 import { buildWarAdjacency } from "./war-state";
 import type { NationId } from "../worldgen/nation";
 import type { UnitType } from "./unit";
@@ -171,7 +172,12 @@ export function updateResearch(world: WorldState): void {
     const root = getResearchPortfolio(world, nation.id);
     const investment = root.investment === "ambitious" ? 1.5 : root.investment === "economy" ? 0.5 : 1;
     const capacity = Math.min(3, 0.6 + (cities.get(nation.id)?.length ?? 0) * 0.12 + getNationCharacter(world, nation.id).innovation * 0.5) * investment;
-    const budget = Math.min(capacity, Math.max(0, nation.resources.steel - 6) / 0.4, Math.max(0, nation.resources.weapons - 6) / 0.2);
+    const materialLimit = Math.min(Math.max(0, nation.resources.steel - 6) / 0.4, Math.max(0, nation.resources.weapons - 6) / 0.2);
+    let budget = Math.min(capacity, materialLimit);
+    if (nation.treasury?.researchFunding && budget >= 0.1) {
+      const bonus = Math.min(capacity * 0.6, materialLimit - budget, nation.treasury.balance / 2);
+      if (spendTreasury(nation.treasury, "research", bonus * 2)) budget += bonus;
+    }
     if (budget < 0.1) { for (const family of EQUIPMENT_FAMILIES) if (weights[family]) getResearchPortfolio(world, nation.id, family).status = "saving resources"; continue; }
     const steel = budget * 0.4, weapons = budget * 0.2;
     nation.resources.steel -= steel; nation.resources.weapons -= weapons;
