@@ -1,3 +1,4 @@
+import { populationPolicyTitle } from "../sim/population-politics";
 import { getPoliticalCampaignIssue, launchPoliticalCampaign, POLITICAL_CAMPAIGN_COST } from "../sim/political-influence";
 import type { NationId } from "../worldgen/nation";
 import { getNationCharacter } from "../sim/nation-character";
@@ -41,6 +42,7 @@ export function attachPoliticsControls(
       const parties = [...politics.support].sort((a, b) => (politics.seats.get(b[0]) ?? 0) - (politics.seats.get(a[0]) ?? 0) || b[1] - a[1]);
       root.innerHTML = `<h2>${democracy ? "Parliamentary democracy" : "Monarchy"}</h2>
         <p><strong>Governing ideology:</strong> ${name(politics.governingIdeologyId)}</p>
+        ${nation.populationPolicy ? `<p><strong>${populationPolicyTitle(nation.populationPolicy)}</strong> · ${nation.populationPolicy.type === "homeland" ? "Claims nearby districts with a substantial population of the homeland's ancestry." : "Recognizes the most widely practiced faith as the state religion."}</p>` : ""}
         <p class="society-note">${active ? `Next ${democracy ? "election" : "royal succession"} in ${next}s` : "Domestic politics are paused."}
         · Doctrine: ${character.doctrine} · Aggression ${Math.round(character.aggression * 100)}% · Cooperation ${Math.round(character.cooperation * 100)}%</p>
         <p class="society-note">${democracy ? "Elections convert public support into 100 seats. A majority coalition governs." : "Court support shapes succession. A challenger needs an eight-point lead to change royal policy."}</p>

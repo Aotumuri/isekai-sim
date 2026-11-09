@@ -175,7 +175,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
       colorKey = nextColors;
       for (const [id, fill] of fills) { fill.tint = getPoliticalFill(world, id); fill.alpha = id === view.selectedNationId ? 1 : 0.92; }
     }
-    const nextLabels = `${nextGeometry}:${view.revision}:${world.factions?.version ?? 0}`;
+    const nextLabels = `${nextGeometry}:${world.populationPolicyRevision ?? 0}:${view.revision}:${world.factions?.version ?? 0}`;
     const labelsChanged = nextLabels !== labelKey;
     if (labelsChanged) {
       labelKey = nextLabels; clearLayer(labels); selection.clear(); parcelSelection.clear();

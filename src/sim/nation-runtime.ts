@@ -1,3 +1,4 @@
+import type { PopulationPolicy } from "./population-politics";
 import type { SubjectGovernment } from "./subject-governments";
 import type { NationalPolitics } from "./politics";
 import type { NationCharacter } from "./nation-character";
@@ -42,6 +43,7 @@ export function createNationResourceFlow(): NationResourceFlow {
 }
 
 export type NationRuntime = Nation & {
+  populationPolicy?: PopulationPolicy;
   character?: NationCharacter;
   preGovernmentCharacter?: NationCharacter;
   politics?: NationalPolitics;

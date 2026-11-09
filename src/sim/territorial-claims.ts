@@ -1,3 +1,4 @@
+import { getHomelandClaimBonus } from "./population-politics";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { WorldState } from "./world-state";
@@ -32,7 +33,7 @@ export function getTerritorialClaim(world: WorldState, nationId: NationId, regio
   if (!memory && !nearby) return 0;
   const character = getNationCharacter(world, nationId);
   return Math.min(100, (memory?.attachment ?? 0) + (region.resource ? 18 + character.thrift * 10 : 0) +
-    (nearby ? 8 + character.aggression * 8 : 0));
+    (nearby ? 8 + character.aggression * 8 + getHomelandClaimBonus(world, nationId, regionId) : 0));
 }
 export function getForeignClaims(world: WorldState, nationId: NationId, ownerId?: NationId): { regionId: MesoRegionId; strength: number; heldTicks: number }[] {
   const state = getTerritorialClaims(world), result: { regionId: MesoRegionId; strength: number; heldTicks: number }[] = [];

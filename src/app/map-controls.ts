@@ -85,7 +85,7 @@ export function attachMapControls(root: HTMLElement, renderer: Renderer, world: 
     if (!force && performance.now() - lastRender < 500) return;
     lastRender = performance.now();
     const claims = state.mode === "claims" && state.selectedNationId ? getMapClaims(world, state.selectedNationId) : [];
-    const contentKey = JSON.stringify([world.exileGovernments?.version ?? 0, claims, state.mode, state.revision, world.factions?.version ?? 0,
+    const contentKey = JSON.stringify([world.populationPolicyRevision ?? 0, world.exileGovernments?.version ?? 0, claims, state.mode, state.revision, world.factions?.version ?? 0,
       active.map((nation) => [nation.id, nation.name, nation.ideologyId]), world.occupation.version, world.territoryVersion,
       state.diplomaticFocusId && state.targetNationId ? getDiplomaticStatus(world, state.diplomaticFocusId, state.targetNationId) : null]);
     if (contentKey === lastContentKey) return;

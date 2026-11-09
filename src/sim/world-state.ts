@@ -70,6 +70,7 @@ export interface WorldState {
   internationalTrade?: InternationalTradeState;
   regionalPopulations?: Map<MesoRegionId, RegionalPopulation>;
   populationRevision?: number;
+  populationPolicyRevision?: number;
   armsAid?: ArmsAidState;
   worldSeed?: number;
   customIdeologies?: Ideology[];

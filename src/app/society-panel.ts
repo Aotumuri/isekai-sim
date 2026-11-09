@@ -130,7 +130,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     }
     if (!visible || (!force && performance.now() - lastRender < 750)) return;
     lastRender = performance.now();
-    const active = world.nations.filter((nation) => isNationPresent(world, nation)), ids = active.map((nation) => `${nation.id}:${world.exileGovernments?.byNationId.get(nation.id)?.status ?? "home"}`).join("|");
+    const active = world.nations.filter((nation) => isNationPresent(world, nation)), ids = active.map((nation) => `${n(nation.id)}:${nation.id}:${world.exileGovernments?.byNationId.get(nation.id)?.status ?? "home"}`).join("|");
     if (ids !== cachedNationIds) {
       const a = nationSelect.value, b = partnerSelect.value;
       const options = active.map((nation) => `<option value="${esc(nation.id)}">${n(nation.id)}${world.exileGovernments?.byNationId.get(nation.id)?.status === "exiled" ? " (in exile)" : ""}</option>`).join("");

@@ -1,3 +1,4 @@
+import { populationPolicyTitle } from "./population-politics";
 import type { NationId } from "../worldgen/nation";
 import type { WorldState } from "./world-state";
 
@@ -72,6 +73,7 @@ export function assignNationIdentities(world: WorldState): void {
 export function getNationName(world: WorldState, nationId: NationId): string {
   const nation = world.nations.find((item) => item.id === nationId);
   if (nation && !nation.name) assignNationIdentities(world);
+  if (nation?.populationPolicy) return `${nation.name} · ${populationPolicyTitle(nation.populationPolicy)}`;
   return nation?.name ?? "Unknown nation";
 }
 export function getNationIdeology(world: WorldState, nationId: NationId): Ideology {
