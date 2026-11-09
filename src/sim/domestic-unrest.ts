@@ -5,7 +5,7 @@ import type { NationId } from "../worldgen/nation";
 import type { WorldState } from "./world-state";
 import { isNationActive } from "./nation-active";
 import { getNationName } from "./nation-identity";
-import { recordSimulationEvent } from "./simulation-settings";
+import { hasPoliticalTurbulence, recordSimulationEvent } from "./simulation-settings";
 export interface NationalUnrest {
   pressure: number; lowSupportSeconds: number; lastSlowTick: number; cooldownUntilSlowTick: number;
   phase: "stable" | "discontent" | "crisis" | "revolution" | "recovering"; revolutions: number;
@@ -42,6 +42,9 @@ export function updateDomesticUnrest(world: WorldState): void {
     const active = isNationActive(nation);
     if (active) {
       item.pressure += elapsed * taxUnrestPerTick(nation.treasury);
+      if (hasPoliticalTurbulence(world) && (nation.politics?.suppression?.until ?? 0) > world.time.slowTick) {
+        item.pressure += elapsed * 1.05;
+      }
       if (world.settings?.foodEnabled !== false && nation.food) item.pressure += elapsed * (1 - nation.food.rationCoverage) * 3;
     }
     const famineRevolution = active && isFamineRevolution(world, nation.food) &&

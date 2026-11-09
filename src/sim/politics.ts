@@ -1,9 +1,10 @@
-import { getRevolutionRisk } from "./domestic-unrest";
+import { getDomesticUnrest, getRevolutionRisk } from "./domestic-unrest";
+import { ideologyCompatibility } from "./ideology-relations";
 import { isNationActive } from "./nation-active";
 import { getNationCharacter, type NationCharacter } from "./nation-character";
 import { BUILTIN_IDEOLOGIES, getIdeologies, getNationIdeology, identityHash } from "./nation-identity";
 import type { NationRuntime } from "./nation-runtime";
-import { getWarDeclarationMode, recordSimulationEvent } from "./simulation-settings";
+import { getWarDeclarationMode, hasPoliticalTurbulence, recordSimulationEvent } from "./simulation-settings";
 import type { WorldState } from "./world-state";
 
 export type GovernmentSystem = "democracy" | "monarchy";
@@ -18,6 +19,8 @@ export interface NationalPolitics {
   nextSupportReviewAt: number;
   nextForeignCampaignAt?: number;
   nextIncomingCampaignAt?: number;
+  suppression?: { ideologyId: string; until: number };
+  nextSuppressionAt?: number;
 }
 
 const ELECTION_INTERVAL = 420;
@@ -86,6 +89,7 @@ export function increasePoliticalSupport(politics: NationalPolitics, ideologyId:
 }
 
 function adoptGovernmentIdeology(world: WorldState, nation: NationRuntime, ideologyId: string): void {
+  if (nation.ideologyId !== ideologyId && nation.politics) delete nation.politics.suppression;
   const base = nation.preGovernmentCharacter ??= { ...getNationCharacter(world, nation.id) };
   const policy = POLICY_PROFILES[ideologyId];
   nation.ideologyId = ideologyId;
@@ -139,10 +143,13 @@ export function updateNationalPolitics(world: WorldState): void {
     const incumbent = politics.governingIdeologyId;
     if (now >= politics.nextSupportReviewAt) {
       politics.nextSupportReviewAt = now + SUPPORT_REVIEW_INTERVAL;
+      if (hasPoliticalTurbulence(world)) reviewSuppression(world, nation, politics);
       const opposition = rankedParties(politics.support, incumbent).find(([id]) => id !== incumbent)?.[0];
       const crisis = Math.max(getRevolutionRisk(world, nation.id), 1 - nation.warCooperation);
       const pressure = politics.system === "democracy" ? 4 : 2;
-      if (opposition && crisis >= 0.35) {
+      if (politics.suppression && hasPoliticalTurbulence(world)) {
+        increasePoliticalSupport(politics, politics.suppression.ideologyId, 3);
+      } else if (opposition && crisis >= 0.35) {
         increasePoliticalSupport(politics, opposition, Math.ceil(crisis * pressure));
       } else if (opposition && politics.system === "democracy" && politics.consecutiveMandates >= 2) {
         increasePoliticalSupport(politics, opposition, 2);
@@ -153,9 +160,11 @@ export function updateNationalPolitics(world: WorldState): void {
     if (now < politics.nextMandateAt) continue;
     const democratic = politics.system === "democracy";
     politics.nextMandateAt = now + (democratic ? ELECTION_INTERVAL : SUCCESSION_INTERVAL);
-    const leader = rankedParties(politics.support, incumbent)[0]?.[0] ?? incumbent;
+    const banned = hasPoliticalTurbulence(world) && (politics.suppression?.until ?? 0) > now ? politics.suppression?.ideologyId : undefined;
+    const eligible = rankedParties(politics.support, incumbent).filter(([id]) => id !== banned);
+    const leader = eligible[0]?.[0] ?? incumbent;
     if (democratic) {
-      politics.seats = new Map(politics.support);
+      politics.seats = banned ? redistributeSeats(eligible) : new Map(politics.support);
       politics.coalition = formCoalition(politics.seats, incumbent);
       politics.governingIdeologyId = politics.coalition[0] ?? incumbent;
     } else if ((politics.support.get(leader) ?? 0) >= (politics.support.get(incumbent) ?? 0) + 8) {
@@ -168,4 +177,35 @@ export function updateNationalPolitics(world: WorldState): void {
     recordSimulationEvent(world, { category: "politics", nationIds: [nation.id],
       message: `${nation.id}: ${democratic ? "election" : "royal succession"} ${incumbent === politics.governingIdeologyId ? "retained" : "brought to power"} ${name}.` });
   }
+}
+
+function reviewSuppression(world: WorldState, nation: NationRuntime, politics: NationalPolitics): void {
+  const now = world.time.slowTick;
+  const name = (id: string) => getIdeologies(world).find((ideology) => ideology.id === id)?.name ?? id;
+  if (politics.suppression && politics.suppression.until <= now) {
+    recordSimulationEvent(world, { category: "politics", nationIds: [nation.id],
+      message: `${nation.id} lifted its ban on ${name(politics.suppression.ideologyId)}. The movement can contest the next mandate.` });
+    delete politics.suppression;
+  }
+  if (now < 120 || politics.suppression || (politics.nextSuppressionAt ?? 0) > now ||
+    (politics.system !== "monarchy" && getNationCharacter(world, nation.id).aggression < 0.6)) return;
+  const target = rankedParties(politics.support, politics.governingIdeologyId)
+    .find(([id, share]) => share >= 18 && ideologyCompatibility(id, politics.governingIdeologyId) <= -0.65);
+  if (!target) return;
+  politics.suppression = { ideologyId: target[0], until: now + 240 };
+  politics.nextSuppressionAt = now + 660;
+  const unrest = getDomesticUnrest(world, nation.id);
+  unrest.pressure = Math.min(100, unrest.pressure + 18);
+  recordSimulationEvent(world, { category: "politics", nationIds: [nation.id],
+    message: `${nation.id} banned ${name(target[0])}. Underground organizing and domestic unrest are rising.` });
+}
+
+function redistributeSeats(parties: [string, number][]): Map<string, number> {
+  const total = parties.reduce((sum, [, support]) => sum + support, 0);
+  const quotas = parties.map(([id, support]) => ({ id, quota: 100 * support / total }));
+  const seats = new Map(quotas.map(({ id, quota }) => [id, Math.floor(quota)]));
+  const remainder = 100 - [...seats.values()].reduce((sum, count) => sum + count, 0);
+  quotas.sort((a, b) => (b.quota % 1) - (a.quota % 1));
+  for (const { id } of quotas.slice(0, remainder)) seats.set(id, seats.get(id)! + 1);
+  return seats;
 }
