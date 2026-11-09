@@ -81,7 +81,7 @@ export function updateAlliedWarRequests(world: WorldState): void {
   if (now - state.lastAISlowTick < 30) return;
   state.lastAISlowTick = now;
   for (const war of [...world.wars]) {
-    if (["allied-request", "faction-obligation", "defensive-alliance"].includes(war.cause ?? "")) continue;
+    if (["allied-request", "faction-obligation", "defensive-alliance", "subject-uprising"].includes(war.cause ?? "")) continue;
     for (const caller of [war.defenderId, war.aggressorId]) {
       const enemy = caller === war.defenderId ? war.aggressorId : war.defenderId;
       const ally = world.nations.find((nation) => eligible(world, caller, nation.id, enemy));

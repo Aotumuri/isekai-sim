@@ -13,6 +13,7 @@ import { updateNationalistMovements } from "./nationalist-movements";
 import { updateBorderIncidents } from "./border-incidents";
 import { updateFactionSanctions } from "./trade-embargo";
 import { updateDefensePacts } from "./defense-pacts";
+import { updateTerritorialGovernance } from "./territorial-governance";
 import { updatePopulationMigration } from "./population-migration";
 import { updateCoastalInvestment } from "./coastal-investment";
 import { updateSubjectGovernments } from "./subject-governments";
@@ -224,6 +225,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   beginAiGeographyEvaluation(world);
   updateSupplyAssessment(world);
   updateAnnexations(world);
+  updateTerritorialGovernance(world);
   updateProduction(world);
   updateSubjectAutonomy(world);
   updateDemobilization(world);

@@ -52,6 +52,14 @@ export type NationRuntime = Nation & {
   nextDisplacementOrderAt?: number;
   populationPolicy?: PopulationPolicy;
   nationalistMovement?: { targetId: Nation["id"]; group: number; until: number; nextAt: number };
+  governance?: {
+    policy: "centralized" | "autonomy" | "assimilation";
+    stability: number;
+    diversity: number;
+    alignment: number;
+    since: number;
+    manual?: boolean;
+  };
   character?: NationCharacter;
   preGovernmentCharacter?: NationCharacter;
   politics?: NationalPolitics;

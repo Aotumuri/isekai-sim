@@ -2,6 +2,8 @@ import type { MacroRegionId } from "../worldgen/macro-region";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationRuntime } from "./nation-runtime";
 import { POPULATION_DIMENSIONS, POPULATION_GROUPS, type PopulationDimension } from "./regional-population";
+import { hasPoliticalTurbulence } from "./simulation-settings";
+import { getSubjectOverlord } from "./subject-governments";
 import { getMesoById } from "./world-cache";
 import type { WorldState } from "./world-state";
 
@@ -15,7 +17,9 @@ export interface RevolutionOrigin {
 
 export function rankRevolutionOrigins(world: WorldState, nation: NationRuntime): RevolutionOrigin[] {
   const populations = world.regionalPopulations;
-  const capital = populations?.get(nation.capitalMesoId);
+  const overlord = hasPoliticalTurbulence(world) && nation.governance?.policy === "assimilation" ? getSubjectOverlord(world, nation.id) : undefined;
+  const reference = overlord ? world.nations.find(({ id }) => id === overlord)?.capitalMesoId : undefined;
+  const capital = populations?.get(reference ?? nation.capitalMesoId);
   if (!populations || !capital?.size) return [];
 
   const regions = getMesoById(world);

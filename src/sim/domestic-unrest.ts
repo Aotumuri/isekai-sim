@@ -6,6 +6,7 @@ import type { WorldState } from "./world-state";
 import { isNationActive } from "./nation-active";
 import { getNationName } from "./nation-identity";
 import { hasPoliticalTurbulence, recordSimulationEvent } from "./simulation-settings";
+import { getGovernanceUnrest } from "./territorial-governance";
 export interface NationalUnrest {
   pressure: number; lowSupportSeconds: number; lastSlowTick: number; cooldownUntilSlowTick: number;
   phase: "stable" | "discontent" | "crisis" | "revolution" | "recovering"; revolutions: number;
@@ -42,6 +43,7 @@ export function updateDomesticUnrest(world: WorldState): void {
     const active = isNationActive(nation);
     if (active) {
       item.pressure += elapsed * taxUnrestPerTick(nation.treasury);
+      if (hasPoliticalTurbulence(world)) item.pressure += elapsed * getGovernanceUnrest(nation);
       if (hasPoliticalTurbulence(world) && (nation.politics?.suppression?.until ?? 0) > world.time.slowTick) {
         item.pressure += elapsed * 1.05;
       }

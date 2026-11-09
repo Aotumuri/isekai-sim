@@ -5,7 +5,8 @@ import { establishRevolutionaryGovernment } from "./politics";
 import { getNationName } from "./nation-identity";
 import { POPULATION_GROUPS } from "./regional-population";
 import { rankRevolutionOrigins, type RevolutionOrigin } from "./revolution-origins";
-import { recordSimulationEvent } from "./simulation-settings";
+import { hasPoliticalTurbulence, recordSimulationEvent } from "./simulation-settings";
+import { getSubjectOverlord } from "./subject-governments";
 import { WORLD_BALANCE } from "../data/balance";
 import type { MacroRegion, MacroRegionId } from "../worldgen/macro-region";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
@@ -177,6 +178,10 @@ export function updateCivilWar(world: WorldState): void {
 
     const war = declareWar(world.wars, newNationId, nation.id, world.time.fastTick);
     if (war) {
+      if (hasPoliticalTurbulence(world) && getSubjectOverlord(world, nation.id)) {
+        war.cause = "subject-uprising";
+        war.uprisingProvinces = [...rebelMacroIds];
+      }
       console.info(
         `[CivilWar] ${nation.id} vs ${newNationId} start @${world.time.fastTick}`,
       );

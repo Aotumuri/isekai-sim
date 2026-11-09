@@ -9,6 +9,7 @@ import { getOwnerByMesoId } from "./world-cache";
 import { findWar } from "./war-state";
 import { isNationRegionSupplied } from "./supply-assessment";
 import { getNationCharacter } from "./nation-character";
+import { getSubjectOverlord } from "./subject-governments";
 import { WORLD_BALANCE } from "../data/balance";
 
 export interface VolunteerMission {
@@ -23,11 +24,15 @@ export function getVolunteerState(world: WorldState): VolunteerState {
 }
 const active = (world: WorldState, id: NationId) => world.nations.some((nation) => nation.id === id && nation.macroRegionIds.length);
 const enemies = (world: WorldState, id: NationId) => world.wars.filter((war) => war.nationAId === id || war.nationBId === id).map((war) => war.nationAId === id ? war.nationBId : war.nationAId);
+const subjectUprising = (world: WorldState, donor: NationId, recipient: NationId) =>
+  getSubjectOverlord(world, recipient) === donor &&
+  world.wars.some((war) => war.defenderId === recipient && war.cause === "subject-uprising");
 export function canSendVolunteers(world: WorldState, donor: NationId, recipient: NationId): boolean {
   if (getWarDeclarationMode(world) !== "diplomacy" || donor === recipient || !active(world, donor) || !active(world, recipient) || findWar(world.wars, donor, recipient)) return false;
   const relation = getRelation(world, donor, recipient), foes = enemies(world, recipient);
-  return foes.length > 0 && relation.trust >= 55 && relation.opinion >= 35 && !relation.crisis &&
-    (areFactionPartners(world, donor, recipient) || hasTreaty(world, donor, recipient, "alliance") || relation.opinion >= 40) &&
+  const subject = subjectUprising(world, donor, recipient);
+  return foes.length > 0 && relation.trust >= (subject ? 45 : 55) && relation.opinion >= (subject ? 20 : 35) && !relation.crisis &&
+    (subject || areFactionPartners(world, donor, recipient) || hasTreaty(world, donor, recipient, "alliance") || relation.opinion >= 40) &&
     !foes.some((enemy) => findWar(world.wars, donor, enemy) || areFactionPartners(world, donor, enemy) ||
       (["alliance", "non-aggression", "truce"] as const).some((type) => hasTreaty(world, donor, enemy, type)));
 }
@@ -136,6 +141,8 @@ export function updateVolunteers(world: WorldState): void {
   if (getWarDeclarationMode(world) !== "diplomacy" || world.time.slowTick - state.lastAISlowTick < 60) return;
   state.lastAISlowTick = world.time.slowTick;
   outer: for (const recipient of world.nations.filter((nation) => nation.macroRegionIds.length && enemies(world, nation.id).length)) {
+    const sponsor = getSubjectOverlord(world, recipient.id);
+    if (sponsor && subjectUprising(world, sponsor, recipient.id) && sendVolunteers(world, sponsor, recipient.id, 1)) break;
     for (const donor of world.nations) if (donor.macroRegionIds.length && getNationCharacter(world, donor.id).cooperation >= 0.6 &&
       canSendVolunteers(world, donor.id, recipient.id) && sendVolunteers(world, donor.id, recipient.id, 1)) break outer;
   }

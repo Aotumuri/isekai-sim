@@ -4,7 +4,7 @@ import { startDiplomaticWar } from "./diplomatic-crises";
 import { changeResource } from "./international-trade";
 import type { NationRuntime } from "./nation-runtime";
 import { getNationName } from "./nation-identity";
-import { getWarDeclarationMode, recordSimulationEvent } from "./simulation-settings";
+import { getWarDeclarationMode, hasPoliticalTurbulence, recordSimulationEvent } from "./simulation-settings";
 import { releaseSubjectGovernment } from "./subject-governments";
 import { getMesoById, getOwnerByMesoId } from "./world-cache";
 import type { WorldState } from "./world-state";
@@ -46,7 +46,8 @@ export function updateSubjectAutonomy(world: WorldState): void {
     const food = world.settings?.foodEnabled === false ? undefined : subject.food;
     const levyPressure = (food?.levy ?? 0) < 0 ? (government.foodLevy ?? 0) * 4 : 0;
     const hunger = food ? (1 - food.rationCoverage) * 2 : 0;
-    const change = levyPressure + hunger + power * 3 + gap * 2 + strain + shortage - relation.trust * 0.04 - 0.5;
+    const autonomyRelief = hasPoliticalTurbulence(world) && subject.governance?.policy === "autonomy" ? 1.5 : 0;
+    const change = levyPressure + hunger + power * 3 + gap * 2 + strain + shortage - relation.trust * 0.04 - 0.5 - autonomyRelief;
     government.autonomy = Math.max(0, Math.min(100, (government.autonomy ?? 0) + change));
     if (government.autonomy < 100 || hasTreaty(world, subject.id, overlord.id, "truce")) continue;
     if (!releaseSubjectGovernment(world, overlord.id, subject.id)) continue;

@@ -1,6 +1,6 @@
 import { getSeparatePeaceIssue } from "./separate-peace";
 import { hasConferenceWar } from "./peace-conference";
-import { dividePartitionResources, getPartitionIssue, planPuppetPartition, preparePartitionNation, type PuppetPartition } from "./puppet-partition";
+import { dividePartitionResources, getPartitionIssue, planLocalSubject, planPuppetPartition, preparePartitionNation, type PuppetPartition } from "./puppet-partition";
 import { estimateAnnexationResistance, recordAnnexation } from "./annexation";
 import { getPuppetTermsIssue, installSubjectGovernment } from "./subject-governments";
 import { getRelation } from "./diplomacy";
@@ -19,7 +19,7 @@ import { getForeignClaims } from "./territorial-claims";
 import { canTransferTerritories, transferTerritories, type TerritoryTransfer } from "./territory-transfer";
 import { changeResource } from "./international-trade";
 import { getMesoById, getOwnerByMesoId } from "./world-cache";
-import { getWarDeclarationMode, recordSimulationEvent } from "./simulation-settings";
+import { getWarDeclarationMode, hasPoliticalTurbulence, recordSimulationEvent } from "./simulation-settings";
 import { concludePeace, getWarFatigue, warFatigueKey } from "./diplomatic-peace";
 
 export interface PeaceTerms {
@@ -27,6 +27,7 @@ export interface PeaceTerms {
   demandedWeapons: number; offeredWeapons: number; truceSeconds: number;
   puppetTarget?: boolean;
   partition?: PuppetPartition;
+  localSubject?: boolean;
 }
 export interface PeaceOffer { proposerId: NationId; terms: PeaceTerms; revisedAtSlowTick: number; revision: number; source: "opening" | "automatic" | "manual" }
 export interface WarNegotiation {
@@ -95,6 +96,16 @@ export function getPeaceTermsIssue(world: WorldState, proposer: NationId, target
   if (!a || !b) return "Both governments need territory to sign this settlement.";
   if (a.resources.weapons < terms.offeredWeapons || b.resources.weapons < terms.demandedWeapons) return "The paying country cannot afford the proposed reparations.";
   const legs = legsFor(proposer, target, terms);
+  if (terms.localSubject) {
+    if (!hasPoliticalTurbulence(world) || terms.puppetTarget || terms.partition || terms.offeredRegionIds.length) {
+      return "A local subject settlement only transfers the selected demands to a new government.";
+    }
+    const plan = planLocalSubject(world, proposer, target, terms.demandedRegionIds);
+    if (!plan) return "A local subject needs at least two connected districts and a seat outside the defeated capital.";
+    const nation = preparePartitionNation(world, b, plan);
+    return canTransferTerritories(world, [{ from: target, to: nation.id, regionIds: plan.districtIds }],
+      { nation, occupationSponsor: proposer }) ? null : "A third party controls part of the proposed subject.";
+  }
   if (legs.length && !canTransferTerritories(world, legs)) return "Territory changed, a third party controls a district, or a country would lose its last territory.";
   const borderIssue = getPeaceBorderIssue(world, legs);
   if (borderIssue) return borderIssue;
@@ -123,7 +134,12 @@ function automaticTerms(world: WorldState, proposer: NationId, target: NationId,
       !getPuppetTermsIssue(world, proposer, target)) {
       terms.puppetTarget = true;
       if (advantage > 0.65) terms.partition = planPuppetPartition(world, proposer, target, []);
-    } else terms.demandedRegionIds = selectPeaceProvinces(world, target, proposer, candidates, 2, cap);
+    } else {
+      terms.demandedRegionIds = selectPeaceProvinces(world, target, proposer, candidates, 2, cap);
+      if (!opening && advantage > 0.35 && hasPoliticalTurbulence(world) &&
+        terms.demandedRegionIds.some((id) => estimateAnnexationResistance(world, proposer, id) >= 0.4) &&
+        planLocalSubject(world, proposer, target, terms.demandedRegionIds)) terms.localSubject = true;
+    }
     terms.demandedWeapons = Math.min(hardline ? 40 : 30, Math.floor(b.resources.weapons * (hardline ? 0.35 : 0.15)),
       Math.max(pursuingOpeningGoals || hardline ? 15 : 0, Math.floor(advantage * 40)));
   } else if (!opening && (advantage < -0.15 || urgency >= 0.55)) {
@@ -167,7 +183,7 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
   const paymentBenefit = Math.min(18, terms.offeredWeapons * 0.5);
   const disposition = character.doctrine === "merchant" || character.doctrine === "isolationist" ? 12 : character.doctrine === "pragmatist" ? 8 : character.cooperation * 7;
   const resolve = 45 + (isFightOnGovernment(world, recipient) ? 35 : character.aggression * 8) + Math.max(0, advantage) * 25;
-  const score = pressure + disposition + landBenefit + paymentBenefit + Math.min(6, (terms.truceSeconds - 300) / 100) - landCost - paymentCost - resolve - (terms.partition ? 38 : terms.puppetTarget ? 25 : 0);
+  const score = pressure + disposition + landBenefit + paymentBenefit + Math.min(6, (terms.truceSeconds - 300) / 100) - landCost - paymentCost - resolve - (terms.partition ? 38 : terms.puppetTarget ? 25 : terms.localSubject ? 8 : 0);
   return { accepts: score >= 0, score, reason: score >= 0 ? "Ending the war now is preferable to continued losses and domestic danger." : landCost + paymentCost > 25 ? "The requested concessions outweigh the current cost of continuing the war." : "The government expects a better outcome by continuing the war." };
 }
 export function proposePeaceTerms(world: WorldState, proposer: NationId, target: NationId, terms: PeaceTerms): boolean {
@@ -187,9 +203,11 @@ export function acceptPeaceOffer(world: WorldState, recipient: NationId, propose
   if (expectedRevision !== undefined && expectedRevision !== offer.revision) return false;
   if (getSeparatePeaceIssue(world, proposer, recipient) || getPeaceTermsIssue(world, proposer, recipient, terms)) return false;
   const defeated = world.nations.find((nation) => nation.id === recipient)!;
-  const successor = terms.partition && preparePartitionNation(world, defeated, terms.partition);
-  const legs = legsFor(proposer, recipient, terms);
-  if (successor && terms.partition) legs.push({ from: recipient, to: successor.id, regionIds: terms.partition.districtIds });
+  const localPlan = terms.localSubject ? planLocalSubject(world, proposer, recipient, terms.demandedRegionIds) : undefined;
+  const plan = localPlan ?? terms.partition;
+  const successor = plan && preparePartitionNation(world, defeated, plan);
+  const legs = localPlan ? [] : legsFor(proposer, recipient, terms);
+  if (successor && plan) legs.push({ from: recipient, to: successor.id, regionIds: plan.districtIds });
   const founding = successor && { nation: successor, occupationSponsor: proposer };
   if (legs.length && !transferTerritories(world, legs, "agreement", founding)) return false;
   // Validation and territory transfer are synchronous and cannot remove this war.
@@ -200,11 +218,11 @@ export function acceptPeaceOffer(world: WorldState, recipient: NationId, propose
   const relation = getRelation(world, proposer, recipient);
   const truce = relation.treaties.find((treaty) => treaty.type === "truce")!; truce.expiresAtSlowTick = world.time.slowTick + terms.truceSeconds;
   relation.cooldownUntilSlowTick = truce.expiresAtSlowTick;
-  recordAnnexation(world, proposer, terms.demandedRegionIds);
+  if (!localPlan) recordAnnexation(world, proposer, terms.demandedRegionIds);
   recordAnnexation(world, recipient, terms.offeredRegionIds);
-  if (terms.puppetTarget || successor) installSubjectGovernment(world, proposer, recipient);
-  if (successor && terms.partition) {
-    dividePartitionResources(world, b, successor, terms.partition);
+  if (terms.puppetTarget || terms.partition) installSubjectGovernment(world, proposer, recipient);
+  if (successor && plan) {
+    dividePartitionResources(world, b, successor, plan);
     installSubjectGovernment(world, proposer, successor.id);
     const successorRelation = getRelation(world, proposer, successor.id);
     successorRelation.treaties.push({ ...truce });

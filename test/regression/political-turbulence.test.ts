@@ -3,14 +3,20 @@ import test from "node:test";
 import { updateBorderIncidents } from "../../src/sim/border-incidents";
 import { getDefensePact, getRelation, isDiplomaticallyProtected } from "../../src/sim/diplomacy";
 import { updateDefensePacts } from "../../src/sim/defense-pacts";
+import { updateCivilWar } from "../../src/sim/civil-war";
+import { updateDiplomaticCrises } from "../../src/sim/diplomatic-crises";
 import { getDomesticUnrest } from "../../src/sim/domestic-unrest";
 import { getFactionState } from "../../src/sim/factions";
 import { getNationCharacter } from "../../src/sim/nation-character";
 import { getNationalPolitics, updateNationalPolitics } from "../../src/sim/politics";
 import { updateNationalistMovements } from "../../src/sim/nationalist-movements";
 import { getForeignClaims } from "../../src/sim/territorial-claims";
+import { getSubjectIntegrationIssue, integrateSubjectGovernment, setGovernancePolicy, updateTerritorialGovernance } from "../../src/sim/territorial-governance";
+import { updateSurrender } from "../../src/sim/surrender";
 import { isTradeEmbargoed, updateFactionSanctions } from "../../src/sim/trade-embargo";
-import { declareWar } from "../../src/sim/war-state";
+import { canSendVolunteers } from "../../src/sim/volunteers";
+import { acceptPeaceOffer, proposePeaceTerms, whitePeaceTerms } from "../../src/sim/war-negotiations";
+import { declareWar, findWar } from "../../src/sim/war-state";
 import { getOwnerByMesoId } from "../../src/sim/world-cache";
 import { createNationId } from "../../src/worldgen/nation";
 import { createSocietyWorld } from "../helpers/society-world";
@@ -20,6 +26,107 @@ function scene() {
   world.settings!.politicalTurbulenceEnabled = true;
   return world;
 }
+
+function dividedSubject() {
+  const world = scene(), [sponsor, subject] = world.nations;
+  subject.subjectGovernment = { overlordId: sponsor.id, establishedAtFastTick: 0 };
+  const relation = getRelation(world, sponsor.id, subject.id);
+  relation.trust = 65;
+  relation.opinion = 30;
+  for (const [id, owner] of getOwnerByMesoId(world)) {
+    const population = world.regionalPopulations!.get(id)!;
+    const group = owner === sponsor.id ? 0 : 1;
+    for (const dimension of ["ancestry", "culture", "faith"] as const) {
+      population[dimension] = Array.from({ length: 6 }, (_, index) => index === group ? population.size : 0);
+    }
+  }
+  return { world, sponsor, subject };
+}
+
+test("regional autonomy makes a diverse country more stable without changing its population", () => {
+  const { world, subject } = dividedSubject();
+  const capital = world.regionalPopulations!.get(subject.capitalMesoId)!;
+  const province = world.macroRegions.find(({ nationId, mesoRegionIds }) =>
+    nationId === subject.id && !mesoRegionIds.includes(subject.capitalMesoId))!;
+  for (const id of province.mesoRegionIds) {
+    const population = world.regionalPopulations!.get(id)!;
+    population.culture = [population.size, 0, 0, 0, 0, 0];
+    population.faith = [population.size, 0, 0, 0, 0, 0];
+  }
+  setGovernancePolicy(world, subject.id, subject.id, "centralized");
+  for (let tick = 10; tick <= 100; tick += 10) {
+    world.time.slowTick = tick;
+    updateTerritorialGovernance(world);
+  }
+  const before = subject.governance!.stability;
+  const culture = [...capital.culture];
+  assert.ok(before < 100);
+  setGovernancePolicy(world, subject.id, subject.id, "autonomy");
+  for (let tick = 110; tick <= 200; tick += 10) {
+    world.time.slowTick = tick;
+    updateTerritorialGovernance(world);
+  }
+  assert.ok(subject.governance!.stability > before);
+  assert.deepEqual(capital.culture, culture);
+});
+
+test("subjects can assimilate gradually and integrate when ready while preserving ancestry", () => {
+  const { world, sponsor, subject } = dividedSubject();
+  const population = world.regionalPopulations!.get(subject.capitalMesoId)!;
+  const ancestry = [...population.ancestry];
+  const subjectUnits = world.units.filter((unit) => unit.nationId === subject.id);
+  assert.ok(setGovernancePolicy(world, sponsor.id, subject.id, "assimilation"));
+  assert.ok(getSubjectIntegrationIssue(world, sponsor.id, subject.id));
+  for (let tick = 10; tick <= 400; tick += 10) {
+    world.time.slowTick = tick;
+    updateTerritorialGovernance(world);
+  }
+  assert.ok(population.culture[0]! > population.size * 0.72);
+  assert.ok(population.faith[0]! > population.size * 0.72);
+  assert.deepEqual(population.ancestry, ancestry);
+  assert.ok(Math.abs(population.culture.reduce((a, b) => a + b) - population.size) < 1e-8);
+  assert.equal(getSubjectIntegrationIssue(world, sponsor.id, subject.id), undefined);
+  assert.ok(integrateSubjectGovernment(world, sponsor.id, subject.id));
+  assert.equal(getOwnerByMesoId(world).get(subject.capitalMesoId), sponsor.id);
+  assert.equal(subject.macroRegionIds.length, 0);
+  assert.ok(subjectUnits.every((unit) => unit.nationId === sponsor.id));
+  assert.ok(!integrateSubjectGovernment(world, sponsor.id, subject.id));
+});
+
+test("a negotiated local subject receives only the demanded provinces", () => {
+  const world = scene(), [sponsor, defeated] = world.nations;
+  const province = world.macroRegions.find(({ nationId, mesoRegionIds }) =>
+    nationId === defeated.id && !mesoRegionIds.includes(defeated.capitalMesoId))!;
+  const districts = [...province.mesoRegionIds];
+  declareWar(world.wars, sponsor.id, defeated.id, 0);
+  const terms = { ...whitePeaceTerms(), demandedRegionIds: districts, localSubject: true };
+  assert.ok(proposePeaceTerms(world, sponsor.id, defeated.id, terms));
+  assert.ok(acceptPeaceOffer(world, defeated.id, sponsor.id));
+  const subject = world.nations.at(-1)!;
+  assert.equal(subject.subjectGovernment?.overlordId, sponsor.id);
+  assert.equal(defeated.subjectGovernment, undefined);
+  assert.equal(getOwnerByMesoId(world).get(defeated.capitalMesoId), defeated.id);
+  assert.ok(districts.every((id) => getOwnerByMesoId(world).get(id) === subject.id));
+});
+
+test("a subject uprising can be supported by volunteers without automatically bringing the sponsor to war", () => {
+  const { world, sponsor, subject } = dividedSubject();
+  assert.ok(setGovernancePolicy(world, sponsor.id, subject.id, "assimilation"));
+  getDomesticUnrest(world, subject.id).pressure = 100;
+  updateCivilWar(world);
+  const rebels = world.nations.at(-1)!;
+  assert.notEqual(rebels.id, subject.id);
+  const war = findWar(world.wars, rebels.id, subject.id)!;
+  assert.equal(war.cause, "subject-uprising");
+  const seat = rebels.capitalMesoId;
+  updateDiplomaticCrises(world);
+  assert.equal(findWar(world.wars, sponsor.id, rebels.id), null);
+  assert.ok(canSendVolunteers(world, sponsor.id, subject.id));
+  world.units = world.units.filter((unit) => unit.nationId !== rebels.id);
+  updateSurrender(world);
+  assert.equal(getOwnerByMesoId(world).get(seat), subject.id);
+  assert.equal(findWar(world.wars, subject.id, rebels.id), null);
+});
 
 test("states facing a shared threat can form a temporary, targeted defense pact", () => {
   const world = scene(), [a, b] = world.nations;

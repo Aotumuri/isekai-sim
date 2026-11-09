@@ -11,6 +11,7 @@ import { buildWarAdjacency, isAtWar } from "./war-state";
 import { isNationActive } from "./nation-active";
 import type { WorldState } from "./world-state";
 import { getMacroAdjacency, getMesoById } from "./world-cache";
+import { recordSimulationEvent } from "./simulation-settings";
 
 export function updateSurrender(world: WorldState): void {
   if (world.nations.length === 0) {
@@ -152,9 +153,13 @@ export function updateSurrender(world: WorldState): void {
       getMacroAdjacency(world),
       new Map(world.macroRegions.map((macro) => [macro.id, macro.nationId])),
     );
+    const uprising = world.wars.find((war) => war.cause === "subject-uprising" && war.aggressorId === surrenderNationId &&
+      !!nationById.get(war.defenderId)?.macroRegionIds.length && !surrendering.includes(war.defenderId));
+    const restored = uprising?.uprisingProvinces?.filter((id) => macroIds.includes(id)) ?? [];
+    if (uprising) for (const id of restored) assignments.set(id, uprising.defenderId);
 
     updateTerritorialClaims(world);
-    if (assignments.size) establishExileGovernment(world, surrenderNationId, new Set(surrendering));
+    if (assignments.size && !restored.length) establishExileGovernment(world, surrenderNationId, new Set(surrendering));
     const didChange = applyAssignments(
       surrenderNationId,
       assignments,
@@ -169,6 +174,10 @@ export function updateSurrender(world: WorldState): void {
     buildingChanged ||= didChange.buildingChanged;
 
     if (didChange.territoryChanged) {
+      if (uprising && restored.length) recordSimulationEvent(world, {
+        category: "military", nationIds: [uprising.defenderId, surrenderNationId],
+        message: `${uprising.defenderId} recovered ${restored.length} provinces after suppressing the uprising.`,
+      });
       if (clearCapitalMarkerForNation(surrenderNationId, nationById, mesoById)) {
         buildingChanged = true;
       }

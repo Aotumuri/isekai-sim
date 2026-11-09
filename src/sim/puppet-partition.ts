@@ -8,12 +8,30 @@ import { createNationResourceFlow, type NationRuntime } from "./nation-runtime";
 import { connectedRegionGroups } from "./peace-borders";
 import { dominantGroup, POPULATION_GROUPS } from "./regional-population";
 import { findWar } from "./war-state";
+import { getSubjectOverlord } from "./subject-governments";
 import { getMesoById, getNeighborsById, getOwnerByMesoId } from "./world-cache";
 import type { WorldState } from "./world-state";
 
 export interface PuppetPartition {
   capitalId: MesoRegionId;
   districtIds: MesoRegionId[];
+}
+
+export function planLocalSubject(world: WorldState, sponsor: NationId, target: NationId,
+  districtIds: MesoRegionId[]): PuppetPartition | undefined {
+  const land = remainingLand(world, target, []);
+  const selected = new Set(districtIds);
+  const capital = world.nations.find(({ id }) => id === target)?.capitalMesoId;
+  if (getSubjectOverlord(world, sponsor) || !capital || selected.has(capital) || selected.size < 2 ||
+    selected.size !== districtIds.length || districtIds.some((id) => !land.has(id))) return;
+  const neighbors = getNeighborsById(world);
+  if (connectedRegionGroups(selected, neighbors).length !== 1 ||
+    connectedRegionGroups(land, neighbors).some((component) =>
+      connectedRegionGroups(new Set(component.filter((id) => !selected.has(id))), neighbors).length > 1)) return;
+  const regions = getMesoById(world);
+  const seat = districtIds.find((id) => regions.get(id)?.building === "city") ??
+    districtIds.find((id) => regions.get(id)?.type === "land" && regions.get(id)?.building === null);
+  if (seat) return { capitalId: seat, districtIds: [...districtIds] };
 }
 
 function remainingLand(world: WorldState, target: NationId, annexed: readonly MesoRegionId[]): Set<MesoRegionId> {

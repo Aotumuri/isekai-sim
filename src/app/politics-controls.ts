@@ -7,7 +7,8 @@ import { getNationCharacter } from "../sim/nation-character";
 import { getIdeologies, getNationName } from "../sim/nation-identity";
 import type { NationRuntime } from "../sim/nation-runtime";
 import { getNationalPolitics } from "../sim/politics";
-import { getWarDeclarationMode } from "../sim/simulation-settings";
+import { getWarDeclarationMode, hasPoliticalTurbulence } from "../sim/simulation-settings";
+import { setGovernancePolicy, type GovernancePolicy } from "../sim/territorial-governance";
 import type { WorldState } from "../sim/world-state";
 
 const esc = (value: string) => value.replace(/[&<>"']/g, (char) =>
@@ -26,6 +27,13 @@ export function attachPoliticsControls(
     if (control.matches("[data-expulsion-target]")) targetByNation.set(selected(), Number(control.value));
   });
   root.addEventListener("click", (event) => {
+    const policy = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-governance-policy]")?.dataset.governancePolicy;
+    if (policy) {
+      event.stopPropagation();
+      const id = selected();
+      feedback(setGovernancePolicy(world, id, id, policy as GovernancePolicy) ? "Governance policy updated." : "Governance policy is unavailable.");
+      return;
+    }
     const action = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-expulsion-action]");
     if (action) {
       event.stopPropagation();
@@ -65,9 +73,15 @@ export function attachPoliticsControls(
       const targetGroup = targetByNation.get(nation.id);
       const parties = [...politics.support].sort((a, b) => (politics.seats.get(b[0]) ?? 0) - (politics.seats.get(a[0]) ?? 0) || b[1] - a[1]);
       const ban = politics.suppression;
+      const governance = nation.governance;
       root.innerHTML = `<h2>${democracy ? "Parliamentary democracy" : "Monarchy"}</h2>
         <p><strong>Governing ideology:</strong> ${name(politics.governingIdeologyId)}</p>
         ${ban && ban.until > world.time.slowTick ? `<p><strong>Banned movement:</strong> ${name(ban.ideologyId)} · ${ban.until - world.time.slowTick}s remaining</p>` : ""}
+        ${hasPoliticalTurbulence(world) ? `<h2>Territorial governance</h2>
+          <p>Stability ${Math.round(governance?.stability ?? 100)}/100 · Diversity ${Math.round((governance?.diversity ?? 0) * 100)}%</p>
+          <p class="society-note">Autonomy reduces the cost of governing diverse districts. Assimilation changes culture and religion gradually and can provoke resistance.</p>
+          <div class="society-actions">${(["centralized", "autonomy", "assimilation"] as const).map((policy) =>
+            `<button type="button" data-governance-policy="${policy}" aria-pressed="${(governance?.policy ?? "centralized") === policy}">${policy[0]!.toUpperCase() + policy.slice(1)}</button>`).join("")}</div>` : ""}
         ${nation.populationPolicy ? `<p><strong>${populationPolicyTitle(nation.populationPolicy)}</strong> · ${nation.populationPolicy.type === "homeland" ? "Claims nearby districts with a substantial population of the homeland's ancestry." : "Recognizes the most widely practiced faith as the state religion."}</p>` : ""}
         <p class="society-note">${active ? `Next ${democracy ? "election" : "royal succession"} in ${next}s` : "Domestic politics are paused."}
         · Doctrine: ${character.doctrine} · Aggression ${Math.round(character.aggression * 100)}% · Cooperation ${Math.round(character.cooperation * 100)}%</p>

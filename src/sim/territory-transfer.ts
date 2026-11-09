@@ -10,6 +10,7 @@ import { updateTerritorialClaims } from "./territorial-claims";
 import { updateOccupation } from "./occupation";
 import { findWar } from "./war-state";
 import { recordSimulationEvent } from "./simulation-settings";
+import { getSubjectOverlord } from "./subject-governments";
 
 export interface TerritoryTransfer { from: NationId; to: NationId; regionIds: MesoRegionId[] }
 function newProvinceId(world: WorldState): MacroRegionId {
@@ -51,6 +52,10 @@ export interface FoundingTransfer {
 }
 
 export function canTransferTerritories(world: WorldState, legs: TerritoryTransfer[], founding?: FoundingTransfer): boolean {
+  return validateTerritoryTransfers(world, legs, founding);
+}
+
+function validateTerritoryTransfers(world: WorldState, legs: TerritoryTransfer[], founding?: FoundingTransfer, integrating?: NationId): boolean {
   if (!legs.length) return false;
   if (founding && (world.nations.some((nation) => nation.id === founding.nation.id) ||
     !legs.some((leg) => leg.to === founding.nation.id && leg.regionIds.includes(founding.nation.capitalMesoId)))) return false;
@@ -69,12 +74,15 @@ export function canTransferTerritories(world: WorldState, legs: TerritoryTransfe
       used.add(id); remaining.set(leg.from, (remaining.get(leg.from) ?? 0) - 1); remaining.set(leg.to, (remaining.get(leg.to) ?? 0) + 1);
     }
   }
-  return [...remaining.values()].every((count) => count > 0);
+  return [...remaining].every(([id, count]) => id === integrating ? count === 0 : count > 0);
 }
 
 /** Both sides of a swap validate before any ownership, cost or military state changes. */
-export function transferTerritories(world: WorldState, legs: TerritoryTransfer[], reason: "agreement" | "ultimatum" | "unilateral" = "agreement", founding?: FoundingTransfer): boolean {
-  if (!canTransferTerritories(world, legs, founding)) return false;
+export function transferTerritories(world: WorldState, legs: TerritoryTransfer[], reason: "agreement" | "ultimatum" | "unilateral" | "integration" = "agreement", founding?: FoundingTransfer): boolean {
+  const integration = reason === "integration" ? legs[0] : undefined;
+  if (reason === "integration" && (!integration || founding || legs.length !== 1 ||
+    getSubjectOverlord(world, integration.from) !== integration.to)) return false;
+  if (!validateTerritoryTransfers(world, legs, founding, integration?.from)) return false;
   updateTerritorialClaims(world);
   if (founding) world.nations.push(founding.nation);
   const changed = new Set(legs.flatMap((leg) => leg.regionIds)), regions = getMesoById(world);
@@ -107,6 +115,10 @@ export function transferTerritories(world: WorldState, legs: TerritoryTransfer[]
   for (const id of changed) { world.occupation.mesoById.delete(id); world.occupation.dirtyMesoIds.add(id); }
   world.occupation.version++; world.buildingVersion++;
   for (const unit of world.units) {
+    if (integration && unit.nationId === integration.from) {
+      unit.nationId = integration.to;
+      for (const cargo of unit.cargoUnits) if (cargo.nationId === integration.from) cargo.nationId = integration.to;
+    }
     const wasOnTransferredLand = changed.has(unit.regionId);
     if (wasOnTransferredLand) {
       const owner = owners.get(unit.regionId);
