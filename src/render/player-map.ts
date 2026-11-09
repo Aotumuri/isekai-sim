@@ -27,6 +27,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
   let agriculture: Graphics | undefined;
   let populationLayer = new Container(), populationKey = "";
   const populationEntries = new Map<MesoRegionId, Graphics>();
+  const populationDots = new Map<MesoRegionId, Graphics>();
   let occupationLayer = new Container();
   const occupationEntries = new Map<MesoRegionId, Graphics>();
   const microByMeso = new Map<MesoRegionId, MicroRegion[]>();
@@ -36,6 +37,14 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
   const hatchTexture = renderer.app.renderer.generateTexture(hatchTile, { region: new Rectangle(0, 0, 16, 16), resolution: 1 });
   hatchTexture.baseTexture.wrapMode = WRAP_MODES.REPEAT;
   hatchTile.destroy();
+  const dotTile = new Graphics();
+  dotTile.beginFill(0xffffff);
+  dotTile.drawCircle(4, 4, 2.6);
+  dotTile.drawCircle(12, 12, 2.6);
+  dotTile.endFill();
+  const dotTexture = renderer.app.renderer.generateTexture(dotTile, { region: new Rectangle(0, 0, 16, 16), resolution: 1 });
+  dotTexture.baseTexture.wrapMode = WRAP_MODES.REPEAT;
+  dotTile.destroy();
   const polygons = (graphics: Graphics, polygon: { x: number; y: number }[]) => {
     if (!polygon.length) return;
     graphics.moveTo(polygon[0]!.x, polygon[0]!.y);
@@ -48,7 +57,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
   const rebuild = () => {
     if (agriculture?.parent === layer) layer.removeChild(agriculture);
     clearLayer(layer); fills.clear(); borders.clear(); outlines.clear(); occupationEntries.clear(); microByMeso.clear(); districtOutlines.clear();
-    populationLayer = new Container(); populationKey = ""; populationEntries.clear();
+    populationLayer = new Container(); populationKey = ""; populationEntries.clear(); populationDots.clear();
     occupationLayer = new Container(); occupationKey = "";
     claimLayer = new Container(); demandOutline = new Graphics(); claimEntries.clear(); claimKey = "";
     // clearLayer destroys children; replace the two reusable overlay containers below.
@@ -129,6 +138,16 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
             graphic.endFill(); populationEntries.set(id, graphic); populationLayer.addChild(graphic);
           }
           graphic.tint = style.color; graphic.alpha = style.alpha;
+          let dots = populationDots.get(id);
+          if (!dots && style.secondaryColor !== undefined) {
+            dots = new Graphics(); dots.beginTextureFill({ texture: dotTexture });
+            for (const micro of microRegions) polygons(dots, micro.polygon);
+            dots.endFill(); populationDots.set(id, dots); populationLayer.addChild(dots);
+          }
+          if (dots) {
+            dots.visible = style.secondaryColor !== undefined;
+            dots.tint = style.secondaryColor ?? 0xffffff;
+          }
         }
       }
     }

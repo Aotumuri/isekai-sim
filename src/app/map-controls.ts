@@ -110,7 +110,7 @@ export function attachMapControls(root: HTMLElement, renderer: Renderer, world: 
         ${[...owners].map(([id, count]) => `<span class="map-legend-item">${esc(getNationName(world, id))} · ${count} ${count === 1 ? "district" : "districts"}</span>`).join("")}
         <p>Hold Space over a district for details. Click another nation to view its claims. C / Esc: Return.</p>`;
     } else if (isPopulationMode(state.mode)) {
-      view("legend").innerHTML = `<h2>${POPULATION_LABELS[state.mode]} by district</h2>${POPULATION_GROUPS[state.mode].map((name, index) => `<span class="map-legend-item"><i style="background:${color(populationColor(index))}"></i>${name}</span>`).join("")}<p>Color shows the largest group. Hold Space over a district for its full distribution.</p>`;
+      view("legend").innerHTML = `<h2>${POPULATION_LABELS[state.mode]} by district</h2>${POPULATION_GROUPS[state.mode].map((name, index) => `<span class="map-legend-item"><i style="background:${color(populationColor(index))}"></i>${name}</span>`).join("")}<p>Base color shows the largest group. Colored dots show the second-largest group where it makes up at least 20%. Hold Space over a district for all shares.</p>`;
     } else if (state.mode === "factions") {
       const factions = (world.factions?.factions ?? []).filter((faction) => faction.memberIds.some((id) => active.some((nation) => nation.id === id)));
       const nonAligned = active.filter((nation) => !getNationFaction(world, nation.id)).length;

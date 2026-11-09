@@ -2,6 +2,8 @@ import { dominantGroup, getRegionalPopulations, populationColor, POPULATION_DIME
 import type { WorldState } from "../sim/world-state";
 import type { MesoRegionId } from "../worldgen/meso-region";
 
+export const MIXED_POPULATION_THRESHOLD = 0.2;
+
 export const POPULATION_LABELS = { ancestry: "Ancestry", culture: "Culture", faith: "Religion" };
 
 export function isPopulationMode(mode: string): mode is PopulationDimension {
@@ -12,7 +14,11 @@ export function getPopulationMapStyle(world: WorldState, id: MesoRegionId, mode:
   const population = getRegionalPopulations(world).get(id);
   if (!population) return null;
   const group = dominantGroup(population[mode]);
-  return { color: populationColor(group), alpha: 0.45 + 0.55 * population[mode][group]! / population.size };
+  const runnerUp = population[mode].reduce((best, count, index) =>
+    index !== group && (best === -1 || count > population[mode][best]!) ? index : best, -1);
+  const mixed = runnerUp >= 0 && population[mode][runnerUp]! >= population.size * MIXED_POPULATION_THRESHOLD;
+  return { color: populationColor(group), alpha: 0.65 + 0.35 * population[mode][group]! / population.size,
+    secondaryColor: mixed ? populationColor(runnerUp) : undefined };
 }
 
 export function formatPopulationDistrict(world: WorldState, id: MesoRegionId, mode: PopulationDimension): string[] {
