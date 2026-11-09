@@ -25,6 +25,7 @@ export function updatePopulationMigration(world: WorldState): void {
   }]));
   const owners = getOwnerByMesoId(world), regions = getMesoById(world);
   const wars = buildWarAdjacency(world.wars);
+  const taxes = new Map(world.nations.map((nation) => [nation.id, nation.treasury?.taxRate ?? 15]));
   const occupied = (id: MesoRegionId) => {
     const controller = world.occupation.mesoById.get(id);
     return controller !== undefined && controller !== owners.get(id);
@@ -41,8 +42,10 @@ export function updatePopulationMigration(world: WorldState): void {
       const trade = crossBorder && (hasTreaty(world, owner, otherOwner, "trade") || hasTreaty(world, owner, otherOwner, "alliance"));
       const affinity = groupAffinity(dominantGroup(source.culture), dominantGroup(target.culture));
       const urban = regions.get(targetId)?.building != null;
+      // Peaceful cross-border flows are modestly skewed towards the lower-tax side.
+      const taxPull = crossBorder ? 1 + ((taxes.get(owner) ?? 15) - (taxes.get(otherOwner) ?? 15)) * 0.012 : 1;
       const rate = occupied(id) ? 0.08 : (trade ? 0.04 : crossBorder ? 0.012 : 0.02)
-        * (urban ? 1.5 : 1) * (0.75 + affinity * 0.25);
+        * (urban ? 1.5 : 1) * (0.75 + affinity * 0.25) * taxPull;
       movePopulation(source, next.get(id)!, next.get(targetId)!, source.size * rate / region.neighbors.length);
     }
   }
