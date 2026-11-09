@@ -1,5 +1,6 @@
 import { areSubjectPartners, getSubjectOverlord } from "./subject-governments";
 import { getIdeologicalAffinity } from "./ideology-relations";
+import { getPublicOutrage } from "./persecution-reaction";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import { areFactionPartners } from "./factions";
 import type { NationId } from "../worldgen/nation";
@@ -32,6 +33,7 @@ export interface DiplomaticRelation {
   nextBorderIncidentAt?: number;
   factionSanctionsUntil?: number;
   defensePact?: { against: NationId; expiresAt: number };
+  publicOutrage?: Map<NationId, { level: number; at: number }>;
   territorialSettlement?: { aggressorId: NationId; regionIds: MesoRegionId[]; atSlowTick: number };
 }
 export interface DiplomacyState {
@@ -120,6 +122,7 @@ export function proposeTreaty(world: WorldState, proposerId: NationId, partnerId
   if (isAtWar(proposerId, partnerId, buildWarAdjacency(world.wars)) || hasExileConflict(world, proposerId, partnerId) || hasTreaty(world, proposerId, partnerId, type)) return false;
   if (type === "alliance" && (getSubjectOverlord(world, proposerId) || getSubjectOverlord(world, partnerId))) return false;
   const relation = getRelation(world, proposerId, partnerId);
+  if (type !== "non-aggression" && Math.max(getPublicOutrage(world, proposerId, partnerId), getPublicOutrage(world, partnerId, proposerId)) >= 55) return false;
   const threshold = type === "alliance" ? 55 : type === "non-aggression" ? 20 : 10;
   const cost = type === "alliance" ? 20 : type === "non-aggression" ? 12 : 8;
   if (relation.crisis || relation.opinion < threshold || relation.trust < (type === "alliance" ? 55 : 30) ||
@@ -224,11 +227,12 @@ export function updateDiplomaticRelations(world: WorldState): void {
     const commonEnemy = [...(wars.get(a) ?? [])].some((enemy) => wars.get(b)?.has(enemy));
     const cooperation = (first.cooperation + second.cooperation) / 2;
     const affinity = getIdeologicalAffinity(world, a, b);
+    const outrage = Math.max(getPublicOutrage(world, a, b), getPublicOutrage(world, b, a));
     const treatyGoodwill = relation.treaties.reduce((sum, treaty) => sum +
       ({ alliance: 22, "non-aggression": 8, trade: 8, truce: 2 }[treaty.type]), 0);
     // Evidence of cooperation can overcome ideological friction. Personality alone cannot drift every pair to +100.
     const targetOpinion = clamp((cooperation - 0.5) * 45 + affinity * 30 + (relation.trust - 40) * 0.45 +
-      treatyGoodwill + (commonEnemy ? 25 : 0) - relation.grievance * 0.5, -100, 100);
+      treatyGoodwill + (commonEnemy ? 25 : 0) - relation.grievance * 0.5 - outrage * 0.65, -100, 100);
     relation.opinion = clamp(relation.opinion + clamp((targetOpinion - relation.opinion) * 0.04, -2, 2), -100, 100);
     const distrust = Math.max(0, -affinity);
     const treatyTrust = relation.treaties.length ? 0.8 * (1 - distrust * 0.25) : 0.1 * (1 - distrust * 0.65);

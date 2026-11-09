@@ -1,6 +1,7 @@
 import type { NationId } from "../worldgen/nation";
 import { getDiplomacyState, getRelation, hasTreaty, relationKey } from "./diplomacy";
 import { isNationActive } from "./nation-active";
+import { hasPublicSanctions } from "./persecution-reaction";
 import { getWarDeclarationMode, hasPoliticalTurbulence, recordSimulationEvent } from "./simulation-settings";
 import type { WorldState } from "./world-state";
 
@@ -10,6 +11,7 @@ export function hasTradeEmbargo(world: WorldState, issuer: NationId, target: Nat
 
 export function isTradeEmbargoed(world: WorldState, a: NationId, b: NationId): boolean {
   return hasTradeEmbargo(world, a, b) || hasTradeEmbargo(world, b, a) ||
+    hasPublicSanctions(world, a, b) || hasPublicSanctions(world, b, a) ||
     (hasPoliticalTurbulence(world) && (world.diplomacy?.relations.get(relationKey(a, b))?.factionSanctionsUntil ?? 0) > world.time.slowTick);
 }
 

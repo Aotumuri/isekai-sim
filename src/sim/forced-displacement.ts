@@ -5,8 +5,9 @@ import { getDomesticUnrest } from "./domestic-unrest";
 import { getNationCharacter } from "./nation-character";
 import { isNationActive } from "./nation-active";
 import type { NationRuntime } from "./nation-runtime";
+import { addPersecutionImpact, createPersecutionImpact, publishPersecutionImpact } from "./persecution-reaction";
 import { POPULATION_DIMENSIONS, POPULATION_GROUPS, type RegionalPopulation } from "./regional-population";
-import { getWarDeclarationMode, recordSimulationEvent } from "./simulation-settings";
+import { getWarDeclarationMode, hasPoliticalTurbulence, recordSimulationEvent } from "./simulation-settings";
 import { buildWarAdjacency, isAtWar } from "./war-state";
 import { getMesoById, getOwnerByMesoId } from "./world-cache";
 import type { WorldState } from "./world-state";
@@ -46,9 +47,11 @@ export function endDisplacementOrder(world: WorldState, nation: NationRuntime): 
   return true;
 }
 
-function displaceGroup(source: RegionalPopulation, target: RegionalPopulation, order: DisplacementOrder): number {
+function displaceGroup(source: RegionalPopulation, target: RegionalPopulation, order: DisplacementOrder,
+  impact?: RegionalPopulation): number {
   const amount = Math.min(source[order.dimension][order.group]! * 0.12, source.size * 0.06, target.size * 0.1);
   if (!(amount > 0)) return 0;
+  if (impact) addPersecutionImpact(impact, source, order.dimension, order.group, amount);
   const share = amount / source.size;
   for (const dimension of POPULATION_DIMENSIONS) {
     source[dimension].forEach((count, index) => {
@@ -87,11 +90,13 @@ export function updateForcedDisplacement(world: WorldState): void {
   const wars = buildWarAdjacency(world.wars);
   const nations = new Map(world.nations.map((nation) => [nation.id, nation]));
   const fallout = new Map<NationId, Map<NationId, number>>();
+  const impacts = new Map<NationId, RegionalPopulation>();
   for (const nation of world.nations) {
     const order = nation.displacementOrder;
     if (order && (world.time.slowTick >= order.until || !isNationActive(nation) ||
       displacementDimension(nation) !== order.dimension || nation.populationPolicy?.group === order.group ||
       getWarDeclarationMode(world) !== "diplomacy")) endDisplacementOrder(world, nation);
+    if (nation.displacementOrder && hasPoliticalTurbulence(world)) impacts.set(nation.id, createPersecutionImpact());
   }
   const isControlled = (id: MesoRegionId, owner: NationId) => {
     const occupier = world.occupation.mesoById.get(id);
@@ -104,7 +109,7 @@ export function updateForcedDisplacement(world: WorldState): void {
       const recipient = owners.get(next), target = populations.get(next);
       if (!recipient || recipient === owner || !target || nations.get(recipient)?.displacementOrder ||
         !isControlled(next, recipient) || isAtWar(owner, recipient, wars)) continue;
-      const amount = displaceGroup(source, target, order);
+      const amount = displaceGroup(source, target, order, impacts.get(owner));
       if (!(amount > 0)) continue;
       order.displaced += amount;
       const receivers = fallout.get(owner) ?? new Map<NationId, number>();
@@ -113,6 +118,7 @@ export function updateForcedDisplacement(world: WorldState): void {
       break;
     }
   }
+  for (const [owner, impact] of impacts) publishPersecutionImpact(world, owner, impact, "forced expulsion");
   for (const [owner, receivers] of fallout) {
     const unrest = getDomesticUnrest(world, owner);
     unrest.pressure = Math.min(100, unrest.pressure + 5);

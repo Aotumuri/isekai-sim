@@ -5,6 +5,7 @@ import { attachPoliticsControls } from "./politics-controls";
 import { attachPeaceControls } from "./peace-controls";
 import { getDesignTransportCapacity } from "../sim/unit-capabilities";
 import { getIdeologicalAffinity, ideologyAffinityLabel } from "../sim/ideology-relations";
+import { getPublicOutrage } from "../sim/persecution-reaction";
 import { attachExileControls } from "./exile-controls";
 import { attachMilitaryCooperationControls } from "./military-cooperation-controls";
 import { attachMobilizationControls } from "./mobilization-controls";
@@ -173,7 +174,11 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     const character = getNationCharacter(world, a), relation = world.diplomacy?.relations.get(relationKey(a, b));
     view("country").innerHTML = `<strong>${n(a)}</strong><span>${DOCTRINES[character.doctrine]} · ${esc(getNationIdeology(world, a).name)} · Influence ${Math.floor(world.diplomacy?.influenceByNationId.get(a) ?? 30)}</span><small>Steel ${Math.floor(nation.resources.steel)} / Fuel ${Math.floor(nation.resources.fuel)} / Weapons ${Math.floor(nation.resources.weapons)}</small>`;
     const treaties = relation?.treaties.filter((treaty) => treaty.expiresAtSlowTick > world.time.slowTick) ?? [];
+    const outrage = Math.round(getPublicOutrage(world, a, b));
+    const partnerOutrage = Math.round(getPublicOutrage(world, b, a));
     view("relation").innerHTML = `<h2>${n(b)} — relations</h2><p class="society-note">Ideologies: ${esc(getNationIdeology(world, a).name)} ↔ ${esc(getNationIdeology(world, b).name)} · ${ideologyAffinityLabel(getIdeologicalAffinity(world, a, b))}</p>${findWar(world.wars, a, b) ? '<p class="society-note">At war</p>' : ""}${relation ? `<div class="society-metrics"><span>Opinion <b>${Math.round(relation.opinion)}</b></span><span>Trust <b>${Math.round(relation.trust)}</b></span><span>Tension <b>${Math.round(relation.tension)}</b></span></div><p class="society-note">${treaties.map((treaty) => `${TREATY_NAMES[treaty.type]} (${treaty.expiresAtSlowTick - world.time.slowTick}s remaining)`).join(" / ") || "No treaties"}</p>` : '<p class="society-note">No diplomatic relation history yet.</p>'}`;
+    if (outrage || partnerOutrage) view("relation").insertAdjacentHTML("beforeend",
+      `<p class="society-note">Public outrage over persecution · ${n(a)} ${outrage}/100 · ${n(b)} ${partnerOutrage}/100</p>`);
     if (treaties.some((treaty) => treaty.type === "truce")) {
       const issue = getTruceExtensionIssue(world, a, b);
       view("truce-extension").innerHTML = `<div class="society-actions"><button type="button" data-action="extend-truce" ${issue ? "disabled" : ""}>Extend truce by ${TRUCE_EXTENSION.seconds}s · ${TRUCE_EXTENSION.cost}</button></div>${issue ? `<p class="society-note">${esc(issue)}</p>` : ""}`;
