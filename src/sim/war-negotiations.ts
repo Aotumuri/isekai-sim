@@ -1,3 +1,4 @@
+import { getSeparatePeaceIssue } from "./separate-peace";
 import { hasConferenceWar } from "./peace-conference";
 import { dividePartitionResources, getPartitionIssue, planPuppetPartition, preparePartitionNation, type PuppetPartition } from "./puppet-partition";
 import { estimateAnnexationResistance, recordAnnexation } from "./annexation";
@@ -184,7 +185,7 @@ export function acceptPeaceOffer(world: WorldState, recipient: NationId, propose
   const negotiation = getWarNegotiation(world, war), offer = negotiation.offers.get(proposer)!;
   const terms = offer.terms;
   if (expectedRevision !== undefined && expectedRevision !== offer.revision) return false;
-  if (getPeaceTermsIssue(world, proposer, recipient, terms)) return false;
+  if (getSeparatePeaceIssue(world, proposer, recipient) || getPeaceTermsIssue(world, proposer, recipient, terms)) return false;
   const defeated = world.nations.find((nation) => nation.id === recipient)!;
   const successor = terms.partition && preparePartitionNation(world, defeated, terms.partition);
   const legs = legsFor(proposer, recipient, terms);

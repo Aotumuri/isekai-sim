@@ -1,3 +1,4 @@
+import { getSeparatePeaceIssue } from "../sim/separate-peace";
 import { estimateAnnexationResistance } from "../sim/annexation";
 import { planPuppetPartition, type PuppetPartition } from "../sim/puppet-partition";
 import { getPuppetTermsIssue, getSubjectOverlord, releaseSubjectGovernment } from "../sim/subject-governments";
@@ -132,10 +133,11 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
       terms.partition?.districtIds.length ? `New puppet: ${terms.partition.districtIds.length} districts around ${districtName(terms.partition.capitalId)}.` : "",
       terms.puppetTarget ? "Subjects without domestic steel or fuel may need aid. Large subjects can seek independence when the overlord is weak." : "",
     ].filter(Boolean).join(" ");
-    view("preview").textContent = issue ? `Cannot publish: ${issue}` : `Opponent’s expected response to your draft: ${assessment.accepts ? "Acceptable under current conditions" : "Likely refusal"}. ${assessment.reason}`;
+    const separateIssue = getSeparatePeaceIssue(world, a, b);
+    view("preview").textContent = separateIssue ?? (issue ? `Cannot publish: ${issue}` : `Opponent’s expected response to your draft: ${assessment.accepts ? "Acceptable under current conditions" : "Likely refusal"}. ${assessment.reason}`);
     root.querySelector<HTMLButtonElement>('[data-peace-action="propose"]')!.disabled = !!issue;
     const accept = root.querySelector<HTMLButtonElement>('[data-peace-action="accept"]')!;
-    accept.disabled = !!getPeaceTermsIssue(world, b, a, opponent.terms); accept.dataset.peaceRevision = String(opponent.revision);
+    accept.disabled = !!separateIssue || !!getPeaceTermsIssue(world, b, a, opponent.terms); accept.dataset.peaceRevision = String(opponent.revision);
   };
   root.addEventListener("input", (event) => { if ((event.target as HTMLElement).dataset.peaceControl !== "automatic") { dirty = true; update(); } });
   root.addEventListener("change", (event) => {

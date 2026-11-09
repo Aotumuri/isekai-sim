@@ -17,6 +17,7 @@ export interface FactionCharter {
   defensiveObligation: WarObligation;
   offensiveObligation: WarObligation;
   considerPersonality: boolean;
+  jointPeaceOnly?: boolean;
 }
 export interface Faction {
   id: string; name: string; founderId: NationId; leaderId: NationId; memberIds: NationId[];
@@ -255,6 +256,8 @@ export function updateFactionWarCalls(world: WorldState): void {
       const target = initiator === attacker.id ? defender.id : attacker.id;
       if (forced) {
         const relation = getRelation(world, attacker.id, defender.id);
+        if (relation.treaties.some((treaty) => treaty.type === "truce" && treaty.negotiatedPeace &&
+          treaty.expiresAtSlowTick > world.time.slowTick)) continue;
         for (const treaty of [...relation.treaties]) if (treaty.type !== "truce") breakTreaty(world, initiator, target, treaty.type);
         if (relation.treaties.some((treaty) => treaty.type === "truce")) {
           relation.treaties = relation.treaties.filter((treaty) => treaty.type !== "truce");

@@ -11,7 +11,7 @@ import { buildWarAdjacency, findWar, isAtWar, normalizeWarPair } from "./war-sta
 import type { WorldState } from "./world-state";
 
 export type TreatyType = "non-aggression" | "trade" | "alliance" | "truce";
-export interface Treaty { type: TreatyType; expiresAtSlowTick: number }
+export interface Treaty { type: TreatyType; expiresAtSlowTick: number; negotiatedPeace?: boolean }
 export interface DiplomaticCrisis {
   aggressorId: NationId;
   openedAtSlowTick: number;
