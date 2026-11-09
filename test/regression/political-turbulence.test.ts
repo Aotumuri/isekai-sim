@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { updateBorderIncidents } from "../../src/sim/border-incidents";
 import { getRelation } from "../../src/sim/diplomacy";
 import { getDomesticUnrest } from "../../src/sim/domestic-unrest";
 import { getNationCharacter } from "../../src/sim/nation-character";
 import { getNationalPolitics, updateNationalPolitics } from "../../src/sim/politics";
 import { updateNationalistMovements } from "../../src/sim/nationalist-movements";
 import { getForeignClaims } from "../../src/sim/territorial-claims";
+import { getOwnerByMesoId } from "../../src/sim/world-cache";
 import { createSocietyWorld } from "../helpers/society-world";
 
 function scene() {
@@ -32,6 +34,29 @@ test("reunification movements claim matching districts beyond the border and the
   assert.ok(getRelation(world, a.id, b.id).grievance >= 30);
   world.time.slowTick = 360;
   assert.equal(getForeignClaims(world, a.id, b.id).length, before);
+});
+
+test("opposing border deployments create a cooldown-limited diplomatic incident", () => {
+  const world = scene(), [a, b] = world.nations;
+  const owners = getOwnerByMesoId(world);
+  const border = world.mesoRegions.find((region) => owners.get(region.id) === a.id &&
+    region.neighbors.some(({ id }) => owners.get(id) === b.id))!;
+  const opposite = border.neighbors.find(({ id }) => owners.get(id) === b.id)!;
+  for (const [nation, region] of [[a, border], [b, opposite]] as const) {
+    const unit = world.units.find((item) => item.nationId === nation.id && item.domain === "land")!;
+    unit.regionId = region.id;
+    unit.org = 100;
+  }
+  getNationCharacter(world, a.id).aggression = 0.9;
+  const relation = getRelation(world, a.id, b.id);
+  relation.opinion = 0;
+  world.time.slowTick = 90;
+  updateBorderIncidents(world);
+  assert.ok(relation.grievance > 0);
+  const tension = relation.tension;
+  world.time.slowTick += 15;
+  updateBorderIncidents(world);
+  assert.equal(relation.tension, tension);
 });
 
 test("a banned opposition grows underground but cannot take seats until the ban expires", () => {

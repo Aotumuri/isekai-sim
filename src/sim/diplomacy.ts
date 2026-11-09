@@ -29,6 +29,7 @@ export interface DiplomaticRelation {
   treaties: Treaty[];
   crisis: DiplomaticCrisis | null;
   cooldownUntilSlowTick: number;
+  nextBorderIncidentAt?: number;
   territorialSettlement?: { aggressorId: NationId; regionIds: MesoRegionId[]; atSlowTick: number };
 }
 export interface DiplomacyState {
