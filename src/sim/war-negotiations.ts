@@ -247,6 +247,10 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
   const recognition = Math.max(0, landBenefit + paymentBenefit - landCost - paymentCost);
   const sacrificeCost = Math.max(0, politicalInvestment - recognition) * (1 - Math.min(0.85, urgency));
   const score = pressure + disposition + landBenefit + paymentBenefit + Math.min(6, (terms.truceSeconds - 300) / 100) - landCost - paymentCost - resolve - sacrificeCost - (terms.partition ? 38 : terms.puppetTarget ? 25 : terms.localSubject ? 8 : 0);
+  const exchangedBlows = casualties + getWarCasualties(war, proposer) > 0 ||
+    occupationRatio(world, proposer, recipient) + occupationRatio(world, recipient, proposer) > 0;
+  const matureEnough = ageSeconds >= 90 || (ageSeconds >= 30 && (exchangedBlows || urgency >= 0.8));
+  if (!matureEnough) return { accepts: false, score, reason: "The government is waiting for battlefield evidence before accepting terms." };
   const reason = score >= 0 ? "Ending the war now is preferable to continued losses and domestic danger."
     : sacrificeCost > 8 && score + sacrificeCost >= 0 ? "The government needs gains it can justify against the casualties already suffered."
     : landCost + paymentCost > 25 ? "The requested concessions outweigh the current cost of continuing the war."
@@ -326,7 +330,7 @@ export function updateWarNegotiations(world: WorldState): void {
     }
     for (const [recipient, proposer] of [[negotiation.a, negotiation.b], [negotiation.b, negotiation.a]]) {
       const offer = negotiation.offers.get(proposer)!;
-      if (!negotiation.automatic.get(recipient) || world.time.slowTick - offer.revisedAtSlowTick < 10 || world.time.fastTick - war.startedAtFastTick < 300) continue;
+      if (!negotiation.automatic.get(recipient) || world.time.slowTick - offer.revisedAtSlowTick < 10) continue;
       if (assessPeaceOffer(world, recipient, proposer, offer.terms).accepts && acceptPeaceOffer(world, recipient, proposer)) break;
     }
   }

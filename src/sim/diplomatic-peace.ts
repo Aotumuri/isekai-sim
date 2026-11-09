@@ -70,8 +70,7 @@ export function concludePeace(world: WorldState, a: NationId, b: NationId, reaso
 
 export function offerPeace(world: WorldState, proposerId: NationId, targetId: NationId): boolean {
   if (!proposePeaceTerms(world, proposerId, targetId, whitePeaceTerms())) return false;
-  const war = findWar(world.wars, proposerId, targetId)!;
-  if (world.time.fastTick - war.startedAtFastTick >= 300 && assessPeaceOffer(world, targetId, proposerId, whitePeaceTerms()).accepts)
+  if (assessPeaceOffer(world, targetId, proposerId, whitePeaceTerms()).accepts)
     acceptPeaceOffer(world, targetId, proposerId);
   return true;
 }
