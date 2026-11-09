@@ -1,3 +1,4 @@
+import { getCampaignDeadline } from "./campaign-deadline";
 import { getCampaignObjectives } from "./campaign-objectives";
 import { getMoveTicksPerRegion } from "./movement";
 import { WORLD_BALANCE } from "../data/balance";
@@ -1029,12 +1030,17 @@ function advanceOperation(
       ? majorSettings.majorMinimumPreparationTicks : settings.minimumPreparationTicks;
     const requiredCompletion = operation.isMajorOffensive
       ? majorSettings.majorStagedFraction : settings.stagedFraction;
-    if (
-      preparationTicks >= minimumPreparation &&
-      approachReadiness.operationCompletion >= requiredCompletion
-    ) {
+    const staged = approachReadiness.operationCompletion >= requiredCompletion;
+    const canAccelerate = !operation.isMajorOffensive && !operation.supplyReliefPlanId &&
+      preparationTicks >= Math.ceil(minimumPreparation / 2) &&
+      getCampaignDeadline(world, operation.nationId, operation.enemyNationId) <= 75 &&
+      getFrontPlan(world, operation.frontId, operation.nationId)?.reasonFlags.includes("closing-campaign-window");
+    if (staged && (preparationTicks >= minimumPreparation || canAccelerate)) {
       const { attackerStrength, defenderStrength } = getLaunchLocalStrength(world, operation);
       const localRatio = defenderStrength <= 0 ? 10 : attackerStrength / defenderStrength;
+      if (preparationTicks < minimumPreparation && localRatio < 1.4) {
+        return { keep: true, changed: operationChanged || assignmentChanged };
+      }
       operation.localStrengthRatioAtAttack = localRatio;
       if (operation.isMajorOffensive && localRatio < majorSettings.majorLocalOvermatchRatio) {
         finishOperation(world, operation, "failure", "strength-collapsed");
