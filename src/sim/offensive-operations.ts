@@ -1823,7 +1823,7 @@ function scoreOperationTarget(
     buildingScore +
     borderScore +
     plan.priority * 0.2 -
-    borderDistance * 5 -
+    borderDistance * (plan.reasonFlags.includes("closing-campaign-window") ? 10 : 5) -
     (averageDistance / 50) * settings.distance -
     enemyStrength * settings.enemyStrength
   );

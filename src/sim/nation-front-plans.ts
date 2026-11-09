@@ -1,3 +1,4 @@
+import { getCampaignDeadline } from "./campaign-deadline";
 import { WORLD_BALANCE } from "../data/balance";
 import type { NationId } from "../worldgen/nation";
 import {
@@ -32,7 +33,8 @@ export type FrontPlanReason =
   | "major-force-supply-risk"
   | "frontline-supply-risk"
   | "maritime-supply-entry-risk"
-  | "bridgehead-campaign";
+  | "bridgehead-campaign"
+  | "closing-campaign-window";
 
 /** Nation-owned intent. Objective geometry and metrics remain on PhysicalFront. */
 export interface NationFrontPlan {
@@ -293,11 +295,17 @@ function evaluateNationFrontPlan(
   const supplyPriority = supplyRisks.reduce(
     (maximum, risk) => Math.max(maximum, risk.status === "critical" ? 26 : 13), 0,
   );
+  const deadline = getCampaignDeadline(world, nationId, enemy.nationId);
+  const canPress = deadline <= 75 && ratio >= 1.05 && friendly.strength > 0 &&
+    posture !== "retreat" && !isCapitalDefenseFront && capitalDefense?.threatLevel !== "critical" &&
+    !supplyRisks.some((risk) => risk.status === "critical");
+  const campaignPosture = canPress ? "attack" : posture;
+  if (canPress) reasonFlags.push("closing-campaign-window");
   const priority = calculatePriority(
     friendly,
     enemy,
     ratio,
-    posture,
+    campaignPosture,
     reasonFlags,
   );
   const capitalPriority = applyCapitalPriority(priority, capitalThreatLevel);
@@ -309,14 +317,14 @@ function evaluateNationFrontPlan(
     frontId: front.id,
     physicalFrontId: front.physicalFrontId,
     nationId,
-    posture: bridgehead && posture !== "retreat" ? "attack" : posture,
+    posture: bridgehead && posture !== "retreat" ? "attack" : campaignPosture,
     priority: capitalThreatLevel === "critical"
       ? capitalPriority
-      : Math.min(100, capitalPriority + supplyPriority + (bridgehead?.priorityBoost ?? 0)),
+      : Math.min(100, capitalPriority + supplyPriority + (bridgehead?.priorityBoost ?? 0) + (canPress ? 15 : 0)),
     desiredStrength: Math.max(supplyRequired, calculateDesiredStrength(
       friendly,
       enemy,
-      posture,
+      campaignPosture,
       capitalDefense,
       front.id,
       isCapitalDefenseFront,
