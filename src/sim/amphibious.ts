@@ -1063,7 +1063,8 @@ function refreshCapabilityProgress(world: WorldState, demand: AmphibiousCapabili
   }
   const previousLandingIds = new Set(demand.assignedLandingUnitIds);
   rebuildOwnership(world);
-  const landingForce = selectLandingForce(world, demand);
+  const leasedCapacity = getFleetTransportCapacity(leaseTransports.map((id) => unitById.get(id)!));
+  const landingForce = selectLandingForce(world, demand, leaseStillComplete ? leasedCapacity : 0);
   const selectedLandingUnits = landingForce.units;
   demand.assignedLandingUnitIds = selectedLandingUnits.map((unit) => unit.id);
   for (const id of demand.assignedLandingUnitIds) previousLandingIds.delete(id);
@@ -1101,7 +1102,6 @@ function refreshCapabilityProgress(world: WorldState, demand: AmphibiousCapabili
     demand.desiredEscortCount = Math.max(1, Math.ceil(demand.desiredTransportCount /
       Math.max(1, WORLD_BALANCE.unit.amphibiousAssault.escortsPerTransports)));
   }
-  const leasedCapacity = getFleetTransportCapacity(leaseTransports.map((id) => unitById.get(id)!));
   if (hasCompleteFleetLease(demand) && (!launchForceReady || leasedCapacity < demand.availableLandingUnitCount)) {
     // Re-evaluate the lease when the current fleet cannot carry the assault force.
     releaseFleetLease(world, demand);
@@ -2173,6 +2173,7 @@ function rankReachableFleet(
 function selectLandingForce(
   world: WorldState,
   demand: AmphibiousCapabilityDemand,
+  leasedCapacity: number,
 ): { units: UnitState[]; strength: number } {
   const { nationId, departurePortId, requiredLandingStrength } = demand;
   const previousIds = new Set(demand.assignedLandingUnitIds);
@@ -2194,6 +2195,19 @@ function selectLandingForce(
     Number(b.regionId === departurePortId) - Number(a.regionId === departurePortId) ||
     Number(previousIds.has(b.id)) - Number(previousIds.has(a.id)) ||
     compareLandingUnits(a, b));
+  const preferred = assembleLandingForce(candidates, requiredLandingStrength);
+  const capacity = leasedCapacity || getFleetTransportCapacity(
+    findAvailableTransports(world, nationId, departurePortId));
+  if (capacity <= 0 || preferred.units.length <= capacity) return preferred;
+
+  // Concentrate stronger units when doing so makes the assault fit the fleet.
+  const concentrated = assembleLandingForce(
+    candidates.sort(compareLandingUnits).slice(0, capacity), requiredLandingStrength);
+  return concentrated.strength >= requiredLandingStrength ? concentrated : preferred;
+}
+
+function assembleLandingForce(candidates: UnitState[], requiredLandingStrength: number):
+  { units: UnitState[]; strength: number } {
   const units: UnitState[] = [];
   let strength = 0;
   for (const unit of candidates) {
