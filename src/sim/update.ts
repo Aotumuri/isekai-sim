@@ -226,9 +226,9 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateFoodTrade(world);
   updateInternationalTrade(world);
   updatePopulationMigration(world);
-  updateForcedDisplacement(world);
   updateFoodSupply(world);
   updatePopulationPolitics(world);
+  updateForcedDisplacement(world);
   updateArmsAid(world);
   updateTechnologyExchange(world);
   updateIsolationEffects(world);

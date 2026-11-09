@@ -1,6 +1,8 @@
+import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { getRelation } from "./diplomacy";
 import { getDomesticUnrest } from "./domestic-unrest";
+import { getNationCharacter } from "./nation-character";
 import { isNationActive } from "./nation-active";
 import type { NationRuntime } from "./nation-runtime";
 import { POPULATION_DIMENSIONS, POPULATION_GROUPS, type RegionalPopulation } from "./regional-population";
@@ -60,9 +62,26 @@ function displaceGroup(source: RegionalPopulation, target: RegionalPopulation, o
   return amount;
 }
 
+function considerExpulsion(world: WorldState, nation: NationRuntime): void {
+  const now = world.time.slowTick;
+  const dimension = displacementDimension(nation);
+  if (!dimension || nation.displacementOrder || (nation.nextDisplacementOrderAt ?? 0) > now ||
+    nation.politics?.system !== "monarchy" ||
+    (world.domesticUnrest?.byNationId.get(nation.id)?.pressure ?? 0) < 85 ||
+    getNationCharacter(world, nation.id).aggression < 0.65) return;
+  const groups = world.regionalPopulations?.get(nation.capitalMesoId)?.[dimension];
+  if (!groups) return;
+  const target = groups.reduce((best, count, group) =>
+    group !== nation.populationPolicy?.group && count > (groups[best] ?? 0) ? group : best, -1);
+  if (target >= 0) startDisplacementOrder(world, nation, target);
+}
+
 export function updateForcedDisplacement(world: WorldState): void {
-  if (world.time.slowTick % 10 !== 0 || !world.regionalPopulations ||
-    !world.nations.some((nation) => nation.displacementOrder)) return;
+  if (world.time.slowTick % 10 !== 0 || !world.regionalPopulations) return;
+  if (getWarDeclarationMode(world) === "diplomacy") {
+    for (const nation of world.nations) considerExpulsion(world, nation);
+  }
+  if (!world.nations.some((nation) => nation.displacementOrder)) return;
   const owners = getOwnerByMesoId(world), regions = getMesoById(world), populations = world.regionalPopulations;
   const wars = buildWarAdjacency(world.wars);
   const nations = new Map(world.nations.map((nation) => [nation.id, nation]));
@@ -73,7 +92,7 @@ export function updateForcedDisplacement(world: WorldState): void {
       displacementDimension(nation) !== order.dimension || nation.populationPolicy?.group === order.group ||
       getWarDeclarationMode(world) !== "diplomacy")) endDisplacementOrder(world, nation);
   }
-  const isControlled = (id: Parameters<typeof owners.get>[0], owner: NationId) => {
+  const isControlled = (id: MesoRegionId, owner: NationId) => {
     const occupier = world.occupation.mesoById.get(id);
     return !occupier || occupier === owner;
   };
