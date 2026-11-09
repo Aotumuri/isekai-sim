@@ -5,7 +5,7 @@ import { dividePartitionResources, getPartitionIssue, planLocalSubject, planPupp
 import { estimateAnnexationResistance, recordAnnexation } from "./annexation";
 import { getPuppetTermsIssue, installSubjectGovernment } from "./subject-governments";
 import { getRelation } from "./diplomacy";
-import { getPeaceBorderIssue, selectPeaceDistricts, selectPeaceProvinces } from "./peace-borders";
+import { getPeaceBorderIssue, getWholeProvinces, selectPeaceDistricts, selectPeaceProvinces } from "./peace-borders";
 import type { NationId } from "../worldgen/nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { WorldState } from "./world-state";
@@ -150,32 +150,58 @@ function openingTerms(world: WorldState, war: WarState, proposer: NationId, targ
   if (getPeaceTermsIssue(world, proposer, target, terms)) terms.demandedRegionIds = [];
   return terms;
 }
-function automaticTerms(world: WorldState, proposer: NationId, target: NationId): PeaceTerms {
-  const terms = whitePeaceTerms(), advantage = getWarAdvantage(world, proposer, target), urgency = getPeaceUrgency(world, proposer);
-  const a = world.nations.find((nation) => nation.id === proposer)!, b = world.nations.find((nation) => nation.id === target)!;
-  const pursuingOpeningGoals = getWarFatigue(world, proposer, target) < 35;
-  const hardline = isFightOnGovernment(world, proposer);
-  const aggressor = findWar(world.wars, proposer, target)?.aggressorId === proposer;
-  if (advantage > 0.15 || hardline || (aggressor && pursuingOpeningGoals && urgency < 0.55)) {
-    const candidates = candidateDistricts(world, proposer, target).filter((id) => estimateAnnexationResistance(world, proposer, id) < 0.55);
-    if (hardline) for (const id of ownedLand(world, target)) if (id !== b.capitalMesoId && !candidates.includes(id) &&
-      (!world.occupation.mesoById.has(id) || world.occupation.mesoById.get(id) === proposer)) candidates.push(id);
-    if (advantage > 0.45 && getNationCharacter(world, proposer).aggression >= 0.65 &&
-      !getPuppetTermsIssue(world, proposer, target)) {
-      terms.puppetTarget = true;
-      if (advantage > 0.65) terms.partition = planPuppetPartition(world, proposer, target, []);
-    } else {
-      terms.demandedRegionIds = selectPeaceProvinces(world, target, proposer, candidates);
-      if (advantage > 0.35 && hasPoliticalTurbulence(world) &&
-        terms.demandedRegionIds.some((id) => estimateAnnexationResistance(world, proposer, id) >= 0.4) &&
-        planLocalSubject(world, proposer, target, terms.demandedRegionIds)) terms.localSubject = true;
+function reviseTerms(world: WorldState, negotiation: WarNegotiation, proposer: NationId, target: NationId): PeaceTerms {
+  const current = negotiation.offers.get(proposer)!.terms;
+  const country = world.nations.find((nation) => nation.id === proposer)!;
+  const opponent = world.nations.find((nation) => nation.id === target)!;
+  const advantage = getWarAdvantage(world, proposer, target);
+  const urgency = getPeaceUrgency(world, proposer);
+  const exitValue = assessPeaceOffer(world, proposer, target, whitePeaceTerms()).score;
+  const wantsCompromise = exitValue > -18 || urgency >= 0.5 || getWarTrend(negotiation, proposer) < -0.16;
+  const terms = { ...current, demandedWeapons: Math.min(current.demandedWeapons, Math.floor(opponent.resources.weapons)),
+    offeredWeapons: Math.min(current.offeredWeapons, Math.floor(country.resources.weapons)) };
+
+  if (wantsCompromise) {
+    if (terms.partition) return { ...terms, partition: undefined };
+    if (terms.puppetTarget) return { ...terms, puppetTarget: false };
+    if (terms.localSubject) return { ...terms, localSubject: false };
+    if (terms.demandedRegionIds.length) {
+      const provinces = getWholeProvinces(world, target, terms.demandedRegionIds);
+      const parcels = provinces?.map(({ mesoRegionIds }) => mesoRegionIds) ?? terms.demandedRegionIds.map((id) => [id]);
+      parcels.sort((a, b) => getTerritorialValue(world, target, b) - getTerritorialValue(world, target, a));
+      for (const parcel of parcels) {
+        const removed = new Set(parcel);
+        const reduced = { ...terms, demandedRegionIds: terms.demandedRegionIds.filter((id) => !removed.has(id)) };
+        if (!getPeaceTermsIssue(world, proposer, target, reduced)) return reduced;
+      }
+      return { ...terms, demandedRegionIds: [] };
     }
-    terms.demandedWeapons = Math.min(hardline ? 40 : 30, Math.floor(b.resources.weapons * (hardline ? 0.35 : 0.15)),
-      Math.max(pursuingOpeningGoals || hardline ? 15 : 0, Math.floor(advantage * 40)));
-  } else if (advantage < -0.15 || urgency >= 0.55) {
-    terms.offeredRegionIds = selectPeaceProvinces(world, proposer, target, candidateDistricts(world, target, proposer));
-    terms.offeredWeapons = Math.min(25, Math.floor(a.resources.weapons * 0.15));
-    terms.truceSeconds = 600;
+    if (terms.demandedWeapons > 0) return { ...terms, demandedWeapons: Math.max(0, terms.demandedWeapons - 15) };
+    if (exitValue >= 0 && (advantage < -0.15 || urgency >= 0.65)) {
+      return { ...terms, offeredWeapons: Math.min(25, Math.floor(country.resources.weapons * 0.15), terms.offeredWeapons + 5),
+        truceSeconds: 600 };
+    }
+    return terms;
+  }
+
+  if (advantage > 0.45 && getWarTrend(negotiation, proposer) >= -0.08 &&
+    getNationCharacter(world, proposer).aggression >= 0.65 && !getPuppetTermsIssue(world, proposer, target)) {
+    const partition = advantage > 0.65 ? planPuppetPartition(world, proposer, target, []) : undefined;
+    const escalation = { ...whitePeaceTerms(), demandedWeapons: terms.demandedWeapons, puppetTarget: true, partition };
+    if (!getPeaceTermsIssue(world, proposer, target, escalation)) return escalation;
+  }
+
+  if (advantage > 0.25 && getWarTrend(negotiation, proposer) >= 0.05 && !terms.puppetTarget && !terms.offeredRegionIds.length) {
+    const candidates = [...new Set([...terms.demandedRegionIds, ...candidateDistricts(world, proposer, target)])]
+      .filter((id) => estimateAnnexationResistance(world, proposer, id) < 0.55);
+    const demands = selectPeaceProvinces(world, target, proposer, candidates);
+    if (demands.length > terms.demandedRegionIds.length) {
+      const localSubject = advantage > 0.35 && hasPoliticalTurbulence(world) &&
+        demands.some((id) => estimateAnnexationResistance(world, proposer, id) >= 0.4) &&
+        !!planLocalSubject(world, proposer, target, demands);
+      const escalation = { ...terms, demandedRegionIds: demands, localSubject };
+      if (!getPeaceTermsIssue(world, proposer, target, escalation)) return escalation;
+    }
   }
   return terms;
 }
@@ -287,9 +313,15 @@ export function updateWarNegotiations(world: WorldState): void {
     sampleWarOutlook(world, negotiation);
     for (const [proposer, target] of [[negotiation.a, negotiation.b], [negotiation.b, negotiation.a]]) {
       if (negotiation.automatic.get(proposer) && world.time.slowTick - (negotiation.lastRevisionSlowTick.get(proposer) ?? 0) >= 30) {
-        const terms = automaticTerms(world, proposer, target), old = negotiation.offers.get(proposer)!;
+        const old = negotiation.offers.get(proposer)!;
+        const revised = reviseTerms(world, negotiation, proposer, target);
+        const terms = getPeaceTermsIssue(world, proposer, target, revised) ? whitePeaceTerms() : revised;
         negotiation.lastRevisionSlowTick.set(proposer, world.time.slowTick);
-        if (JSON.stringify(terms) !== JSON.stringify(old.terms)) negotiation.offers.set(proposer, { proposerId: proposer, terms, revisedAtSlowTick: world.time.slowTick, revision: old.revision + 1, source: "automatic" });
+        if (JSON.stringify(terms) !== JSON.stringify(old.terms)) {
+          negotiation.offers.set(proposer, { proposerId: proposer, terms, revisedAtSlowTick: world.time.slowTick, revision: old.revision + 1, source: "automatic" });
+          recordSimulationEvent(world, { category: "diplomacy", nationIds: [proposer, target],
+            message: `${getNationName(world, proposer)} revised its peace terms: ${terms.demandedRegionIds.length} districts demanded, ${terms.demandedWeapons || -terms.offeredWeapons} weapons reparations.` });
+        }
       }
     }
     for (const [recipient, proposer] of [[negotiation.a, negotiation.b], [negotiation.b, negotiation.a]]) {
