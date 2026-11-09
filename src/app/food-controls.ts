@@ -1,3 +1,4 @@
+import { expandGrainStorage, grainStorageCost, GRAIN_STORAGE_MAX } from "../sim/grain-storage";
 import { canIrrigate, installIrrigation, IRRIGATION_COST } from "../sim/irrigation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import { RATION_POLICIES, setFoodAsylum, setRationPolicy, type RationPolicy } from "../sim/ration-policy";
@@ -24,6 +25,8 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
     <label>Ration policy <select data-food-control="rations"><option value="normal">Normal · 100%</option><option value="conserve">Conserve · 94%</option><option value="emergency">Emergency · 88%</option></select></label>
     <label><input type="checkbox" data-food-control="asylum"> Receive refugees from neighboring crises</label>
     <p class="society-note" data-food-view="refugees"></p>
+    <button type="button" data-food-action="storage">Expand grain storage</button>
+    <p class="society-note" data-food-view="storage"></p>
     <h2>Irrigation</h2><label>Farm district <select data-food-control="irrigation"></select></label>
     <button type="button" data-food-action="irrigate">Build irrigation</button>
     <p class="society-note">${IRRIGATION_COST.cash} cash and ${IRRIGATION_COST.steel} steel · +40% harvest in the selected district. Requires workable land, control and supply.</p>
@@ -45,14 +48,20 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
   const irrigate = root.querySelector<HTMLButtonElement>('[data-food-action="irrigate"]')!;
   let irrigationKey = "";
   const asylum = root.querySelector<HTMLInputElement>('[data-food-control="asylum"]')!;
+  const storage = root.querySelector<HTMLButtonElement>('[data-food-action="storage"]')!;
   const price = () => Number(amount.value) * TRADE_RESOURCE_VALUES.food;
 
   function update(nation: NationRuntime): void {
     const target = world.nations.find((item) => item.id === partner()), food = nation.food;
     const enabled = world.settings?.foodEnabled !== false;
     const domestic = enabled && !!food && isNationActive(nation);
-    view("stock").textContent = domestic ? `Grain stockpile ${quantity(food.stock)} / ${quantity(foodStorageLimit(food.demand))}`
+    view("stock").textContent = domestic ? `Grain stockpile ${quantity(food.stock)} / ${quantity(foodStorageLimit(food.demand, food.storageLevel))}`
       : enabled ? "No active food supply." : "Food simulation is paused.";
+    const level = food?.storageLevel ?? 0, storageCost = grainStorageCost(level);
+    storage.disabled = !domestic || level >= GRAIN_STORAGE_MAX || (nation.treasury?.balance ?? 0) < storageCost.cash ||
+      nation.resources.steel < storageCost.steel;
+    view("storage").textContent = level >= GRAIN_STORAGE_MAX ? "Strategic grain storage fully expanded."
+      : `Level ${level}/${GRAIN_STORAGE_MAX} · ${storageCost.cash} cash + ${storageCost.steel} steel for 60 more seconds of full-ration capacity.`;
     const key = `${nation.id}:${world.territoryVersion}:${world.irrigatedDistricts?.size ?? 0}`;
     if (key !== irrigationKey) {
       irrigationKey = key;
@@ -102,6 +111,11 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
     const nation = world.nations.find((item) => item.id === selected());
     if (nation) update(nation);
   };
+  storage.addEventListener("click", () => {
+    const expanded = expandGrainStorage(world, selected());
+    feedback(expanded ? "Strategic grain storage expanded." : "Storage expansion requires a supplied capital and available funds.");
+    refresh();
+  });
   asylum.addEventListener("change", () => {
     setFoodAsylum(world, selected(), asylum.checked);
     refresh();

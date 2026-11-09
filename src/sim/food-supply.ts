@@ -12,7 +12,7 @@ import type { WorldState } from "./world-state";
 
 export const FOOD_INTERVAL = 10;
 export const FAMINE_THRESHOLD = 3;
-export const foodStorageLimit = (demand: number): number => 20 + demand * 18;
+export const foodStorageLimit = (demand: number, level = 0): number => 20 + demand * (18 + 6 * level);
 
 export interface NationalFoodSupply {
   stock: number;
@@ -20,6 +20,7 @@ export interface NationalFoodSupply {
   levy?: number;
   demand: number;
   rationCoverage: number;
+  storageLevel?: number;
   asylum?: boolean;
   refugeesReceived?: number;
   rationPolicy?: RationPolicy;
@@ -84,7 +85,7 @@ export function updateFoodSupply(world: WorldState): void {
     const available = food.stock + harvest + food.levy;
     const consumed = Math.min(available, demand * RATION_POLICIES[food.rationPolicy ?? "normal"]);
     food.rationCoverage = consumed / demand;
-    food.stock = Math.min(foodStorageLimit(demand), available - consumed);
+    food.stock = Math.min(foodStorageLimit(demand, food.storageLevel), available - consumed);
     const wasFamine = food.shortageCycles >= FAMINE_THRESHOLD;
     food.shortageCycles = food.rationCoverage < 0.85 ? food.shortageCycles + 1 : Math.max(0, food.shortageCycles - 2);
     const famine = food.shortageCycles >= FAMINE_THRESHOLD;
@@ -107,5 +108,5 @@ export function splitFoodSupply(parent: NationalFoodSupply | undefined, share: n
   if (!parent) return undefined;
   const stock = parent.stock * Math.max(0, Math.min(1, share));
   parent.stock -= stock;
-  return { ...parent, stock, harvest: parent.harvest * share, demand: parent.demand * share, levy: 0, deaths: 0, refugeesReceived: 0 };
+  return { ...parent, stock, harvest: parent.harvest * share, demand: parent.demand * share, levy: 0, deaths: 0, refugeesReceived: 0, storageLevel: 0 };
 }
