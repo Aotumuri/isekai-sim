@@ -9,7 +9,7 @@ import { isNationActive } from "./nation-active";
 import { updateOccupation } from "./occupation";
 import { getWarDeclarationMode, recordSimulationEvent } from "./simulation-settings";
 import { getOwnerByMesoId } from "./world-cache";
-import { buildWarAdjacency, findWar, isAtWar, type WarState } from "./war-state";
+import { buildWarAdjacency, findWar, getWarCasualties, isAtWar, type WarState } from "./war-state";
 import type { WorldState } from "./world-state";
 
 export function warFatigueKey(war: WarState): string {
@@ -17,7 +17,7 @@ export function warFatigueKey(war: WarState): string {
 }
 export function getWarFatigue(world: WorldState, a: NationId, b: NationId): number {
   const war = findWar(world.wars, a, b);
-  return war ? getDiplomacyState(world).fatigueByWarId.get(warFatigueKey(war)) ?? 0 : 0;
+  return war ? war.exhaustionByNationId?.get(a)?.fatigue ?? getDiplomacyState(world).fatigueByWarId.get(warFatigueKey(war)) ?? 0 : 0;
 }
 
 /** Status-quo peace: occupied land and embarked troops are returned by agreement. */
@@ -96,9 +96,16 @@ export function updateDiplomaticPeace(world: WorldState): void {
   for (const key of state.fatigueByWarId.keys()) if (!liveKeys.has(key)) state.fatigueByWarId.delete(key);
   for (const war of [...world.wars]) {
     const key = warFatigueKey(war);
-    const losses = [...war.contributionByNationId.values()].reduce((sum, value) => sum + value, 0);
-    const fatigue = Math.min(100, (state.fatigueByWarId.get(key) ?? 0) + 1 + Math.min(2, losses / 10_000));
-    state.fatigueByWarId.set(key, fatigue);
+    const legacyFatigue = state.fatigueByWarId.get(key) ?? 0;
+    const sides = war.exhaustionByNationId ??= new Map();
+    for (const nation of [war.nationAId, war.nationBId]) {
+      const casualties = getWarCasualties(war, nation);
+      const previous = sides.get(nation);
+      const counted = previous?.countedCasualties ?? (legacyFatigue > 0 ? casualties : 0);
+      const newLosses = Math.max(0, casualties - counted);
+      sides.set(nation, { fatigue: Math.min(100, (previous?.fatigue ?? legacyFatigue) + 1 + Math.min(10, newLosses / 1_500)),
+        countedCasualties: casualties });
+    }
 
   }
   updateWarNegotiations(world);

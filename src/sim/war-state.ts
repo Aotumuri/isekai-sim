@@ -16,6 +16,7 @@ export interface WarState {
   startedAtFastTick: number;
   isTest: boolean;
   contributionByNationId: Map<NationId, number>;
+  exhaustionByNationId?: Map<NationId, { fatigue: number; countedCasualties: number }>;
 }
 
 export type WarAdjacency = Map<NationId, Set<NationId>>;
@@ -113,6 +114,13 @@ export function findWar(
     }
   }
   return null;
+}
+
+/** Contributions record the manpower inflicted on the other side in battle. */
+export function getWarCasualties(war: WarState, nation: NationId): number {
+  if (nation === war.nationAId) return war.contributionByNationId.get(war.nationBId) ?? 0;
+  if (nation === war.nationBId) return war.contributionByNationId.get(war.nationAId) ?? 0;
+  return 0;
 }
 
 export function addWarContribution(
