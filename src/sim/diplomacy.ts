@@ -30,6 +30,7 @@ export interface DiplomaticRelation {
   crisis: DiplomaticCrisis | null;
   cooldownUntilSlowTick: number;
   nextBorderIncidentAt?: number;
+  factionSanctionsUntil?: number;
   territorialSettlement?: { aggressorId: NationId; regionIds: MesoRegionId[]; atSlowTick: number };
 }
 export interface DiplomacyState {

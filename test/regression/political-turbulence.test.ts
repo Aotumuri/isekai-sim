@@ -3,11 +3,15 @@ import test from "node:test";
 import { updateBorderIncidents } from "../../src/sim/border-incidents";
 import { getRelation } from "../../src/sim/diplomacy";
 import { getDomesticUnrest } from "../../src/sim/domestic-unrest";
+import { getFactionState } from "../../src/sim/factions";
 import { getNationCharacter } from "../../src/sim/nation-character";
 import { getNationalPolitics, updateNationalPolitics } from "../../src/sim/politics";
 import { updateNationalistMovements } from "../../src/sim/nationalist-movements";
 import { getForeignClaims } from "../../src/sim/territorial-claims";
+import { isTradeEmbargoed, updateFactionSanctions } from "../../src/sim/trade-embargo";
+import { declareWar } from "../../src/sim/war-state";
 import { getOwnerByMesoId } from "../../src/sim/world-cache";
+import { createNationId } from "../../src/worldgen/nation";
 import { createSocietyWorld } from "../helpers/society-world";
 
 function scene() {
@@ -15,6 +19,27 @@ function scene() {
   world.settings!.politicalTurbulenceEnabled = true;
   return world;
 }
+
+test("a bloc sanctions an aggressor together and trade can resume after sanctions expire", () => {
+  const world = scene(), [a, b] = world.nations;
+  const aggressor = { ...a, id: createNationId(2) };
+  world.nations.push(aggressor);
+  getFactionState(world).factions.push({
+    id: "test-bloc", name: "Test bloc", founderId: a.id, leaderId: a.id, memberIds: [a.id, b.id],
+    createdAtSlowTick: 0, charter: { allowedIdeologyIds: [], defensiveObligation: "none",
+      offensiveObligation: "none", considerPersonality: false },
+  });
+  declareWar(world.wars, aggressor.id, a.id, 0);
+  world.time.slowTick = 20;
+  updateFactionSanctions(world);
+  assert.ok(isTradeEmbargoed(world, a.id, aggressor.id));
+  assert.ok(isTradeEmbargoed(world, b.id, aggressor.id));
+  assert.ok(!isTradeEmbargoed(world, a.id, b.id));
+  world.wars = [];
+  world.time.slowTick = 140;
+  updateFactionSanctions(world);
+  assert.ok(!isTradeEmbargoed(world, b.id, aggressor.id));
+});
 
 test("reunification movements claim matching districts beyond the border and then expire", () => {
   const world = scene();
