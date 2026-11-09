@@ -4,7 +4,8 @@ import { getNationName } from "../../src/sim/nation-identity";
 import { exchangePortPopulation, updatePopulationMigration } from "../../src/sim/population-migration";
 import { getHomelandClaimBonus, updatePopulationPolitics } from "../../src/sim/population-politics";
 import { getRegionalPopulations, groupAffinity, POPULATION_DIMENSIONS } from "../../src/sim/regional-population";
-import { getOwnerByMesoId } from "../../src/sim/world-cache";
+import { createWorldCache, getOwnerByMesoId } from "../../src/sim/world-cache";
+import { createMesoRegionId, type MesoRegion } from "../../src/worldgen/meso-region";
 import { createSocietyWorld } from "../helpers/society-world";
 
 test("seeded distributions are repeatable and land-only", () => {
@@ -14,6 +15,33 @@ test("seeded distributions are repeatable and land-only", () => {
   assert.equal(populations.size, world.mesoRegions.filter((region) => region.type !== "sea").length);
   assert(groupAffinity(0, 1) > groupAffinity(0, 3));
   assert.equal(groupAffinity(0, 1), groupAffinity(1, 0));
+});
+
+test("initial groups spread along connected land and do not cross a sea district", () => {
+  const world = createSocietyWorld();
+  const fixture = world.mesoRegions[0]!;
+  const chain = [[1], [0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5]];
+  const regions: MesoRegion[] = chain.map((adjacent, index) => ({
+    ...fixture, id: createMesoRegionId(index),
+    type: index === 3 ? "sea" : "land", building: null,
+    center: { x: index, y: 0 },
+    neighbors: adjacent.map((id) => ({ id: createMesoRegionId(id), hasRiver: false })),
+  }));
+  const generate = (mesoRegions: MesoRegion[]) =>
+    getRegionalPopulations({ ...world, mesoRegions, cache: createWorldCache(), regionalPopulations: undefined });
+  const populations = generate(regions);
+  assert.equal(populations.size, 6);
+  for (const dimension of POPULATION_DIMENSIONS) {
+    const left = populations.get(createMesoRegionId(0))![dimension];
+    const right = populations.get(createMesoRegionId(4))![dimension];
+    assert.equal(left.filter((count) => count > 0).length, 3);
+    assert.equal(right.filter((count) => count > 0).length, 3);
+    assert(left.every((count, group) => count === 0 || right[group] === 0));
+    assert.notDeepEqual(left, populations.get(createMesoRegionId(2))![dimension]);
+  }
+  // Moving the second island right up against the first does not create a land route.
+  assert.deepEqual(generate(regions.map((region, index) =>
+    index < 4 ? region : { ...region, center: { x: index - 4, y: 0.01 } })), populations);
 });
 
 test("overland and port migration preserve every group and update local composition", () => {
