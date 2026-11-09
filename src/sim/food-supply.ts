@@ -20,6 +20,7 @@ export interface NationalFoodSupply {
   levy?: number;
   demand: number;
   rationCoverage: number;
+  protectGrainExports?: boolean;
   storageLevel?: number;
   asylum?: boolean;
   refugeesReceived?: number;
@@ -83,14 +84,16 @@ export function updateFoodSupply(world: WorldState): void {
     food.demand = demand;
     if (world.time.slowTick === 0 || demand <= 0) continue;
     const available = food.stock + harvest + food.levy;
-    const consumed = Math.min(available, demand * RATION_POLICIES[food.rationPolicy ?? "normal"]);
+    const ration = RATION_POLICIES[food.rationPolicy ?? "normal"];
+    const consumed = Math.min(available, demand * ration);
     food.rationCoverage = consumed / demand;
     food.stock = Math.min(foodStorageLimit(demand, food.storageLevel), available - consumed);
     const wasFamine = food.shortageCycles >= FAMINE_THRESHOLD;
-    food.shortageCycles = food.rationCoverage < 0.85 ? food.shortageCycles + 1 : Math.max(0, food.shortageCycles - 2);
+    const famineCoverage = Math.min(0.9, ration - 0.01);
+    food.shortageCycles = food.rationCoverage < famineCoverage ? food.shortageCycles + 1 : Math.max(0, food.shortageCycles - 2);
     const famine = food.shortageCycles >= FAMINE_THRESHOLD;
-    if (famine && food.rationCoverage < 0.85) {
-      const severity = (0.85 - food.rationCoverage) / 0.85;
+    if (famine && food.rationCoverage < famineCoverage) {
+      const severity = (famineCoverage - food.rationCoverage) / famineCoverage;
       food.deaths += applyFamineDeaths(world, ids, severity * 0.035);
       world.populationRevision = (world.populationRevision ?? 0) + 1;
     }

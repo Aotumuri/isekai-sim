@@ -19,3 +19,11 @@ export function setFoodAsylum(world: WorldState, id: NationId, enabled: boolean)
   nation.food.asylum = enabled;
   return true;
 }
+
+
+export function setGrainExportProtection(world: WorldState, id: NationId, enabled: boolean): boolean {
+  const nation = world.nations.find((item) => item.id === id);
+  if (!nation?.food || !isNationActive(nation) || world.settings?.foodEnabled === false) return false;
+  nation.food.protectGrainExports = enabled;
+  return true;
+}

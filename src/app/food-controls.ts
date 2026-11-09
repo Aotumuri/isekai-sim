@@ -1,7 +1,7 @@
 import { expandGrainStorage, grainStorageCost, GRAIN_STORAGE_MAX } from "../sim/grain-storage";
 import { canIrrigate, installIrrigation, IRRIGATION_COST } from "../sim/irrigation";
 import type { MesoRegionId } from "../worldgen/meso-region";
-import { RATION_POLICIES, setFoodAsylum, setRationPolicy, type RationPolicy } from "../sim/ration-policy";
+import { RATION_POLICIES, setFoodAsylum, setGrainExportProtection, setRationPolicy, type RationPolicy } from "../sim/ration-policy";
 import { FAMINE_THRESHOLD, FOOD_INTERVAL, foodStorageLimit } from "../sim/food-supply";
 import { hasTradeAgreement, proposeResourceTrade, resourceReserve, TRADE_RESOURCE_VALUES } from "../sim/international-trade";
 import { isNationActive } from "../sim/nation-active";
@@ -23,13 +23,14 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
     <p data-food-view="status"></p><p class="society-note" data-food-view="deaths"></p>
     <p class="society-note">Open Display settings on the map to see agricultural land. Occupied districts stop supplying the national harvest.</p>
     <label>Ration policy <select data-food-control="rations"><option value="normal">Normal · 100%</option><option value="conserve">Conserve · 94%</option><option value="emergency">Emergency · 88%</option></select></label>
-    <label><input type="checkbox" data-food-control="asylum"> Receive refugees from neighboring crises</label>
+    <label><input type="checkbox" data-food-control="asylum"> Expand refugee reception from neighboring crises</label>
     <p class="society-note" data-food-view="refugees"></p>
     <button type="button" data-food-action="storage">Expand grain storage</button>
     <p class="society-note" data-food-view="storage"></p>
     <h2>Irrigation</h2><label>Farm district <select data-food-control="irrigation"></select></label>
     <button type="button" data-food-action="irrigate">Build irrigation</button>
     <p class="society-note">${IRRIGATION_COST.cash} cash and ${IRRIGATION_COST.steel} steel · +40% harvest in the selected district. Requires workable land, control and supply.</p>
+    <label><input type="checkbox" data-food-control="export-protection"> Protect 60 seconds of grain from export</label>
     <h2>Grain trade with selected partner</h2>
     <p class="society-note">Governments with a looming shortage look for suppliers automatically. Shipments require an agreement, open route and exportable stock.</p>
     <label>Grain to buy <input type="number" min="1" max="1000" step="1" value="20" data-food-control="amount"></label>
@@ -49,6 +50,7 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
   let irrigationKey = "";
   const asylum = root.querySelector<HTMLInputElement>('[data-food-control="asylum"]')!;
   const storage = root.querySelector<HTMLButtonElement>('[data-food-action="storage"]')!;
+  const protection = root.querySelector<HTMLInputElement>('[data-food-control="export-protection"]')!;
   const price = () => Number(amount.value) * TRADE_RESOURCE_VALUES.food;
 
   function update(nation: NationRuntime): void {
@@ -76,6 +78,8 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
     asylum.disabled = !domestic;
     asylum.checked = food?.asylum ?? false;
     view("refugees").textContent = domestic ? `Last 10s · ${(food.refugeesReceived ?? 0).toFixed(2)} population units received from famine or occupation. Arrivals increase food demand and the tax base.` : "";
+    protection.disabled = !domestic;
+    protection.checked = food?.protectGrainExports ?? false;
     rations.disabled = !domestic;
     rations.value = food?.rationPolicy ?? "normal";
     if (domestic) {
@@ -111,6 +115,10 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
     const nation = world.nations.find((item) => item.id === selected());
     if (nation) update(nation);
   };
+  protection.addEventListener("change", () => {
+    setGrainExportProtection(world, selected(), protection.checked);
+    refresh();
+  });
   storage.addEventListener("click", () => {
     const expanded = expandGrainStorage(world, selected());
     feedback(expanded ? "Strategic grain storage expanded." : "Storage expansion requires a supplied capital and available funds.");

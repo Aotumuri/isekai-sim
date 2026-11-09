@@ -7,7 +7,7 @@ import { getWarDeclarationMode } from "./simulation-settings";
 import { isTradeEmbargoed } from "./trade-embargo";
 import type { WorldState } from "./world-state";
 
-const surplus = (nation: NationRuntime): number => nation.food ? nation.food.stock - nation.food.demand * 5 : 0;
+const surplus = (nation: NationRuntime): number => nation.food ? nation.food.stock - Math.max(nation.food.demand * 5, resourceReserve(nation, "food")) : 0;
 
 export function updateFoodTrade(world: WorldState): void {
   if (world.time.slowTick % FOOD_INTERVAL !== 0 || !world.settings?.tradeEnabled ||

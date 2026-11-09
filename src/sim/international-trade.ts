@@ -53,7 +53,7 @@ function changeTradeStock(nation: NationRuntime, resource: TradeResource, amount
 }
 
 export function resourceReserve(nation: NationRuntime, resource: TradeResource): number {
-  if (resource === "food") return (nation.food?.demand ?? 0) * 2;
+  if (resource === "food") return (nation.food?.demand ?? 0) * (nation.food?.protectGrainExports ? 6 : 2);
   if (resource === "cash") return 10;
   return resource === "fuel" ? Math.max(20, nation.resourceFlow.usage.fuel * 5) : resource === "weapons" ? 25 : 20;
 }
