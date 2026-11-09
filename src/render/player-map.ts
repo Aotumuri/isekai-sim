@@ -203,7 +203,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
       colorKey = nextColors;
       for (const [id, fill] of fills) { fill.tint = getPoliticalFill(world, id); fill.alpha = id === view.selectedNationId ? 1 : 0.92; }
     }
-    const nextLabels = `${nextGeometry}:${world.populationPolicyRevision ?? 0}:${view.revision}:${world.factions?.version ?? 0}`;
+    const nextLabels = `${nextGeometry}:${view.revision}:${world.factions?.version ?? 0}`;
     const labelsChanged = nextLabels !== labelKey;
     if (labelsChanged) {
       labelKey = nextLabels; clearLayer(labels); selection.clear(); parcelSelection.clear();
@@ -215,7 +215,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
       if (view.selectedNationId) { selection.lineStyle(3.2, 0xfff5cf, 0.95); stroke(selection, outlines.get(view.selectedNationId) ?? []); }
       for (const anchor of getNationLabelAnchors(world)) {
         const faction = getNationFaction(world, anchor.nationId);
-        const text = getNationName(world, anchor.nationId) + (view.mode === "factions" ? `\n${faction?.name ?? "Non-aligned"}` : "");
+        const text = getNationName(world, anchor.nationId, "short") + (view.mode === "factions" ? `\n${faction?.name ?? "Non-aligned"}` : "");
         const label = new Text(text, new TextStyle({ fontFamily: "Georgia, serif", fontSize: anchor.primary ? Math.min(22, 13 + Math.sqrt(anchor.regionCount) * 0.8) : 12,
           fontWeight: "600", fill: 0xf4f5ee, align: "center", stroke: 0x132237, strokeThickness: 3, letterSpacing: 0.7, dropShadow: true, dropShadowAlpha: 0.35, dropShadowDistance: 1 }));
         label.anchor.set(0.5);

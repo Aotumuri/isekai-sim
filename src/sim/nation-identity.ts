@@ -70,10 +70,10 @@ export function assignNationIdentities(world: WorldState): void {
     nation.ideologyId ??= BUILTIN_IDEOLOGIES[(hash >>> 16) % BUILTIN_IDEOLOGIES.length]!.id;
   }
 }
-export function getNationName(world: WorldState, nationId: NationId): string {
+export function getNationName(world: WorldState, nationId: NationId, form: "official" | "short" = "official"): string {
   const nation = world.nations.find((item) => item.id === nationId);
   if (nation && !nation.name) assignNationIdentities(world);
-  if (nation?.populationPolicy) return `${nation.name} · ${populationPolicyTitle(nation.populationPolicy)}`;
+  if (form === "official" && nation?.populationPolicy) return `${nation.name} · ${populationPolicyTitle(nation.populationPolicy)}`;
   return nation?.name ?? "Unknown nation";
 }
 export function getNationIdeology(world: WorldState, nationId: NationId): Ideology {

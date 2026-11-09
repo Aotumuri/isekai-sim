@@ -54,10 +54,12 @@ test("cohesionist self-determination gives way to a state religion after a manda
   world.time.slowTick = 10;
   updatePopulationPolitics(world);
   assert.match(getNationName(world, nation.id), /Auvren Homeland/);
+  assert.equal(getNationName(world, nation.id, "short"), nation.name);
   assert(getHomelandClaimBonus(world, nation.id, nation.capitalMesoId) > 0);
   nation.ideologyId = "capitalism";
   world.time.slowTick = 20;
   updatePopulationPolitics(world);
   assert.match(getNationName(world, nation.id), /Ember Covenant Holy State/);
+  assert.equal(getNationName(world, nation.id, "short"), nation.name);
   assert.equal(getHomelandClaimBonus(world, nation.id, nation.capitalMesoId), 0);
 });
