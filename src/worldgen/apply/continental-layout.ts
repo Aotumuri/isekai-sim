@@ -1,4 +1,5 @@
 import { SeededRng } from "../../utils/seeded-rng";
+import { createInlandSeaCeiling } from "./inland-sea";
 
 export function createContinentalLayout(seed: number) {
   const rng = new SeededRng(seed ^ 0x671295ab);
@@ -6,7 +7,7 @@ export function createContinentalLayout(seed: number) {
   const flipX = rng.nextFloat() < 0.5;
   const flipY = rng.nextFloat() < 0.5;
   const centerY = rng.range(0.46, 0.54);
-  const straitPhase = rng.range(0, Math.PI * 2);
+  const seaSeed = rng.nextFloat();
   const continents = style === 1
     ? [
       { x: 0.25, y: centerY - 0.07, rx: 0.21, ry: 0.33 },
@@ -26,13 +27,8 @@ export function createContinentalLayout(seed: number) {
     flipX,
     flipY,
     landforms: [...continents, ...islands],
-    seaCeiling(x: number, y: number): number {
-      if (style !== 2) return Infinity;
-      // A wide basin tapers into a narrow, curved outlet on one side.
-      const basin = Math.hypot((x - 0.54) / 0.23, (y - centerY) / 0.115) - 1;
-      const channelY = centerY + 0.025 * Math.sin(15 * x + straitPhase);
-      const strait = x < 0.44 ? Infinity : (Math.abs(y - channelY) - 0.020) * 10;
-      return Math.min(basin, strait);
-    },
+    seaCeiling: style === 2
+      ? createInlandSeaCeiling(centerY, new SeededRng(seaSeed * 0x100000000))
+      : () => Infinity,
   };
 }

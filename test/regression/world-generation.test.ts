@@ -122,17 +122,19 @@ test("historical seeds produce connected land, separate continents, and a sea wi
       assert.equal(continents, expected);
     }
 
-    const inland = createWorld({ ...config, seed: 4 });
-    const center = inland.microRegions.reduce((closest, region) => {
-      const distance = (cell: MicroRegion) =>
-        Math.hypot(cell.site.x - config.width / 2, cell.site.y - config.height / 2);
-      return distance(region) < distance(closest) ? region : closest;
-    });
-    assert.ok(center.isSea);
-    const sea = new Map(inland.microRegions.filter((region) => region.isSea)
-      .map((region) => [region.id, region]));
-    const waters = collectConnectedRegions(center, sea);
-    assert.ok(waters.some((region) => region.polygon.some(({ x }) => x === 0 || x === config.width)));
+    for (const seed of [4, 7, 15, 21]) {
+      const inland = createWorld({ ...config, seed });
+      const distanceToCenter = ({ site }: MicroRegion) =>
+        Math.hypot(site.x - config.width / 2, site.y - config.height / 2);
+      const center = inland.microRegions.reduce((closest, region) =>
+        distanceToCenter(region) < distanceToCenter(closest) ? region : closest);
+      assert.ok(center.isSea, `seed ${seed} should have water near the center`);
+      const sea = new Map(inland.microRegions.filter((region) => region.isSea)
+        .map((region) => [region.id, region]));
+      const waters = collectConnectedRegions(center, sea);
+      assert.ok(waters.some((region) => region.polygon.some(({ x }) => x === 0 || x === config.width)),
+        `seed ${seed} should have an outlet to open water`);
+    }
   } finally {
     Object.assign(WORLD_BALANCE, { mapGenerator: previous });
   }
