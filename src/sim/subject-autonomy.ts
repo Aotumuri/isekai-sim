@@ -43,7 +43,10 @@ export function updateSubjectAutonomy(world: WorldState): void {
     const power = Math.min(1.5, assets.districts / overlordAssets.districts);
     const relation = getRelation(world, subject.id, overlord.id);
     const strain = (1 - Math.max(0, Math.min(1, overlord.warCooperation))) * 2;
-    const change = power * 3 + gap * 2 + strain + shortage - relation.trust * 0.04 - 0.5;
+    const food = world.settings?.foodEnabled === false ? undefined : subject.food;
+    const levyPressure = (food?.levy ?? 0) < 0 ? (government.foodLevy ?? 0) * 4 : 0;
+    const hunger = food ? (1 - food.rationCoverage) * 2 : 0;
+    const change = levyPressure + hunger + power * 3 + gap * 2 + strain + shortage - relation.trust * 0.04 - 0.5;
     government.autonomy = Math.max(0, Math.min(100, (government.autonomy ?? 0) + change));
     if (government.autonomy < 100 || hasTreaty(world, subject.id, overlord.id, "truce")) continue;
     if (!releaseSubjectGovernment(world, overlord.id, subject.id)) continue;

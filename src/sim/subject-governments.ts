@@ -1,3 +1,4 @@
+import type { FoodLevyRate } from "./subject-food-levy";
 import type { NationId } from "../worldgen/nation";
 import { getDiplomacyState, getRelation } from "./diplomacy";
 import { leaveFaction } from "./factions";
@@ -14,6 +15,7 @@ export interface SubjectGovernment {
   overlordId: NationId;
   establishedAtFastTick: number;
   autonomy?: number;
+  foodLevy?: FoodLevyRate;
 }
 
 export function getSubjectOverlord(world: WorldState, subjectId: NationId): NationId | undefined {

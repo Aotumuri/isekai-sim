@@ -13,12 +13,12 @@ export function updateFoodTrade(world: WorldState): void {
   if (world.time.slowTick % FOOD_INTERVAL !== 0 || !world.settings?.tradeEnabled ||
     world.settings.foodEnabled === false || getWarDeclarationMode(world) !== "diplomacy") return;
   const nations = world.nations.filter((nation) => isNationActive(nation) && nation.food && nation.treasury);
-  const exporters = nations.filter((nation) => surplus(nation) >= 1 && nation.food!.harvest >= nation.food!.demand)
+  const exporters = nations.filter((nation) => surplus(nation) >= 1 && nation.food!.harvest + (nation.food!.levy ?? 0) >= nation.food!.demand)
     .sort((a, b) => surplus(b) - surplus(a) || a.id.localeCompare(b.id));
   const shipments = world.internationalTrade?.deals.filter((deal) => deal.status === "in-transit") ?? [];
   const buyers = nations.filter((nation) => {
     const food = nation.food!;
-    return food.demand > 0 && food.stock < food.demand * 5 && food.harvest < food.demand;
+    return food.demand > 0 && food.stock < food.demand * 5 && food.harvest + (food.levy ?? 0) < food.demand;
   }).sort((a, b) => a.food!.stock / a.food!.demand - b.food!.stock / b.food!.demand || a.id.localeCompare(b.id));
 
   for (const buyer of buyers) {

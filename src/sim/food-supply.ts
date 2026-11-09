@@ -1,3 +1,4 @@
+import { collectSubjectFoodLevies } from "./subject-food-levy";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { annexedOutputFactor } from "./annexation";
@@ -14,6 +15,7 @@ export const foodStorageLimit = (demand: number): number => 20 + demand * 18;
 export interface NationalFoodSupply {
   stock: number;
   harvest: number;
+  levy?: number;
   demand: number;
   rationCoverage: number;
   shortageCycles: number;
@@ -62,6 +64,7 @@ export function updateFoodSupply(world: WorldState): void {
     world.lastFoodTick === world.time.slowTick) return;
   world.lastFoodTick = world.time.slowTick;
   const totals = collectFoodDistricts(world);
+  const levies = collectSubjectFoodLevies(world, totals);
   for (const nation of world.nations) {
     const districts = totals.get(nation.id);
     if (!districts || !isNationActive(nation)) continue;
@@ -69,9 +72,10 @@ export function updateFoodSupply(world: WorldState): void {
     const food = nation.food ??= { stock: demand * (world.time.slowTick === 0 ? 12 : 0), harvest, demand,
       rationCoverage: 1, shortageCycles: 0, deaths: 0 };
     food.harvest = harvest;
+    food.levy = levies.get(nation.id) ?? 0;
     food.demand = demand;
     if (world.time.slowTick === 0 || demand <= 0) continue;
-    const available = food.stock + harvest;
+    const available = food.stock + harvest + food.levy;
     food.rationCoverage = Math.min(1, available / demand);
     food.stock = Math.min(foodStorageLimit(demand), Math.max(0, available - demand));
     const wasFamine = food.shortageCycles >= FAMINE_THRESHOLD;
@@ -96,5 +100,5 @@ export function splitFoodSupply(parent: NationalFoodSupply | undefined, share: n
   if (!parent) return undefined;
   const stock = parent.stock * Math.max(0, Math.min(1, share));
   parent.stock -= stock;
-  return { ...parent, stock, harvest: parent.harvest * share, demand: parent.demand * share, deaths: 0 };
+  return { ...parent, stock, harvest: parent.harvest * share, demand: parent.demand * share, levy: 0, deaths: 0 };
 }
