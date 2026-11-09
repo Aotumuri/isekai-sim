@@ -1,3 +1,4 @@
+import { taxUnrestPerTick } from "./treasury";
 import { WORLD_BALANCE } from "../data/balance";
 import type { NationId } from "../worldgen/nation";
 import type { WorldState } from "./world-state";
@@ -28,16 +29,18 @@ export function updateDomesticUnrest(world: WorldState): void {
     if (!balance.enabled || !elapsed) continue;
     const atWar = world.wars.some((war) => war.nationAId === nation.id || war.nationBId === nation.id);
     const vulnerable = isNationActive(nation) && atWar && nation.warCooperation < balance.warningSupport;
-    const before = item.phase;
+    const before = item.phase, pressureBefore = item.pressure;
     if (vulnerable && world.time.slowTick >= item.cooldownUntilSlowTick) {
       const severity = Math.max(0, Math.min(1, 1 - nation.warCooperation / balance.warningSupport));
-      item.pressure = Math.min(100, item.pressure + Math.max(0, world.time.slowTick - Math.max(previousTick, item.cooldownUntilSlowTick)) * (0.25 + severity * 0.25));
+      item.pressure = item.pressure + Math.max(0, world.time.slowTick - Math.max(previousTick, item.cooldownUntilSlowTick)) * (0.25 + severity * 0.25);
       item.lowSupportSeconds += Math.max(0, world.time.slowTick - Math.max(previousTick, item.cooldownUntilSlowTick));
     } else {
-      item.pressure = Math.max(0, item.pressure - elapsed * (atWar ? 0.3 : 0.8));
+      item.pressure -= elapsed * (atWar ? 0.3 : 0.8);
       item.lowSupportSeconds = Math.max(0, item.lowSupportSeconds - elapsed * (atWar ? 1 : 2));
     }
-    item.phase = !vulnerable && item.pressure > 0 ? "recovering" : item.pressure >= 100 && item.lowSupportSeconds >= balance.minimumCrisisSeconds && nation.warCooperation <= balance.criticalSupport && world.time.slowTick >= item.cooldownUntilSlowTick ? "revolution" : item.pressure >= 60 ? "crisis" : item.pressure > 0 ? "discontent" : "stable";
+    if (isNationActive(nation)) item.pressure += elapsed * taxUnrestPerTick(nation.treasury);
+    item.pressure = Math.max(0, Math.min(100, item.pressure));
+    item.phase = !vulnerable && item.pressure > 0 && item.pressure < pressureBefore ? "recovering" : item.pressure >= 100 && item.lowSupportSeconds >= balance.minimumCrisisSeconds && nation.warCooperation <= balance.criticalSupport && world.time.slowTick >= item.cooldownUntilSlowTick ? "revolution" : item.pressure >= 60 ? "crisis" : item.pressure > 0 ? "discontent" : "stable";
     if (before !== item.phase && (item.phase === "crisis" || item.phase === "recovering")) recordSimulationEvent(world, {
       category: "diplomacy", nationIds: [nation.id], message: `${getNationName(world, nation.id)}: domestic unrest ${item.phase} (${Math.round(item.pressure)}/100).` });
   }

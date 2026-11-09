@@ -69,6 +69,7 @@ export interface WorldState {
   diplomacy?: DiplomacyState;
   research?: ResearchState;
   internationalTrade?: InternationalTradeState;
+  lastTaxCollectionTick?: number;
   annexations?: Map<MesoRegionId, Annexation>;
   regionalPopulations?: Map<MesoRegionId, RegionalPopulation>;
   populationRevision?: number;

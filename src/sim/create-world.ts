@@ -1,3 +1,4 @@
+import { updateTreasuries } from "./treasury";
 import { getRegionalPopulations } from "./regional-population";
 import { getTerritorialClaims } from "./territorial-claims";
 import { assignNationIdentities } from "./nation-identity";
@@ -193,6 +194,7 @@ export function createWorld(config: WorldConfig): WorldState {
   };
   assignNationIdentities(world);
   getRegionalPopulations(world);
+  updateTreasuries(world);
   getTerritorialClaims(world);
   return world;
 }
