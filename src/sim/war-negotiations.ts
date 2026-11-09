@@ -221,6 +221,19 @@ export function getWarNegotiation(world: WorldState, war: WarState): WarNegotiat
   }
   return negotiation;
 }
+function competingWarPressure(world: WorldState, nation: NationId, negotiatingWith: NationId): number {
+  const ownPower = Math.max(1, nationalPower(world, nation));
+  let pressure = 0;
+  for (const war of world.wars) {
+    if (war.nationAId !== nation && war.nationBId !== nation) continue;
+    const enemy = war.nationAId === nation ? war.nationBId : war.nationAId;
+    if (enemy === negotiatingWith) continue;
+    pressure += Math.min(12, nationalPower(world, enemy) / ownPower * 9) +
+      occupationRatio(world, nation, enemy) * 20;
+  }
+  return Math.min(25, pressure);
+}
+
 export function assessPeaceOffer(world: WorldState, recipient: NationId, proposer: NationId, terms: PeaceTerms) {
   const issue = getPeaceTermsIssue(world, proposer, recipient, terms);
   if (issue) return { accepts: false, score: -Infinity, reason: issue };
@@ -232,7 +245,8 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
   const urgency = getPeaceUrgency(world, recipient);
   const domestic = urgency * 42;
   const forecast = -getWarTrend(negotiation, recipient) * 45;
-  const pressure = fatigue * 0.7 + Math.min(18, ageSeconds * 0.025) + occupationRatio(world, recipient, proposer) * 45 + militaryLoss * 15 + Math.max(0, -advantage) * 30 + (1 - nation.warCooperation) * 12 + domestic + forecast;
+  const competingWars = competingWarPressure(world, recipient, proposer);
+  const pressure = fatigue * 0.7 + Math.min(18, ageSeconds * 0.025) + occupationRatio(world, recipient, proposer) * 45 + militaryLoss * 15 + Math.max(0, -advantage) * 30 + (1 - nation.warCooperation) * 12 + domestic + forecast + competingWars;
   const totalValue = getNationalTerritorialValue(world, recipient);
   const landCost = getTerritorialValue(world, recipient, terms.demandedRegionIds) / totalValue * 100 +
     (terms.demandedRegionIds.includes(nation.capitalMesoId) ? 25 : 0);
@@ -246,7 +260,9 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
   const politicalInvestment = Math.min(40, casualties / Math.max(1_000, negotiation.openingPower.get(recipient) ?? 0) * 45);
   const recognition = Math.max(0, landBenefit + paymentBenefit - landCost - paymentCost);
   const sacrificeCost = Math.max(0, politicalInvestment - recognition) * (1 - Math.min(0.85, urgency));
-  const score = pressure + disposition + landBenefit + paymentBenefit + Math.min(6, (terms.truceSeconds - 300) / 100) - landCost - paymentCost - resolve - sacrificeCost - (terms.partition ? 38 : terms.puppetTarget ? 25 : terms.localSubject ? 8 : 0);
+  // A longer truce secures the rear while forces move to other theaters.
+  const truceValue = (terms.truceSeconds - 300) / 100 * (1 + competingWars / 12);
+  const score = pressure + disposition + landBenefit + paymentBenefit + truceValue - landCost - paymentCost - resolve - sacrificeCost - (terms.partition ? 38 : terms.puppetTarget ? 25 : terms.localSubject ? 8 : 0);
   const exchangedBlows = casualties + getWarCasualties(war, proposer) > 0 ||
     occupationRatio(world, proposer, recipient) + occupationRatio(world, recipient, proposer) > 0;
   const matureEnough = ageSeconds >= 90 || (ageSeconds >= 30 && (exchangedBlows || urgency >= 0.8));
