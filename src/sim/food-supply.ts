@@ -20,6 +20,8 @@ export interface NationalFoodSupply {
   levy?: number;
   demand: number;
   rationCoverage: number;
+  asylum?: boolean;
+  refugeesReceived?: number;
   rationPolicy?: RationPolicy;
   shortageCycles: number;
   deaths: number;
@@ -105,5 +107,5 @@ export function splitFoodSupply(parent: NationalFoodSupply | undefined, share: n
   if (!parent) return undefined;
   const stock = parent.stock * Math.max(0, Math.min(1, share));
   parent.stock -= stock;
-  return { ...parent, stock, harvest: parent.harvest * share, demand: parent.demand * share, levy: 0, deaths: 0 };
+  return { ...parent, stock, harvest: parent.harvest * share, demand: parent.demand * share, levy: 0, deaths: 0, refugeesReceived: 0 };
 }

@@ -12,3 +12,10 @@ export function setRationPolicy(world: WorldState, id: NationId, policy: RationP
   nation.food.rationPolicy = policy;
   return true;
 }
+
+export function setFoodAsylum(world: WorldState, id: NationId, enabled: boolean): boolean {
+  const nation = world.nations.find((item) => item.id === id);
+  if (!nation?.food || !isNationActive(nation) || world.settings?.foodEnabled === false) return false;
+  nation.food.asylum = enabled;
+  return true;
+}
