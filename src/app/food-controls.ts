@@ -1,3 +1,5 @@
+import { canIrrigate, installIrrigation, IRRIGATION_COST } from "../sim/irrigation";
+import type { MesoRegionId } from "../worldgen/meso-region";
 import { RATION_POLICIES, setRationPolicy, type RationPolicy } from "../sim/ration-policy";
 import { FAMINE_THRESHOLD, FOOD_INTERVAL, foodStorageLimit } from "../sim/food-supply";
 import { hasTradeAgreement, proposeResourceTrade, resourceReserve, TRADE_RESOURCE_VALUES } from "../sim/international-trade";
@@ -20,6 +22,9 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
     <p data-food-view="status"></p><p class="society-note" data-food-view="deaths"></p>
     <p class="society-note">Open Display settings on the map to see agricultural land. Occupied districts stop supplying the national harvest.</p>
     <label>Ration policy <select data-food-control="rations"><option value="normal">Normal · 100%</option><option value="conserve">Conserve · 94%</option><option value="emergency">Emergency · 88%</option></select></label>
+    <h2>Irrigation</h2><label>Farm district <select data-food-control="irrigation"></select></label>
+    <button type="button" data-food-action="irrigate">Build irrigation</button>
+    <p class="society-note">${IRRIGATION_COST.cash} cash and ${IRRIGATION_COST.steel} steel · +40% harvest in the selected district. Requires workable land, control and supply.</p>
     <h2>Grain trade with selected partner</h2>
     <p class="society-note">Governments with a looming shortage look for suppliers automatically. Shipments require an agreement, open route and exportable stock.</p>
     <label>Grain to buy <input type="number" min="1" max="1000" step="1" value="20" data-food-control="amount"></label>
@@ -34,6 +39,9 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
   const amount = root.querySelector<HTMLInputElement>('[data-food-control="amount"]')!;
   const levy = root.querySelector<HTMLSelectElement>('[data-food-control="levy"]')!;
   const rations = root.querySelector<HTMLSelectElement>('[data-food-control="rations"]')!;
+  const irrigation = root.querySelector<HTMLSelectElement>('[data-food-control="irrigation"]')!;
+  const irrigate = root.querySelector<HTMLButtonElement>('[data-food-action="irrigate"]')!;
+  let irrigationKey = "";
   const price = () => Number(amount.value) * TRADE_RESOURCE_VALUES.food;
 
   function update(nation: NationRuntime): void {
@@ -42,6 +50,17 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
     const domestic = enabled && !!food && isNationActive(nation);
     view("stock").textContent = domestic ? `Grain stockpile ${quantity(food.stock)} / ${quantity(foodStorageLimit(food.demand))}`
       : enabled ? "No active food supply." : "Food simulation is paused.";
+    const key = `${nation.id}:${world.territoryVersion}:${world.irrigatedDistricts?.size ?? 0}`;
+    if (key !== irrigationKey) {
+      irrigationKey = key;
+      const previous = irrigation.value;
+      const sites = [...(world.agriculturalLand?.keys() ?? [])].filter((id) => canIrrigate(world, nation.id, id));
+      irrigation.replaceChildren(...sites.map((id) => new Option(`District ${id.replace("meso-", "")}`, id)));
+      if (sites.includes(previous as MesoRegionId)) irrigation.value = previous;
+    }
+    irrigation.disabled = !domestic || !irrigation.options.length;
+    irrigate.disabled = irrigation.disabled || (nation.treasury?.balance ?? 0) < IRRIGATION_COST.cash ||
+      nation.resources.steel < IRRIGATION_COST.steel;
     rations.disabled = !domestic;
     rations.value = food?.rationPolicy ?? "normal";
     if (domestic) {
@@ -77,6 +96,11 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
     const nation = world.nations.find((item) => item.id === selected());
     if (nation) update(nation);
   };
+  irrigate.addEventListener("click", () => {
+    const built = installIrrigation(world, selected(), irrigation.value as MesoRegionId);
+    feedback(built ? "Irrigation completed." : "Irrigation requires a safe, supplied farm district and available funds.");
+    refresh();
+  });
   rations.addEventListener("change", () => {
     if (setRationPolicy(world, selected(), rations.value as RationPolicy)) feedback("Ration policy updated.");
     refresh();

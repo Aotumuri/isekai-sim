@@ -78,6 +78,7 @@ export interface WorldState {
   annexations?: Map<MesoRegionId, Annexation>;
   regionalPopulations?: Map<MesoRegionId, RegionalPopulation>;
   lastFoodTick?: number;
+  irrigatedDistricts?: Set<MesoRegionId>;
   agriculturalLand?: Map<MesoRegionId, AgriculturalLand>;
   populationRevision?: number;
   populationPolicyRevision?: number;

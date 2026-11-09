@@ -1,3 +1,4 @@
+import { IRRIGATION_MULTIPLIER } from "./irrigation";
 import { RATION_POLICIES, type RationPolicy } from "./ration-policy";
 import { collectSubjectFoodLevies } from "./subject-food-levy";
 import type { MesoRegionId } from "../worldgen/meso-region";
@@ -40,7 +41,8 @@ function collectFoodDistricts(world: WorldState): Map<NationId, FoodDistricts> {
     total.demand += population.size * 0.5;
     const occupier = world.occupation.mesoById.get(id);
     if (!occupier || occupier === owner) {
-      total.harvest += (world.agriculturalLand?.get(id)?.harvest ?? 0) * annexedOutputFactor(world, owner, id);
+      total.harvest += (world.agriculturalLand?.get(id)?.harvest ?? 0) * annexedOutputFactor(world, owner, id) *
+        (world.irrigatedDistricts?.has(id) ? IRRIGATION_MULTIPLIER : 1);
     }
     totals.set(owner, total);
   }
