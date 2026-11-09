@@ -1,3 +1,4 @@
+import { formatPopulationDistrict, isPopulationMode } from "../population-map";
 import { getUnitTransportCapacity } from "../../sim/unit-capabilities";
 import { getMapClaims } from "../claim-map-data";
 import { getOwnerByMesoId } from "../../sim/world-cache";
@@ -24,6 +25,7 @@ export function formatRegionTooltip(
     const lines = nation ? [getNationName(world, nation.id), getNationIdeology(world, nation.id).name,
       `Faction: ${getNationFaction(world, nation.id)?.name ?? "Non-aligned"}`] : [region.isSea ? "Open sea" : "Unclaimed territory"];
     if (meso) {
+      if (isPopulationMode(world.mapView.mode)) lines.push(...formatPopulationDistrict(world, meso.id, world.mapView.mode));
       lines.push(`District ${meso.id.replace("meso-", "")}`);
       const owner = getOwnerByMesoId(world).get(meso.id), occupier = world.occupation.mesoById.get(meso.id);
       if (world.mapView.mode === "claims" && world.mapView.selectedNationId && meso.type !== "sea") {

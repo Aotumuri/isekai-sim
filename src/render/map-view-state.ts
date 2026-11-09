@@ -1,7 +1,8 @@
+import type { PopulationDimension } from "../sim/regional-population";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { WorldState } from "../sim/world-state";
-export type MapMode = "political" | "diplomacy" | "factions" | "debug" | "claims";
+export type MapMode = "political" | "diplomacy" | "factions" | "debug" | "claims" | PopulationDimension;
 export interface MapViewState {
   claimsReturnMode?: Exclude<MapMode, "claims">;
   territoryPreviewIds?: MesoRegionId[];

@@ -1,3 +1,4 @@
+import { getPopulationMapStyle, isPopulationMode } from "./population-map";
 import { Container, Graphics, Text, TextStyle, Rectangle, WRAP_MODES } from "pixi.js";
 import type { WorldState } from "../sim/world-state";
 import type { MesoRegionId } from "../worldgen/meso-region";
@@ -22,6 +23,8 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
   let geometryKey = "", colorKey = "", labelKey = "", lastZoom = -1, occupationKey = "";
   let claimKey = "", claimLayer = new Container(), demandOutline = new Graphics();
   const claimEntries = new Map<MesoRegionId, Graphics>();
+  let populationLayer = new Container(), populationKey = "";
+  const populationEntries = new Map<MesoRegionId, Graphics>();
   let occupationLayer = new Container();
   const occupationEntries = new Map<MesoRegionId, Graphics>();
   const microByMeso = new Map<MesoRegionId, MicroRegion[]>();
@@ -42,6 +45,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
   };
   const rebuild = () => {
     clearLayer(layer); fills.clear(); borders.clear(); outlines.clear(); occupationEntries.clear(); microByMeso.clear(); districtOutlines.clear();
+    populationLayer = new Container(); populationKey = ""; populationEntries.clear();
     occupationLayer = new Container(); occupationKey = "";
     claimLayer = new Container(); demandOutline = new Graphics(); claimEntries.clear(); claimKey = "";
     // clearLayer destroys children; replace the two reusable overlay containers below.
@@ -83,7 +87,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
     }
     ocean.endFill(); layer.addChild(ocean);
     for (const fill of fills.values()) { fill.endFill(); layer.addChild(fill); }
-    layer.addChild(claimLayer, occupationLayer);
+    layer.addChild(populationLayer, claimLayer, occupationLayer);
     provinces.name = "PlayerProvinces"; districts.name = "PlayerDistricts";
     layer.addChild(provinces, districts);
     for (const border of borders.values()) layer.addChild(border);
@@ -100,6 +104,25 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
     renderer.worldLayers.layers.TerritoryEffects.visible = debug;
     const nextGeometry = `${world.mapVersion}:${world.territoryVersion}`;
     if (nextGeometry !== geometryKey) { geometryKey = nextGeometry; rebuild(); }
+    const populationMode = isPopulationMode(view.mode) ? view.mode : null;
+    populationLayer.visible = populationMode !== null;
+    if (populationMode) {
+      const key = `${populationMode}:${world.populationRevision ?? 0}`;
+      if (key !== populationKey) {
+        populationKey = key;
+        for (const [id, microRegions] of microByMeso) {
+          const style = getPopulationMapStyle(world, id, populationMode);
+          if (!style) continue;
+          let graphic = populationEntries.get(id);
+          if (!graphic) {
+            graphic = new Graphics(); graphic.beginFill(0xffffff);
+            for (const micro of microRegions) polygons(graphic, micro.polygon);
+            graphic.endFill(); populationEntries.set(id, graphic); populationLayer.addChild(graphic);
+          }
+          graphic.tint = style.color; graphic.alpha = style.alpha;
+        }
+      }
+    }
     claimLayer.visible = demandOutline.visible = view.mode === "claims";
     if (view.mode === "claims" && view.selectedNationId) {
       const nextClaims = `${geometryKey}:${view.revision}:${world.territorialClaims?.version}:${world.time.slowTick}:${JSON.stringify([...(world.diplomacy?.relations.values() ?? [])].filter((r) => r.crisis?.aggressorId === view.selectedNationId).map((r) => r.crisis))}`;
