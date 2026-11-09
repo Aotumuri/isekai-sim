@@ -88,3 +88,25 @@ test("maritime intent uses cached reachability and pays a real overseas premium"
   const hypotheticalLand = assessWarIntent(world, { ...candidate, route: "land" });
   assert(maritime.expectedCost > hypotheticalLand.expectedCost);
 });
+
+test("overseas readiness requires lift, escorts and a favorable naval balance", async () => {
+  const { createScenarioWorld } = await import("../scenarios");
+  const { assessMaritimeWarReadiness } = await import("../../src/sim/maritime-war-readiness");
+  const world = createScenarioWorld("two-island-amphibious", {
+    seed: 695_919_685_365, width: 640, height: 360, quick: true,
+  });
+  const [attacker, defender] = world.nations;
+  const fleet = world.units.filter((unit) => unit.domain === "naval");
+  for (const ship of fleet.filter((unit) => unit.nationId === defender!.id)) ship.org = 0;
+  const assess = () => assessMaritimeWarReadiness(world, attacker!.id, defender!.id);
+  assert.notEqual(assess(), null);
+  const transport = fleet.find((unit) => unit.nationId === attacker!.id && unit.type === "TransportShip")!;
+  transport.org = 0;
+  assert.equal(assess(), null);
+  transport.org = 1;
+  for (const ship of fleet.filter((unit) => unit.nationId === defender!.id)) {
+    ship.org = 1;
+    ship.combatPower *= 10;
+  }
+  assert.equal(assess(), null);
+});

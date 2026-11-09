@@ -1,3 +1,4 @@
+import { assessMaritimeWarReadiness } from "./maritime-war-readiness";
 import { getWarDeclarationMode } from "./simulation-settings";
 import { WORLD_BALANCE } from "../data/balance";
 import type { NationId } from "../worldgen/nation";
@@ -9,7 +10,7 @@ import type {
 } from "./war-intent";
 import { buildWarAdjacency, declareWar, isAtWar } from "./war-state";
 import type { WorldState } from "./world-state";
-import { getMesoById, getPortTargetsByNation } from "./world-cache";
+import { getPortTargetsByNation } from "./world-cache";
 import { areCoalitionMembers } from "./common-threat-coalitions";
 
 const EPSILON = 0.000_001;
@@ -128,16 +129,9 @@ export function assessWarIntent(world: WorldState, candidate: WarIntentCandidate
     rejection.add("insufficient-strength");
   }
   if (candidate.route === "maritime") {
-    const transportDeficit = Math.max(0,
-      settings.maritimeMinimumTransports - attacker.power.transports);
-    const combatShipDeficit = Math.max(0,
-      settings.maritimeMinimumCombatShips - attacker.power.combatShips);
-    expectedCost += 10 + transportDeficit * 5 + combatShipDeficit * 5 +
-      maritimeDistanceCost(world, candidate.aggressorId, candidate.targetNationId) +
-      Math.max(0, target.power.navalCombatStrength - attacker.power.navalCombatStrength) /
-        Math.max(1, target.power.navalCombatStrength) * 12;
-    if (attackerLand < settings.maritimeMinimumLandStrength ||
-      attacker.power.productionCapability <= 0) rejection.add("maritime-infeasible");
+    const distance = assessMaritimeWarReadiness(world, candidate.aggressorId, candidate.targetNationId);
+    expectedCost += 10 + (distance ?? settings.maritimeMaxRouteSegments) * 2;
+    if (distance === null) rejection.add("maritime-infeasible");
   }
   expectedCost = clamp(expectedCost, 0, 72);
 
@@ -204,24 +198,6 @@ function calculateExternalExposure(
     danger = Math.max(danger, third.threatScore * 0.42 * dominance * relevance);
   }
   return clamp(danger, 0, 36);
-}
-
-function maritimeDistanceCost(world: WorldState, attackerId: NationId,
-  targetId: NationId): number {
-  const ports = getPortTargetsByNation(world);
-  const meso = getMesoById(world);
-  let minimum = Number.POSITIVE_INFINITY;
-  for (const attackerPort of ports.get(attackerId) ?? []) {
-    const a = meso.get(attackerPort)?.center;
-    if (!a) continue;
-    for (const targetPort of ports.get(targetId) ?? []) {
-      const b = meso.get(targetPort)?.center;
-      if (!b) continue;
-      minimum = Math.min(minimum, Math.hypot(a.x - b.x, a.y - b.y));
-    }
-  }
-  if (!Number.isFinite(minimum)) return 16;
-  return clamp(minimum / Math.max(1, Math.hypot(world.width, world.height)) * 16, 0, 16);
 }
 
 function chooseDominantReason(

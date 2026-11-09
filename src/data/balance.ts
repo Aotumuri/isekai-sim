@@ -484,8 +484,11 @@ export const WORLD_BALANCE = {
       intentThreshold: 48,
       minimumLandStrength: 1_000,
       maritimeMinimumLandStrength: 2_000,
-      maritimeMinimumTransports: 1,
+      maritimeMinimumTransports: 2,
       maritimeMinimumCombatShips: 1,
+      maritimeMinimumUnitsPerWave: 2,
+      maritimeSuperiorityRatio: 1.25,
+      maritimeMaxRouteSegments: 14,
     },
     surrender: {
       occupationWeight: 0.5,

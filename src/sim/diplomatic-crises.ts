@@ -1,3 +1,4 @@
+import { hasWarApproach } from "./maritime-war-readiness";
 import { getSubjectOverlord } from "./subject-governments";
 import { getPeaceBorderIssue, getWholeProvinces, selectPeaceProvinces } from "./peace-borders";
 import { getWarNegotiation } from "./war-negotiations";
@@ -44,7 +45,7 @@ export function openDiplomaticCrisis(world: WorldState, aggressorId: NationId, t
   if (relation.crisis || world.time.slowTick < relation.cooldownUntilSlowTick) return false;
   const exposure = world.strategicThreatObservation.exposures.find((item) =>
     item.observerNationId === aggressorId && item.threatNationId === targetId && (item.landAdjacent || item.sharedSeaComponent));
-  if (!exposure || getNationalMilitaryStrength(world, aggressorId) < Math.max(1, getNationalMilitaryStrength(world, targetId)) * 0.65) return false;
+  if (!exposure || !hasWarApproach(world, aggressorId, targetId) || getNationalMilitaryStrength(world, aggressorId) < Math.max(1, getNationalMilitaryStrength(world, targetId)) * 0.65) return false;
   if ([...getDiplomacyState(world).relations.values()].some((item) => item.crisis?.aggressorId === aggressorId)) return false;
   if (!spendInfluence(world, aggressorId, 12)) return false;
   relation.crisis = { aggressorId, openedAtSlowTick: world.time.slowTick,
@@ -109,6 +110,7 @@ export function startDiplomaticWar(world: WorldState, aggressorId: NationId, tar
   if (findWar(world.wars, aggressorId, targetId)) return false;
   const overlord = getSubjectOverlord(world, aggressorId);
   if (overlord && !findWar(world.wars, overlord, targetId)) return false;
+  if (cause === "diplomatic-crisis" && !hasWarApproach(world, aggressorId, targetId)) return false;
   prepareMilitaryAccessForWar(world, aggressorId, targetId);
   const war = declareWar(world.wars, aggressorId, targetId, world.time.fastTick);
   if (!war) return false;
@@ -170,6 +172,10 @@ export function updateDiplomaticCrises(world: WorldState): void {
     if (world.wars.filter((war) => war.nationAId === attacker || war.nationBId === attacker).length >= 2) {
       resolveCrisisPeacefully(world, attacker, defender, "overextension"); continue;
     }
+    if (!hasWarApproach(world, attacker, defender)) {
+      resolveCrisisPeacefully(world, attacker, defender, "expedition no longer feasible");
+      continue;
+    }
     startDiplomaticWar(world, attacker, defender);
   }
   for (const war of [...world.wars]) {
@@ -219,6 +225,7 @@ export function updateDiplomaticCrises(world: WorldState): void {
 /** Explicit betrayal after a territorial settlement; normal war declarations honor the truce. */
 export function betrayTerritorialSettlement(world: WorldState, aggressorId: NationId, targetId: NationId): boolean {
   if (getWarDeclarationMode(world) !== "diplomacy" || aggressorId === targetId ||
+    !hasWarApproach(world, aggressorId, targetId) ||
     findWar(world.wars, aggressorId, targetId) || areFactionPartners(world, aggressorId, targetId) ||
     hasTreaty(world, aggressorId, targetId, "alliance") || hasTreaty(world, aggressorId, targetId, "non-aggression") ||
     ![aggressorId, targetId].every((id) => world.nations.some((nation) => nation.id === id && isNationActive(nation)))) return false;
