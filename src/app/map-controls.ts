@@ -13,12 +13,13 @@ import { buildRegionBounds, findRegion } from "../render/region/hit-test";
 import type { Renderer } from "../render/renderer";
 import type { FrontDebugOverlay } from "../render/front-debug-overlay";
 const esc = (value: unknown) => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]!));
+const POPULATION_KEYS = ["Q", "W", "R"] as const;
 const color = (value: number) => `#${value.toString(16).padStart(6, "0")}`;
 
 export function attachMapControls(root: HTMLElement, renderer: Renderer, world: WorldState,
   debug: FrontDebugOverlay, society: { openDiplomacy: () => void; openFactions: () => void; close: () => void }): { update: () => void } {
   const controls = document.createElement("section"); controls.className = "map-controls"; controls.setAttribute("aria-label", "Map display");
-  controls.innerHTML = `<nav class="map-mode-buttons" aria-label="Map modes"><button type="button" data-map-mode="political">Political</button><button type="button" data-map-mode="diplomacy">Diplomacy <kbd>E</kbd></button><button type="button" data-map-mode="factions">Factions</button><button type="button" data-map-mode="claims">Claims <kbd>C</kbd></button>${POPULATION_DIMENSIONS.map((mode, index) => `<button type="button" data-map-mode="${mode}">${POPULATION_LABELS[mode]} <kbd>${index + 1}</kbd></button>`).join("")}<button type="button" data-map-mode="debug">Debug <kbd>F</kbd></button></nav>
+  controls.innerHTML = `<nav class="map-mode-buttons" aria-label="Map modes"><button type="button" data-map-mode="political">Political</button><button type="button" data-map-mode="diplomacy">Diplomacy <kbd>E</kbd></button><button type="button" data-map-mode="factions">Factions</button><button type="button" data-map-mode="claims">Claims <kbd>C</kbd></button>${POPULATION_DIMENSIONS.map((mode, index) => `<button type="button" data-map-mode="${mode}">${POPULATION_LABELS[mode]} <kbd>${POPULATION_KEYS[index]}</kbd></button>`).join("")}<button type="button" data-map-mode="debug">Debug <kbd>F</kbd></button></nav>
     <details class="map-display-options"><summary>Display settings</summary><label><input type="checkbox" data-map-option="provinceBorders" checked> Province borders</label><label><input type="checkbox" data-map-option="districtBorders"> District grid</label><label><input type="checkbox" data-map-option="labels" checked> Country names</label><label><input type="checkbox" data-map-option="occupations" checked> Occupation overlay</label></details>
     <div class="map-selection" data-map-view="selection"></div><div class="map-legend" data-map-view="legend"></div><p class="map-message" role="status" data-map-view="message"></p>`;
   root.appendChild(controls);
@@ -56,7 +57,7 @@ export function attachMapControls(root: HTMLElement, renderer: Renderer, world: 
   window.addEventListener("keydown", (event) => {
     if (event.repeat || (event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.closest("input,select,textarea")))) return;
     if (!event.ctrlKey && !event.metaKey && !event.altKey) {
-      const mode = POPULATION_DIMENSIONS.find((_, index) => event.code === `Digit${index + 1}`);
+      const mode = POPULATION_DIMENSIONS.find((_, index) => event.code === `Key${POPULATION_KEYS[index]}`);
       if (mode) { event.preventDefault(); enter(getMapView(world).mode === mode ? "political" : mode); }
       if (event.code === "Escape" && isPopulationMode(getMapView(world).mode)) enter("political");
     }
