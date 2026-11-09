@@ -1,3 +1,4 @@
+import { getRiverCrossingPressure } from "../../src/sim/river-crossings";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -275,3 +276,18 @@ function battleState(): BattleState {
 function id(value: string): MesoRegionId {
   return value as MesoRegionId;
 }
+
+test("crossing pressure falls when a second column attacks from dry ground", () => {
+  const target = directionWorld().mesoRegions.find(({ id }) => id === TARGET)!;
+  target.neighbors[0]!.hasRiver = true;
+  const crossing = unit("crossing", SOURCES[0]);
+  const dry = unit("dry", SOURCES[1]);
+  const defender = unit("garrison", TARGET, "land", B);
+  defender.moveTargetId = null;
+  defender.org = 0.8;
+  assert.equal(getRiverCrossingPressure(target, [dry], [defender]), 1);
+  assert.equal(getRiverCrossingPressure(target, [crossing], [defender]), 1.25);
+  assert.equal(getRiverCrossingPressure(target, [crossing, dry], [defender]), 1.125);
+  defender.org = 0.5;
+  assert.equal(getRiverCrossingPressure(target, [crossing], [defender]), 1);
+});

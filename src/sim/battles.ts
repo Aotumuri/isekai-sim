@@ -1,3 +1,4 @@
+import { getRiverCrossingPressure } from "./river-crossings";
 import { getUnitProtection } from "./unit-strength";
 import { getCoastalSupportModifier } from "./coastal-support";
 import { WORLD_BALANCE } from "../data/balance";
@@ -202,7 +203,8 @@ function updateLandBattles(
           removedUnitIds,
           now,
           directions.modifier * getCoastalSupportModifier(world, attackerNation, mesoId),
-          getCoastalSupportModifier(world, defenderNation, mesoId),
+          getCoastalSupportModifier(world, defenderNation, mesoId) *
+            getRiverCrossingPressure(getMesoById(world).get(mesoId), attackers, defenders),
         );
         if (outcome) {
           battle.attackerManpowerLoss += outcome.attackerManpowerLoss;
