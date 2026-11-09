@@ -5,7 +5,7 @@ import { areFactionPartners } from "./factions";
 import type { NationId } from "../worldgen/nation";
 import { getNationCharacter } from "./nation-character";
 import { isNationPresent } from "./nation-active";
-import { getWarDeclarationMode, recordSimulationEvent } from "./simulation-settings";
+import { getWarDeclarationMode, hasPoliticalTurbulence, recordSimulationEvent } from "./simulation-settings";
 import { getAdjacentNationPairs } from "./world-cache";
 import { buildWarAdjacency, findWar, isAtWar, normalizeWarPair } from "./war-state";
 import type { WorldState } from "./world-state";
@@ -31,6 +31,7 @@ export interface DiplomaticRelation {
   cooldownUntilSlowTick: number;
   nextBorderIncidentAt?: number;
   factionSanctionsUntil?: number;
+  defensePact?: { against: NationId; expiresAt: number };
   territorialSettlement?: { aggressorId: NationId; regionIds: MesoRegionId[]; atSlowTick: number };
 }
 export interface DiplomacyState {
@@ -91,7 +92,14 @@ export function hasExileConflict(world: WorldState, a: NationId, b: NationId): b
   return hostile(a, b) || hostile(b, a);
 }
 export function isDiplomaticallyProtected(world: WorldState, a: NationId, b: NationId): boolean {
-  return areSubjectPartners(world, a, b) || areFactionPartners(world, a, b) || (["truce", "non-aggression", "alliance"] as const).some((type) => hasTreaty(world, a, b, type));
+  return areSubjectPartners(world, a, b) || areFactionPartners(world, a, b) || !!getDefensePact(world, a, b) ||
+    (["truce", "non-aggression", "alliance"] as const).some((type) => hasTreaty(world, a, b, type));
+}
+
+export function getDefensePact(world: WorldState, a: NationId, b: NationId): DiplomaticRelation["defensePact"] {
+  if (!hasPoliticalTurbulence(world)) return;
+  const pact = world.diplomacy?.relations.get(relationKey(a, b))?.defensePact;
+  return pact && pact.expiresAt > world.time.slowTick ? pact : undefined;
 }
 export function getInfluence(world: WorldState, nationId: NationId): number {
   const influence = getDiplomacyState(world).influenceByNationId;

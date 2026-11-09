@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { updateBorderIncidents } from "../../src/sim/border-incidents";
-import { getRelation } from "../../src/sim/diplomacy";
+import { getDefensePact, getRelation, isDiplomaticallyProtected } from "../../src/sim/diplomacy";
+import { updateDefensePacts } from "../../src/sim/defense-pacts";
 import { getDomesticUnrest } from "../../src/sim/domestic-unrest";
 import { getFactionState } from "../../src/sim/factions";
 import { getNationCharacter } from "../../src/sim/nation-character";
@@ -19,6 +20,23 @@ function scene() {
   world.settings!.politicalTurbulenceEnabled = true;
   return world;
 }
+
+test("states facing a shared threat can form a temporary, targeted defense pact", () => {
+  const world = scene(), [a, b] = world.nations;
+  const threat = { ...a, id: createNationId(2) };
+  world.nations.push(threat);
+  const relation = getRelation(world, a.id, b.id);
+  relation.opinion = 5;
+  world.commonThreatCoalitions.coalitions.push({ id: "test", memberNationIds: [a.id, b.id], targetNationId: threat.id,
+    formedAtSlowTick: 30, age: 60, formationReason: "shared-land-threat", pendingDissolutionReason: null, unstableTicks: 0 });
+  world.time.slowTick = 90;
+  updateDefensePacts(world);
+  assert.equal(getDefensePact(world, a.id, b.id)?.against, threat.id);
+  assert.ok(isDiplomaticallyProtected(world, a.id, b.id));
+  assert.ok(!isDiplomaticallyProtected(world, a.id, threat.id));
+  world.time.slowTick = 330;
+  assert.equal(getDefensePact(world, a.id, b.id), undefined);
+});
 
 test("a bloc sanctions an aggressor together and trade can resume after sanctions expire", () => {
   const world = scene(), [a, b] = world.nations;

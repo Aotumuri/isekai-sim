@@ -10,7 +10,7 @@ import { canTransferTerritories, transferTerritories } from "./territory-transfe
 import { getOwnerByMesoId } from "./world-cache";
 import { areFactionPartners, getFactionDefenders } from "./factions";
 import type { NationId } from "../worldgen/nation";
-import { getDiplomacyState, getRelation, hasTreaty, isDiplomaticallyProtected, spendInfluence } from "./diplomacy";
+import { getDefensePact, getDiplomacyState, getRelation, hasTreaty, isDiplomaticallyProtected, spendInfluence } from "./diplomacy";
 import { getNationCharacter } from "./nation-character";
 import { isNationActive } from "./nation-active";
 import { getWarDeclarationMode, recordSimulationEvent } from "./simulation-settings";
@@ -156,7 +156,9 @@ export function updateDiplomaticCrises(world: WorldState): void {
       resolveCrisisPeacefully(world, attacker, defender, "deterrence"); continue;
     }
     const defensiveAllies = world.nations.filter((nation) => nation.id !== attacker && nation.id !== defender &&
-      isNationActive(nation) && ((!areFactionPartners(world, nation.id, defender) && hasTreaty(world, nation.id, defender, "alliance")) || getFactionDefenders(world, defender).includes(nation.id)));
+      isNationActive(nation) && ((!areFactionPartners(world, nation.id, defender) &&
+        (hasTreaty(world, nation.id, defender, "alliance") || getDefensePact(world, nation.id, defender)?.against === attacker)) ||
+        getFactionDefenders(world, defender).includes(nation.id)));
     const defense = getNationalMilitaryStrength(world, defender) + defensiveAllies.reduce((sum, nation) => sum + getNationalMilitaryStrength(world, nation.id) * 0.7, 0);
     if (defense > getNationalMilitaryStrength(world, attacker) * 1.8) {
       resolveCrisisPeacefully(world, attacker, defender, "allied deterrence"); continue;
@@ -192,7 +194,10 @@ export function updateDiplomaticCrises(world: WorldState): void {
     if (war.cause === "allied-request" || war.cause === "defensive-alliance" || war.cause === "faction-obligation") continue;
     for (const ally of world.nations.filter(isNationActive)) {
       if (ally.id === war.aggressorId || ally.id === war.defenderId || areFactionPartners(world, ally.id, war.defenderId) ||
-        !hasTreaty(world, ally.id, war.defenderId, "alliance") || findWar(world.wars, ally.id, war.aggressorId)) continue;
+        findWar(world.wars, ally.id, war.aggressorId)) continue;
+      const treaty = hasTreaty(world, ally.id, war.defenderId, "alliance");
+      const pact = getDefensePact(world, ally.id, war.defenderId)?.against === war.aggressorId;
+      if (!treaty && (!pact || !hasWarApproach(world, ally.id, war.aggressorId))) continue;
       if (world.wars.filter((item) => item.nationAId === ally.id || item.nationBId === ally.id).length >= 2) continue;
       if (startDiplomaticWar(world, ally.id, war.aggressorId, "defensive-alliance")) state.defensiveInterventions += 1;
     }
