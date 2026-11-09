@@ -15,7 +15,8 @@ import { buildWarAdjacency, isAtWar } from "./war-state";
 import { getUnitCombatStrength } from "./unit-strength";
 import type { WorldState } from "./world-state";
 
-export const TRADE_RESOURCES = ["steel", "fuel", "weapons"] as const;
+const INDUSTRIAL_RESOURCES = ["steel", "fuel", "weapons"] as const;
+export const TRADE_RESOURCES = [...INDUSTRIAL_RESOURCES, "food", "cash"] as const;
 export type TradeResource = typeof TRADE_RESOURCES[number];
 export interface TradeRoute { regionIds: MesoRegionId[]; maritime: boolean }
 export interface TradeDeal {
@@ -33,13 +34,27 @@ export function getInternationalTradeState(world: WorldState): InternationalTrad
   return world.internationalTrade ??= { deals: [], nextDealNumber: 0, lastSlowTick: -1,
     lastAISlowTick: -20, delivered: 0, returned: 0, fuelSpent: 0 };
 }
-export function changeResource(nation: NationRuntime, resource: TradeResource, amount: number): void {
+export function changeResource(nation: NationRuntime, resource: typeof INDUSTRIAL_RESOURCES[number], amount: number): void {
   nation.resources[resource] += amount;
   nation.resourceFlow.delta[resource] += amount;
   if (amount >= 0) nation.resourceFlow.income[resource] += amount;
   else nation.resourceFlow.usage[resource] -= amount;
 }
+export function getTradeStock(nation: NationRuntime, resource: TradeResource): number {
+  if (resource === "food") return nation.food?.stock ?? 0;
+  if (resource === "cash") return nation.treasury?.balance ?? 0;
+  return nation.resources[resource];
+}
+
+function changeTradeStock(nation: NationRuntime, resource: TradeResource, amount: number): void {
+  if (resource === "food") { if (nation.food) nation.food.stock += amount; }
+  else if (resource === "cash") { if (nation.treasury) nation.treasury.balance += amount; }
+  else changeResource(nation, resource, amount);
+}
+
 export function resourceReserve(nation: NationRuntime, resource: TradeResource): number {
+  if (resource === "food") return (nation.food?.demand ?? 0) * 2;
+  if (resource === "cash") return 10;
   return resource === "fuel" ? Math.max(20, nation.resourceFlow.usage.fuel * 5) : resource === "weapons" ? 25 : 20;
 }
 
@@ -104,13 +119,22 @@ export function isTradeRouteOpen(world: WorldState, a: NationId, b: NationId, ro
   return true;
 }
 
-export const TRADE_RESOURCE_VALUES: Record<TradeResource, number> = { steel: 1, fuel: 1.4, weapons: 2.4 };
+export const TRADE_RESOURCE_VALUES: Record<TradeResource, number> = { steel: 1, fuel: 1.4, weapons: 2.4, food: 0.7, cash: 1 };
+
+export function hasTradeAgreement(world: WorldState, a: NationId, b: NationId): boolean {
+  return areFactionPartners(world, a, b) || hasTreaty(world, a, b, "trade") || hasTreaty(world, a, b, "alliance");
+}
+
+function supportsTradeResource(world: WorldState, nation: NationRuntime, resource: TradeResource): boolean {
+  if (resource === "food") return world.settings?.foodEnabled !== false && !!nation.food;
+  return resource !== "cash" || !!nation.treasury;
+}
 export function proposeResourceTrade(world: WorldState, sellerId: NationId, buyerId: NationId,
   offeredResource: TradeResource, offeredAmount: number, requestedResource: TradeResource, requestedAmount: number): boolean {
   if (getWarDeclarationMode(world) !== "diplomacy" || !world.settings?.tradeEnabled || sellerId === buyerId ||
     offeredResource === requestedResource || !TRADE_RESOURCES.includes(offeredResource) || !TRADE_RESOURCES.includes(requestedResource) ||
     !Number.isFinite(offeredAmount) || !Number.isFinite(requestedAmount) || offeredAmount <= 0 || requestedAmount <= 0) return false;
-  if (!areFactionPartners(world, sellerId, buyerId) && !hasTreaty(world, sellerId, buyerId, "trade") && !hasTreaty(world, sellerId, buyerId, "alliance")) return false;
+  if (!hasTradeAgreement(world, sellerId, buyerId) || isTradeEmbargoed(world, sellerId, buyerId)) return false;
   const ratio = offeredAmount * TRADE_RESOURCE_VALUES[offeredResource] / (requestedAmount * TRADE_RESOURCE_VALUES[requestedResource]);
   if (ratio < 0.8 || ratio > 1.25) return false;
   const state = getInternationalTradeState(world);
@@ -118,15 +142,17 @@ export function proposeResourceTrade(world: WorldState, sellerId: NationId, buye
     ((deal.sellerId === sellerId && deal.buyerId === buyerId) || (deal.sellerId === buyerId && deal.buyerId === sellerId)))) return false;
   const seller = world.nations.find((nation) => nation.id === sellerId && isNationActive(nation));
   const buyer = world.nations.find((nation) => nation.id === buyerId && isNationActive(nation));
-  if (!seller || !buyer || seller.resources[offeredResource] < offeredAmount + resourceReserve(seller, offeredResource) ||
-    buyer.resources[requestedResource] < requestedAmount + resourceReserve(buyer, requestedResource)) return false;
+  if (!seller || !buyer ||
+    ![seller, buyer].every((nation) => supportsTradeResource(world, nation, offeredResource) && supportsTradeResource(world, nation, requestedResource)) ||
+    getTradeStock(seller, offeredResource) < offeredAmount + resourceReserve(seller, offeredResource) ||
+    getTradeStock(buyer, requestedResource) < requestedAmount + resourceReserve(buyer, requestedResource)) return false;
   const route = findTradeRoute(world, sellerId, buyerId);
   if (!route) return false;
   const shippingFuel = shippingFuelFor(route);
   const carrier = [seller, buyer].find((nation) => nation.resources.fuel -
     (nation.id === sellerId && offeredResource === "fuel" ? offeredAmount : nation.id === buyerId && requestedResource === "fuel" ? requestedAmount : 0) >= shippingFuel);
   if (shippingFuel > 0 && !carrier) return false;
-  changeResource(seller, offeredResource, -offeredAmount); changeResource(buyer, requestedResource, -requestedAmount);
+  changeTradeStock(seller, offeredResource, -offeredAmount); changeTradeStock(buyer, requestedResource, -requestedAmount);
   if (shippingFuel > 0) { changeResource(carrier!, "fuel", -shippingFuel); state.fuelSpent += shippingFuel; }
   state.deals.push({ id: `trade-${state.nextDealNumber++}`, sellerId, buyerId, offeredResource, offeredAmount,
     requestedResource, requestedAmount, route, arrivesAtSlowTick: world.time.slowTick + transitTicks(route), status: "in-transit" });
@@ -168,18 +194,19 @@ export function updateInternationalTrade(world: WorldState): void {
     state.lastSlowTick = world.time.slowTick;
     for (const deal of state.deals.filter((item) => item.status === "in-transit")) {
       const seller = world.nations.find((nation) => nation.id === deal.sellerId), buyer = world.nations.find((nation) => nation.id === deal.buyerId);
-      const agreement = areFactionPartners(world, deal.sellerId, deal.buyerId) || hasTreaty(world, deal.sellerId, deal.buyerId, "trade") || hasTreaty(world, deal.sellerId, deal.buyerId, "alliance");
+      const agreement = hasTradeAgreement(world, deal.sellerId, deal.buyerId);
       const canTrade = world.settings?.diplomacyEnabled && world.settings.tradeEnabled && seller && buyer &&
-        isNationActive(seller) && isNationActive(buyer) && agreement && !isTradeEmbargoed(world, deal.sellerId, deal.buyerId);
+        isNationActive(seller) && isNationActive(buyer) && agreement && !isTradeEmbargoed(world, deal.sellerId, deal.buyerId) &&
+        [seller, buyer].every((nation) => supportsTradeResource(world, nation, deal.offeredResource) && supportsTradeResource(world, nation, deal.requestedResource));
       const open = canTrade && isTradeRouteOpen(world, deal.sellerId, deal.buyerId, deal.route);
       if (canTrade && !open && rerouteTrade(world, deal, seller, buyer)) continue;
       if (!open) {
-        if (seller) changeResource(seller, deal.offeredResource, deal.offeredAmount);
-        if (buyer) changeResource(buyer, deal.requestedResource, deal.requestedAmount);
+        if (seller) changeTradeStock(seller, deal.offeredResource, deal.offeredAmount);
+        if (buyer) changeTradeStock(buyer, deal.requestedResource, deal.requestedAmount);
         deal.status = "returned"; state.returned += 1;
         recordSimulationEvent(world, { category: "trade", nationIds: [deal.sellerId, deal.buyerId], message: `${deal.id} returned: route or agreement unavailable.` });
       } else if (world.time.slowTick >= deal.arrivesAtSlowTick) {
-        changeResource(buyer!, deal.offeredResource, deal.offeredAmount); changeResource(seller!, deal.requestedResource, deal.requestedAmount);
+        changeTradeStock(buyer!, deal.offeredResource, deal.offeredAmount); changeTradeStock(seller!, deal.requestedResource, deal.requestedAmount);
         if (deal.route.maritime) {
           const from = deal.route.regionIds[0], to = deal.route.regionIds.at(-1);
           if (from && to) exchangePortPopulation(world, from, to);
@@ -199,9 +226,9 @@ export function updateInternationalTrade(world: WorldState): void {
   for (const relation of getDiplomacyState(world).relations.values()) {
     const a = world.nations.find((nation) => nation.id === relation.nationAId), b = world.nations.find((nation) => nation.id === relation.nationBId);
     if (!a || !b || relation.crisis) continue;
-    const surplus = (nation: NationRuntime, resource: TradeResource) => nation.resources[resource] / resourceReserve(nation, resource);
-    const offered = TRADE_RESOURCES.find((resource) => surplus(a, resource) > 1.5 && surplus(b, resource) < surplus(a, resource) * 0.6);
-    const requested = TRADE_RESOURCES.find((resource) => resource !== offered && surplus(b, resource) > 1.5 && surplus(a, resource) < surplus(b, resource) * 0.6);
+    const surplus = (nation: NationRuntime, resource: typeof INDUSTRIAL_RESOURCES[number]) => nation.resources[resource] / resourceReserve(nation, resource);
+    const offered = INDUSTRIAL_RESOURCES.find((resource) => surplus(a, resource) > 1.5 && surplus(b, resource) < surplus(a, resource) * 0.6);
+    const requested = INDUSTRIAL_RESOURCES.find((resource) => resource !== offered && surplus(b, resource) > 1.5 && surplus(a, resource) < surplus(b, resource) * 0.6);
     if (!offered || !requested) continue;
     const amount = Math.min(12, (a.resources[offered] - resourceReserve(a, offered)) * 0.15,
       (b.resources[requested] - resourceReserve(b, requested)) * TRADE_RESOURCE_VALUES[requested] / TRADE_RESOURCE_VALUES[offered] * 0.15);

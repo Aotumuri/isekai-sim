@@ -31,7 +31,7 @@ const BRANCH_NAMES = RESEARCH_BRANCH_NAMES;
 const DOCTRINES = { expansionist: "Expansionist", merchant: "Mercantile", technocrat: "Technocratic",
   guardian: "Defensive", pragmatist: "Pragmatic", isolationist: "Isolationist" };
 const TREATY_NAMES = { alliance: "Defensive alliance", trade: "Trade pact", "non-aggression": "Non-aggression", truce: "Truce" };
-const RESOURCE_NAMES: Record<TradeResource, string> = { steel: "Steel", fuel: "Fuel", weapons: "Weapons" };
+const RESOURCE_NAMES: Record<TradeResource, string> = { steel: "Steel", fuel: "Fuel", weapons: "Weapons", food: "Food", cash: "Cash" };
 const RESEARCH_STATUS = { researching: "Researching", "saving resources": "Saving research funds", "capital isolated": "Capital isolated", complete: "Research complete", paused: "Preparing", "government in exile": "Government in exile" };
 const esc = (value: unknown) => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]!));
 
