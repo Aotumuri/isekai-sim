@@ -75,6 +75,7 @@ export interface WorldState {
   publicWorks?: Map<MesoRegionId, PublicWork>;
   annexations?: Map<MesoRegionId, Annexation>;
   regionalPopulations?: Map<MesoRegionId, RegionalPopulation>;
+  lastFoodTick?: number;
   agriculturalLand?: Map<MesoRegionId, AgriculturalLand>;
   populationRevision?: number;
   populationPolicyRevision?: number;

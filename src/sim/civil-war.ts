@@ -1,3 +1,4 @@
+import { splitFoodSupply } from "./food-supply";
 import { splitTreasury } from "./treasury";
 import { updateDomesticUnrest, canRevolt, recordRevolution } from "./domestic-unrest";
 import { establishRevolutionaryGovernment } from "./politics";
@@ -133,6 +134,7 @@ export function updateCivilWar(world: WorldState): void {
       warCooperationBoost: 0,
       resources: rebelResources,
       treasury: splitTreasury(nation.treasury, rebelShare),
+      food: splitFoodSupply(nation.food, rebelShare),
       resourceFlow: createNationResourceFlow(),
       nextUnitProductionTick: isUnitProductionEnabled
         ? nextScheduledTickRange(

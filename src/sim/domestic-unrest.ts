@@ -1,3 +1,4 @@
+import { isFamineRevolution } from "./food-supply";
 import { taxUnrestPerTick } from "./treasury";
 import { WORLD_BALANCE } from "../data/balance";
 import type { NationId } from "../worldgen/nation";
@@ -38,15 +39,23 @@ export function updateDomesticUnrest(world: WorldState): void {
       item.pressure -= elapsed * (atWar ? 0.3 : 0.8);
       item.lowSupportSeconds = Math.max(0, item.lowSupportSeconds - elapsed * (atWar ? 1 : 2));
     }
-    if (isNationActive(nation)) item.pressure += elapsed * taxUnrestPerTick(nation.treasury);
+    const active = isNationActive(nation);
+    if (active) {
+      item.pressure += elapsed * taxUnrestPerTick(nation.treasury);
+      if (world.settings?.foodEnabled !== false && nation.food) item.pressure += elapsed * (1 - nation.food.rationCoverage) * 3;
+    }
+    const famineRevolution = active && isFamineRevolution(world, nation.food) &&
+      item.pressure >= 100 && world.time.slowTick >= item.cooldownUntilSlowTick;
     item.pressure = Math.max(0, Math.min(100, item.pressure));
-    item.phase = !vulnerable && item.pressure > 0 && item.pressure < pressureBefore ? "recovering" : item.pressure >= 100 && item.lowSupportSeconds >= balance.minimumCrisisSeconds && nation.warCooperation <= balance.criticalSupport && world.time.slowTick >= item.cooldownUntilSlowTick ? "revolution" : item.pressure >= 60 ? "crisis" : item.pressure > 0 ? "discontent" : "stable";
+    item.phase = famineRevolution ? "revolution" : !vulnerable && item.pressure > 0 && item.pressure < pressureBefore ? "recovering" : item.pressure >= 100 && item.lowSupportSeconds >= balance.minimumCrisisSeconds && nation.warCooperation <= balance.criticalSupport && world.time.slowTick >= item.cooldownUntilSlowTick ? "revolution" : item.pressure >= 60 ? "crisis" : item.pressure > 0 ? "discontent" : "stable";
     if (before !== item.phase && (item.phase === "crisis" || item.phase === "recovering")) recordSimulationEvent(world, {
       category: "diplomacy", nationIds: [nation.id], message: `${getNationName(world, nation.id)}: domestic unrest ${item.phase} (${Math.round(item.pressure)}/100).` });
   }
 }
 export function canRevolt(world: WorldState, id: NationId): boolean {
   const nation = world.nations.find((item) => item.id === id), unrest = getDomesticUnrest(world, id), balance = WORLD_BALANCE.war.civilWar;
+  if (nation && isNationActive(nation) && unrest.pressure >= 100 &&
+    world.time.slowTick >= unrest.cooldownUntilSlowTick && isFamineRevolution(world, nation.food)) return true;
   return !!nation && nation.warCooperation <= balance.criticalSupport && unrest.pressure >= 100 &&
     unrest.lowSupportSeconds >= balance.minimumCrisisSeconds && world.time.slowTick >= unrest.cooldownUntilSlowTick &&
     world.wars.some((war) => war.nationAId === id || war.nationBId === id);

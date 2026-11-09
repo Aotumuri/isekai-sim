@@ -9,11 +9,12 @@ export interface SimulationSettings {
   researchEnabled: boolean;
   armsAidEnabled: boolean;
   tradeEnabled: boolean;
+  foodEnabled?: boolean;
 }
 
 export function createSimulationSettings(overrides: Partial<SimulationSettings> = {}): SimulationSettings {
   return { mobilizationEnabled: true, diplomacyEnabled: true, legacyWarDeclarationsEnabled: true,
-    researchEnabled: true, armsAidEnabled: true, tradeEnabled: true, ...overrides };
+    researchEnabled: true, armsAidEnabled: true, tradeEnabled: true, foodEnabled: true, ...overrides };
 }
 
 export function getWarDeclarationMode(world: WorldState): "diplomacy" | "legacy" | "off" {

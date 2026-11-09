@@ -1,3 +1,4 @@
+import { updateFoodSupply } from "./food-supply";
 import { mapAgriculturalLand } from "../worldgen/agricultural-land";
 import { updateTreasuries } from "./treasury";
 import { getRegionalPopulations } from "./regional-population";
@@ -197,6 +198,7 @@ export function createWorld(config: WorldConfig): WorldState {
   assignNationIdentities(world);
   getRegionalPopulations(world);
   updateTreasuries(world);
+  updateFoodSupply(world);
   getTerritorialClaims(world);
   return world;
 }

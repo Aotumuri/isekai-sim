@@ -1,3 +1,4 @@
+import { splitFoodSupply } from "./food-supply";
 import { splitTreasury } from "./treasury";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
@@ -103,5 +104,6 @@ export function dividePartitionResources(world: WorldState, parent: NationRuntim
     parent.resources[key] -= successor.resources[key];
   }
   successor.treasury = splitTreasury(parent.treasury, share);
+  successor.food = splitFoodSupply(parent.food, share);
   assignNationIdentities(world);
 }
