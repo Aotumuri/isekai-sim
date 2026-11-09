@@ -1,3 +1,4 @@
+import { getCrisisDeploymentReadiness } from "./crisis-deployment";
 import { getNationalTerritorialValue, getTerritorialValue } from "./territorial-value";
 import { hasWarApproach } from "./maritime-war-readiness";
 import { getSubjectOverlord } from "./subject-governments";
@@ -179,6 +180,14 @@ export function updateDiplomaticCrises(world: WorldState): void {
     }
     if (!hasWarApproach(world, attacker, defender)) {
       resolveCrisisPeacefully(world, attacker, defender, "expedition no longer feasible");
+      continue;
+    }
+    const staged = getCrisisDeploymentReadiness(world, attacker, defender);
+    if (crisis.deadlineSlowTick >= crisis.openedAtSlowTick + 30 && now < crisis.openedAtSlowTick + 50 &&
+      staged !== undefined && staged < 0.4) {
+      crisis.deadlineSlowTick = now + 10;
+      recordSimulationEvent(world, { category: "military", nationIds: [attacker, defender],
+        message: `${attacker} delayed escalation while its border force assembled (${Math.round(staged * 100)}% in position).` });
       continue;
     }
     startDiplomaticWar(world, attacker, defender);

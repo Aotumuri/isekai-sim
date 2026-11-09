@@ -69,6 +69,16 @@ export function updateCrisisDeployments(world: WorldState): void {
   deployments.set(world, next);
 }
 
+export function getCrisisDeploymentReadiness(world: WorldState, nation: NationId, opponent: NationId): number | undefined {
+  let staged = 0, total = 0;
+  for (const { unit, destination, opponent: target } of deployments.get(world)?.values() ?? []) {
+    if (unit.nationId !== nation || target !== opponent || unit.manpower <= 0) continue;
+    total += unit.manpower;
+    if (unit.regionId === destination && !unit.moveToId) staged += unit.manpower;
+  }
+  return total > 0 ? staged / total : undefined;
+}
+
 export function applyCrisisDeployments(world: WorldState): void {
   for (const { unit, opponent, destination } of deployments.get(world)?.values() ?? []) {
     const relation = world.diplomacy?.relations.get([unit.nationId, opponent].sort().join(":"));
