@@ -1,3 +1,4 @@
+import { estimateAnnexationResistance, recordAnnexation } from "./annexation";
 import { getPuppetTermsIssue, installSubjectGovernment } from "./subject-governments";
 import { getRelation } from "./diplomacy";
 import { getPeaceBorderIssue, getWholeProvinces, selectPeaceProvinces } from "./peace-borders";
@@ -105,7 +106,7 @@ function automaticTerms(world: WorldState, proposer: NationId, target: NationId,
   const aggressor = findWar(world.wars, proposer, target)?.aggressorId === proposer;
   if (advantage > 0.15 || hardline || (aggressor && pursuingOpeningGoals && urgency < 0.55)) {
     const cap = Math.floor(ownedLand(world, target).length * 0.25);
-    const candidates = candidateDistricts(world, proposer, target);
+    const candidates = candidateDistricts(world, proposer, target).filter((id) => estimateAnnexationResistance(world, proposer, id) < 0.55);
     if (hardline) for (const id of ownedLand(world, target)) if (id !== b.capitalMesoId && !candidates.includes(id) &&
       (!world.occupation.mesoById.has(id) || world.occupation.mesoById.get(id) === proposer)) candidates.push(id);
     if (!opening && advantage > 0.45 && getNationCharacter(world, proposer).aggression >= 0.65 &&
@@ -182,6 +183,8 @@ export function acceptPeaceOffer(world: WorldState, recipient: NationId, propose
   const relation = getRelation(world, proposer, recipient);
   const truce = relation.treaties.find((treaty) => treaty.type === "truce")!; truce.expiresAtSlowTick = world.time.slowTick + terms.truceSeconds;
   relation.cooldownUntilSlowTick = truce.expiresAtSlowTick;
+  recordAnnexation(world, proposer, terms.demandedRegionIds);
+  recordAnnexation(world, recipient, terms.offeredRegionIds);
   if (terms.puppetTarget) installSubjectGovernment(world, proposer, recipient);
   const state = getWarNegotiationState(world); state.active.delete(negotiation.key);
   state.settlements.push({ a: recipient, b: proposer, proposerId: proposer, terms, atSlowTick: world.time.slowTick });

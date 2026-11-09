@@ -1,3 +1,4 @@
+import { annexedOutputFactor } from "./annexation";
 import { allFieldUnits, getArmyLimits, getMobilization } from "./mobilization";
 import { equipNewUnit, getDevelopedUnitWeaponCost } from "./equipment-development";
 import { getNationalDesign, type WeaponDesign } from "./research";
@@ -164,6 +165,7 @@ function updateProductionInternal(world: WorldState): void {
   const ownerByMesoId = getOwnerByMesoId(world);
   const occupationByMesoId = world.occupation.mesoById;
   const resourceOutputs = collectResourceOutputs(
+    world,
     world.mesoRegions,
     ownerByMesoId,
     occupationByMesoId,
@@ -640,6 +642,7 @@ interface ResourceOutput {
 }
 
 function collectResourceOutputs(
+  world: WorldState,
   mesoRegions: MesoRegion[],
   ownerByMesoId: Map<MesoRegionId, NationId>,
   occupationByMesoId: Map<MesoRegionId, NationId>,
@@ -679,19 +682,20 @@ function collectResourceOutputs(
     }
 
     const output = ensureOutput(owner);
+    const factor = annexedOutputFactor(world, owner, meso.id);
     if (meso.resource === "steel") {
-      output.steel += steelPerDeposit;
+      output.steel += steelPerDeposit * factor;
     } else if (meso.resource === "fuel") {
-      output.fuel += fuelPerDeposit;
+      output.fuel += fuelPerDeposit * factor;
     }
 
     const microCount = meso.microRegionIds.length;
     if (meso.building === "city") {
-      output.manpower += manpowerPerCity + manpowerPerCityMicro * microCount;
-      output.weaponCapacity += weaponsPerCity;
+      output.manpower += (manpowerPerCity + manpowerPerCityMicro * microCount) * factor;
+      output.weaponCapacity += weaponsPerCity * factor;
     } else if (meso.building === "capital") {
-      output.manpower += manpowerPerCapital + manpowerPerCapitalMicro * microCount;
-      output.weaponCapacity += weaponsPerCapital;
+      output.manpower += (manpowerPerCapital + manpowerPerCapitalMicro * microCount) * factor;
+      output.weaponCapacity += weaponsPerCapital * factor;
     }
   }
 

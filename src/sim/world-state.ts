@@ -1,3 +1,4 @@
+import type { Annexation } from "./annexation";
 import type { RegionalPopulation } from "./regional-population";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { WarNegotiationState } from "./war-negotiations";
@@ -68,6 +69,7 @@ export interface WorldState {
   diplomacy?: DiplomacyState;
   research?: ResearchState;
   internationalTrade?: InternationalTradeState;
+  annexations?: Map<MesoRegionId, Annexation>;
   regionalPopulations?: Map<MesoRegionId, RegionalPopulation>;
   populationRevision?: number;
   populationPolicyRevision?: number;
