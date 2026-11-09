@@ -8,7 +8,7 @@ export type RationPolicy = keyof typeof RATION_POLICIES;
 export function setRationPolicy(world: WorldState, id: NationId, policy: RationPolicy): boolean {
   const nation = world.nations.find((item) => item.id === id);
   if (!nation?.food || !isNationActive(nation) || world.settings?.foodEnabled === false ||
-    !Object.hasOwn(RATION_POLICIES, policy)) return false;
+    !Object.prototype.hasOwnProperty.call(RATION_POLICIES, policy)) return false;
   nation.food.rationPolicy = policy;
   return true;
 }
