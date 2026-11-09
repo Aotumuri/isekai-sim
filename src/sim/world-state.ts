@@ -1,3 +1,4 @@
+import type { PeaceConference } from "./peace-conference";
 import type { NationId } from "../worldgen/nation";
 import type { AgriculturalLand } from "../worldgen/agricultural-land";
 import type { PublicWork } from "./public-works";
@@ -60,6 +61,8 @@ import type { CommonThreatCoalitionState } from "./common-threat-coalitions";
 
 export interface WorldState {
   domesticUnrest?: DomesticUnrestState;
+  peaceConferences?: PeaceConference[];
+  nextPeaceConferenceId?: number;
   warNegotiations?: WarNegotiationState;
   exileGovernments?: ExileGovernmentState;
   militaryAccess?: MilitaryAccessState;

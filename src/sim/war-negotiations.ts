@@ -1,3 +1,4 @@
+import { hasConferenceWar } from "./peace-conference";
 import { dividePartitionResources, getPartitionIssue, planPuppetPartition, preparePartitionNation, type PuppetPartition } from "./puppet-partition";
 import { estimateAnnexationResistance, recordAnnexation } from "./annexation";
 import { getPuppetTermsIssue, installSubjectGovernment } from "./subject-governments";
@@ -221,6 +222,7 @@ export function updateWarNegotiations(world: WorldState): void {
   if (world.time.slowTick - state.lastAISlowTick < 10) return;
   state.lastAISlowTick = world.time.slowTick;
   for (const war of [...world.wars]) {
+    if (hasConferenceWar(world, war)) continue;
     const negotiation = getWarNegotiation(world, war);
     for (const [proposer, target] of [[negotiation.a, negotiation.b], [negotiation.b, negotiation.a]]) {
       if (negotiation.automatic.get(proposer) && world.time.slowTick - (negotiation.lastRevisionSlowTick.get(proposer) ?? 0) >= 30) {
