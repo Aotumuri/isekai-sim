@@ -1,3 +1,4 @@
+import { RATION_POLICIES, type RationPolicy } from "./ration-policy";
 import { collectSubjectFoodLevies } from "./subject-food-levy";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
@@ -18,6 +19,7 @@ export interface NationalFoodSupply {
   levy?: number;
   demand: number;
   rationCoverage: number;
+  rationPolicy?: RationPolicy;
   shortageCycles: number;
   deaths: number;
 }
@@ -76,13 +78,14 @@ export function updateFoodSupply(world: WorldState): void {
     food.demand = demand;
     if (world.time.slowTick === 0 || demand <= 0) continue;
     const available = food.stock + harvest + food.levy;
-    food.rationCoverage = Math.min(1, available / demand);
-    food.stock = Math.min(foodStorageLimit(demand), Math.max(0, available - demand));
+    const consumed = Math.min(available, demand * RATION_POLICIES[food.rationPolicy ?? "normal"]);
+    food.rationCoverage = consumed / demand;
+    food.stock = Math.min(foodStorageLimit(demand), available - consumed);
     const wasFamine = food.shortageCycles >= FAMINE_THRESHOLD;
-    food.shortageCycles = food.rationCoverage < 0.9 ? food.shortageCycles + 1 : Math.max(0, food.shortageCycles - 2);
+    food.shortageCycles = food.rationCoverage < 0.85 ? food.shortageCycles + 1 : Math.max(0, food.shortageCycles - 2);
     const famine = food.shortageCycles >= FAMINE_THRESHOLD;
-    if (famine && food.rationCoverage < 0.9) {
-      const severity = (0.9 - food.rationCoverage) / 0.9;
+    if (famine && food.rationCoverage < 0.85) {
+      const severity = (0.85 - food.rationCoverage) / 0.85;
       food.deaths += applyFamineDeaths(world, ids, severity * 0.035);
       world.populationRevision = (world.populationRevision ?? 0) + 1;
     }
