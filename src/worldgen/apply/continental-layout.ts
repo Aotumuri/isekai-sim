@@ -2,7 +2,24 @@ import { SeededRng } from "../../utils/seeded-rng";
 import type { WorldConfig } from "../../data/world-config";
 import { createInlandSeaCeiling } from "./inland-sea";
 
-export function createContinentalLayout(seed: number, layout?: WorldConfig["continentalLayout"]) {
+interface Landform {
+  x: number;
+  y: number;
+  rx: number;
+  ry: number;
+  coastPhase?: number;
+}
+
+interface ContinentalLayout {
+  flipX: boolean;
+  flipY: boolean;
+  landforms: Landform[];
+  coastReliefScale: number;
+  minimumLandformStrength: number;
+  seaCeiling: (x: number, y: number) => number;
+}
+
+export function createContinentalLayout(seed: number, layout?: WorldConfig["continentalLayout"]): ContinentalLayout {
   const rng = new SeededRng(seed ^ 0x671295ab);
   if (layout === "oceanic") {
     const continents = [
@@ -17,18 +34,21 @@ export function createContinentalLayout(seed: number, layout?: WorldConfig["cont
     }));
     const easternCoast = { x: continents[2]!.x + 0.09, y: continents[2]!.y + 0.21, rx: 0.13, ry: 0.15 };
     const islands = [
-      { x: 0.45, y: 0.55 },
-      { x: 0.49, y: 0.69 },
-      { x: 0.52, y: 0.84 },
-      { x: 0.53, y: 0.21 },
-    ].map(({ x, y }) => ({ x, y, rx: rng.range(0.025, 0.038), ry: rng.range(0.03, 0.055) }));
+      { x: 0.45, y: 0.55, rx: 0.040, ry: 0.024 },
+      { x: 0.49, y: 0.69, rx: 0.024, ry: 0.047 },
+      { x: 0.52, y: 0.84, rx: 0.046, ry: 0.030 },
+      { x: 0.53, y: 0.21, rx: 0.026, ry: 0.045 },
+    ].map(({ x, y, rx, ry }) => ({ x, y, rx: rx * rng.range(0.85, 1.15), ry: ry * rng.range(0.85, 1.15) }));
+    const flipX = rng.nextFloat() < 0.5;
+    const flipY = rng.nextFloat() < 0.5;
 
     return {
-      flipX: rng.nextFloat() < 0.5,
-      flipY: rng.nextFloat() < 0.5,
-      landforms: [...continents, easternCoast, ...islands],
+      flipX,
+      flipY,
+      landforms: [...continents, easternCoast, ...islands]
+        .map((landform) => ({ ...landform, coastPhase: rng.range(0, 2 * Math.PI) })),
       // Leave room for the coastline noise between landforms instead of carving a channel through them.
-      coastReliefScale: 0.65,
+      coastReliefScale: 0.52,
       minimumLandformStrength: 0.4,
       seaCeiling: () => Infinity,
     };

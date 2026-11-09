@@ -22,7 +22,18 @@ export function applyContinentalElevation(
     const y = layout.flipY ? 1 - v : v;
     let interior = -Infinity;
     for (const continent of layout.landforms) {
-      const distance = Math.hypot((x - continent.x) / continent.rx, (y - continent.y) / continent.ry);
+      const dx = (x - continent.x) / continent.rx;
+      const dy = (y - continent.y) / continent.ry;
+      let distance = Math.hypot(dx, dy);
+      if (continent.coastPhase !== undefined) {
+        const angle = Math.atan2(dy, dx), phase = continent.coastPhase;
+        // The outline itself forms bays and peninsulas before finer coastline noise is added.
+        const shape = 0.24 * Math.cos(3 * angle + phase) +
+          0.15 * Math.sin(5 * angle - 2 * phase) + 0.08 * Math.cos(8 * angle + phase);
+        // Favor deep bays over outward growth so nearby continents stay separated.
+        const radius = 1 + shape * (0.72 - shape);
+        distance /= radius;
+      }
       const strength = clamp(continent.rx / 0.20, layout.minimumLandformStrength, 1);
       interior = Math.max(interior, (1 - distance) * strength);
     }
