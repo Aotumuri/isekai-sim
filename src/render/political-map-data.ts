@@ -9,6 +9,7 @@ import type { NationId } from "../worldgen/nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import { CLAIM_COLORS } from "./claim-map-data";
 import { getNationColor } from "./nation-color";
+export const SUBJECT_MAP_MARKER = "◆";
 export type DiplomaticStatus = "selected" | "friendly" | "neutral" | "hostile" | "war";
 export const DIPLOMATIC_COLORS: Record<DiplomaticStatus, number> = {
   selected: 0x72b9ed, friendly: 0x55ba79, neutral: 0xe9cb68, hostile: 0xed984a, war: 0xe75b62,
@@ -33,8 +34,8 @@ export function getPoliticalFill(world: WorldState, nationId: NationId): number 
     return faction ? getFactionColor(faction.id) : 0x7b8899;
   }
   const overlord = getSubjectOverlord(world, nationId);
-  if (!overlord) return getNationColor(nationId);
-  const color = getNationColor(overlord);
+  if (!overlord) return getNationColor(nationId, world);
+  const color = getNationColor(overlord, world);
   // Blend 32% black into each channel to retain the overlord's hue.
   const red = Math.round((color >> 16) * 0.68);
   const green = Math.round(((color >> 8) & 0xff) * 0.68);

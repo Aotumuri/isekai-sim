@@ -1,10 +1,79 @@
 import type { NationId } from "../worldgen/nation";
+import { getAdjacentNationPairs } from "../sim/world-cache";
+import type { WorldState } from "../sim/world-state";
 
-export function getNationColor(nationId: NationId): number {
-  const hash = hashString(nationId);
-  // Golden angle spreads sequential IDs across the hue wheel.
-  const hue = (hash * 137.508) % 360;
-  return hslToHex(hue, 0.62, 0.55);
+const colorProfiles = [
+  { saturation: 0.79, lightness: 0.49 },
+  { saturation: 0.54, lightness: 0.65 },
+  { saturation: 0.72, lightness: 0.57 },
+  { saturation: 0.45, lightness: 0.53 },
+  { saturation: 0.72, lightness: 0.71 },
+];
+
+const colorsByWorld = new WeakMap<WorldState, Map<NationId, number>>();
+
+export function getNationColor(nationId: NationId, world?: WorldState): number {
+  if (world) {
+    const assigned = colorsByWorld.get(world) ?? new Map<NationId, number>();
+    if (assigned.size < world.nations.length) {
+      assignNationColors(world, assigned);
+      colorsByWorld.set(world, assigned);
+    }
+    const color = assigned.get(nationId);
+    if (color !== undefined) return color;
+  }
+  const sequence = /^nation-(\d+)$/.exec(nationId);
+  const index = sequence ? Number(sequence[1]) : hashString(nationId);
+  return paletteColor(index);
+}
+
+function paletteColor(index: number): number {
+  // Spread consecutive nations across hues and rotate between vivid, soft and light colors.
+  const hue = (12 + index * 137.508) % 360;
+  const { saturation, lightness } = colorProfiles[index % colorProfiles.length]!;
+  return hslToHex(hue, saturation, lightness);
+}
+
+function assignNationColors(world: WorldState, assigned: Map<NationId, number>): void {
+  const neighbors = new Map(world.nations.map(({ id }) => [id, new Set<NationId>()]));
+  for (const [a, b] of getAdjacentNationPairs(world)) {
+    neighbors.get(a)?.add(b);
+    neighbors.get(b)?.add(a);
+  }
+  const used = new Set(assigned.values());
+  const palette = Array.from({ length: Math.max(60, world.nations.length * 2) }, (_, index) => paletteColor(index));
+  const pending = world.nations.filter(({ id }) => !assigned.has(id))
+    .sort((a, b) => neighbors.get(b.id)!.size - neighbors.get(a.id)!.size || a.id.localeCompare(b.id));
+  for (const { id } of pending) {
+    const adjacentColors = [...neighbors.get(id)!].flatMap((neighbor) => {
+      const color = assigned.get(neighbor);
+      return color === undefined ? [] : [color];
+    });
+    let best = getNationColor(id), bestScore = -Infinity;
+    for (const color of palette) {
+      if (used.has(color)) continue;
+      const overall = nearestColorDistance(color, used);
+      const adjacent = adjacentColors.length ? nearestColorDistance(color, adjacentColors) : overall;
+      const score = adjacent + overall * 0.4;
+      if (score > bestScore) {
+        best = color;
+        bestScore = score;
+      }
+    }
+    assigned.set(id, best);
+    used.add(best);
+  }
+}
+
+function nearestColorDistance(color: number, others: Iterable<number>): number {
+  let nearest = 3 * 255 ** 2;
+  for (const other of others) {
+    const red = (color >> 16) - (other >> 16);
+    const green = ((color >> 8) & 0xff) - ((other >> 8) & 0xff);
+    const blue = (color & 0xff) - (other & 0xff);
+    nearest = Math.min(nearest, red ** 2 + green ** 2 + blue ** 2);
+  }
+  return nearest;
 }
 
 function hashString(value: string): number {

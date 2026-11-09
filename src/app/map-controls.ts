@@ -5,11 +5,12 @@ import type { NationId } from "../worldgen/nation";
 import { getNationFaction } from "../sim/factions";
 import { getNationIdeology, getNationName } from "../sim/nation-identity";
 import { isNationPresent } from "../sim/nation-active";
+import { getSubjectOverlord } from "../sim/subject-governments";
 import { getOwnerByMesoId } from "../sim/world-cache";
 import type { WorldState } from "../sim/world-state";
 import { getMapView, selectMapNation, setMapMode, type MapMode } from "../render/map-view-state";
 import { CLAIM_COLORS, getMapClaims } from "../render/claim-map-data";
-import { DIPLOMATIC_COLORS, getDiplomaticStatus, getFactionColor, getOccupationSummary, getPoliticalFill } from "../render/political-map-data";
+import { DIPLOMATIC_COLORS, getDiplomaticStatus, getFactionColor, getOccupationSummary, getPoliticalFill, SUBJECT_MAP_MARKER } from "../render/political-map-data";
 import { buildRegionBounds, findRegion } from "../render/region/hit-test";
 import type { Renderer } from "../render/renderer";
 import type { FrontDebugOverlay } from "../render/front-debug-overlay";
@@ -88,7 +89,7 @@ export function attachMapControls(root: HTMLElement, renderer: Renderer, world: 
     lastRender = performance.now();
     const claims = state.mode === "claims" && state.selectedNationId ? getMapClaims(world, state.selectedNationId) : [];
     const contentKey = JSON.stringify([world.populationPolicyRevision ?? 0, world.exileGovernments?.version ?? 0, claims, state.mode, state.revision, world.factions?.version ?? 0,
-      active.map((nation) => [nation.id, nation.name, nation.ideologyId]), world.occupation.version, world.territoryVersion,
+      active.map((nation) => [nation.id, nation.name, nation.ideologyId]), world.occupation.version, world.territoryVersion, world.militaryAccess?.version ?? 0,
       state.diplomaticFocusId && state.targetNationId ? getDiplomaticStatus(world, state.diplomaticFocusId, state.targetNationId) : null]);
     if (contentKey === lastContentKey) return;
     lastContentKey = contentKey;
@@ -116,6 +117,9 @@ export function attachMapControls(root: HTMLElement, renderer: Renderer, world: 
       const nonAligned = active.filter((nation) => !getNationFaction(world, nation.id)).length;
       view("legend").innerHTML = `<h2>Faction colors</h2>${factions.map((faction) => `<span class="map-legend-item"><i style="background:${color(getFactionColor(faction.id))}"></i>${esc(faction.name)} · Leader: ${esc(getNationName(world, faction.leaderId))} · ${faction.memberIds.filter((id) => active.some((nation) => nation.id === id)).length}</span>`).join("")}<span class="map-legend-item"><i style="background:#7b8899"></i>Non-aligned · ${nonAligned}</span><button type="button" data-map-action="factions">Manage factions</button>`;
     } else view("legend").innerHTML = state.mode === "debug" ? '<span>Debug view: original district grid, occupation overlays and operational markers.</span>' : "";
+    if (state.mode !== "debug" && state.labels && active.some(({ id }) => getSubjectOverlord(world, id))) {
+      view("legend").innerHTML += `<span class="map-legend-item">${SUBJECT_MAP_MARKER} Puppet government</span>`;
+    }
     if (state.mode !== "debug" && state.farmland) {
       view("legend").innerHTML += `<h2>Agricultural land</h2>${AGRICULTURE_COLORS.map(({ color: tint, label }) =>
         `<span class="map-legend-item"><i style="background:${color(tint)}"></i>${label}</span>`).join("")}`;

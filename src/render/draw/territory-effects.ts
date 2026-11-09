@@ -5,7 +5,6 @@ import type { MesoRegionId } from "../../worldgen/meso-region";
 import type { MicroRegion } from "../../worldgen/micro-region";
 import type { NationId } from "../../worldgen/nation";
 import { clearLayer } from "../clear-layer";
-import { getNationColor } from "../nation-color";
 
 const HATCH_SPACING = 12;
 const HATCH_WIDTH = 2;
@@ -88,6 +87,7 @@ export function drawTerritoryEffects(
   occupation: OccupationState,
   width: number,
   height: number,
+  nationColor: (id: NationId) => number,
   dirtyMesoIds?: Iterable<MesoRegionId>,
 ): void {
   const cache = getTerritoryEffectCache(
@@ -135,7 +135,7 @@ export function drawTerritoryEffects(
     }
 
     if (entry.nationId !== nationId) {
-      entry.graphics.tint = getNationColor(nationId);
+      entry.graphics.tint = nationColor(nationId);
       entry.nationId = nationId;
     }
     entry.graphics.visible = true;

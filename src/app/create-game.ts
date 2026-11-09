@@ -13,6 +13,8 @@ import { createRenderer } from "../render/renderer";
 import { attachTimeHud } from "../render/time-hud";
 import { attachViewControls } from "../render/view/controls";
 import { attachNationInfoBar } from "../render/nation-info-bar";
+import { getNationColor } from "../render/nation-color";
+import type { NationId } from "../worldgen/nation";
 import { attachFrontDebugOverlay } from "../render/front-debug-overlay";
 import { createWorld } from "../sim/create-world";
 import { createSimClock, getSpeedMultiplier } from "../sim/time";
@@ -31,6 +33,7 @@ export function createGame(root: HTMLElement, setup: { world?: WorldState; pause
   const renderer = createRenderer(root);
   setTerritoryEffectsRenderer(renderer.app.renderer);
   const world = setup.world ?? createWorld(config);
+  const nationColor = (id: NationId) => getNationColor(id, world);
   drawMicroRegions(renderer.worldLayers.layers.MicroTerrain, world.microRegions);
   drawMesoBorders(renderer.worldLayers.layers.MesoBorder, world.microRegions);
   drawNationBorders(
@@ -38,6 +41,7 @@ export function createGame(root: HTMLElement, setup: { world?: WorldState; pause
     world.microRegions,
     world.macroRegions,
     world.nations,
+    nationColor,
   );
   drawTerritoryEffects(
     renderer.worldLayers.layers.TerritoryEffects,
@@ -46,6 +50,7 @@ export function createGame(root: HTMLElement, setup: { world?: WorldState; pause
     world.occupation,
     config.width,
     config.height,
+    nationColor,
   );
   world.occupation.dirtyMesoIds.clear();
   drawCityCapitalIcons(
@@ -57,6 +62,7 @@ export function createGame(root: HTMLElement, setup: { world?: WorldState; pause
     renderer.app.renderer,
     world.units,
     world.mesoRegions,
+    nationColor,
     0,
   );
   attachRegionHoverUI(renderer, world);
@@ -93,6 +99,7 @@ export function createGame(root: HTMLElement, setup: { world?: WorldState; pause
         world.microRegions,
         world.macroRegions,
         world.nations,
+        nationColor,
       );
       lastTerritoryVersion = world.territoryVersion;
       shouldRedrawIcons = true;
@@ -105,6 +112,7 @@ export function createGame(root: HTMLElement, setup: { world?: WorldState; pause
         world.occupation,
         config.width,
         config.height,
+        nationColor,
         world.occupation.dirtyMesoIds.size > 0
           ? world.occupation.dirtyMesoIds
           : undefined,
@@ -134,6 +142,7 @@ export function createGame(root: HTMLElement, setup: { world?: WorldState; pause
       renderer.app.renderer,
       world.units,
       world.mesoRegions,
+      nationColor,
       clock.accumulatorMs,
       getSpeedMultiplier(clock) <= MAX_UNIT_ANIMATION_SPEED,
     );

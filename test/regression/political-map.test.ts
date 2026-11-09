@@ -3,7 +3,9 @@ import test from "node:test";
 import { getDiplomacyState, getRelation } from "../../src/sim/diplomacy";
 import { createFaction, joinFaction } from "../../src/sim/factions";
 import { declareWar } from "../../src/sim/war-state";
-import { getOwnerByMesoId } from "../../src/sim/world-cache";
+import { getAdjacentNationPairs, getOwnerByMesoId } from "../../src/sim/world-cache";
+import { createDefaultWorldConfig } from "../../src/data/world-config";
+import { createWorld } from "../../src/sim/create-world";
 import { getMapView, setMapMode, selectMapNation } from "../../src/render/map-view-state";
 import { classifyPoliticalBoundary, getDiplomaticStatus, getNationLabelAnchors, getPoliticalFill } from "../../src/render/political-map-data";
 import { createSocietyWorld } from "../helpers/society-world";
@@ -105,4 +107,21 @@ test("puppets use a darker shade of their overlord's political color", () => {
   }
   delete subject.subjectGovernment;
   assert.equal(getPoliticalFill(world, subject.id), original);
+});
+
+test("political colors distinguish neighboring countries and reserve dark shades for puppets", () => {
+  const world = createWorld({ ...createDefaultWorldConfig(), seed: 17, microRegionCount: 32_000 });
+  const colors = world.nations.map(({ id }) => getPoliticalFill(world, id));
+  assert.equal(new Set(colors).size, colors.length);
+  const channels = (color: number) => [color >> 16, (color >> 8) & 0xff, color & 0xff];
+  const brightest = (color: number) => Math.max(...channels(color));
+  assert.ok(Math.min(...colors.map(brightest)) > Math.max(...colors.map(brightest)) * 0.68);
+
+  const neighbors = getAdjacentNationPairs(world);
+  assert.ok(neighbors.length > 0);
+  for (const [a, b] of neighbors) {
+    const left = channels(getPoliticalFill(world, a));
+    const right = channels(getPoliticalFill(world, b));
+    assert.ok(Math.hypot(...left.map((channel, index) => channel - right[index]!)) > 75, `${a} / ${b}`);
+  }
 });

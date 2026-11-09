@@ -2,7 +2,7 @@ import { Container, Graphics, Sprite, type Renderer as PixiRenderer, type Textur
 import type { UnitId, UnitState, UnitType } from "../../sim/unit";
 import { getMoveMsPerRegion } from "../../sim/movement";
 import type { MesoRegion } from "../../worldgen/meso-region";
-import { getNationColor } from "../nation-color";
+import type { NationId } from "../../worldgen/nation";
 import { clearLayer } from "../clear-layer";
 import { getMesoRegionByIdMap } from "../region-index";
 
@@ -30,6 +30,7 @@ export function drawUnits(
   renderer: PixiRenderer,
   units: UnitState[],
   mesoRegions: MesoRegion[],
+  nationColor: (id: NationId) => number,
   interpolationMs = 0,
   animateMovement = true,
 ): void {
@@ -61,7 +62,7 @@ export function drawUnits(
     } else if (sprite.texture !== cache.textures[unit.type]) {
       sprite.texture = cache.textures[unit.type];
     }
-    sprite.tint = getNationColor(unit.nationId);
+    sprite.tint = nationColor(unit.nationId);
     sprite.position.set(pos.x, pos.y);
   }
 

@@ -7,12 +7,13 @@ import type { MicroRegion } from "../worldgen/micro-region";
 import type { NationId } from "../worldgen/nation";
 import { getNationName } from "../sim/nation-identity";
 import { getNationFaction } from "../sim/factions";
+import { getSubjectOverlord } from "../sim/subject-governments";
 import { clearLayer } from "./clear-layer";
 import { findSharedSegments, type Segment } from "./meso-border-geometry";
 import { getNationColor } from "./nation-color";
 import { CLAIM_COLORS, getClaimColor, getMapClaims } from "./claim-map-data";
 import { getMapView } from "./map-view-state";
-import { classifyPoliticalBoundary, getNationLabelAnchors, getPoliticalFill, getPlayerOccupations } from "./political-map-data";
+import { classifyPoliticalBoundary, getNationLabelAnchors, getPoliticalFill, getPlayerOccupations, SUBJECT_MAP_MARKER } from "./political-map-data";
 import type { Renderer } from "./renderer";
 
 export function attachPlayerMap(renderer: Renderer, world: WorldState): { update: () => void } {
@@ -69,7 +70,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
     provinces.lineStyle(0.8, 0xe5f1f6, 0.2); districts.lineStyle(0.7, 0x142536, 0.32);
     for (const nation of world.nations) {
       const fill = new Graphics(); fill.beginFill(0xffffff, 0.62); fills.set(nation.id, fill);
-      const border = new Graphics(); border.lineStyle(2.2, 0xffffff, 1); border.tint = getNationColor(nation.id); borders.set(nation.id, border);
+      const border = new Graphics(); border.lineStyle(2.2, 0xffffff, 1); border.tint = getNationColor(nation.id, world); borders.set(nation.id, border);
     }
     for (const region of world.microRegions) {
       if (region.mesoRegionId) {
@@ -203,7 +204,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
       colorKey = nextColors;
       for (const [id, fill] of fills) { fill.tint = getPoliticalFill(world, id); fill.alpha = id === view.selectedNationId ? 1 : 0.92; }
     }
-    const nextLabels = `${nextGeometry}:${view.revision}:${world.factions?.version ?? 0}`;
+    const nextLabels = `${nextGeometry}:${view.revision}:${world.factions?.version ?? 0}:${subjectRevision}`;
     const labelsChanged = nextLabels !== labelKey;
     if (labelsChanged) {
       labelKey = nextLabels; clearLayer(labels); selection.clear(); parcelSelection.clear();
@@ -215,7 +216,9 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
       if (view.selectedNationId) { selection.lineStyle(3.2, 0xfff5cf, 0.95); stroke(selection, outlines.get(view.selectedNationId) ?? []); }
       for (const anchor of getNationLabelAnchors(world)) {
         const faction = getNationFaction(world, anchor.nationId);
-        const text = getNationName(world, anchor.nationId, "short") + (view.mode === "factions" ? `\n${faction?.name ?? "Non-aligned"}` : "");
+        const subject = getSubjectOverlord(world, anchor.nationId);
+        const name = getNationName(world, anchor.nationId, "short");
+        const text = (subject ? `${SUBJECT_MAP_MARKER} ${name}` : name) + (view.mode === "factions" ? `\n${faction?.name ?? "Non-aligned"}` : "");
         const label = new Text(text, new TextStyle({ fontFamily: "Georgia, serif", fontSize: anchor.primary ? Math.min(22, 13 + Math.sqrt(anchor.regionCount) * 0.8) : 12,
           fontWeight: "600", fill: 0xf4f5ee, align: "center", stroke: 0x132237, strokeThickness: 3, letterSpacing: 0.7, dropShadow: true, dropShadowAlpha: 0.35, dropShadowDistance: 1 }));
         label.anchor.set(0.5);

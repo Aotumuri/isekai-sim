@@ -4,7 +4,6 @@ import type { MicroRegion } from "../../worldgen/micro-region";
 import type { Nation, NationId } from "../../worldgen/nation";
 import { clearLayer } from "../clear-layer";
 import { findSharedSegments, type Segment } from "../meso-border-geometry";
-import { getNationColor } from "../nation-color";
 import { getMicroRegionByIdMap } from "../region-index";
 
 const BORDER_WIDTH = 2.2;
@@ -30,18 +29,19 @@ export function drawNationBorders(
   microRegions: MicroRegion[],
   macroRegions: MacroRegion[],
   nations: Nation[],
+  nationColor: (id: NationId) => number,
 ): void {
   if (macroRegions.length === 0 || nations.length === 0) {
     return;
   }
 
-  const cache = getNationBorderCache(layer, microRegions, macroRegions);
+  const cache = getNationBorderCache(layer, microRegions, macroRegions, nationColor);
   for (const macro of macroRegions) {
     const graphics = cache.graphicsByMacroId.get(macro.id);
     if (!graphics || graphics.nationId === macro.nationId) {
       continue;
     }
-    const color = getNationColor(macro.nationId);
+    const color = nationColor(macro.nationId);
     graphics.fill.tint = color;
     graphics.border.tint = color;
     graphics.nationId = macro.nationId;
@@ -52,6 +52,7 @@ function getNationBorderCache(
   layer: Container,
   microRegions: MicroRegion[],
   macroRegions: MacroRegion[],
+  nationColor: (id: NationId) => number,
 ): NationBorderCache {
   const cached = borderCacheByLayer.get(layer);
   if (cached && cached.microRegions === microRegions && cached.macroRegions === macroRegions) {
@@ -70,7 +71,7 @@ function getNationBorderCache(
     const fill = new Graphics();
     fill.name = `NationFill:${macro.id}`;
     fill.beginFill(0xffffff, FILL_ALPHA);
-    fill.tint = getNationColor(macro.nationId);
+    fill.tint = nationColor(macro.nationId);
 
     const border = new Graphics();
     border.name = `NationBorder:${macro.id}`;
@@ -81,7 +82,7 @@ function getNationBorderCache(
       cap: "round",
       join: "round",
     });
-    border.tint = getNationColor(macro.nationId);
+    border.tint = nationColor(macro.nationId);
 
     graphicsByMacroId.set(macro.id, {
       fill,
