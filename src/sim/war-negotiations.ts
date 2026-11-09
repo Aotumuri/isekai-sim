@@ -34,6 +34,7 @@ export interface PeaceTerms {
 export interface PeaceOffer { proposerId: NationId; terms: PeaceTerms; revisedAtSlowTick: number; revision: number; source: "opening" | "automatic" | "manual" }
 export interface WarNegotiation {
   key: string; a: NationId; b: NationId; openingPower: Map<NationId, number>;
+  outlook?: { advantageA: number; trendA: number; sampledAtSlowTick: number };
   offers: Map<NationId, PeaceOffer>; automatic: Map<NationId, boolean>; lastRevisionSlowTick: Map<NationId, number>;
 }
 export interface PeaceSettlement { a: NationId; b: NationId; proposerId: NationId; terms: PeaceTerms; atSlowTick: number }
@@ -56,6 +57,19 @@ export function getWarAdvantage(world: WorldState, a: NationId, b: NationId): nu
   const military = Math.log((nationalPower(world, a) + 1) / (nationalPower(world, b) + 1)) * 0.25;
   return Math.max(-1, Math.min(1, military + (occupationRatio(world, b, a) - occupationRatio(world, a, b)) * 0.75));
 }
+function sampleWarOutlook(world: WorldState, negotiation: WarNegotiation): void {
+  const advantage = getWarAdvantage(world, negotiation.a, negotiation.b);
+  const old = negotiation.outlook;
+  if (old && world.time.slowTick <= old.sampledAtSlowTick) return;
+  const change = old ? (advantage - old.advantageA) * 30 / (world.time.slowTick - old.sampledAtSlowTick) : 0;
+  const trend = Math.max(-0.5, Math.min(0.5, change));
+  negotiation.outlook = { advantageA: advantage, trendA: old ? old.trendA * 0.4 + trend * 0.6 : 0, sampledAtSlowTick: world.time.slowTick };
+}
+
+function getWarTrend(negotiation: WarNegotiation, nation: NationId): number {
+  return (negotiation.outlook?.trendA ?? 0) * (nation === negotiation.a ? 1 : -1);
+}
+
 export function isFightOnGovernment(world: WorldState, id: NationId): boolean {
   const character = getNationCharacter(world, id); return character.aggression >= 0.85 && character.cooperation <= 0.4;
 }
@@ -171,6 +185,7 @@ export function getWarNegotiation(world: WorldState, war: WarState): WarNegotiat
   if (!negotiation) {
     negotiation = { key, a: war.nationAId, b: war.nationBId, openingPower: new Map([[war.nationAId, nationalPower(world, war.nationAId)], [war.nationBId, nationalPower(world, war.nationBId)]]), offers: new Map(), automatic: new Map(), lastRevisionSlowTick: new Map() };
     state.active.set(key, negotiation);
+    sampleWarOutlook(world, negotiation);
     for (const [proposer, target] of [[negotiation.a, negotiation.b], [negotiation.b, negotiation.a]]) {
       negotiation.automatic.set(proposer, true); negotiation.lastRevisionSlowTick.set(proposer, world.time.slowTick);
       negotiation.offers.set(proposer, { proposerId: proposer, terms: openingTerms(world, war, proposer, target), revisedAtSlowTick: world.time.slowTick, revision: 0, source: "opening" });
@@ -190,7 +205,8 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
   const ageSeconds = Math.max(0, world.time.fastTick - war.startedAtFastTick) * FAST_TICK_MS / 1000;
   const urgency = getPeaceUrgency(world, recipient);
   const domestic = urgency * 42;
-  const pressure = fatigue * 0.7 + Math.min(18, ageSeconds * 0.025) + occupationRatio(world, recipient, proposer) * 45 + militaryLoss * 15 + Math.max(0, -advantage) * 30 + (1 - nation.warCooperation) * 12 + domestic;
+  const forecast = -getWarTrend(negotiation, recipient) * 45;
+  const pressure = fatigue * 0.7 + Math.min(18, ageSeconds * 0.025) + occupationRatio(world, recipient, proposer) * 45 + militaryLoss * 15 + Math.max(0, -advantage) * 30 + (1 - nation.warCooperation) * 12 + domestic + forecast;
   const totalValue = getNationalTerritorialValue(world, recipient);
   const landCost = getTerritorialValue(world, recipient, terms.demandedRegionIds) / totalValue * 100 +
     (terms.demandedRegionIds.includes(nation.capitalMesoId) ? 25 : 0);
@@ -268,6 +284,7 @@ export function updateWarNegotiations(world: WorldState): void {
   for (const war of [...world.wars]) {
     if (hasConferenceWar(world, war)) continue;
     const negotiation = getWarNegotiation(world, war);
+    sampleWarOutlook(world, negotiation);
     for (const [proposer, target] of [[negotiation.a, negotiation.b], [negotiation.b, negotiation.a]]) {
       if (negotiation.automatic.get(proposer) && world.time.slowTick - (negotiation.lastRevisionSlowTick.get(proposer) ?? 0) >= 30) {
         const terms = automaticTerms(world, proposer, target), old = negotiation.offers.get(proposer)!;
