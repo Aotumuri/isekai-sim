@@ -140,21 +140,22 @@ test("historical seeds produce connected land, separate continents, and a sea wi
   }
 });
 
-test("the larger default map has four major landmasses separated by ocean", () => {
+test("the larger default map has three major landmasses of different sizes", () => {
   const config = createDefaultWorldConfig();
   assert.ok(config.width > 2560 && config.height > 1440);
   assert.ok(config.microRegionCount > 210_000);
 
-  for (const seed of [1, 2, 17]) {
+  for (const seed of [1, 2, 3, 17]) {
     const world = createWorld({ ...config, seed, microRegionCount: 12_000 });
     const remaining = new Map(world.microRegions.filter((region) => !region.isSea)
       .map((region) => [region.id, region]));
-    let continents = 0;
+    const continentSizes: number[] = [];
     for (const region of remaining.values()) {
       const land = collectConnectedRegions(region, remaining);
-      if (land.length > world.microRegions.length * 0.05) continents += 1;
+      if (land.length > world.microRegions.length * 0.05) continentSizes.push(land.length);
     }
-    assert.equal(continents, 4, `seed ${seed}`);
+    assert.equal(continentSizes.length, 3, `seed ${seed}`);
+    assert.ok(Math.max(...continentSizes) > Math.min(...continentSizes) * 1.5, `seed ${seed}`);
   }
 });
 
