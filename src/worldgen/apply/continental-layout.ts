@@ -1,6 +1,7 @@
 import { SeededRng } from "../../utils/seeded-rng";
 import type { WorldConfig } from "../../data/world-config";
 import { createInlandSeaCeiling } from "./inland-sea";
+import { createIslandArc, type IslandArc } from "./island-arcs";
 
 interface Landform {
   x: number;
@@ -16,6 +17,7 @@ interface ContinentalLayout {
   swapAxes?: boolean;
   rotation?: number;
   landforms: Landform[];
+  islandArcs?: IslandArc[];
   coastReliefScale: number;
   minimumLandformStrength: number;
   seaCeiling: (x: number, y: number) => number;
@@ -30,20 +32,25 @@ export function createContinentalLayout(seed: number, layout?: WorldConfig["cont
       { x: rng.range(0.75, 0.80), y: rng.range(0.40, 0.55), rx: rng.range(0.15, 0.19), ry: rng.range(0.30, 0.35) },
     ];
     const easternCoast = { x: continents[2]!.x + 0.09, y: continents[2]!.y + 0.21, rx: 0.13, ry: 0.15 };
-    const islands = [
-      { x: 0.45, y: 0.55, rx: 0.040, ry: 0.024 },
-      { x: 0.49, y: 0.69, rx: 0.024, ry: 0.047 },
-      { x: 0.52, y: 0.84, rx: 0.046, ry: 0.030 },
-      { x: 0.53, y: 0.21, rx: 0.026, ry: 0.045 },
-    ].map(({ x, y, rx, ry }) => ({ x, y, rx: rx * rng.range(0.85, 1.15), ry: ry * rng.range(0.85, 1.15) }));
+    const [north, , east] = continents;
+    const arcs = new SeededRng(seed ^ 0x3f62ad91);
+    const islandArcs = [
+      createIslandArc({ x: east!.x - east!.rx * 0.82, y: east!.y + 0.12 },
+        { x: arcs.range(0.57, 0.63), y: arcs.range(0.57, 0.69) },
+        { x: arcs.range(0.52, 0.56), y: arcs.range(0.77, 0.85) }, arcs),
+      createIslandArc({ x: north!.x + 0.10, y: north!.y + 0.015 },
+        { x: arcs.range(0.42, 0.48), y: arcs.range(0.23, 0.33) },
+        { x: arcs.range(0.48, 0.54), y: arcs.range(0.45, 0.54) }, arcs),
+    ];
     const flipX = rng.nextFloat() < 0.5;
     const flipY = rng.nextFloat() < 0.5;
 
     return {
       flipX,
       flipY,
-      landforms: [...continents, easternCoast, ...islands]
+      landforms: [...continents, easternCoast]
         .map((landform) => ({ ...landform, coastPhase: rng.range(0, 2 * Math.PI) })),
+      islandArcs,
       swapAxes: rng.nextFloat() < 0.5,
       rotation: rng.range(-0.16, 0.16),
       // Leave room for the coastline noise between landforms instead of carving a channel through them.

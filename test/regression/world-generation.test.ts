@@ -6,6 +6,7 @@ import { createDefaultWorldConfig, createWorldConfig } from "../../src/data/worl
 import { getOwnerByMesoId } from "../../src/sim/world-cache";
 import { SeededRng } from "../../src/utils/seeded-rng";
 import { applyDrainageRivers } from "../../src/worldgen/apply/drainage-rivers";
+import { createIslandArc, sampleIslandArc } from "../../src/worldgen/apply/island-arcs";
 import { generateMesoRegions } from "../../src/worldgen/generate/meso-regions";
 import { generateNations } from "../../src/worldgen/generate/nations";
 import { growTerrainBorders } from "../../src/worldgen/generate/terrain-borders";
@@ -141,6 +142,17 @@ test("historical seeds produce connected land, separate continents, and a sea wi
   } finally {
     Object.assign(WORLD_BALANCE, { mapGenerator: previous });
   }
+});
+
+test("a curved ridge produces separate island peaks with shallow gaps between them", () => {
+  const arc = createIslandArc({ x: 0.2, y: 0.3 }, { x: 0.4, y: 0.1 }, { x: 0.6, y: 0.3 }, new SeededRng(17));
+  const sample = (index: number) => {
+    const t = index / 24;
+    return sampleIslandArc(arc, 0.2 + 0.4 * t, 0.3 - 0.4 * t * (1 - t));
+  };
+  assert.ok(sample(4) > 0 && sample(9) > 0 && sample(15) > 0);
+  assert.ok(sample(6) < 0 && sample(12) < 0);
+  assert.ok(sample(12) > sampleIslandArc(arc, 0.4, 0.29));
 });
 
 test("the larger default map varies the orientation of its three major landmasses", () => {

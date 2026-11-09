@@ -1,5 +1,6 @@
 import { sampleCoastRelief } from "./coast-relief";
 import { createContinentalLayout } from "./continental-layout";
+import { sampleIslandArc } from "./island-arcs";
 import type { WorldConfig } from "../../data/world-config";
 import { clamp } from "../../utils/math";
 import type { SeededRng } from "../../utils/seeded-rng";
@@ -14,6 +15,7 @@ export function applyContinentalElevation(
   const [, , , , beltBend, beltOffset, hillX, hillY] =
     Array.from({ length: 8 }, () => rng.range(0, 2 * Math.PI));
   const layout = createContinentalLayout(config.seed, config.continentalLayout);
+  const islandArcs = layout.islandArcs ?? [];
   const cosine = Math.cos(layout.rotation ?? 0), sine = Math.sin(layout.rotation ?? 0);
 
   for (const region of regions) {
@@ -53,7 +55,12 @@ export function applyContinentalElevation(
     const edgeFade = Math.max(0, 1 - rim / 0.12) ** 2;
     // Fade the coastal displacement inland so the mountain belts keep their relief.
     const coastalWeight = clamp(1 - interior / 0.30, 0, 1);
-    const coastline = interior + coastalWeight * layout.coastReliefScale * sampleCoastRelief(x, y, config.seed) - edgeFade;
+    const coastalNoise = sampleCoastRelief(x, y, config.seed);
+    let coastline = interior + coastalWeight * layout.coastReliefScale * coastalNoise;
+    for (const arc of islandArcs) {
+      coastline = Math.max(coastline, sampleIslandArc(arc, x, y) + 0.24 * coastalNoise);
+    }
+    coastline -= edgeFade;
     const relief = Math.min(coastline, layout.seaCeiling(x, y)) * (0.40 + 0.56 * ridges + 0.14 * hills);
     region.elevation = clamp(config.elevationSeaLevel + relief, config.elevationRange.min, config.elevationRange.max);
   }
