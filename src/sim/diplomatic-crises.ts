@@ -1,3 +1,4 @@
+import { getNationalTerritorialValue, getTerritorialValue } from "./territorial-value";
 import { hasWarApproach } from "./maritime-war-readiness";
 import { getSubjectOverlord } from "./subject-governments";
 import { getPeaceBorderIssue, getWholeProvinces, selectPeaceProvinces } from "./peace-borders";
@@ -5,7 +6,6 @@ import { getWarNegotiation } from "./war-negotiations";
 import { prepareMilitaryAccessForWar } from "./military-access";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import { getForeignClaims, getTerritorialClaim } from "./territorial-claims";
-import { getNationalistClaimBonus } from "./nationalist-movements";
 import { canTransferTerritories, transferTerritories } from "./territory-transfer";
 import { getOwnerByMesoId } from "./world-cache";
 import { areFactionPartners, getFactionDefenders } from "./factions";
@@ -38,10 +38,7 @@ export function openDiplomaticCrisis(world: WorldState, aggressorId: NationId, t
   if (regionIds) {
     const provinces = getWholeProvinces(world, targetId, regionIds);
     const hasClaim = (id: MesoRegionId) => getTerritorialClaim(world, aggressorId, id) >= 20;
-    const validClaim = provinces ? (provinces.length === 1 && regionIds.some(hasClaim)) ||
-      (provinces.length <= 3 && provinces.every(({ mesoRegionIds }) =>
-        mesoRegionIds.some((id) => getNationalistClaimBonus(world, aggressorId, id) > 0)))
-      : regionIds.length <= 8 && regionIds.every(hasClaim);
+    const validClaim = provinces ? provinces.every(({ mesoRegionIds }) => mesoRegionIds.some(hasClaim)) : regionIds.every(hasClaim);
     if (!regionIds.length || !validClaim || !canSettleTerritorialDemand(world, targetId, aggressorId, regionIds)) return false;
   }
   const relation = getRelation(world, aggressorId, targetId);
@@ -166,10 +163,10 @@ export function updateDiplomaticCrises(world: WorldState): void {
     if (now < crisis.deadlineSlowTick) {
       const character = getNationCharacter(world, defender);
       const demanded = crisis.regionIds ?? [];
-      const ownerRegions = [...getOwnerByMesoId(world).values()].filter((id) => id === defender).length;
-      const attachment = demanded.length ? demanded.reduce((sum, id) => sum + getTerritorialClaim(world, defender, id), 0) / demanded.length : 0;
+      const territorialCost = getTerritorialValue(world, defender, demanded) / getNationalTerritorialValue(world, defender);
       const capitalDemanded = demanded.includes(world.nations.find((nation) => nation.id === defender)!.capitalMesoId);
-      const acceptableTerritory = crisis.demand !== "territory" || (!capitalDemanded && demanded.length <= Math.max(1, Math.floor(ownerRegions * 0.25)) && ratio > 1.6 + attachment / 60);
+      const escalationCost = Math.max(0, Math.log(ratio / 1.4)) * character.cooperation * 0.45;
+      const acceptableTerritory = crisis.demand !== "territory" || (!capitalDemanded && territorialCost <= escalationCost);
       if (ratio > 1.4 && character.cooperation > 0.6 && acceptableTerritory) respondToCrisis(world, defender, attacker, "concede");
       else if (character.cooperation > 0.7 && relation.trust >= 45) respondToCrisis(world, defender, attacker, "negotiate");
       continue;
@@ -222,13 +219,7 @@ export function updateDiplomaticCrises(world: WorldState): void {
     const capital = world.nations.find((nation) => nation.id === candidate.targetNationId)?.capitalMesoId;
     const territorialTargets = claims.filter((claim) => claim.strength >= 35 && claim.regionId !== capital).map((claim) => claim.regionId);
     if (desire < 45) continue;
-    const targetDistrictCount = world.macroRegions.filter((macro) => macro.nationId === candidate.targetNationId)
-      .reduce((count, macro) => count + macro.mesoRegionIds.length, 0);
-    const movementTargets = territorialTargets.filter((id) => getNationalistClaimBonus(world, attacker, id) > 0);
-    const expanded = selectPeaceProvinces(world, candidate.targetNationId, attacker, movementTargets, 3,
-      Math.floor(targetDistrictCount * 0.45));
-    const requested = expanded.length ? expanded : selectPeaceProvinces(world, candidate.targetNationId, attacker, territorialTargets, 1,
-      Math.max(1, Math.floor(targetDistrictCount * 0.25)));
+    const requested = selectPeaceProvinces(world, candidate.targetNationId, attacker, territorialTargets);
     if (openDiplomaticCrisis(world, attacker, candidate.targetNationId,
       requested.length ? requested : undefined)) opened.add(attacker);
   }

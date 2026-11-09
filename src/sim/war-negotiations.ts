@@ -1,3 +1,4 @@
+import { getNationalTerritorialValue, getTerritorialValue } from "./territorial-value";
 import { getSeparatePeaceIssue } from "./separate-peace";
 import { hasConferenceWar } from "./peace-conference";
 import { dividePartitionResources, getPartitionIssue, planLocalSubject, planPuppetPartition, preparePartitionNation, type PuppetPartition } from "./puppet-partition";
@@ -18,7 +19,7 @@ import { getUnitCombatStrength } from "./unit-strength";
 import { getForeignClaims } from "./territorial-claims";
 import { canTransferTerritories, transferTerritories, type TerritoryTransfer } from "./territory-transfer";
 import { changeResource } from "./international-trade";
-import { getMesoById, getOwnerByMesoId } from "./world-cache";
+import { getOwnerByMesoId } from "./world-cache";
 import { getWarDeclarationMode, hasPoliticalTurbulence, recordSimulationEvent } from "./simulation-settings";
 import { concludePeace, getWarFatigue, warFatigueKey } from "./diplomatic-peace";
 
@@ -166,10 +167,10 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
   const ageSeconds = Math.max(0, world.time.fastTick - war.startedAtFastTick) / 10;
   const domestic = getPeaceUrgency(world, recipient) * 42;
   const pressure = fatigue * 0.7 + Math.min(18, ageSeconds * 0.025) + occupationRatio(world, recipient, proposer) * 45 + militaryLoss * 15 + Math.max(0, -advantage) * 30 + (1 - nation.warCooperation) * 12 + domestic;
-  const regions = getMesoById(world), land = ownedLand(world, recipient), value = (id: MesoRegionId) => 1 + (regions.get(id)?.resource ? 0.6 : 0) + (regions.get(id)?.building ? 0.5 : 0);
-  const totalValue = Math.max(1, land.reduce((sum, id) => sum + value(id), 0));
-  const landCost = terms.demandedRegionIds.reduce((sum, id) => sum + value(id), 0) / totalValue * 100 + (terms.demandedRegionIds.includes(nation.capitalMesoId) ? 25 : 0);
-  const landBenefit = terms.offeredRegionIds.reduce((sum, id) => sum + value(id), 0) / totalValue * 80;
+  const totalValue = getNationalTerritorialValue(world, recipient);
+  const landCost = getTerritorialValue(world, recipient, terms.demandedRegionIds) / totalValue * 100 +
+    (terms.demandedRegionIds.includes(nation.capitalMesoId) ? 25 : 0);
+  const landBenefit = getTerritorialValue(world, recipient, terms.offeredRegionIds) / totalValue * 80;
   const paymentCost = terms.demandedWeapons / Math.max(10, nation.resources.weapons) * 25;
   const paymentBenefit = Math.min(18, terms.offeredWeapons * 0.5);
   const disposition = character.doctrine === "merchant" || character.doctrine === "isolationist" ? 12 : character.doctrine === "pragmatist" ? 8 : character.cooperation * 7;
