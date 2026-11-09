@@ -1,3 +1,4 @@
+import { isMilitaryFunded } from "./military-funding";
 import { annexedOutputFactor } from "./annexation";
 import { allFieldUnits, getArmyLimits, getMobilization } from "./mobilization";
 import { equipNewUnit, getDevelopedUnitWeaponCost } from "./equipment-development";
@@ -495,10 +496,11 @@ function updateProductionInternal(world: WorldState): void {
       land: currentLandCount,
       naval: currentNavalCount,
     });
+    const recruitmentInterval = isMilitaryFunded(world, nation.treasury) ? 0.6 : 1;
     nation.nextUnitProductionTick = nextScheduledTickRange(
       world.time.slowTick,
-      mobilization && mobilization.threat >= 0.35 ? 2 : minInterval,
-      mobilization && mobilization.threat >= 0.35 ? (mobilization.phase === "war" ? 6 : 12) : maxInterval,
+      Math.max(1, Math.ceil((mobilization && mobilization.threat >= 0.35 ? 2 : minInterval) * recruitmentInterval)),
+      Math.max(1, Math.ceil((mobilization && mobilization.threat >= 0.35 ? (mobilization.phase === "war" ? 6 : 12) : maxInterval) * recruitmentInterval)),
       world.simRng,
     );
   }

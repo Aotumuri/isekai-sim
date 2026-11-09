@@ -1,3 +1,4 @@
+import { isMilitaryFunded } from "./military-funding";
 import { WORLD_BALANCE } from "../data/balance";
 import type { NationId } from "../worldgen/nation";
 import type { NationRuntime } from "./nation-runtime";
@@ -76,7 +77,8 @@ export function getArmyLimits(world: WorldState, nation: NationRuntime, item = g
   const populationCeiling = Math.min(WORLD_BALANCE.production.maxMobilizedLandUnits, Math.max(24, districts * 8 + cities * 6));
   const support = clamp(nation.warCooperation), personality = getNationCharacter(world, nation.id);
   const maximum = Math.max(4, Math.floor(populationCeiling * (0.2 + support * 0.8) * (1 - item.burden * 0.003)));
-  const standing = Math.min(maximum, Math.max(3, Math.min(24, Math.ceil(3 + cities * 0.65 + districts * 0.08 + personality.aggression * 2))));
+  const baselineStanding = Math.max(3, Math.min(24, Math.ceil(3 + cities * 0.65 + districts * 0.08 + personality.aggression * 2)));
+  const standing = Math.min(maximum, isMilitaryFunded(world, nation.treasury) ? Math.ceil(baselineStanding * 1.25) : baselineStanding);
   return { standing, maximum, authorized: Math.max(standing, Math.floor(standing + (maximum - standing) * item.readiness)) };
 }
 export function updateMobilization(world: WorldState): void {
