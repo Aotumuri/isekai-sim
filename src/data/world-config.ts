@@ -8,6 +8,7 @@ export interface Range {
 
 export interface WorldConfig {
   systems?: Partial<SimulationSettings>;
+  continentalLayout?: "oceanic";
   width: number;
   height: number;
   microRegionCount: number;
@@ -53,7 +54,8 @@ const DEFAULT_SEED = Math.floor(Math.random() * 1_000_000_000_000);
 
 export function createDefaultWorldConfig(): WorldConfig {
   return {
-    ...createWorldConfig(2560, 1440, 210_000),
+    ...createWorldConfig(4096, 2304, 320_000),
+    continentalLayout: "oceanic",
     nationTargetMacroRegionsPerNation: 6,
   };
 }

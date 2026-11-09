@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { WORLD_BALANCE } from "../../src/data/balance";
 import { createWorld } from "../../src/sim/create-world";
-import { createWorldConfig } from "../../src/data/world-config";
+import { createDefaultWorldConfig, createWorldConfig } from "../../src/data/world-config";
 import { SeededRng } from "../../src/utils/seeded-rng";
 import { applyDrainageRivers } from "../../src/worldgen/apply/drainage-rivers";
 import { generateMesoRegions } from "../../src/worldgen/generate/meso-regions";
@@ -137,6 +137,24 @@ test("historical seeds produce connected land, separate continents, and a sea wi
     }
   } finally {
     Object.assign(WORLD_BALANCE, { mapGenerator: previous });
+  }
+});
+
+test("the larger default map has four major landmasses separated by ocean", () => {
+  const config = createDefaultWorldConfig();
+  assert.ok(config.width > 2560 && config.height > 1440);
+  assert.ok(config.microRegionCount > 210_000);
+
+  for (const seed of [1, 2, 17]) {
+    const world = createWorld({ ...config, seed, microRegionCount: 12_000 });
+    const remaining = new Map(world.microRegions.filter((region) => !region.isSea)
+      .map((region) => [region.id, region]));
+    let continents = 0;
+    for (const region of remaining.values()) {
+      const land = collectConnectedRegions(region, remaining);
+      if (land.length > world.microRegions.length * 0.05) continents += 1;
+    }
+    assert.equal(continents, 4, `seed ${seed}`);
   }
 });
 

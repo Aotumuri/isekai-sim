@@ -13,7 +13,7 @@ export function applyContinentalElevation(
   // Keep the mountain and hill phases stable when changing the coastline.
   const [, , , , beltBend, beltOffset, hillX, hillY] =
     Array.from({ length: 8 }, () => rng.range(0, 2 * Math.PI));
-  const layout = createContinentalLayout(config.seed);
+  const layout = createContinentalLayout(config.seed, config.continentalLayout);
 
   for (const region of regions) {
     const u = region.site.x / config.width;

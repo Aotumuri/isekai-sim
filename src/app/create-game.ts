@@ -61,14 +61,16 @@ export function createGame(root: HTMLElement, setup: { world?: WorldState; pause
   );
   attachRegionHoverUI(renderer, world);
   const nationInfoBar = attachNationInfoBar(renderer, world);
+  let overviewScale: number | undefined;
   if (!setup.world) {
     const { width, height } = renderer.app.screen;
     const mapWidth = width - renderer.uiRightWidth;
-    const scale = Math.min(1, mapWidth / world.width, height / world.height);
+    overviewScale = Math.min(1, mapWidth / world.width, height / world.height);
+    const scale = overviewScale * 1.5;
     renderer.worldContainer.scale.set(scale);
     renderer.worldContainer.position.set((mapWidth - world.width * scale) / 2, (height - world.height * scale) / 2);
   }
-  attachViewControls(renderer);
+  attachViewControls(renderer, overviewScale);
   const clock = createSimClock();
   clock.paused = setup.paused ?? false;
   const societyPanel = attachSocietyPanel(root, world, clock);

@@ -5,10 +5,10 @@ const MIN_SCALE = 0.5;
 const MAX_SCALE = 4;
 const ZOOM_INTENSITY = 0.0015;
 
-export function attachViewControls(renderer: Renderer): void {
+export function attachViewControls(renderer: Renderer, overviewScale = renderer.worldContainer.scale.x): void {
   const view = renderer.app.view as HTMLCanvasElement;
   view.style.touchAction = "none";
-  const minScale = Math.min(MIN_SCALE, renderer.worldContainer.scale.x);
+  const minScale = Math.min(MIN_SCALE, overviewScale);
 
   let isDragging = false;
   let lastPointer: Vec2 | null = null;
