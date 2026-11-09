@@ -7,7 +7,7 @@ export interface MapViewState {
   claimsReturnMode?: Exclude<MapMode, "claims">;
   territoryPreviewIds?: MesoRegionId[];
   mode: MapMode; selectedNationId: NationId | null; diplomaticFocusId: NationId | null;
-  targetNationId: NationId | null; provinceBorders: boolean; districtBorders: boolean; labels: boolean; occupations: boolean; revision: number;
+  targetNationId: NationId | null; provinceBorders: boolean; districtBorders: boolean; labels: boolean; occupations: boolean; farmland?: boolean; revision: number;
 }
 export function getMapView(world: WorldState): MapViewState {
   return world.mapView ??= { mode: "political", selectedNationId: null, diplomaticFocusId: null, targetNationId: null,

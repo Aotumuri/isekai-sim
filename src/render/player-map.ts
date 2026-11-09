@@ -1,3 +1,4 @@
+import { createAgricultureOverlay } from "./agriculture-overlay";
 import { getPopulationMapStyle, isPopulationMode } from "./population-map";
 import { Container, Graphics, Text, TextStyle, Rectangle, WRAP_MODES } from "pixi.js";
 import type { WorldState } from "../sim/world-state";
@@ -23,6 +24,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
   let geometryKey = "", colorKey = "", labelKey = "", lastZoom = -1, occupationKey = "";
   let claimKey = "", claimLayer = new Container(), demandOutline = new Graphics();
   const claimEntries = new Map<MesoRegionId, Graphics>();
+  let agriculture: Graphics | undefined;
   let populationLayer = new Container(), populationKey = "";
   const populationEntries = new Map<MesoRegionId, Graphics>();
   let occupationLayer = new Container();
@@ -44,6 +46,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
     for (const segment of segments) { graphics.moveTo(segment.a.x, segment.a.y); graphics.lineTo(segment.b.x, segment.b.y); }
   };
   const rebuild = () => {
+    if (agriculture?.parent === layer) layer.removeChild(agriculture);
     clearLayer(layer); fills.clear(); borders.clear(); outlines.clear(); occupationEntries.clear(); microByMeso.clear(); districtOutlines.clear();
     populationLayer = new Container(); populationKey = ""; populationEntries.clear();
     occupationLayer = new Container(); occupationKey = "";
@@ -88,6 +91,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
     ocean.endFill(); layer.addChild(ocean);
     for (const fill of fills.values()) { fill.endFill(); layer.addChild(fill); }
     layer.addChild(populationLayer, claimLayer, occupationLayer);
+    if (agriculture) layer.addChildAt(agriculture, layer.getChildIndex(claimLayer));
     provinces.name = "PlayerProvinces"; districts.name = "PlayerDistricts";
     layer.addChild(provinces, districts);
     for (const border of borders.values()) layer.addChild(border);
@@ -104,6 +108,11 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
     renderer.worldLayers.layers.TerritoryEffects.visible = debug;
     const nextGeometry = `${world.mapVersion}:${world.territoryVersion}`;
     if (nextGeometry !== geometryKey) { geometryKey = nextGeometry; rebuild(); }
+    if (view.farmland && !agriculture) {
+      agriculture = createAgricultureOverlay(world);
+      layer.addChildAt(agriculture, layer.getChildIndex(claimLayer));
+    }
+    if (agriculture) agriculture.visible = !!view.farmland;
     const populationMode = isPopulationMode(view.mode) ? view.mode : null;
     populationLayer.visible = populationMode !== null;
     if (populationMode) {

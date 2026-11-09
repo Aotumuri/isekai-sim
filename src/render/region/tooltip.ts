@@ -26,6 +26,10 @@ export function formatRegionTooltip(
       `Faction: ${getNationFaction(world, nation.id)?.name ?? "Non-aligned"}`] : [region.isSea ? "Open sea" : "Unclaimed territory"];
     if (meso) {
       if (isPopulationMode(world.mapView.mode)) lines.push(...formatPopulationDistrict(world, meso.id, world.mapView.mode));
+      if (world.mapView.farmland) {
+        const land = world.agriculturalLand?.get(meso.id);
+        if (land) lines.push(`Arable land ${Math.round(land.arableShare * 100)}% · Potential harvest ${land.harvest.toFixed(2)} / 10s`);
+      }
       lines.push(`District ${meso.id.replace("meso-", "")}`);
       const owner = getOwnerByMesoId(world).get(meso.id), occupier = world.occupation.mesoById.get(meso.id);
       if (world.mapView.mode === "claims" && world.mapView.selectedNationId && meso.type !== "sea") {
