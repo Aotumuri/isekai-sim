@@ -20,6 +20,7 @@ export interface UnitState {
   volunteerOriginId?: NationId;
   volunteerMissionId?: number;
   design?: WeaponDesign;
+  combatExperience?: number;
   id: UnitId;
   nationId: NationId;
   regionId: MesoRegionId;

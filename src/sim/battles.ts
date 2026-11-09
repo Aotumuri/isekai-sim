@@ -575,6 +575,9 @@ export function resolveBattle(
   const lossA = applyDamage(aliveA, damageWeightA, damageToA, orgDamageToA, removedUnitIds);
   const lossB = applyDamage(aliveB, damageWeightB, damageToB, orgDamageToB, removedUnitIds);
 
+  if (strengthB > 0) awardCombatExperience(aliveA, removedUnitIds);
+  if (strengthA > 0) awardCombatExperience(aliveB, removedUnitIds);
+
   const remainingA = aliveA.some((unit) => isUnitAlive(unit, removedUnitIds));
   const remainingB = aliveB.some((unit) => isUnitAlive(unit, removedUnitIds));
 
@@ -599,6 +602,14 @@ export function resolveBattle(
     defenderOrganizationLoss: lossB.orgLoss,
     attackerWon: remainingA && !remainingB,
   };
+}
+
+function awardCombatExperience(units: UnitState[], removed: Set<UnitId>): void {
+  for (const unit of units) {
+    if (unit.combatPower > 0 && unit.type !== "TransportShip" && isUnitAlive(unit, removed)) {
+      unit.combatExperience = Math.min(100, (unit.combatExperience ?? 0) + 0.25);
+    }
+  }
 }
 
 export function summarizeAttackDirections(
