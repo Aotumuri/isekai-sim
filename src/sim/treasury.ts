@@ -71,7 +71,7 @@ export function updateTreasuries(world: WorldState): void {
 
 export function setTaxRate(world: WorldState, id: NationId, rate: number): boolean {
   const nation = world.nations.find((item) => item.id === id);
-  if (!nation?.treasury || !isNationActive(nation) || !TAX_RATES.includes(rate as TaxRate)) return false;
+  if (!nation?.treasury || !isNationActive(nation) || nation.treasury.automaticBudget || !TAX_RATES.includes(rate as TaxRate)) return false;
   nation.treasury.taxRate = rate as TaxRate;
   return true;
 }
@@ -85,4 +85,12 @@ export function spendTreasury(treasury: NationalTreasury | undefined, category: 
 
 export function taxUnrestPerTick(treasury?: NationalTreasury): number {
   return treasury ? (treasury.taxRate - 15) * (treasury.taxRate > 15 ? 0.08 : 0.04) : 0;
+}
+
+export function setTreasuryPolicy(world: WorldState, id: NationId,
+  policy: "automaticBudget" | "researchFunding" | "militaryFunding", enabled: boolean): boolean {
+  const nation = world.nations.find((item) => item.id === id);
+  if (!nation?.treasury || !isNationActive(nation) || (policy !== "automaticBudget" && nation.treasury.automaticBudget)) return false;
+  nation.treasury[policy] = enabled;
+  return true;
 }
