@@ -1,3 +1,4 @@
+import { exchangePortPopulation } from "./population-migration";
 import { areFactionPartners } from "./factions";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
@@ -178,6 +179,10 @@ export function updateInternationalTrade(world: WorldState): void {
         recordSimulationEvent(world, { category: "trade", nationIds: [deal.sellerId, deal.buyerId], message: `${deal.id} returned: route or agreement unavailable.` });
       } else if (world.time.slowTick >= deal.arrivesAtSlowTick) {
         changeResource(buyer!, deal.offeredResource, deal.offeredAmount); changeResource(seller!, deal.requestedResource, deal.requestedAmount);
+        if (deal.route.maritime) {
+          const from = deal.route.regionIds[0], to = deal.route.regionIds.at(-1);
+          if (from && to) exchangePortPopulation(world, from, to);
+        }
         deal.status = "delivered"; state.delivered += 1; getDiplomacyState(world).tradeDeliveries += 1;
         const relation = getRelation(world, deal.sellerId, deal.buyerId);
         relation.opinion = Math.min(100, relation.opinion + 2); relation.trust = Math.min(100, relation.trust + 1);

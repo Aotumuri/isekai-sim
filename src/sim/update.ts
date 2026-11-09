@@ -1,3 +1,4 @@
+import { updatePopulationMigration } from "./population-migration";
 import { updateCoastalInvestment } from "./coastal-investment";
 import { updateSubjectGovernments } from "./subject-governments";
 import { updateForeignPoliticalInfluence } from "./political-influence";
@@ -205,6 +206,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateEquipmentRefits(world);
   updateCoastalInvestment(world);
   updateInternationalTrade(world);
+  updatePopulationMigration(world);
   updateArmsAid(world);
   updateTechnologyExchange(world);
   updateIsolationEffects(world);
