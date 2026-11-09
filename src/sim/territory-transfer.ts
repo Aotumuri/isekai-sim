@@ -1,3 +1,4 @@
+import type { NationRuntime } from "./nation-runtime";
 import { getRelation, hasTreaty } from "./diplomacy";
 import { areFactionPartners } from "./factions";
 import type { MacroRegion, MacroRegionId } from "../worldgen/macro-region";
@@ -44,17 +45,25 @@ export function splitProvince(world: WorldState, nationId: NationId, provinceId:
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [nationId], message: `${nationId} divided a province (${ids.size} regions in the new province).` });
   return true;
 }
-export function canTransferTerritories(world: WorldState, legs: TerritoryTransfer[]): boolean {
+export interface FoundingTransfer {
+  nation: NationRuntime;
+  occupationSponsor: NationId;
+}
+
+export function canTransferTerritories(world: WorldState, legs: TerritoryTransfer[], founding?: FoundingTransfer): boolean {
   if (!legs.length) return false;
   const owners = getOwnerByMesoId(world), regions = getMesoById(world), used = new Set<MesoRegionId>();
   const remaining = new Map<NationId, number>();
   for (const owner of owners.values()) remaining.set(owner, (remaining.get(owner) ?? 0) + 1);
   for (const leg of legs) {
-    if (leg.from === leg.to || !leg.regionIds.length || ![leg.from, leg.to].every((id) => world.nations.some((nation) => nation.id === id && nation.macroRegionIds.length))) return false;
+    const active = (id: NationId) => world.nations.some((nation) => nation.id === id && nation.macroRegionIds.length);
+    if (leg.from === leg.to || !leg.regionIds.length || !active(leg.from) ||
+      (!active(leg.to) && leg.to !== founding?.nation.id)) return false;
     for (const id of leg.regionIds) {
       const occupier = world.occupation.mesoById.get(id);
       if (used.has(id) || owners.get(id) !== leg.from || !regions.has(id) || regions.get(id)!.type === "sea" ||
-        (occupier && occupier !== leg.from && occupier !== leg.to)) return false;
+        (occupier && occupier !== leg.from && occupier !== leg.to &&
+          !(leg.to === founding?.nation.id && occupier === founding.occupationSponsor))) return false;
       used.add(id); remaining.set(leg.from, (remaining.get(leg.from) ?? 0) - 1); remaining.set(leg.to, (remaining.get(leg.to) ?? 0) + 1);
     }
   }
@@ -62,9 +71,10 @@ export function canTransferTerritories(world: WorldState, legs: TerritoryTransfe
 }
 
 /** Both sides of a swap validate before any ownership, cost or military state changes. */
-export function transferTerritories(world: WorldState, legs: TerritoryTransfer[], reason: "agreement" | "ultimatum" | "unilateral" = "agreement"): boolean {
-  if (!canTransferTerritories(world, legs)) return false;
+export function transferTerritories(world: WorldState, legs: TerritoryTransfer[], reason: "agreement" | "ultimatum" | "unilateral" = "agreement", founding?: FoundingTransfer): boolean {
+  if (!canTransferTerritories(world, legs, founding)) return false;
   updateTerritorialClaims(world);
+  if (founding) world.nations.push(founding.nation);
   const changed = new Set(legs.flatMap((leg) => leg.regionIds)), regions = getMesoById(world);
   for (const leg of legs) {
     const ids = new Set(leg.regionIds);
@@ -84,6 +94,10 @@ export function transferTerritories(world: WorldState, legs: TerritoryTransfer[]
     if (owners.get(nation.capitalMesoId) !== nation.id) {
       const replacement = owned.find((region) => region.building === "city") ?? owned[0];
       replacement.building = "capital"; nation.capitalMesoId = replacement.id;
+    }
+    if (nation === founding?.nation) {
+      const capital = regions.get(nation.capitalMesoId)!;
+      capital.building = "capital";
     }
     // A consensual cession is not a battlefield city loss.
     if (reason !== "unilateral") nation.initialCityCount = owned.filter((region) => region.building === "city" || region.building === "capital").length;
