@@ -1,6 +1,8 @@
 import type { Range, WorldConfig } from "../../data/world-config";
 import { SeededRng } from "../../utils/seeded-rng";
 import type { MesoRegion, MesoRegionId } from "../meso-region";
+import type { MicroRegion } from "../micro-region";
+import { growTerrainBorders } from "./terrain-borders";
 import { createMacroRegionId, type MacroRegion } from "../macro-region";
 import { createNationId, type Nation } from "../nation";
 
@@ -13,6 +15,7 @@ export function generateNations(
   mesoRegions: MesoRegion[],
   config: WorldConfig,
   rng: SeededRng,
+  microRegions: readonly MicroRegion[] = [],
 ): NationGenerationResult {
   if (!config.nationEnabled) {
     return { nations: [], macroRegions: [] };
@@ -69,17 +72,15 @@ export function generateNations(
     rng,
   );
   const landComponents = buildLandComponents(landIndices, neighborsByIndex);
-  const capitalIndices = ensureCapitalPerComponent(initialCapitals, landComponents, rng);
+  const startingCapitals = ensureCapitalPerComponent(initialCapitals, landComponents, rng);
+  const layout = config.nationBorderStyle === "terrain"
+    ? growTerrainBorders(mesoRegions, microRegions, startingCapitals, neighborsByIndex, config)
+    : { ...assignToCapitals(startingCapitals, neighborsByIndex, isLand), capitalIndices: startingCapitals };
+  const { capitalIndices, ownerByIndex, distanceByIndex } = layout;
 
   for (const capitalIndex of capitalIndices) {
     mesoRegions[capitalIndex].building = "capital";
   }
-
-  const { ownerByIndex, distanceByIndex } = assignToCapitals(
-    capitalIndices,
-    neighborsByIndex,
-    isLand,
-  );
 
   const nations: Nation[] = [];
   for (let i = 0; i < capitalIndices.length; i += 1) {

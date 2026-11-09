@@ -9,6 +9,7 @@ export interface Range {
 export interface WorldConfig {
   systems?: Partial<SimulationSettings>;
   continentalLayout?: "oceanic";
+  nationBorderStyle?: "terrain";
   width: number;
   height: number;
   microRegionCount: number;
@@ -56,6 +57,7 @@ export function createDefaultWorldConfig(): WorldConfig {
   return {
     ...createWorldConfig(4096, 2304, 320_000),
     continentalLayout: "oceanic",
+    nationBorderStyle: "terrain",
     systems: { politicalTurbulenceEnabled: true },
     nationTargetMacroRegionsPerNation: 6,
   };

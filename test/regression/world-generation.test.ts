@@ -3,10 +3,13 @@ import test from "node:test";
 import { WORLD_BALANCE } from "../../src/data/balance";
 import { createWorld } from "../../src/sim/create-world";
 import { createDefaultWorldConfig, createWorldConfig } from "../../src/data/world-config";
+import { getOwnerByMesoId } from "../../src/sim/world-cache";
 import { SeededRng } from "../../src/utils/seeded-rng";
 import { applyDrainageRivers } from "../../src/worldgen/apply/drainage-rivers";
 import { generateMesoRegions } from "../../src/worldgen/generate/meso-regions";
 import { generateNations } from "../../src/worldgen/generate/nations";
+import { growTerrainBorders } from "../../src/worldgen/generate/terrain-borders";
+import { createMesoRegionId, type MesoRegion } from "../../src/worldgen/meso-region";
 import { createMicroRegionId, type MicroRegion } from "../../src/worldgen/micro-region";
 
 test("tiny islands become water and larger islands retain a port even when cities fill the coast", () => {
@@ -165,6 +168,40 @@ test("the larger default map varies the orientation of its three major landmasse
     orientations.add(width > height ? "horizontal" : "vertical");
   }
   assert.equal(orientations.size, 2);
+});
+
+test("terrain-driven frontiers can follow a river away from the midpoint", () => {
+  const config = { ...createWorldConfig(200, 100), seed: 1 };
+  const neighbors = Array.from({ length: 9 }, (_, index) => [index - 1, index + 1].filter((id) => id >= 0 && id < 9));
+  const regions: MesoRegion[] = neighbors.map((adjacent, index) => ({
+    id: createMesoRegionId(index), center: { x: 15 + index * 20, y: 50 },
+    centerId: createMicroRegionId(index), microRegionIds: [], type: "land", building: null, resource: null,
+    neighbors: adjacent.map((id) => ({ id: createMesoRegionId(id), hasRiver: false })),
+  }));
+  const owners = () => growTerrainBorders(regions, [], [0, 8], neighbors, config).ownerByIndex;
+  assert.equal(owners()[3], 0);
+  regions[2]!.neighbors.find(({ id }) => id === regions[3]!.id)!.hasRiver = true;
+  regions[3]!.neighbors.find(({ id }) => id === regions[2]!.id)!.hasRiver = true;
+  assert.deepEqual(owners(), [0, 0, 0, 1, 1, 1, 1, 1, 1]);
+});
+
+test("terrain-driven frontiers leave every land district connected to its capital", () => {
+  const config = createDefaultWorldConfig();
+  for (const seed of [0, 17, 103]) {
+    const world = createWorld({ ...config, seed, microRegionCount: 32_000, nationTargetMacroRegionsPerNation: 3 });
+    const owners = getOwnerByMesoId(world);
+    assert.equal(owners.size, world.mesoRegions.filter(({ type }) => type !== "sea").length);
+    const districts = new Map(world.mesoRegions.map((region) => [region.id, region]));
+    for (const nation of world.nations) {
+      const owned = new Set([...owners].filter(([, owner]) => owner === nation.id).map(([id]) => id));
+      const reached = [nation.capitalMesoId];
+      assert.ok(owned.delete(nation.capitalMesoId));
+      for (const id of reached) for (const neighbor of districts.get(id)!.neighbors) {
+        if (owned.delete(neighbor.id)) reached.push(neighbor.id);
+      }
+      assert.equal(owned.size, 0, `seed ${seed}, ${nation.id}`);
+    }
+  }
 });
 
 function collectConnectedRegions(

@@ -75,7 +75,7 @@ export function createWorld(config: WorldConfig): WorldState {
     applyRivers(microRegions, microRegionEdges, rng, config.riverSourceCount);
   }
   const mesoRegions = generateMesoRegions(microRegions, config, rng, historical);
-  const { macroRegions, nations } = generateNations(mesoRegions, config, rng);
+  const { macroRegions, nations } = generateNations(mesoRegions, config, rng, microRegions);
   const productionBalance = WORLD_BALANCE.production;
   const unitRange = productionBalance.unitSlowTickRange;
   const isUnitProductionEnabled = unitRange.min > 0 && unitRange.max > 0;
