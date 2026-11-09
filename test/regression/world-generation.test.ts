@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { WORLD_BALANCE } from "../../src/data/balance";
+import { createWorld } from "../../src/sim/create-world";
 import { createWorldConfig } from "../../src/data/world-config";
 import { SeededRng } from "../../src/utils/seeded-rng";
 import { applyDrainageRivers } from "../../src/worldgen/apply/drainage-rivers";
@@ -72,4 +74,32 @@ test("historical drainage joins tributaries across a depression and reaches the 
   applyDrainageRivers(regions, edges, { ...config, riverSourceCount: 0 });
   assert.ok(edges.every(({ hasRiver }) => !hasRiver));
   assert.ok(regions.every(({ isRiver }) => !isRiver));
+});
+
+test("balance selects reproducible historical maps with terrain-dependent deposits", () => {
+  const previous = WORLD_BALANCE.mapGenerator;
+  const config = { ...createWorldConfig(800, 450, 10_000), seed: 17 };
+  try {
+    Object.assign(WORLD_BALANCE, { mapGenerator: "legacy" });
+    const legacy = createWorld(config);
+    Object.assign(WORLD_BALANCE, { mapGenerator: "historical" });
+    const world = createWorld(config);
+    const repeated = createWorld(config);
+    assert.deepEqual(world.microRegions, repeated.microRegions);
+    assert.deepEqual(world.mesoRegions, repeated.mesoRegions);
+    assert.notDeepEqual(world.microRegions.map(({ isSea }) => isSea),
+      legacy.microRegions.map(({ isSea }) => isSea));
+    assert.ok(world.microRegionEdges.some(({ hasRiver }) => hasRiver));
+
+    const elevationById = new Map(world.microRegions.map(({ id, elevation }) => [id, elevation]));
+    const depositHeight = (resource: "steel" | "fuel") => {
+      const cells = world.mesoRegions.filter((region) => region.resource === resource)
+        .flatMap(({ microRegionIds }) => microRegionIds);
+      assert.ok(cells.length > 0);
+      return cells.reduce((sum, id) => sum + elevationById.get(id)!, 0) / cells.length;
+    };
+    assert.ok(depositHeight("steel") > depositHeight("fuel"));
+  } finally {
+    Object.assign(WORLD_BALANCE, { mapGenerator: previous });
+  }
 });

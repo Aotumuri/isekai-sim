@@ -1,3 +1,4 @@
+import { rankGeologicalDeposits } from "../apply/geological-deposits";
 import type { WorldConfig } from "../../data/world-config";
 import { SeededRng } from "../../utils/seeded-rng";
 import { buildMesoNeighbors } from "../build-meso-neighbors";
@@ -14,6 +15,7 @@ export function generateMesoRegions(
   microRegions: MicroRegion[],
   config: WorldConfig,
   rng: SeededRng,
+  historical = false,
 ): MesoRegion[] {
   const count = microRegions.length;
   if (count === 0) {
@@ -155,7 +157,7 @@ export function generateMesoRegions(
     region.neighbors = neighborsById.get(region.id) ?? [];
   }
 
-  assignResources(mergedMesoRegions, config, rng);
+  assignResources(mergedMesoRegions, config, rng, historical ? microRegions : undefined);
 
   return mergedMesoRegions;
 }
@@ -261,6 +263,7 @@ function assignResources(
   mesoRegions: MesoRegion[],
   config: WorldConfig,
   rng: SeededRng,
+  geologicalTerrain?: MicroRegion[],
 ): void {
   const candidates: number[] = [];
   for (let i = 0; i < mesoRegions.length; i += 1) {
@@ -283,11 +286,19 @@ function assignResources(
     config.resourceMinFuelDeposits,
   );
 
+  const steelCount = Math.min(steelTarget, candidates.length);
+  const fuelCount = Math.min(fuelTarget, candidates.length - steelCount);
+  if (geologicalTerrain) {
+    const { steelIndices, fuelIndices } = rankGeologicalDeposits(
+      mesoRegions, geologicalTerrain, candidates, steelCount, fuelCount, config, rng,
+    );
+    setResources(mesoRegions, steelIndices, "steel");
+    setResources(mesoRegions, fuelIndices, "fuel");
+    return;
+  }
+
   const shuffled = [...candidates];
   shuffleInPlace(shuffled, rng);
-
-  const steelCount = Math.min(steelTarget, shuffled.length);
-  const fuelCount = Math.min(fuelTarget, Math.max(0, shuffled.length - steelCount));
 
   const steelIndices = shuffled.slice(0, steelCount);
   const fuelIndices = shuffled.slice(steelCount, steelCount + fuelCount);

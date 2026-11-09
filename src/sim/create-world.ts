@@ -70,7 +70,7 @@ export function createWorld(config: WorldConfig): WorldState {
     applySeaLevel(microRegions, config);
     applyRivers(microRegions, microRegionEdges, rng, config.riverSourceCount);
   }
-  const mesoRegions = generateMesoRegions(microRegions, config, rng);
+  const mesoRegions = generateMesoRegions(microRegions, config, rng, historical);
   const { macroRegions, nations } = generateNations(mesoRegions, config, rng);
   const productionBalance = WORLD_BALANCE.production;
   const unitRange = productionBalance.unitSlowTickRange;
