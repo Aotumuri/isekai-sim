@@ -14,7 +14,7 @@ export function updateBorderIncidents(world: WorldState): void {
   const owners = getOwnerByMesoId(world), regions = getMesoById(world);
   const deployments = new Map<string, { a: NationId; b: NationId; first: number; second: number }>();
   for (const unit of world.units) {
-    if (unit.domain !== "land" || unit.org < 25 || unit.manpower <= 0 || owners.get(unit.regionId) !== unit.nationId) continue;
+    if (unit.domain !== "land" || unit.org < 0.25 || unit.manpower <= 0 || owners.get(unit.regionId) !== unit.nationId) continue;
     const neighbors = new Set((regions.get(unit.regionId)?.neighbors ?? []).map(({ id }) => owners.get(id)));
     for (const other of neighbors) {
       if (!other || other === unit.nationId) continue;

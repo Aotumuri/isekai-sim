@@ -70,7 +70,7 @@ test("opposing border deployments create a cooldown-limited diplomatic incident"
   for (const [nation, region] of [[a, border], [b, opposite]] as const) {
     const unit = world.units.find((item) => item.nationId === nation.id && item.domain === "land")!;
     unit.regionId = region.id;
-    unit.org = 100;
+    unit.org = 1;
   }
   getNationCharacter(world, a.id).aggression = 0.9;
   const relation = getRelation(world, a.id, b.id);
