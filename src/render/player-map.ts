@@ -37,7 +37,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
     for (const point of polygon.slice(1)) graphics.lineTo(point.x, point.y);
     graphics.closePath();
   };
-  const stroke = (graphics: Graphics, segments: Segment[]) => {
+  const stroke = (graphics: Graphics, segments: readonly Segment[]) => {
     for (const segment of segments) { graphics.moveTo(segment.a.x, segment.a.y); graphics.lineTo(segment.b.x, segment.b.y); }
   };
   const rebuild = () => {

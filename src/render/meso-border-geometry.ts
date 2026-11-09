@@ -10,7 +10,18 @@ export interface Segment {
   b: Vec2;
 }
 
-export function findSharedSegments(regionA: MicroRegion, regionB: MicroRegion): Segment[] {
+// World generation fixes polygon geometry. Ownership changes only affect styling.
+const sharedSegmentsByPolygon = new WeakMap<Vec2[], WeakMap<Vec2[], readonly Segment[]>>();
+
+export function findSharedSegments(regionA: MicroRegion, regionB: MicroRegion): readonly Segment[] {
+  let byNeighbor = sharedSegmentsByPolygon.get(regionA.polygon);
+  if (!byNeighbor) {
+    byNeighbor = new WeakMap();
+    sharedSegmentsByPolygon.set(regionA.polygon, byNeighbor);
+  }
+  const cached = byNeighbor.get(regionB.polygon);
+  if (cached) return cached;
+
   const segmentsA = buildSegments(regionA.polygon);
   const segmentsB = buildSegments(regionB.polygon);
   const results: Segment[] = [];
@@ -25,6 +36,7 @@ export function findSharedSegments(regionA: MicroRegion, regionB: MicroRegion): 
     }
   }
 
+  byNeighbor.set(regionB.polygon, results);
   return results;
 }
 

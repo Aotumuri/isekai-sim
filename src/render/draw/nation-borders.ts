@@ -159,7 +159,7 @@ function getNationBorderCache(
   return cache;
 }
 
-function drawSegments(graphics: Graphics, segments: Segment[]): void {
+function drawSegments(graphics: Graphics, segments: readonly Segment[]): void {
   for (const segment of segments) {
     graphics.moveTo(segment.a.x, segment.a.y);
     graphics.lineTo(segment.b.x, segment.b.y);
