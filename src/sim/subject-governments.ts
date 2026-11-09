@@ -13,6 +13,7 @@ import type { WorldState } from "./world-state";
 export interface SubjectGovernment {
   overlordId: NationId;
   establishedAtFastTick: number;
+  autonomy?: number;
 }
 
 export function getSubjectOverlord(world: WorldState, subjectId: NationId): NationId | undefined {

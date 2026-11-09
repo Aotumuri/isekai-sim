@@ -1,3 +1,4 @@
+import { updateSubjectAutonomy } from "./subject-autonomy";
 import { updateAnnexations } from "./annexation";
 import { updatePopulationPolitics } from "./population-politics";
 import { updatePopulationMigration } from "./population-migration";
@@ -204,6 +205,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateSupplyAssessment(world);
   updateAnnexations(world);
   updateProduction(world);
+  updateSubjectAutonomy(world);
   updateDemobilization(world);
   updateResearch(world);
   updateEquipmentRefits(world);
