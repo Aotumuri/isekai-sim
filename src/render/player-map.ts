@@ -123,7 +123,8 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
       }
     }
     occupationLayer.visible = view.occupations;
-    const nextOccupations = `${geometryKey}:${world.occupation.version}:${view.revision}:${view.mode === "diplomacy" ? world.time.slowTick : 0}:${world.factions?.version ?? 0}`;
+    const subjectRevision = world.militaryAccess?.version ?? 0;
+    const nextOccupations = `${geometryKey}:${world.occupation.version}:${view.revision}:${view.mode === "diplomacy" ? world.time.slowTick : 0}:${world.factions?.version ?? 0}:${subjectRevision}`;
     if (view.occupations && nextOccupations !== occupationKey) {
       occupationKey = nextOccupations;
       const current = getPlayerOccupations(world), live = new Set(current.map((entry) => entry.regionId));
@@ -146,7 +147,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
     }
     (layer.getChildByName("PlayerProvinces") as Graphics).visible = view.provinceBorders;
     (layer.getChildByName("PlayerDistricts") as Graphics).visible = view.districtBorders;
-    const nextColors = `${nextGeometry}:${view.revision}:${world.time.slowTick}:${world.factions?.version ?? 0}`;
+    const nextColors = `${nextGeometry}:${view.revision}:${world.time.slowTick}:${world.factions?.version ?? 0}:${subjectRevision}`;
     if (nextColors !== colorKey) {
       colorKey = nextColors;
       for (const [id, fill] of fills) { fill.tint = getPoliticalFill(world, id); fill.alpha = id === view.selectedNationId ? 1 : 0.92; }

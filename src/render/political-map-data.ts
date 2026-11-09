@@ -1,3 +1,4 @@
+import { getSubjectOverlord } from "../sim/subject-governments";
 import { hasExileConflict, relationKey } from "../sim/diplomacy";
 import { areFactionPartners, getNationFaction } from "../sim/factions";
 import { identityHash } from "../sim/nation-identity";
@@ -31,7 +32,14 @@ export function getPoliticalFill(world: WorldState, nationId: NationId): number 
     const faction = getNationFaction(world, nationId);
     return faction ? getFactionColor(faction.id) : 0x7b8899;
   }
-  return getNationColor(nationId);
+  const overlord = getSubjectOverlord(world, nationId);
+  if (!overlord) return getNationColor(nationId);
+  const color = getNationColor(overlord);
+  // Blend 32% black into each channel to retain the overlord's hue.
+  const red = Math.round((color >> 16) * 0.68);
+  const green = Math.round(((color >> 8) & 0xff) * 0.68);
+  const blue = Math.round((color & 0xff) * 0.68);
+  return (red << 16) | (green << 8) | blue;
 }
 export function classifyPoliticalBoundary(ownerA?: string, provinceA?: string, ownerB?: string, provinceB?: string): "national" | "province" | "none" {
   if (ownerA !== ownerB && (ownerA || ownerB)) return "national";

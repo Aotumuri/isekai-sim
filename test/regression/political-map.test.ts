@@ -91,3 +91,18 @@ test("occupation overlays distinguish the owner from the controller and disappea
   assert.equal(getPlayerOccupations(world).length, 0);
   assert.equal(getMapView(world).occupations, true);
 });
+
+test("puppets use a darker shade of their overlord's political color", () => {
+  const world = createSocietyWorld(), [overlord, subject] = world.nations;
+  assert(overlord && subject);
+  const original = getPoliticalFill(world, subject.id);
+  const parent = getPoliticalFill(world, overlord.id);
+  subject.subjectGovernment = { overlordId: overlord.id, establishedAtFastTick: 0 };
+  const puppet = getPoliticalFill(world, subject.id);
+  assert.notEqual(puppet, parent);
+  for (const shift of [0, 8, 16]) {
+    assert.equal((puppet >> shift) & 0xff, Math.round(((parent >> shift) & 0xff) * 0.68));
+  }
+  delete subject.subjectGovernment;
+  assert.equal(getPoliticalFill(world, subject.id), original);
+});
