@@ -1,3 +1,4 @@
+import { getCampaignObjectives } from "./campaign-objectives";
 import { getCampaignDeadline } from "./campaign-deadline";
 import { WORLD_BALANCE } from "../data/balance";
 import type { NationId } from "../worldgen/nation";
@@ -34,7 +35,8 @@ export type FrontPlanReason =
   | "frontline-supply-risk"
   | "maritime-supply-entry-risk"
   | "bridgehead-campaign"
-  | "closing-campaign-window";
+  | "closing-campaign-window"
+  | "declared-war-objective";
 
 /** Nation-owned intent. Objective geometry and metrics remain on PhysicalFront. */
 export interface NationFrontPlan {
@@ -301,6 +303,10 @@ function evaluateNationFrontPlan(
     !supplyRisks.some((risk) => risk.status === "critical");
   const campaignPosture = canPress ? "attack" : posture;
   if (canPress) reasonFlags.push("closing-campaign-window");
+  const objectives = new Set(getCampaignObjectives(world, nationId, enemy.nationId));
+  const advancesObjective = enemy.influenceRegionIds.some((id) => objectives.has(id)) ||
+    enemy.borderRegionIds.some((id) => objectives.has(id));
+  if (advancesObjective) reasonFlags.push("declared-war-objective");
   const priority = calculatePriority(
     friendly,
     enemy,
@@ -320,7 +326,7 @@ function evaluateNationFrontPlan(
     posture: bridgehead && posture !== "retreat" ? "attack" : campaignPosture,
     priority: capitalThreatLevel === "critical"
       ? capitalPriority
-      : Math.min(100, capitalPriority + supplyPriority + (bridgehead?.priorityBoost ?? 0) + (canPress ? 15 : 0)),
+      : Math.min(100, capitalPriority + supplyPriority + (bridgehead?.priorityBoost ?? 0) + (canPress ? 15 : 0) + (advancesObjective && campaignPosture !== "retreat" ? 12 : 0)),
     desiredStrength: Math.max(supplyRequired, calculateDesiredStrength(
       friendly,
       enemy,

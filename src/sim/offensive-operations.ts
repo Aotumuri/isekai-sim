@@ -1,3 +1,4 @@
+import { getCampaignObjectives } from "./campaign-objectives";
 import { getMoveTicksPerRegion } from "./movement";
 import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
@@ -1817,11 +1818,14 @@ function scoreOperationTarget(
         ? settings.city
         : 0;
   const borderScore = enemyBorderSet.has(regionId) ? settings.border : 0;
+  const objectives = getCampaignObjectives(world, plan.nationId, enemyNationId);
+  const objectiveScore = objectives.includes(regionId) ? 24 :
+    meso?.neighbors.some(({ id }) => objectives.includes(id)) ? 8 : 0;
   const averageDistance = averageCenterDistance(units, regionId, world);
   const enemyStrength = getNearbyEnemyStrength(world, regionId, enemyNationId);
   return (
     buildingScore +
-    borderScore +
+    borderScore + objectiveScore +
     plan.priority * 0.2 -
     borderDistance * (plan.reasonFlags.includes("closing-campaign-window") ? 10 : 5) -
     (averageDistance / 50) * settings.distance -
