@@ -10,7 +10,8 @@ import type { NationId } from "../worldgen/nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { WorldState } from "./world-state";
 import type { WarState } from "./war-state";
-import { findWar } from "./war-state";
+import { findWar, getWarCasualties } from "./war-state";
+import { FAST_TICK_MS } from "./time";
 import { getNationCharacter } from "./nation-character";
 import { getNationName } from "./nation-identity";
 import { getRevolutionRisk } from "./domestic-unrest";
@@ -186,8 +187,9 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
   const nation = world.nations.find((item) => item.id === recipient)!, character = getNationCharacter(world, recipient);
   const militaryLoss = Math.max(0, 1 - nationalPower(world, recipient) / Math.max(1, negotiation.openingPower.get(recipient) ?? 1));
   const advantage = getWarAdvantage(world, recipient, proposer), fatigue = getWarFatigue(world, recipient, proposer);
-  const ageSeconds = Math.max(0, world.time.fastTick - war.startedAtFastTick) / 10;
-  const domestic = getPeaceUrgency(world, recipient) * 42;
+  const ageSeconds = Math.max(0, world.time.fastTick - war.startedAtFastTick) * FAST_TICK_MS / 1000;
+  const urgency = getPeaceUrgency(world, recipient);
+  const domestic = urgency * 42;
   const pressure = fatigue * 0.7 + Math.min(18, ageSeconds * 0.025) + occupationRatio(world, recipient, proposer) * 45 + militaryLoss * 15 + Math.max(0, -advantage) * 30 + (1 - nation.warCooperation) * 12 + domestic;
   const totalValue = getNationalTerritorialValue(world, recipient);
   const landCost = getTerritorialValue(world, recipient, terms.demandedRegionIds) / totalValue * 100 +
@@ -197,8 +199,17 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
   const paymentBenefit = Math.min(18, terms.offeredWeapons * 0.5);
   const disposition = character.doctrine === "merchant" || character.doctrine === "isolationist" ? 12 : character.doctrine === "pragmatist" ? 8 : character.cooperation * 7;
   const resolve = 45 + (isFightOnGovernment(world, recipient) ? 35 : character.aggression * 8) + Math.max(0, advantage) * 25;
-  const score = pressure + disposition + landBenefit + paymentBenefit + Math.min(6, (terms.truceSeconds - 300) / 100) - landCost - paymentCost - resolve - (terms.partition ? 38 : terms.puppetTarget ? 25 : terms.localSubject ? 8 : 0);
-  return { accepts: score >= 0, score, reason: score >= 0 ? "Ending the war now is preferable to continued losses and domestic danger." : landCost + paymentCost > 25 ? "The requested concessions outweigh the current cost of continuing the war." : "The government expects a better outcome by continuing the war." };
+  // Replacements can restore combat strength, but they do not erase past casualties.
+  const casualties = getWarCasualties(war, recipient);
+  const politicalInvestment = Math.min(40, casualties / Math.max(1_000, negotiation.openingPower.get(recipient) ?? 0) * 45);
+  const recognition = Math.max(0, landBenefit + paymentBenefit - landCost - paymentCost);
+  const sacrificeCost = Math.max(0, politicalInvestment - recognition) * (1 - Math.min(0.85, urgency));
+  const score = pressure + disposition + landBenefit + paymentBenefit + Math.min(6, (terms.truceSeconds - 300) / 100) - landCost - paymentCost - resolve - sacrificeCost - (terms.partition ? 38 : terms.puppetTarget ? 25 : terms.localSubject ? 8 : 0);
+  const reason = score >= 0 ? "Ending the war now is preferable to continued losses and domestic danger."
+    : sacrificeCost > 8 && score + sacrificeCost >= 0 ? "The government needs gains it can justify against the casualties already suffered."
+    : landCost + paymentCost > 25 ? "The requested concessions outweigh the current cost of continuing the war."
+    : "The government expects a better outcome by continuing the war.";
+  return { accepts: score >= 0, score, reason };
 }
 export function proposePeaceTerms(world: WorldState, proposer: NationId, target: NationId, terms: PeaceTerms): boolean {
   if (getPeaceTermsIssue(world, proposer, target, terms)) return false;
