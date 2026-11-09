@@ -63,6 +63,11 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
     claimLayer = new Container(); demandOutline = new Graphics(); claimEntries.clear(); claimKey = "";
     // clearLayer destroys children; replace the two reusable overlay containers below.
     const provinces = new Graphics(), districts = new Graphics(), ocean = new Graphics();
+    const ridgeFills = [0x153348, 0x193950, 0x1d3f57, 0x24475e].map((color) => {
+      const graphics = new Graphics();
+      graphics.beginFill(color, 0.94);
+      return graphics;
+    });
     const ownerByMeso = new Map(world.macroRegions.flatMap((macro) => macro.mesoRegionIds.map((id) => [id, macro.nationId] as const)));
     const provinceByMeso = new Map(world.macroRegions.flatMap((macro) => macro.mesoRegionIds.map((id) => [id, macro.id] as const)));
     const microById = new Map(world.microRegions.map((region) => [region.id, region]));
@@ -79,7 +84,10 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
       }
       const owner = region.mesoRegionId ? ownerByMeso.get(region.mesoRegionId) : undefined;
       const fill = owner ? fills.get(owner) : undefined;
-      polygons(fill ?? ocean, region.polygon);
+      const ridgeFill = region.isSea && region.seaRidge
+        ? ridgeFills[Math.min(ridgeFills.length - 1, Math.floor(region.seaRidge * ridgeFills.length))]
+        : undefined;
+      polygons(fill ?? ridgeFill ?? ocean, region.polygon);
       for (const neighborId of region.neighbors) {
         if (region.id >= neighborId) continue;
         const neighbor = microById.get(neighborId); if (!neighbor) continue;
@@ -99,6 +107,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
       }
     }
     ocean.endFill(); layer.addChild(ocean);
+    for (const fill of ridgeFills) { fill.endFill(); layer.addChild(fill); }
     for (const fill of fills.values()) { fill.endFill(); layer.addChild(fill); }
     layer.addChild(populationLayer, claimLayer, occupationLayer);
     if (agriculture) layer.addChildAt(agriculture, layer.getChildIndex(claimLayer));

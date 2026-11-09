@@ -9,6 +9,7 @@ export interface MicroRegion {
   polygon: Vec2[];
   neighbors: MicroRegionId[];
   elevation: number;
+  seaRidge?: number;
   isSea: boolean;
   isRiver: boolean;
   mesoRegionId: MesoRegionId | null;

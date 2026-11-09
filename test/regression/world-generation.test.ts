@@ -163,6 +163,8 @@ test("the larger default map varies the orientation of its three major landmasse
   const orientations = new Set<string>();
   for (const seed of [1, 2, 3, 6, 17, 21, 57, 64, 76]) {
     const world = createWorld({ ...config, seed, microRegionCount: 12_000 });
+    assert.ok(world.microRegions.some(({ isSea, seaRidge }) => isSea && seaRidge !== undefined && seaRidge > 0),
+      `seed ${seed} has a submerged ridge`);
     const remaining = new Map(world.microRegions.filter((region) => !region.isSea)
       .map((region) => [region.id, region]));
     const continents: MicroRegion[][] = [];

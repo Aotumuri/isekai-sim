@@ -56,11 +56,12 @@ export function applyContinentalElevation(
     // Fade the coastal displacement inland so the mountain belts keep their relief.
     const coastalWeight = clamp(1 - interior / 0.30, 0, 1);
     const coastalNoise = sampleCoastRelief(x, y, config.seed);
-    let coastline = interior + coastalWeight * layout.coastReliefScale * coastalNoise;
+    let ridge = -Infinity;
     for (const arc of islandArcs) {
-      coastline = Math.max(coastline, sampleIslandArc(arc, x, y) + 0.24 * coastalNoise);
+      ridge = Math.max(ridge, sampleIslandArc(arc, x, y) + 0.24 * coastalNoise);
     }
-    coastline -= edgeFade;
+    if (ridge - edgeFade > -0.22) region.seaRidge = clamp(1 + (ridge - edgeFade) / 0.22, 0, 1);
+    const coastline = Math.max(interior + coastalWeight * layout.coastReliefScale * coastalNoise, ridge) - edgeFade;
     const relief = Math.min(coastline, layout.seaCeiling(x, y)) * (0.40 + 0.56 * ridges + 0.14 * hills);
     region.elevation = clamp(config.elevationSeaLevel + relief, config.elevationRange.min, config.elevationRange.max);
   }
