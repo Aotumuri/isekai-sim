@@ -103,3 +103,54 @@ test("balance selects reproducible historical maps with terrain-dependent deposi
     Object.assign(WORLD_BALANCE, { mapGenerator: previous });
   }
 });
+
+test("historical seeds produce connected land, separate continents, and a sea with an outlet", () => {
+  const previous = WORLD_BALANCE.mapGenerator;
+  const config = createWorldConfig(600, 340, 12_000);
+  try {
+    Object.assign(WORLD_BALANCE, { mapGenerator: "historical" });
+    const single = createWorld({ ...config, seed: 2 });
+    const multiple = createWorld({ ...config, seed: 1 });
+    for (const [world, expected] of [[single, 1], [multiple, 2]] as const) {
+      const remaining = new Map(world.microRegions.filter((region) => !region.isSea)
+        .map((region) => [region.id, region]));
+      let continents = 0;
+      for (const region of remaining.values()) {
+        const land = collectConnectedRegions(region, remaining);
+        if (land.length > world.microRegions.length * 0.10) continents += 1;
+      }
+      assert.equal(continents, expected);
+    }
+
+    const inland = createWorld({ ...config, seed: 4 });
+    const center = inland.microRegions.reduce((closest, region) => {
+      const distance = (cell: MicroRegion) =>
+        Math.hypot(cell.site.x - config.width / 2, cell.site.y - config.height / 2);
+      return distance(region) < distance(closest) ? region : closest;
+    });
+    assert.ok(center.isSea);
+    const sea = new Map(inland.microRegions.filter((region) => region.isSea)
+      .map((region) => [region.id, region]));
+    const waters = collectConnectedRegions(center, sea);
+    assert.ok(waters.some((region) => region.polygon.some(({ x }) => x === 0 || x === config.width)));
+  } finally {
+    Object.assign(WORLD_BALANCE, { mapGenerator: previous });
+  }
+});
+
+function collectConnectedRegions(
+  start: MicroRegion,
+  remaining: Map<MicroRegion["id"], MicroRegion>,
+): MicroRegion[] {
+  remaining.delete(start.id);
+  const connected = [start];
+  for (const region of connected) {
+    for (const id of region.neighbors) {
+      const neighbor = remaining.get(id);
+      if (!neighbor) continue;
+      remaining.delete(id);
+      connected.push(neighbor);
+    }
+  }
+  return connected;
+}
