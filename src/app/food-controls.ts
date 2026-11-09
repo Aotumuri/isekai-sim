@@ -2,7 +2,7 @@ import { expandGrainStorage, grainStorageCost, GRAIN_STORAGE_MAX } from "../sim/
 import { canIrrigate, installIrrigation, IRRIGATION_COST } from "../sim/irrigation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import { RATION_POLICIES, setFoodAsylum, setGrainExportProtection, setRationPolicy, type RationPolicy } from "../sim/ration-policy";
-import { FAMINE_THRESHOLD, FOOD_INTERVAL, foodStorageLimit } from "../sim/food-supply";
+import { FAMINE_THRESHOLD, FOOD_INTERVAL, foodReserveSeconds, foodStorageLimit } from "../sim/food-supply";
 import { hasTradeAgreement, proposeResourceTrade, resourceReserve, sendGrainAid, TRADE_RESOURCE_VALUES } from "../sim/international-trade";
 import { isNationActive } from "../sim/nation-active";
 import type { NationRuntime } from "../sim/nation-runtime";
@@ -85,10 +85,10 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
     rations.value = food?.rationPolicy ?? "normal";
     if (domestic) {
       const transfer = food.levy ?? 0;
-      const deficit = Math.max(0, food.demand * RATION_POLICIES[food.rationPolicy ?? "normal"] - food.harvest - transfer);
+      const seconds = foodReserveSeconds(food);
       view("balance").textContent = `Per ${FOOD_INTERVAL}s · Harvest ${quantity(food.harvest)} · Rations ${quantity(food.demand)} · Net requisitions ${transfer >= 0 ? "+" : ""}${quantity(transfer)}.`;
-      const status = food.shortageCycles >= FAMINE_THRESHOLD ? "Famine" : food.rationCoverage + 1e-8 < RATION_POLICIES[food.rationPolicy ?? "normal"] ? "Food shortage" : deficit > 0 ? "Using reserves" : "Rations met";
-      view("status").textContent = `${status} · Last ration coverage ${Math.round(food.rationCoverage * 100)}%${deficit > 0 ? ` · Reserves last about ${Math.floor(food.stock / deficit * FOOD_INTERVAL)}s at the current deficit` : ""}.`;
+      const status = food.shortageCycles >= FAMINE_THRESHOLD ? "Famine" : food.rationCoverage + 1e-8 < RATION_POLICIES[food.rationPolicy ?? "normal"] ? "Food shortage" : Number.isFinite(seconds) ? "Using reserves" : "Rations met";
+      view("status").textContent = `${status} · Last ration coverage ${Math.round(food.rationCoverage * 100)}%${Number.isFinite(seconds) ? ` · Reserves last about ${seconds}s at the current deficit` : ""}.`;
       view("deaths").textContent = food.deaths > 0 ? `Famine deaths to date: ${food.deaths.toFixed(2)} population units.` : "";
     } else for (const key of ["balance", "status", "deaths"]) view(key).textContent = "";
     const trade = !!target && target !== nation && isNationActive(nation) && isNationActive(target) &&

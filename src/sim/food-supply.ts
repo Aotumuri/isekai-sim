@@ -25,6 +25,7 @@ export interface NationalFoodSupply {
   asylum?: boolean;
   refugeesReceived?: number;
   rationPolicy?: RationPolicy;
+  reserveWarning?: boolean;
   shortageCycles: number;
   deaths: number;
 }
@@ -51,6 +52,21 @@ function collectFoodDistricts(world: WorldState): Map<NationId, FoodDistricts> {
     totals.set(owner, total);
   }
   return totals;
+}
+
+export function foodReserveSeconds(food: NationalFoodSupply): number {
+  const ration = RATION_POLICIES[food.rationPolicy ?? "normal"];
+  const deficit = food.demand * ration - food.harvest - (food.levy ?? 0);
+  return deficit > 0 ? Math.floor(food.stock / deficit * FOOD_INTERVAL) : Infinity;
+}
+
+function updateReserveWarning(world: WorldState, id: NationId, food: NationalFoodSupply): void {
+  const seconds = foodReserveSeconds(food);
+  if (food.reserveWarning && seconds >= 120) food.reserveWarning = false;
+  if (food.reserveWarning || seconds > 60 || food.shortageCycles >= FAMINE_THRESHOLD) return;
+  food.reserveWarning = true;
+  recordSimulationEvent(world, { category: "politics", nationIds: [id],
+    message: `${id}'s grain reserve will last about ${seconds} more seconds at current harvest and ration levels.` });
 }
 
 function applyFamineDeaths(world: WorldState, districts: MesoRegionId[], mortality: number): number {
@@ -92,6 +108,7 @@ export function updateFoodSupply(world: WorldState): void {
     const famineCoverage = Math.min(0.9, ration - 0.01);
     food.shortageCycles = food.rationCoverage < famineCoverage ? food.shortageCycles + 1 : Math.max(0, food.shortageCycles - 2);
     const famine = food.shortageCycles >= FAMINE_THRESHOLD;
+    updateReserveWarning(world, nation.id, food);
     if (famine && food.rationCoverage < famineCoverage) {
       const severity = (famineCoverage - food.rationCoverage) / famineCoverage;
       food.deaths += applyFamineDeaths(world, ids, severity * 0.035);
@@ -111,5 +128,5 @@ export function splitFoodSupply(parent: NationalFoodSupply | undefined, share: n
   if (!parent) return undefined;
   const stock = parent.stock * Math.max(0, Math.min(1, share));
   parent.stock -= stock;
-  return { ...parent, stock, harvest: parent.harvest * share, demand: parent.demand * share, levy: 0, deaths: 0, refugeesReceived: 0, storageLevel: 0 };
+  return { ...parent, stock, harvest: parent.harvest * share, demand: parent.demand * share, levy: 0, deaths: 0, refugeesReceived: 0, storageLevel: 0, reserveWarning: false };
 }
