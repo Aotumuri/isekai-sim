@@ -15,6 +15,7 @@ export interface NationalTreasury {
   lastRevenue: number;
   nextReliefTick?: number;
   researchFunding: boolean;
+  automaticBudget?: boolean;
   militaryFunding: boolean;
   militaryFundedUntil?: number;
   spent: Record<SpendingCategory, number>;

@@ -1,3 +1,4 @@
+import { updateBudgetPolicies } from "./budget-policy";
 import { updatePublicWorks } from "./public-works";
 import { updateMilitaryFunding } from "./military-funding";
 import { updateTreasuries } from "./treasury";
@@ -203,6 +204,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateAlliedWarRequests(world);
   updateVolunteers(world);
   updateWarDeclarations(world);
+  updateBudgetPolicies(world);
   updateTreasuries(world);
   updateMilitaryFunding(world);
   updateMobilization(world);
