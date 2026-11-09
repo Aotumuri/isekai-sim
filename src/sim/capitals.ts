@@ -1,3 +1,4 @@
+import { recordSimulationEvent } from "./simulation-settings";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { isNationActive } from "./nation-active";
@@ -56,6 +57,10 @@ export function updateCapitals(world: WorldState): void {
     }
     if (didFall) {
       nation.capitalFallCount += 1;
+      recordSimulationEvent(world, { category: "military", nationIds: [nation.id],
+        message: nextCapitalId
+          ? `${nation.id} lost its capital and evacuated the government to ${nextCapitalId}.`
+          : `${nation.id} lost its capital and has no safe city to evacuate to.` });
     }
   }
 
@@ -72,6 +77,9 @@ function pickTemporaryCapital(
   occupationByMesoId: Map<MesoRegionId, NationId>,
 ): MesoRegionId | null {
   let candidate: MesoRegionId | null = null;
+  let bestExposure = Infinity;
+  let bestDistance = -1;
+  const fallen = mesoById.get(currentCapitalId)?.center;
 
   for (const [mesoId, meso] of mesoById.entries()) {
     if (mesoId === currentCapitalId) {
@@ -87,8 +95,14 @@ function pickTemporaryCapital(
     if (occupier && occupier !== nationId) {
       continue;
     }
-    if (!candidate || mesoId < candidate) {
+    const exposure = meso.neighbors.filter(({ id }) =>
+      mesoById.get(id)?.type !== "sea" && (occupationByMesoId.get(id) ?? ownerByMesoId.get(id)) !== nationId).length;
+    const distance = fallen ? Math.hypot(meso.center.x - fallen.x, meso.center.y - fallen.y) : 0;
+    if (exposure < bestExposure || (exposure === bestExposure &&
+      (distance > bestDistance || (distance === bestDistance && (!candidate || mesoId < candidate))))) {
       candidate = mesoId;
+      bestExposure = exposure;
+      bestDistance = distance;
     }
   }
 
