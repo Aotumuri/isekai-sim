@@ -23,6 +23,7 @@ export interface TradeDeal {
   id: string; sellerId: NationId; buyerId: NationId;
   offeredResource: TradeResource; requestedResource: TradeResource;
   offeredAmount: number; requestedAmount: number; route: TradeRoute;
+  humanitarian?: boolean;
   rerouted?: boolean;
   arrivesAtSlowTick: number; status: "in-transit" | "delivered" | "returned";
 }
@@ -131,21 +132,31 @@ function supportsTradeResource(world: WorldState, nation: NationRuntime, resourc
 }
 export function proposeResourceTrade(world: WorldState, sellerId: NationId, buyerId: NationId,
   offeredResource: TradeResource, offeredAmount: number, requestedResource: TradeResource, requestedAmount: number): boolean {
+  return dispatchTrade(world, sellerId, buyerId, offeredResource, offeredAmount, requestedResource, requestedAmount, false);
+}
+
+export function sendGrainAid(world: WorldState, donor: NationId, recipient: NationId, amount: number): boolean {
+  return dispatchTrade(world, donor, recipient, "food", amount, "cash", 0, true);
+}
+
+function dispatchTrade(world: WorldState, sellerId: NationId, buyerId: NationId,
+  offeredResource: TradeResource, offeredAmount: number, requestedResource: TradeResource, requestedAmount: number,
+  humanitarian: boolean): boolean {
   if (getWarDeclarationMode(world) !== "diplomacy" || !world.settings?.tradeEnabled || sellerId === buyerId ||
     offeredResource === requestedResource || !TRADE_RESOURCES.includes(offeredResource) || !TRADE_RESOURCES.includes(requestedResource) ||
-    !Number.isFinite(offeredAmount) || !Number.isFinite(requestedAmount) || offeredAmount <= 0 || requestedAmount <= 0) return false;
+    !Number.isFinite(offeredAmount) || !Number.isFinite(requestedAmount) || offeredAmount <= 0 || (!humanitarian && requestedAmount <= 0)) return false;
   if (!hasTradeAgreement(world, sellerId, buyerId) || isTradeEmbargoed(world, sellerId, buyerId)) return false;
   const ratio = offeredAmount * TRADE_RESOURCE_VALUES[offeredResource] / (requestedAmount * TRADE_RESOURCE_VALUES[requestedResource]);
-  if (ratio < 0.8 || ratio > 1.25) return false;
+  if (!humanitarian && (ratio < 0.8 || ratio > 1.25)) return false;
   const state = getInternationalTradeState(world);
   if (state.deals.filter((deal) => deal.status === "in-transit").length >= 32 || state.deals.some((deal) => deal.status === "in-transit" &&
     ((deal.sellerId === sellerId && deal.buyerId === buyerId) || (deal.sellerId === buyerId && deal.buyerId === sellerId)))) return false;
   const seller = world.nations.find((nation) => nation.id === sellerId && isNationActive(nation));
   const buyer = world.nations.find((nation) => nation.id === buyerId && isNationActive(nation));
   if (!seller || !buyer ||
-    ![seller, buyer].every((nation) => supportsTradeResource(world, nation, offeredResource) && supportsTradeResource(world, nation, requestedResource)) ||
+    ![seller, buyer].every((nation) => supportsTradeResource(world, nation, offeredResource) && (humanitarian || supportsTradeResource(world, nation, requestedResource))) ||
     getTradeStock(seller, offeredResource) < offeredAmount + resourceReserve(seller, offeredResource) ||
-    getTradeStock(buyer, requestedResource) < requestedAmount + resourceReserve(buyer, requestedResource)) return false;
+    (!humanitarian && getTradeStock(buyer, requestedResource) < requestedAmount + resourceReserve(buyer, requestedResource))) return false;
   const route = findTradeRoute(world, sellerId, buyerId);
   if (!route) return false;
   const shippingFuel = shippingFuelFor(route);
@@ -155,9 +166,9 @@ export function proposeResourceTrade(world: WorldState, sellerId: NationId, buye
   changeTradeStock(seller, offeredResource, -offeredAmount); changeTradeStock(buyer, requestedResource, -requestedAmount);
   if (shippingFuel > 0) { changeResource(carrier!, "fuel", -shippingFuel); state.fuelSpent += shippingFuel; }
   state.deals.push({ id: `trade-${state.nextDealNumber++}`, sellerId, buyerId, offeredResource, offeredAmount,
-    requestedResource, requestedAmount, route, arrivesAtSlowTick: world.time.slowTick + transitTicks(route), status: "in-transit" });
+    requestedResource, requestedAmount, route, ...(humanitarian ? { humanitarian: true } : {}), arrivesAtSlowTick: world.time.slowTick + transitTicks(route), status: "in-transit" });
   recordSimulationEvent(world, { category: "trade", nationIds: [sellerId, buyerId],
-    message: `${sellerId} dispatched ${offeredAmount.toFixed(1)} ${offeredResource} for ${requestedAmount.toFixed(1)} ${requestedResource} from ${buyerId}.` });
+    message: humanitarian ? `${sellerId} sent ${offeredAmount.toFixed(1)} grain as relief to ${buyerId}.` : `${sellerId} dispatched ${offeredAmount.toFixed(1)} ${offeredResource} for ${requestedAmount.toFixed(1)} ${requestedResource} from ${buyerId}.` });
   return true;
 }
 
@@ -197,7 +208,7 @@ export function updateInternationalTrade(world: WorldState): void {
       const agreement = hasTradeAgreement(world, deal.sellerId, deal.buyerId);
       const canTrade = world.settings?.diplomacyEnabled && world.settings.tradeEnabled && seller && buyer &&
         isNationActive(seller) && isNationActive(buyer) && agreement && !isTradeEmbargoed(world, deal.sellerId, deal.buyerId) &&
-        [seller, buyer].every((nation) => supportsTradeResource(world, nation, deal.offeredResource) && supportsTradeResource(world, nation, deal.requestedResource));
+        [seller, buyer].every((nation) => supportsTradeResource(world, nation, deal.offeredResource) && (deal.humanitarian || supportsTradeResource(world, nation, deal.requestedResource)));
       const open = canTrade && isTradeRouteOpen(world, deal.sellerId, deal.buyerId, deal.route);
       if (canTrade && !open && rerouteTrade(world, deal, seller, buyer)) continue;
       if (!open) {

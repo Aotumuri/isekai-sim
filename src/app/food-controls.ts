@@ -3,7 +3,7 @@ import { canIrrigate, installIrrigation, IRRIGATION_COST } from "../sim/irrigati
 import type { MesoRegionId } from "../worldgen/meso-region";
 import { RATION_POLICIES, setFoodAsylum, setGrainExportProtection, setRationPolicy, type RationPolicy } from "../sim/ration-policy";
 import { FAMINE_THRESHOLD, FOOD_INTERVAL, foodStorageLimit } from "../sim/food-supply";
-import { hasTradeAgreement, proposeResourceTrade, resourceReserve, TRADE_RESOURCE_VALUES } from "../sim/international-trade";
+import { hasTradeAgreement, proposeResourceTrade, resourceReserve, sendGrainAid, TRADE_RESOURCE_VALUES } from "../sim/international-trade";
 import { isNationActive } from "../sim/nation-active";
 import type { NationRuntime } from "../sim/nation-runtime";
 import { getWarDeclarationMode } from "../sim/simulation-settings";
@@ -33,14 +33,15 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
     <label><input type="checkbox" data-food-control="export-protection"> Protect 60 seconds of grain from export</label>
     <h2>Grain trade with selected partner</h2>
     <p class="society-note">Governments with a looming shortage look for suppliers automatically. Shipments require an agreement, open route and exportable stock.</p>
-    <label>Grain to buy <input type="number" min="1" max="1000" step="1" value="20" data-food-control="amount"></label>
-    <div class="society-actions"><button type="button" data-food-action="buy">Buy grain</button><button type="button" data-food-action="embargo"></button></div>
+    <label>Grain quantity <input type="number" min="1" max="1000" step="1" value="20" data-food-control="amount"></label>
+    <div class="society-actions"><button type="button" data-food-action="buy">Buy grain</button><button type="button" data-food-action="aid">Send grain relief</button><button type="button" data-food-action="embargo"></button></div>
     <p class="society-note" data-food-view="trade"></p>
     <h2>Subject requisitions</h2>
     <label>Share of the selected partner’s harvest <select data-food-control="levy">${FOOD_LEVY_RATES.map((rate) => `<option value="${rate}">${Math.round(rate * 100)}%</option>`).join("")}</select></label>
     <p class="society-note" data-food-view="levy"></p>`;
   const view = (name: string) => root.querySelector<HTMLElement>(`[data-food-view="${name}"]`)!;
   const buy = root.querySelector<HTMLButtonElement>('[data-food-action="buy"]')!;
+  const aid = root.querySelector<HTMLButtonElement>('[data-food-action="aid"]')!;
   const embargo = root.querySelector<HTMLButtonElement>('[data-food-action="embargo"]')!;
   const amount = root.querySelector<HTMLInputElement>('[data-food-control="amount"]')!;
   const levy = root.querySelector<HTMLSelectElement>('[data-food-control="levy"]')!;
@@ -101,6 +102,8 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
     buy.disabled = !domestic || !trade || blocked || !agreement || !validAmount || !target?.food || !target.treasury ||
       !nation.treasury || nation.treasury.balance < price() + resourceReserve(nation, "cash") ||
       target.food.stock < offered + resourceReserve(target, "food");
+    aid.disabled = !domestic || !trade || blocked || !agreement || !validAmount || !target?.food ||
+      food.stock < offered + resourceReserve(nation, "food");
     view("trade").textContent = blocked ? "An embargo blocks trade in both directions, including grain." :
       `${quantity(validAmount ? price() : 0)} cash · ${target?.food ? `Partner exportable grain ${quantity(Math.max(0, target.food.stock - resourceReserve(target, "food")))}.` : "Partner has no food stockpile."}${trade && !agreement ? " Negotiate a trade pact first." : ""}`;
     const subject = !!target && getSubjectOverlord(world, target.id) === nation.id;
@@ -140,6 +143,11 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
   amount.addEventListener("input", refresh);
   levy.addEventListener("change", () => {
     if (setSubjectFoodLevy(world, selected(), partner(), Number(levy.value))) feedback("Harvest requisition policy updated.");
+    refresh();
+  });
+  aid.addEventListener("click", () => {
+    const sent = sendGrainAid(world, selected(), partner(), Number(amount.value));
+    feedback(sent ? "Grain relief dispatched." : "Grain relief needs an open route, an agreement and sufficient surplus grain.");
     refresh();
   });
   buy.addEventListener("click", () => {
