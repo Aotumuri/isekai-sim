@@ -221,7 +221,10 @@ export function updateDiplomaticRelations(world: WorldState): void {
       treatyGoodwill + (commonEnemy ? 25 : 0) - relation.grievance * 0.5, -100, 100);
     relation.opinion = clamp(relation.opinion + clamp((targetOpinion - relation.opinion) * 0.04, -2, 2), -100, 100);
     const distrust = Math.max(0, -affinity);
-    relation.trust = clamp(relation.trust + (relation.treaties.length ? 0.8 * (1 - distrust * 0.25) : 0.1 * (1 - distrust * 0.65)), 0, 100);
+    const treatyTrust = relation.treaties.length ? 0.8 * (1 - distrust * 0.25) : 0.1 * (1 - distrust * 0.65);
+    // Shared fighting builds trust even before a formal agreement is in place.
+    const wartimeTrust = commonEnemy && !relation.crisis ? cooperation * 1.2 : 0;
+    relation.trust = clamp(relation.trust + treatyTrust + wartimeTrust, 0, 100);
     relation.grievance = Math.max(0, relation.grievance - 0.2);
     relation.tension = clamp(relation.tension + (first.aggression + second.aggression - 0.9) * 2 -
       (relation.opinion > 20 ? 1.5 : 0) + relation.grievance * 0.03 + distrust * 0.35, 0, 100);
