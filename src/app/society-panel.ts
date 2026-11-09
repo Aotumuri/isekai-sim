@@ -1,3 +1,4 @@
+import { attachPeaceConferenceControls } from "./peace-conference-controls";
 import { attachFoodControls } from "./food-controls";
 import { attachTreasuryControls } from "./treasury-controls";
 import { attachPoliticsControls } from "./politics-controls";
@@ -63,7 +64,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
         <div data-view="relation"></div><div data-view="truce-extension"></div>
         <div class="society-actions"><button type="button" data-action="improve" title="10 influence. Opinion +10, trust +3, tension -8.">Send envoy · 10</button><button type="button" data-action="pact" title="Requires opinion 20, trust 30 and influence 12.">Non-aggression · 12</button><button type="button" data-action="trade-pact" title="Requires opinion 10, trust 30 and influence 8.">Trade pact · 8</button><button type="button" data-action="alliance" title="Requires opinion 55, trust 55 and influence 20.">Defensive alliance · 20</button></div>
         <label>Aid equipment<select data-control="aid-family" aria-label="Aid equipment">${familyOptions}</select></label><div class="society-actions"><button type="button" data-action="aid" title="Send equipment for the selected weapon family and retain a reserve of 30. Requires friendly relations and an open route.">Send 20 weapons</button><button type="button" data-action="peace" title="Propose status-quo terms. Acceptance depends on war outlook, personality and domestic stability.">Propose white peace</button><button type="button" data-action="crisis" class="society-danger" title="12 influence. Treaties, strategic access and military strength constrain ultimatums.">Ultimatum · 12</button></div>
-        <div data-view="crisis"></div><div data-peace-ui></div>
+        <div data-view="crisis"></div><div data-peace-ui></div><div data-peace-conference-ui></div>
         <details><summary>Break a treaty (damages trust and opinion)</summary><div class="society-actions"><button type="button" data-action="break-alliance">Break alliance</button><button type="button" data-action="break-pact">Break non-aggression</button><button type="button" data-action="break-trade">Break trade pact</button></div></details>
         <div data-military-cooperation-ui></div>
         <h2>Resource exchange</h2><p class="society-note">Exchange equal value. Exports are reserved at dispatch and arrive after transit.</p>
@@ -112,6 +113,8 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
   const food = attachFoodControls(wrapper.querySelector<HTMLElement>("[data-food-ui]")!, world,
     () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; });
   const treasury = attachTreasuryControls(wrapper.querySelector<HTMLElement>("[data-treasury-ui]")!, world,
+    () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; });
+  const conference = attachPeaceConferenceControls(wrapper.querySelector<HTMLElement>("[data-peace-conference-ui]")!, world,
     () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; });
   const peaceControls = attachPeaceControls(wrapper.querySelector<HTMLElement>("[data-peace-ui]")!, world, () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   const factions = attachFactionControls(wrapper.querySelector<HTMLElement>("[data-faction-ui]")!, world, () => nationSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
@@ -219,6 +222,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     if (!panel.querySelector<HTMLElement>('[data-pane="food"]')?.hidden) food.update(nation);
     if (!panel.querySelector<HTMLElement>('[data-pane="treasury"]')?.hidden) treasury.update(nation);
     peaceControls.update();
+    conference.update();
     exileControls.update();
     factions.update();
     territories.update();
