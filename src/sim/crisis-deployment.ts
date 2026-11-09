@@ -1,6 +1,7 @@
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { UnitState } from "./unit";
+import { getWarDeclarationMode } from "./simulation-settings";
 import { buildWarAdjacency } from "./war-state";
 import { getOwnerByMesoId } from "./world-cache";
 import type { WorldState } from "./world-state";
@@ -14,7 +15,8 @@ interface Deployment {
 const deployments = new WeakMap<WorldState, Map<UnitState["id"], Deployment>>();
 
 export function updateCrisisDeployments(world: WorldState): void {
-  const crises = [...(world.diplomacy?.relations.values() ?? [])].filter((relation) => relation.crisis);
+  const crises = getWarDeclarationMode(world) === "diplomacy"
+    ? [...(world.diplomacy?.relations.values() ?? [])].filter((relation) => relation.crisis) : [];
   const old = deployments.get(world);
   if (!crises.length && !old?.size) return;
   const next = new Map<UnitState["id"], Deployment>();
@@ -70,6 +72,7 @@ export function updateCrisisDeployments(world: WorldState): void {
 }
 
 export function getCrisisDeploymentReadiness(world: WorldState, nation: NationId, opponent: NationId): number | undefined {
+  if (getWarDeclarationMode(world) !== "diplomacy") return undefined;
   let staged = 0, total = 0;
   for (const { unit, destination, opponent: target } of deployments.get(world)?.values() ?? []) {
     if (unit.nationId !== nation || target !== opponent || unit.manpower <= 0) continue;
@@ -80,6 +83,7 @@ export function getCrisisDeploymentReadiness(world: WorldState, nation: NationId
 }
 
 export function applyCrisisDeployments(world: WorldState): void {
+  if (getWarDeclarationMode(world) !== "diplomacy") return;
   for (const { unit, opponent, destination } of deployments.get(world)?.values() ?? []) {
     const relation = world.diplomacy?.relations.get([unit.nationId, opponent].sort().join(":"));
     if (relation?.crisis && !world.wars.some((war) => war.nationAId === unit.nationId || war.nationBId === unit.nationId)) {
