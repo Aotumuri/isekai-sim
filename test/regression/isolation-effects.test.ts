@@ -240,3 +240,17 @@ function connectIsland(world: WorldState): void {
 function id(name: string): MesoRegionId {
   return name as MesoRegionId;
 }
+
+test("long isolation consumes equipment until supply is restored", () => {
+  const { world, unit } = createIsolationWorld();
+  const slot = unit.equipment[0]!;
+  slot.fill = 0.8;
+  evaluateAt(world, 599);
+  assert.equal(slot.fill, 0.8);
+  evaluateAt(world, 600);
+  assert(slot.fill < 0.8);
+  const remaining = slot.fill;
+  connectIsland(world);
+  evaluateAt(world, 610);
+  assert.equal(slot.fill, remaining);
+});

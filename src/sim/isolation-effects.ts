@@ -59,7 +59,7 @@ export function createIsolationEffectsState(): IsolationEffectsState {
   };
 }
 
-/** Applies organization-only isolation effects once per slow tick. */
+/** Applies isolation effects once per slow tick. */
 export function updateIsolationEffects(world: WorldState): void {
   const startedAt = world.instrumentation ? performance.now() : 0;
   const state = world.isolationEffects;
@@ -124,6 +124,12 @@ export function updateIsolationEffects(world: WorldState): void {
             world.instrumentation?.incrementCounter("isolationEffects.ageAtFloorTicks", age);
           }
         }
+      }
+    }
+    // A pocket cut off for a full minute begins consuming its equipment stock.
+    if (age >= 600) {
+      for (const slot of unit.equipment) {
+        slot.fill = Math.min(slot.fill, Math.max(0.25, slot.fill - 0.003));
       }
     }
     isolatedOrganizationTotal += unit.org;
