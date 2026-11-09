@@ -4,6 +4,8 @@ import { createSimulationSettings } from "./simulation-settings";
 import type { WorldConfig } from "../data/world-config";
 import { WORLD_BALANCE } from "../data/balance";
 import { SeededRng } from "../utils/seeded-rng";
+import { applyContinentalElevation } from "../worldgen/apply/continental-elevation";
+import { applyDrainageRivers } from "../worldgen/apply/drainage-rivers";
 import { applyElevation } from "../worldgen/apply/elevation";
 import { applyRivers } from "../worldgen/apply/rivers";
 import { applySeaLevel } from "../worldgen/apply/sea-level";
@@ -58,9 +60,16 @@ export function createWorld(config: WorldConfig): WorldState {
   const simRng = new SeededRng(config.seed + 1);
   const microRegions = generateMicroRegions(config, rng);
   const microRegionEdges = createMicroRegionEdges(microRegions);
-  applyElevation(microRegions, config, rng);
-  applySeaLevel(microRegions, config);
-  applyRivers(microRegions, microRegionEdges, rng, config.riverSourceCount);
+  const historical = WORLD_BALANCE.mapGenerator === "historical";
+  if (historical) {
+    applyContinentalElevation(microRegions, config, rng);
+    applySeaLevel(microRegions, config);
+    applyDrainageRivers(microRegions, microRegionEdges, config);
+  } else {
+    applyElevation(microRegions, config, rng);
+    applySeaLevel(microRegions, config);
+    applyRivers(microRegions, microRegionEdges, rng, config.riverSourceCount);
+  }
   const mesoRegions = generateMesoRegions(microRegions, config, rng);
   const { macroRegions, nations } = generateNations(mesoRegions, config, rng);
   const productionBalance = WORLD_BALANCE.production;
