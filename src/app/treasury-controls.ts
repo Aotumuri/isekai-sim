@@ -17,8 +17,8 @@ export function attachTreasuryControls(root: HTMLElement, world: WorldState, sel
   feedback: (message: string) => void) {
   root.innerHTML = `
     <h2>National treasury</h2><p data-finance-view="balance"></p><p class="society-note" data-finance-view="revenue"></p>
-    <label><input type="checkbox" data-finance-policy="automaticBudget"> Let the government manage the budget</label>
-    <label>Tax rate <select data-finance-control="tax">${TAX_RATES.map((rate) => `<option value="${rate}">${rate}%</option>`).join("")}</select></label>
+    <div class="society-selectors"><label>Tax rate <select data-finance-control="tax">${TAX_RATES.map((rate) => `<option value="${rate}">${rate}%</option>`).join("")}</select></label>
+    <label><input type="checkbox" data-finance-policy="automaticBudget"> Let the government manage the budget</label></div>
     <p class="society-note" data-finance-view="pressure"></p>
     <h2>Public spending</h2>
     <label><input type="checkbox" data-finance-policy="researchFunding"> Fund research grants</label>
@@ -71,7 +71,7 @@ export function attachTreasuryControls(root: HTMLElement, world: WorldState, sel
     const unrest = getDomesticUnrest(world, nation.id), cooldown = Math.max(0, (treasury.nextReliefTick ?? 0) - world.time.slowTick);
     view("revenue").textContent = `Population ${cash(treasury.population)} · Taxable ${cash(treasury.taxablePopulation)} · Last collection +${cash(treasury.lastRevenue)} · Next estimate +${cash(treasury.taxablePopulation * treasury.taxRate / 100)} every ${TAX_COLLECTION_INTERVAL}s.`;
     view("pressure").textContent = `Domestic unrest ${Math.round(unrest.pressure)}/100. Low taxes ease unrest. High taxes can fuel unrest even in peacetime.`;
-    view("military").textContent = `${militaryFundingCost(treasury)} cash every ${TAX_COLLECTION_INTERVAL}s · Up to 25% larger standing force and shorter recruitment cycles. ${isMilitaryFunded(world, treasury) ? "Currently funded." : "Currently unfunded."}`;
+    view("military").textContent = `${militaryFundingCost(treasury)} cash every ${TAX_COLLECTION_INTERVAL}s · Larger standing force (+25%, rounded up, within the mobilization limit) and shorter recruitment cycles. ${isMilitaryFunded(world, treasury) ? "Currently funded." : "Currently unfunded."}`;
     view("relief").textContent = `${reliefCost(treasury)} cash · Reduces unrest by up to 22 points${cooldown ? ` · Available in ${cooldown}s` : ""}.`;
     action("relief").disabled = unrest.pressure <= 0 || cooldown > 0 || treasury.balance < reliefCost(treasury);
     updateSites(nation.id);
