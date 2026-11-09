@@ -1,3 +1,4 @@
+import { buildWarAdjacency } from "./war-state";
 import type { NationId } from "../worldgen/nation";
 import type { UnitType } from "./unit";
 import { getNationCharacter } from "./nation-character";
@@ -124,6 +125,16 @@ export function getEquipmentResearchPriorities(world: WorldState, nationId: Nati
   if (character.doctrine === "expansionist") weights.Tank += 1;
   if (character.doctrine === "guardian") weights.Infantry += 1;
   if (coastal && character.doctrine === "merchant") weights.TransportShip += 1.5;
+  const enemies = buildWarAdjacency(world.wars).get(nationId);
+  if (enemies?.size) {
+    const observations = world.strategicThreatObservation.observationByNationId;
+    const opposingShips = [...enemies].reduce((sum, id) =>
+      sum + (observations.get(id)?.power.combatShips ?? 0), 0);
+    const ownShips = observations.get(nationId)?.power.combatShips ?? 0;
+    if (coastal && opposingShips > ownShips) {
+      weights.CombatShip += Math.min(3, (opposingShips - ownShips) * 0.75);
+    }
+  }
   for (const family of EQUIPMENT_FAMILIES) {
     const program = getResearchPortfolio(world, nationId, family), priority = program.priority ?? "auto";
     if (priority !== "auto") weights[family] = { paused: 0, low: 0.35, normal: 1, high: 4 }[priority];
