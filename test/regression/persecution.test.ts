@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getRelation, proposeTreaty } from "../../src/sim/diplomacy";
+import { getDomesticUnrest } from "../../src/sim/domestic-unrest";
 import { addPersecutionImpact, createPersecutionImpact, getPublicOutrage, publishPersecutionImpact } from "../../src/sim/persecution-reaction";
 import { getNationalPolitics } from "../../src/sim/politics";
 import { POPULATION_DIMENSIONS } from "../../src/sim/regional-population";
+import { getReligiousBan, startReligiousBan, updateReligiousPersecution } from "../../src/sim/religious-persecution";
 import { createSimulationSettings } from "../../src/sim/simulation-settings";
 import { isTradeEmbargoed } from "../../src/sim/trade-embargo";
 import { getOwnerByMesoId } from "../../src/sim/world-cache";
@@ -14,6 +16,40 @@ function scene() {
   world.settings = createSimulationSettings({ politicalTurbulenceEnabled: true });
   return world;
 }
+
+test("a blanket religious ban harms every minority faith without converting its followers", () => {
+  const world = scene(), [offender, first, second] = world.nations;
+  assert.ok(!startReligiousBan(world, offender));
+  offender.populationPolicy = { type: "religious", group: 0 };
+  const populations = world.regionalPopulations!;
+  for (const [id, owner] of getOwnerByMesoId(world)) {
+    const population = populations.get(id)!;
+    population.ancestry = [0, 0, 0, 0, 0, population.size];
+    population.culture = [0, 0, 0, 0, 0, population.size];
+    if (owner === offender.id) population.faith = [0.6, 0.2, 0.2, 0, 0, 0].map((share) => share * population.size);
+    else {
+      const faith = owner === first.id ? 1 : owner === second.id ? 2 : 0;
+      population.faith = Array.from({ length: 6 }, (_, index) => index === faith ? population.size : 0);
+      population.ancestry = [population.size, 0, 0, 0, 0, 0];
+      population.culture = [population.size, 0, 0, 0, 0, 0];
+    }
+  }
+  const before = structuredClone(populations);
+  assert.ok(startReligiousBan(world, offender));
+  world.time.slowTick = 10;
+  updateReligiousPersecution(world);
+  const pressure = getDomesticUnrest(world, offender.id).pressure;
+  assert.ok(pressure > 0);
+  assert.ok(getPublicOutrage(world, first.id, offender.id) > 0);
+  assert.ok(getPublicOutrage(world, second.id, offender.id) > 0);
+  assert.deepEqual(populations, before);
+  updateReligiousPersecution(world);
+  assert.equal(getDomesticUnrest(world, offender.id).pressure, pressure);
+  world.time.slowTick = 150;
+  updateReligiousPersecution(world);
+  assert.equal(getReligiousBan(world, offender), undefined);
+  assert.ok(!startReligiousBan(world, offender));
+});
 
 test("affected communities drive stronger democratic outrage regardless of shared ideology", () => {
   const world = scene(), [offender, democracy, monarchy, unrelated] = world.nations;

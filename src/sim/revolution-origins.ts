@@ -3,6 +3,7 @@ import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationRuntime } from "./nation-runtime";
 import { POPULATION_DIMENSIONS, POPULATION_GROUPS, type PopulationDimension } from "./regional-population";
 import { hasPoliticalTurbulence } from "./simulation-settings";
+import { getReligiousBan } from "./religious-persecution";
 import { getSubjectOverlord } from "./subject-governments";
 import { getMesoById } from "./world-cache";
 import type { WorldState } from "./world-state";
@@ -26,6 +27,7 @@ export function rankRevolutionOrigins(world: WorldState, nation: NationRuntime):
   const policy = nation.populationPolicy;
   const favoredDimension = policy?.type === "homeland" ? "ancestry" : policy?.type === "religious" ? "faith" : undefined;
   const order = nation.displacementOrder;
+  const ban = getReligiousBan(world, nation);
   const origins: RevolutionOrigin[] = [];
   for (const province of world.macroRegions) {
     if (province.nationId !== nation.id || province.mesoRegionIds.includes(nation.capitalMesoId)) continue;
@@ -44,7 +46,8 @@ export function rankRevolutionOrigins(world: WorldState, nation: NationRuntime):
     for (const dimension of POPULATION_DIMENSIONS) {
       for (const [group] of POPULATION_GROUPS[dimension].entries()) {
         if (dimension === favoredDimension && group === policy?.group) continue;
-        const targeted = order?.dimension === dimension && order.group === group && order.until > world.time.slowTick;
+        const targeted = (order?.dimension === dimension && order.group === group && order.until > world.time.slowTick) ||
+          (dimension === "faith" && ban && group !== ban.allowedFaith);
         const capitalShare = (capital[dimension][group] ?? 0) / capital.size;
         const share = districts.reduce((sum, { population }) => sum + (population[dimension][group] ?? 0), 0) / size;
         const minimumShare = targeted ? 0.25 : 0.5;

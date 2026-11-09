@@ -51,8 +51,12 @@ export function publishPersecutionImpact(world: WorldState, offender: NationId, 
   for (const nation of world.nations) {
     const local = totals.get(nation.id);
     if (!isNationActive(nation) || !local?.size) continue;
-    const affinity = Math.max(...POPULATION_DIMENSIONS.map((dimension) =>
+    const sharedIdentity = Math.max(...POPULATION_DIMENSIONS.map((dimension) =>
       local[dimension].reduce((sum, count, index) => sum + count / local.size * impact[dimension][index]! / impact.size, 0)));
+    const bannedFaith = action === "religious persecution"
+      ? Math.max(...local.faith.map((count, index) => count / local.size * Math.sqrt(impact.faith[index]! / impact.size)))
+      : 0;
+    const affinity = Math.max(sharedIdentity, bannedFaith);
     if (affinity < 0.26) continue;
     const democratic = getNationalPolitics(world, nation).system === "democracy";
     const previous = getPublicOutrage(world, nation.id, offender);

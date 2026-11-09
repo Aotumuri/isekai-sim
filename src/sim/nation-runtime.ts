@@ -51,6 +51,8 @@ export type NationRuntime = Nation & {
   displacementOrder?: DisplacementOrder;
   nextDisplacementOrderAt?: number;
   populationPolicy?: PopulationPolicy;
+  religiousBan?: { allowedFaith: number; until: number; lastAppliedAt?: number };
+  nextReligiousBanAt?: number;
   nationalistMovement?: { targetId: Nation["id"]; group: number; until: number; nextAt: number };
   governance?: {
     policy: "centralized" | "autonomy" | "assimilation";
