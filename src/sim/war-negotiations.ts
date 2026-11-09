@@ -1,3 +1,4 @@
+import { foodReserveSeconds } from "./food-supply";
 import { getNationalTerritorialValue, getTerritorialValue } from "./territorial-value";
 import { getSeparatePeaceIssue } from "./separate-peace";
 import { hasConferenceWar } from "./peace-conference";
@@ -246,10 +247,13 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
   const domestic = urgency * 42;
   const forecast = -getWarTrend(negotiation, recipient) * 45;
   const competingWars = competingWarPressure(world, recipient, proposer);
+  const foodRunway = nation.food ? foodReserveSeconds(nation.food) : Infinity;
+  const foodPressure = nation.food ? Math.max(0, 1 - foodRunway / 90) * 10 +
+    (1 - nation.food.rationCoverage) * 10 : 0;
   const totalValue = getNationalTerritorialValue(world, recipient);
   const occupied = ownedLand(world, recipient).filter((id) => world.occupation.mesoById.get(id) === proposer);
   const occupiedValue = getTerritorialValue(world, recipient, occupied) / totalValue;
-  const pressure = fatigue * 0.7 + Math.min(18, ageSeconds * 0.025) + occupiedValue * 45 + militaryLoss * 15 + Math.max(0, -advantage) * 30 + (1 - nation.warCooperation) * 12 + domestic + forecast + competingWars;
+  const pressure = fatigue * 0.7 + Math.min(18, ageSeconds * 0.025) + occupiedValue * 45 + militaryLoss * 15 + Math.max(0, -advantage) * 30 + (1 - nation.warCooperation) * 12 + domestic + forecast + competingWars + foodPressure;
   const occupiedSet = new Set(occupied);
   const securedDemands = terms.demandedRegionIds.filter((id) => occupiedSet.has(id));
   const landCost = (getTerritorialValue(world, recipient, terms.demandedRegionIds) -
@@ -272,7 +276,8 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
     occupationRatio(world, proposer, recipient) + occupationRatio(world, recipient, proposer) > 0;
   const matureEnough = ageSeconds >= 90 || (ageSeconds >= 30 && (exchangedBlows || urgency >= 0.8));
   if (!matureEnough) return { accepts: false, score, reason: "The government is waiting for battlefield evidence before accepting terms." };
-  const reason = score >= 0 ? "Ending the war now is preferable to continued losses and domestic danger."
+  const reason = score >= 0 ? foodPressure >= 10 ? "The food emergency makes continued fighting too costly."
+    : "Ending the war now is preferable to continued losses and domestic danger."
     : sacrificeCost > 8 && score + sacrificeCost >= 0 ? "The government needs gains it can justify against the casualties already suffered."
     : landCost + paymentCost > 25 ? "The requested concessions outweigh the current cost of continuing the war."
     : "The government expects a better outcome by continuing the war.";
