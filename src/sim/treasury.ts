@@ -13,6 +13,7 @@ export interface NationalTreasury {
   population: number;
   taxablePopulation: number;
   lastRevenue: number;
+  nextReliefTick?: number;
   researchFunding: boolean;
   militaryFunding: boolean;
   spent: Record<SpendingCategory, number>;
