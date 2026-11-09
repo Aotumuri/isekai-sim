@@ -1,3 +1,4 @@
+import { updateFoodTrade } from "./food-trade";
 import { updateFoodSupply } from "./food-supply";
 import { updateBudgetPolicies } from "./budget-policy";
 import { updatePublicWorks } from "./public-works";
@@ -219,6 +220,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateEquipmentRefits(world);
   updatePublicWorks(world);
   updateCoastalInvestment(world);
+  updateFoodTrade(world);
   updateInternationalTrade(world);
   updatePopulationMigration(world);
   updateFoodSupply(world);
