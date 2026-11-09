@@ -58,11 +58,13 @@ export function updateOccupation(world: WorldState): void {
     }
 
     const current = mesoOccupation.get(meso.id);
-    if (current && current !== owner) {
-      continue;
-    }
+    // A rival can take an abandoned occupation only when hostile to both sides.
+    const contenders = current && current !== owner
+      ? units.filter((unit) => isAtWar(unit.nationId, current, warAdjacency))
+      : units;
+    if (current && units.some((unit) => unit.nationId === current)) continue;
 
-    const occupier = pickOccupier(units, owner, warAdjacency);
+    const occupier = pickOccupier(contenders, owner, warAdjacency);
     if (occupier && occupier !== current) {
       mesoOccupation.set(meso.id, occupier);
       dirtyMesoIds.add(meso.id);
@@ -114,7 +116,7 @@ function markChangedMacroMesosDirty(
 function collectUnitsByMeso(units: UnitState[]): Map<MesoRegionId, UnitState[]> {
   const unitsByMesoId = new Map<MesoRegionId, UnitState[]>();
   for (const unit of units) {
-    if (unit.domain !== "land") {
+    if (unit.domain !== "land" || unit.manpower <= 0 || unit.org <= 0) {
       continue;
     }
     const list = unitsByMesoId.get(unit.regionId);
@@ -146,7 +148,7 @@ function pickOccupier(
   let bestNation: NationId | null = null;
   let bestCount = 0;
   for (const [nationId, count] of counts.entries()) {
-    if (count > bestCount) {
+    if (count > bestCount || (count === bestCount && bestNation !== null && nationId < bestNation)) {
       bestNation = nationId;
       bestCount = count;
     }
@@ -179,7 +181,7 @@ function computeMacroOccupation(
     let bestNation: NationId | null = null;
     let bestCount = 0;
     for (const [nationId, count] of counts.entries()) {
-      if (count > bestCount) {
+      if (count > bestCount || (count === bestCount && bestNation !== null && nationId < bestNation)) {
         bestNation = nationId;
         bestCount = count;
       }
