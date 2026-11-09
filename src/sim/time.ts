@@ -41,6 +41,12 @@ export function setSpeedIndex(clock: SimClock, index: number): boolean {
   if (clock.speedIndex === clamped) {
     return false;
   }
+  if (clamped < clock.speedIndex) {
+    // Keep partial progress, but stop catching up on ticks queued at the old speed.
+    const pendingMs = clock.accumulatorMs - (clock.accumulatorMs % FAST_TICK_MS);
+    clock.accumulatorMs -= pendingMs;
+    clock.slowAccumulatorMs -= pendingMs;
+  }
   clock.speedIndex = clamped;
   return true;
 }
