@@ -20,6 +20,7 @@ export interface TradeDeal {
   id: string; sellerId: NationId; buyerId: NationId;
   offeredResource: TradeResource; requestedResource: TradeResource;
   offeredAmount: number; requestedAmount: number; route: TradeRoute;
+  rerouted?: boolean;
   arrivesAtSlowTick: number; status: "in-transit" | "delivered" | "returned";
 }
 export interface InternationalTradeState {
@@ -119,17 +120,44 @@ export function proposeResourceTrade(world: WorldState, sellerId: NationId, buye
     buyer.resources[requestedResource] < requestedAmount + resourceReserve(buyer, requestedResource)) return false;
   const route = findTradeRoute(world, sellerId, buyerId);
   if (!route) return false;
-  const shippingFuel = route.maritime ? Math.max(2, Math.ceil(route.regionIds.length * 0.1)) : 0;
+  const shippingFuel = shippingFuelFor(route);
   const carrier = [seller, buyer].find((nation) => nation.resources.fuel -
     (nation.id === sellerId && offeredResource === "fuel" ? offeredAmount : nation.id === buyerId && requestedResource === "fuel" ? requestedAmount : 0) >= shippingFuel);
   if (shippingFuel > 0 && !carrier) return false;
   changeResource(seller, offeredResource, -offeredAmount); changeResource(buyer, requestedResource, -requestedAmount);
   if (shippingFuel > 0) { changeResource(carrier!, "fuel", -shippingFuel); state.fuelSpent += shippingFuel; }
   state.deals.push({ id: `trade-${state.nextDealNumber++}`, sellerId, buyerId, offeredResource, offeredAmount,
-    requestedResource, requestedAmount, route, arrivesAtSlowTick: world.time.slowTick + Math.max(3, Math.ceil(route.regionIds.length * 1.5)), status: "in-transit" });
+    requestedResource, requestedAmount, route, arrivesAtSlowTick: world.time.slowTick + transitTicks(route), status: "in-transit" });
   recordSimulationEvent(world, { category: "trade", nationIds: [sellerId, buyerId],
     message: `${sellerId} dispatched ${offeredAmount.toFixed(1)} ${offeredResource} for ${requestedAmount.toFixed(1)} ${requestedResource} from ${buyerId}.` });
   return true;
+}
+
+function rerouteTrade(world: WorldState, deal: TradeDeal, seller: NationRuntime, buyer: NationRuntime): boolean {
+  if (deal.rerouted) return false;
+  const route = findTradeRoute(world, seller.id, buyer.id);
+  if (!route || !isTradeRouteOpen(world, seller.id, buyer.id, route)) return false;
+  const fuel = shippingFuelFor(route);
+  const carrier = [seller, buyer].find((nation) => nation.resources.fuel >= fuel);
+  if (fuel > 0 && !carrier) return false;
+  if (fuel > 0 && carrier) {
+    changeResource(carrier, "fuel", -fuel);
+    getInternationalTradeState(world).fuelSpent += fuel;
+  }
+  deal.route = route;
+  deal.rerouted = true;
+  deal.arrivesAtSlowTick = world.time.slowTick + transitTicks(route);
+  recordSimulationEvent(world, { category: "trade", nationIds: [seller.id, buyer.id],
+    message: `${deal.id} was diverted to an alternate route. Delivery is delayed.` });
+  return true;
+}
+
+function shippingFuelFor(route: TradeRoute): number {
+  return route.maritime ? Math.max(2, Math.ceil(route.regionIds.length * 0.1)) : 0;
+}
+
+function transitTicks(route: TradeRoute): number {
+  return Math.max(3, Math.ceil(route.regionIds.length * 1.5));
 }
 
 export function updateInternationalTrade(world: WorldState): void {
@@ -139,8 +167,10 @@ export function updateInternationalTrade(world: WorldState): void {
     for (const deal of state.deals.filter((item) => item.status === "in-transit")) {
       const seller = world.nations.find((nation) => nation.id === deal.sellerId), buyer = world.nations.find((nation) => nation.id === deal.buyerId);
       const agreement = areFactionPartners(world, deal.sellerId, deal.buyerId) || hasTreaty(world, deal.sellerId, deal.buyerId, "trade") || hasTreaty(world, deal.sellerId, deal.buyerId, "alliance");
-      const open = world.settings?.diplomacyEnabled && world.settings.tradeEnabled && seller && buyer &&
-        isNationActive(seller) && isNationActive(buyer) && agreement && isTradeRouteOpen(world, deal.sellerId, deal.buyerId, deal.route);
+      const canTrade = world.settings?.diplomacyEnabled && world.settings.tradeEnabled && seller && buyer &&
+        isNationActive(seller) && isNationActive(buyer) && agreement;
+      const open = canTrade && isTradeRouteOpen(world, deal.sellerId, deal.buyerId, deal.route);
+      if (canTrade && !open && rerouteTrade(world, deal, seller, buyer)) continue;
       if (!open) {
         if (seller) changeResource(seller, deal.offeredResource, deal.offeredAmount);
         if (buyer) changeResource(buyer, deal.requestedResource, deal.requestedAmount);
