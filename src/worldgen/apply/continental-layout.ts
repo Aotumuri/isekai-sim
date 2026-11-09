@@ -6,9 +6,9 @@ export function createContinentalLayout(seed: number, layout?: WorldConfig["cont
   const rng = new SeededRng(seed ^ 0x671295ab);
   if (layout === "oceanic") {
     const continents = [
-      { x: 0.27, y: 0.29, rx: rng.range(0.22, 0.25), ry: rng.range(0.17, 0.22) },
-      { x: 0.22, y: 0.73, rx: rng.range(0.13, 0.17), ry: rng.range(0.14, 0.18) },
-      { x: 0.75, y: 0.47, rx: rng.range(0.16, 0.20), ry: rng.range(0.30, 0.35) },
+      { x: 0.23, y: 0.25, rx: rng.range(0.18, 0.21), ry: rng.range(0.14, 0.18) },
+      { x: 0.23, y: 0.74, rx: rng.range(0.15, 0.18), ry: rng.range(0.16, 0.19) },
+      { x: 0.77, y: 0.47, rx: rng.range(0.15, 0.19), ry: rng.range(0.30, 0.35) },
     ].map(({ x, y, rx, ry }) => ({
       x: x + rng.range(-0.025, 0.025),
       y: y + rng.range(-0.025, 0.025),
@@ -17,25 +17,20 @@ export function createContinentalLayout(seed: number, layout?: WorldConfig["cont
     }));
     const easternCoast = { x: continents[2]!.x + 0.09, y: continents[2]!.y + 0.21, rx: 0.13, ry: 0.15 };
     const islands = [
-      { x: 0.43, y: 0.64 },
-      { x: 0.46, y: 0.73 },
+      { x: 0.45, y: 0.55 },
+      { x: 0.49, y: 0.69 },
       { x: 0.52, y: 0.84 },
-      { x: 0.64, y: 0.15 },
-    ].map(({ x, y }) => ({ x, y, rx: rng.range(0.025, 0.045), ry: rng.range(0.03, 0.06) }));
-    const straitPhase = rng.range(0, 2 * Math.PI);
+      { x: 0.53, y: 0.21 },
+    ].map(({ x, y }) => ({ x, y, rx: rng.range(0.025, 0.038), ry: rng.range(0.03, 0.055) }));
 
     return {
       flipX: rng.nextFloat() < 0.5,
       flipY: rng.nextFloat() < 0.5,
       landforms: [...continents, easternCoast, ...islands],
-      seaCeiling: (x: number, y: number) => {
-        // Preserve navigable water between continents even where coastal noise creates headlands.
-        const meridian = 0.55 + 0.07 * Math.sin(5 * y + straitPhase);
-        const westernPassage = 0.51 + 0.15 * x + 0.035 * Math.sin(10 * x - straitPhase);
-        const oceanDistance = Math.abs(x - meridian);
-        const distance = x < meridian ? Math.min(oceanDistance, Math.abs(y - westernPassage)) : oceanDistance;
-        return 10 * (distance - 0.018);
-      },
+      // Leave room for the coastline noise between landforms instead of carving a channel through them.
+      coastReliefScale: 0.65,
+      minimumLandformStrength: 0.4,
+      seaCeiling: () => Infinity,
     };
   }
 
@@ -63,6 +58,8 @@ export function createContinentalLayout(seed: number, layout?: WorldConfig["cont
     flipX,
     flipY,
     landforms: [...continents, ...islands],
+    coastReliefScale: 1,
+    minimumLandformStrength: 0,
     seaCeiling: style === 2
       ? createInlandSeaCeiling(centerY, new SeededRng(seaSeed * 0x100000000))
       : () => Infinity,

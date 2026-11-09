@@ -23,7 +23,8 @@ export function applyContinentalElevation(
     let interior = -Infinity;
     for (const continent of layout.landforms) {
       const distance = Math.hypot((x - continent.x) / continent.rx, (y - continent.y) / continent.ry);
-      interior = Math.max(interior, (1 - distance) * Math.min(1, continent.rx / 0.20));
+      const strength = clamp(continent.rx / 0.20, layout.minimumLandformStrength, 1);
+      interior = Math.max(interior, (1 - distance) * strength);
     }
     // Mountain belts bend across the interior. Coastal shelves stay low.
     const belt = Math.sin(17 * x + 10 * y + 1.4 * Math.sin(13 * y + beltBend) + beltOffset);
@@ -33,7 +34,7 @@ export function applyContinentalElevation(
     const edgeFade = Math.max(0, 1 - rim / 0.12) ** 2;
     // Fade the coastal displacement inland so the mountain belts keep their relief.
     const coastalWeight = clamp(1 - interior / 0.30, 0, 1);
-    const coastline = interior + coastalWeight * sampleCoastRelief(x, y, config.seed) - edgeFade;
+    const coastline = interior + coastalWeight * layout.coastReliefScale * sampleCoastRelief(x, y, config.seed) - edgeFade;
     const relief = Math.min(coastline, layout.seaCeiling(x, y)) * (0.40 + 0.56 * ridges + 0.14 * hills);
     region.elevation = clamp(config.elevationSeaLevel + relief, config.elevationRange.min, config.elevationRange.max);
   }

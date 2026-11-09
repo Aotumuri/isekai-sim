@@ -145,7 +145,7 @@ test("the larger default map has three major landmasses of different sizes", () 
   assert.ok(config.width > 2560 && config.height > 1440);
   assert.ok(config.microRegionCount > 210_000);
 
-  for (const seed of [1, 2, 3, 17]) {
+  for (const seed of [1, 2, 3, 17, 21, 64, 76]) {
     const world = createWorld({ ...config, seed, microRegionCount: 12_000 });
     const remaining = new Map(world.microRegions.filter((region) => !region.isSea)
       .map((region) => [region.id, region]));
