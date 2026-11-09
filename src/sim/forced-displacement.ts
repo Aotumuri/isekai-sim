@@ -6,19 +6,23 @@ import { getNationCharacter } from "./nation-character";
 import { isNationActive } from "./nation-active";
 import type { NationRuntime } from "./nation-runtime";
 import { addPersecutionImpact, createPersecutionImpact, publishPersecutionImpact } from "./persecution-reaction";
-import { POPULATION_DIMENSIONS, POPULATION_GROUPS, type RegionalPopulation } from "./regional-population";
+import { dominantGroup, POPULATION_DIMENSIONS, POPULATION_GROUPS, type PopulationDimension, type RegionalPopulation } from "./regional-population";
 import { getWarDeclarationMode, hasPoliticalTurbulence, recordSimulationEvent } from "./simulation-settings";
 import { buildWarAdjacency, isAtWar } from "./war-state";
 import { getMesoById, getOwnerByMesoId } from "./world-cache";
 import type { WorldState } from "./world-state";
 
-export type TargetDimension = "ancestry" | "faith";
+export type TargetDimension = PopulationDimension;
+export type PersecutionOrderMode = "expulsion" | "killing";
 
 export interface DisplacementOrder {
   dimension: TargetDimension;
   group: number;
   until: number;
   displaced: number;
+  mode?: PersecutionOrderMode;
+  killed?: number;
+  lastAppliedAt?: number;
 }
 
 export function displacementDimension(nation: NationRuntime): TargetDimension | undefined {
@@ -26,15 +30,28 @@ export function displacementDimension(nation: NationRuntime): TargetDimension | 
     nation.populationPolicy?.type === "religious" ? "faith" : undefined;
 }
 
-export function startDisplacementOrder(world: WorldState, nation: NationRuntime, group: number): boolean {
-  const dimension = displacementDimension(nation), now = world.time.slowTick;
+export function getPersecutionTargets(world: WorldState, nation: NationRuntime): { dimension: TargetDimension; group: number; name: string }[] {
+  const dimension = displacementDimension(nation);
+  if (!dimension) return [];
+  const capital = world.regionalPopulations?.get(nation.capitalMesoId);
+  const dimensions: TargetDimension[] = dimension === "ancestry" && capital && hasPoliticalTurbulence(world) ? [dimension, "culture"] : [dimension];
+  return dimensions.flatMap((category) => {
+    const protectedGroup = category === "culture" ? dominantGroup(capital!.culture) : nation.populationPolicy?.group;
+    return POPULATION_GROUPS[category].flatMap((name, group) => group === protectedGroup ? [] : [{ dimension: category, group, name }]);
+  });
+}
+
+export function startDisplacementOrder(world: WorldState, nation: NationRuntime, group: number,
+  mode: PersecutionOrderMode = "expulsion", dimension = displacementDimension(nation)): boolean {
+  const now = world.time.slowTick;
   if (!dimension || getWarDeclarationMode(world) !== "diplomacy" || !isNationActive(nation) ||
     (nation.nextDisplacementOrderAt ?? 0) > now || nation.displacementOrder ||
-    !Number.isInteger(group) || !POPULATION_GROUPS[dimension][group] || group === nation.populationPolicy?.group) return false;
-  nation.displacementOrder = { dimension, group, until: now + 60, displaced: 0 };
+    (mode === "killing" && !hasPoliticalTurbulence(world)) ||
+    !getPersecutionTargets(world, nation).some((target) => target.dimension === dimension && target.group === group)) return false;
+  nation.displacementOrder = { dimension, group, until: now + 60, displaced: 0, mode };
   nation.nextDisplacementOrderAt = now + 300;
   recordSimulationEvent(world, { category: "politics", nationIds: [nation.id],
-    message: `${nation.id} ordered the forced expulsion of ${POPULATION_GROUPS[dimension][group]} residents.` });
+    message: `${nation.id} ordered ${mode === "killing" ? "mass killings targeting" : "the forced expulsion of"} ${POPULATION_GROUPS[dimension][group]} residents.` });
   return true;
 }
 
@@ -43,13 +60,17 @@ export function endDisplacementOrder(world: WorldState, nation: NationRuntime): 
   if (!order) return false;
   delete nation.displacementOrder;
   recordSimulationEvent(world, { category: "politics", nationIds: [nation.id],
-    message: `${nation.id}'s expulsion order ended after displacing ${order.displaced.toFixed(2)} population units.` });
+    message: order.mode === "killing"
+      ? `${nation.id}'s mass killing order ended. ${(order.killed ?? 0).toFixed(2)} population units were killed.`
+      : `${nation.id}'s expulsion order ended after displacing ${order.displaced.toFixed(2)} population units.` });
   return true;
 }
 
-function displaceGroup(source: RegionalPopulation, target: RegionalPopulation, order: DisplacementOrder,
+function applyPersecution(source: RegionalPopulation, target: RegionalPopulation | undefined, order: DisplacementOrder,
   impact?: RegionalPopulation): number {
-  const amount = Math.min(source[order.dimension][order.group]! * 0.12, source.size * 0.06, target.size * 0.1);
+  const amount = target
+    ? Math.min(source[order.dimension][order.group]! * 0.12, source.size * 0.06, target.size * 0.1)
+    : Math.min(source[order.dimension][order.group]! * 0.10, source.size * 0.05);
   if (!(amount > 0)) return 0;
   if (impact) addPersecutionImpact(impact, source, order.dimension, order.group, amount);
   const share = amount / source.size;
@@ -57,11 +78,11 @@ function displaceGroup(source: RegionalPopulation, target: RegionalPopulation, o
     source[dimension].forEach((count, index) => {
       const moved = dimension === order.dimension ? (index === order.group ? amount : 0) : count * share;
       source[dimension][index]! -= moved;
-      target[dimension][index]! += moved;
+      if (target) target[dimension][index]! += moved;
     });
   }
   source.size -= amount;
-  target.size += amount;
+  if (target) target.size += amount;
   return amount;
 }
 
@@ -77,7 +98,10 @@ function considerExpulsion(world: WorldState, nation: NationRuntime): void {
   if (!groups) return;
   const target = groups.reduce((best, count, group) =>
     group !== nation.populationPolicy?.group && count > (groups[best] ?? 0) ? group : best, -1);
-  if (target >= 0) startDisplacementOrder(world, nation, target);
+  if (target < 0) return;
+  const extreme = hasPoliticalTurbulence(world) && pressure >= 95 && getNationCharacter(world, nation.id).aggression >= 0.85 &&
+    world.wars.some(({ nationAId, nationBId }) => nationAId === nation.id || nationBId === nation.id);
+  startDisplacementOrder(world, nation, target, extreme ? "killing" : "expulsion");
 }
 
 export function updateForcedDisplacement(world: WorldState): void {
@@ -91,25 +115,37 @@ export function updateForcedDisplacement(world: WorldState): void {
   const nations = new Map(world.nations.map((nation) => [nation.id, nation]));
   const fallout = new Map<NationId, Map<NationId, number>>();
   const impacts = new Map<NationId, RegionalPopulation>();
+  const activeOrders = new Map<NationId, DisplacementOrder>();
   for (const nation of world.nations) {
     const order = nation.displacementOrder;
-    if (order && (world.time.slowTick >= order.until || !isNationActive(nation) ||
-      displacementDimension(nation) !== order.dimension || nation.populationPolicy?.group === order.group ||
-      getWarDeclarationMode(world) !== "diplomacy")) endDisplacementOrder(world, nation);
-    if (nation.displacementOrder && hasPoliticalTurbulence(world)) impacts.set(nation.id, createPersecutionImpact());
+    if (!order) continue;
+    if (world.time.slowTick >= order.until || !isNationActive(nation) || getWarDeclarationMode(world) !== "diplomacy" ||
+      (order.mode === "killing" && !hasPoliticalTurbulence(world)) ||
+      !getPersecutionTargets(world, nation).some((target) => target.dimension === order.dimension && target.group === order.group)) {
+      endDisplacementOrder(world, nation);
+      continue;
+    }
+    if (order.lastAppliedAt === world.time.slowTick) continue;
+    order.lastAppliedAt = world.time.slowTick;
+    activeOrders.set(nation.id, order);
+    if (hasPoliticalTurbulence(world)) impacts.set(nation.id, createPersecutionImpact());
   }
   const isControlled = (id: MesoRegionId, owner: NationId) => {
     const occupier = world.occupation.mesoById.get(id);
     return !occupier || occupier === owner;
   };
   for (const [id, owner] of owners) {
-    const order = nations.get(owner)?.displacementOrder, source = populations.get(id);
+    const order = activeOrders.get(owner), source = populations.get(id);
     if (!order || !source || !isControlled(id, owner)) continue;
+    if (order.mode === "killing") {
+      order.killed = (order.killed ?? 0) + applyPersecution(source, undefined, order, impacts.get(owner));
+      continue;
+    }
     for (const { id: next } of regions.get(id)?.neighbors ?? []) {
       const recipient = owners.get(next), target = populations.get(next);
       if (!recipient || recipient === owner || !target || nations.get(recipient)?.displacementOrder ||
         !isControlled(next, recipient) || isAtWar(owner, recipient, wars)) continue;
-      const amount = displaceGroup(source, target, order, impacts.get(owner));
+      const amount = applyPersecution(source, target, order, impacts.get(owner));
       if (!(amount > 0)) continue;
       order.displaced += amount;
       const receivers = fallout.get(owner) ?? new Map<NationId, number>();
@@ -118,7 +154,16 @@ export function updateForcedDisplacement(world: WorldState): void {
       break;
     }
   }
-  for (const [owner, impact] of impacts) publishPersecutionImpact(world, owner, impact, "forced expulsion");
+  let deaths = false;
+  for (const [owner, impact] of impacts) {
+    const killing = activeOrders.get(owner)?.mode === "killing";
+    if (killing && impact.size > 0) {
+      deaths = true;
+      const unrest = getDomesticUnrest(world, owner);
+      unrest.pressure = Math.min(100, unrest.pressure + 12);
+    }
+    publishPersecutionImpact(world, owner, impact, killing ? "mass killing" : "forced expulsion");
+  }
   for (const [owner, receivers] of fallout) {
     const unrest = getDomesticUnrest(world, owner);
     unrest.pressure = Math.min(100, unrest.pressure + 5);
@@ -129,5 +174,5 @@ export function updateForcedDisplacement(world: WorldState): void {
       relation.tension = Math.min(100, relation.tension + 3);
     }
   }
-  if (fallout.size) world.populationRevision = (world.populationRevision ?? 0) + 1;
+  if (fallout.size || deaths) world.populationRevision = (world.populationRevision ?? 0) + 1;
 }

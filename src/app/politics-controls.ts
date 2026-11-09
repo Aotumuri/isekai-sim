@@ -1,4 +1,4 @@
-import { displacementDimension, endDisplacementOrder, startDisplacementOrder } from "../sim/forced-displacement";
+import { endDisplacementOrder, getPersecutionTargets, startDisplacementOrder } from "../sim/forced-displacement";
 import { POPULATION_GROUPS } from "../sim/regional-population";
 import { populationPolicyTitle } from "../sim/population-politics";
 import { getPoliticalCampaignIssue, launchPoliticalCampaign, POLITICAL_CAMPAIGN_COST } from "../sim/political-influence";
@@ -22,10 +22,10 @@ export function attachPoliticsControls(
   partner: () => NationId,
   feedback: (message: string) => void,
 ) {
-  const targetByNation = new Map<NationId, number>();
+  const targetByNation = new Map<NationId, string>();
   root.addEventListener("change", (event) => {
     const control = event.target as HTMLSelectElement;
-    if (control.matches("[data-expulsion-target]")) targetByNation.set(selected(), Number(control.value));
+    if (control.matches("[data-expulsion-target]")) targetByNation.set(selected(), control.value);
   });
   root.addEventListener("click", (event) => {
     const religiousAction = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-religious-ban]")?.dataset.religiousBan;
@@ -49,10 +49,12 @@ export function attachPoliticsControls(
       const nation = world.nations.find((item) => item.id === selected());
       if (!nation) return;
       const target = root.querySelector<HTMLSelectElement>("[data-expulsion-target]");
+      const group = getPersecutionTargets(world, nation).find(({ dimension, group }) => `${dimension}:${group}` === target?.value);
       const stopping = action.dataset.expulsionAction === "stop";
+      const killing = action.dataset.expulsionAction === "kill";
       const success = stopping ? endDisplacementOrder(world, nation) :
-        !!target && startDisplacementOrder(world, nation, Number(target.value));
-      feedback(success ? stopping ? "Expulsion order ended." : "Expulsion order issued."
+        !!group && startDisplacementOrder(world, nation, group.group, killing ? "killing" : "expulsion", group.dimension);
+      feedback(success ? stopping ? "Persecution order ended." : "Persecution order issued."
         : "The government cannot issue this order.");
       return;
     }
@@ -77,7 +79,7 @@ export function attachPoliticsControls(
       const issue = getPoliticalCampaignIssue(world, nation.id, target);
       const partnerNation = world.nations.find((item) => item.id === target && item.macroRegionIds.length > 0);
       const partnerPolitics = partnerNation ? getNationalPolitics(world, partnerNation) : undefined;
-      const dimension = displacementDimension(nation), order = nation.displacementOrder;
+      const targets = getPersecutionTargets(world, nation), order = nation.displacementOrder;
       const cooldown = Math.max(0, (nation.nextDisplacementOrderAt ?? 0) - world.time.slowTick);
       const targetGroup = targetByNation.get(nation.id);
       const parties = [...politics.support].sort((a, b) => (politics.seats.get(b[0]) ?? 0) - (politics.seats.get(a[0]) ?? 0) || b[1] - a[1]);
@@ -102,14 +104,17 @@ export function attachPoliticsControls(
         <p class="society-note">${democracy ? "Elections convert public support into 100 seats. A majority coalition governs." : "Court support shapes succession. A challenger needs an eight-point lead to change royal policy."}</p>
         <table><thead><tr><th>Ideology</th><th>${democracy ? "Public support" : "Court support"}</th>${democracy ? "<th>Seats</th>" : ""}<th>Role</th></tr></thead>
         <tbody>${parties.map(([id, share]) => `<tr><td>${name(id)}</td><td>${share}%</td>${democracy ? `<td>${politics.seats.get(id) ?? 0}</td>` : ""}<td>${id === politics.governingIdeologyId ? "Leads government" : politics.coalition.includes(id) ? "Coalition" : "Opposition"}</td></tr>`).join("")}</tbody></table>
-        ${dimension || order ? `<h2>Forced expulsion</h2>
-        <p class="society-note">Residents are forced across accessible land borders. Expulsions increase domestic unrest and damage relations with receiving countries.</p>
-        ${order ? `<p>Target: ${POPULATION_GROUPS[order.dimension][order.group]} · ${Math.max(0, order.until - world.time.slowTick)}s remaining · ${order.displaced.toFixed(2)} population units displaced.</p>
-        <button type="button" data-expulsion-action="stop">End expulsion order</button>` : dimension ? `<label>Target group <select data-expulsion-target>
-        ${POPULATION_GROUPS[dimension].map((group, index) => index === nation.populationPolicy?.group ? "" :
-          `<option value="${index}" ${targetGroup === index ? "selected" : ""}>${group}</option>`).join("")}</select></label>
-        <button type="button" data-expulsion-action="start" ${!active || cooldown ? "disabled" : ""}>Issue 60-second expulsion order</button>
-        ${cooldown ? `<p class="society-note">Available again in ${cooldown}s.</p>` : ""}` : ""}` : ""}
+        ${targets.length || order ? `<h2>Targeted persecution</h2>
+        <p class="society-note">Forced expulsion displaces residents across accessible land borders. Mass killing causes permanent population losses. Both fuel unrest and diplomatic backlash.</p>
+        ${order ? `<p>Target: ${POPULATION_GROUPS[order.dimension][order.group]} · ${Math.max(0, order.until - world.time.slowTick)}s remaining · ${order.mode === "killing" ? `${(order.killed ?? 0).toFixed(2)} population units killed` : `${order.displaced.toFixed(2)} population units displaced`}.</p>
+        <button type="button" data-expulsion-action="stop">End persecution order</button>` : `<label>Target group <select data-expulsion-target>
+        ${targets.map(({ dimension, group, name }) => {
+          const value = `${dimension}:${group}`;
+          return `<option value="${value}" ${targetGroup === value ? "selected" : ""}>${name} (${dimension})</option>`;
+        }).join("")}</select></label>
+        <div class="society-actions"><button type="button" data-expulsion-action="expel" ${!active || cooldown ? "disabled" : ""}>Order forced expulsion</button>
+        ${hasPoliticalTurbulence(world) ? `<button type="button" data-expulsion-action="kill" ${!active || cooldown ? "disabled" : ""}>Order mass killing</button>` : ""}</div>
+        ${cooldown ? `<p class="society-note">Available again in ${cooldown}s.</p>` : ""}`}` : ""}
         <h2>Foreign political outreach</h2>
         <p class="society-note">Promote your governing ideology in ${esc(getNationName(world, target))}. Supporting a rival movement raises diplomatic tension.</p>
         ${partnerPolitics ? `<p class="society-note">Partner government: ${name(partnerPolitics.governingIdeologyId)} · Local support for ${name(politics.governingIdeologyId)}: ${partnerPolitics.support.get(politics.governingIdeologyId) ?? 0}%.</p>` : ""}

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getRelation, proposeTreaty } from "../../src/sim/diplomacy";
 import { getDomesticUnrest } from "../../src/sim/domestic-unrest";
+import { getPersecutionTargets, startDisplacementOrder, updateForcedDisplacement } from "../../src/sim/forced-displacement";
 import { addPersecutionImpact, createPersecutionImpact, getPublicOutrage, publishPersecutionImpact } from "../../src/sim/persecution-reaction";
 import { getNationalPolitics } from "../../src/sim/politics";
 import { POPULATION_DIMENSIONS } from "../../src/sim/regional-population";
@@ -26,7 +27,7 @@ test("a blanket religious ban harms every minority faith without converting its 
     const population = populations.get(id)!;
     population.ancestry = [0, 0, 0, 0, 0, population.size];
     population.culture = [0, 0, 0, 0, 0, population.size];
-    if (owner === offender.id) population.faith = [0.6, 0.2, 0.2, 0, 0, 0].map((share) => share * population.size);
+    if (owner === offender.id) population.faith = [0.5, 0.1, 0.1, 0.1, 0.1, 0.1].map((share) => share * population.size);
     else {
       const faith = owner === first.id ? 1 : owner === second.id ? 2 : 0;
       population.faith = Array.from({ length: 6 }, (_, index) => index === faith ? population.size : 0);
@@ -49,6 +50,40 @@ test("a blanket religious ban harms every minority faith without converting its 
   updateReligiousPersecution(world);
   assert.equal(getReligiousBan(world, offender), undefined);
   assert.ok(!startReligiousBan(world, offender));
+});
+
+test("a killing order reduces population without moving it across borders", () => {
+  const world = scene(), [offender, observer] = world.nations;
+  offender.populationPolicy = { type: "homeland", group: 0 };
+  const populations = world.regionalPopulations!, owners = getOwnerByMesoId(world);
+  const own = [...populations].filter(([id]) => owners.get(id) === offender.id);
+  const foreign = [...populations].filter(([id]) => owners.get(id) !== offender.id);
+  for (const [, population] of own) {
+    population.ancestry = [population.size, 0, 0, 0, 0, 0];
+    population.culture = [population.size * 0.6, population.size * 0.4, 0, 0, 0, 0];
+  }
+  for (const [id, population] of foreign) {
+    if (owners.get(id) === observer.id) population.culture = [0, population.size, 0, 0, 0, 0];
+  }
+  assert.ok(!getPersecutionTargets(world, offender).some(({ dimension, group }) => dimension === "culture" && group === 0));
+  const original = own.reduce((sum, [, population]) => sum + population.size, 0);
+  const protectedCulture = own.reduce((sum, [, population]) => sum + population.culture[0]!, 0);
+  const foreignBefore = structuredClone(foreign);
+  assert.ok(startDisplacementOrder(world, offender, 1, "killing", "culture"));
+  world.time.slowTick = 10;
+  updateForcedDisplacement(world);
+  const dead = offender.displacementOrder?.killed ?? 0;
+  assert.ok(dead > 0);
+  assert.equal(offender.displacementOrder?.displaced, 0);
+  assert.ok(Math.abs(original - own.reduce((sum, [, population]) => sum + population.size, 0) - dead) < 1e-8);
+  assert.equal(own.reduce((sum, [, population]) => sum + population.culture[0]!, 0), protectedCulture);
+  assert.deepEqual(foreign, foreignBefore);
+  assert.ok(getPublicOutrage(world, observer.id, offender.id) > 0);
+  for (const [, population] of own) for (const dimension of POPULATION_DIMENSIONS) {
+    assert.ok(Math.abs(population[dimension].reduce((sum, count) => sum + count, 0) - population.size) < 1e-8);
+  }
+  updateForcedDisplacement(world);
+  assert.equal(offender.displacementOrder?.killed, dead);
 });
 
 test("affected communities drive stronger democratic outrage regardless of shared ideology", () => {
