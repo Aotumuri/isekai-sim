@@ -6,7 +6,9 @@ import { getWholeProvinces } from "../sim/peace-borders";
 import type { NationId } from "../worldgen/nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { WorldState } from "../sim/world-state";
-import { findWar } from "../sim/war-state";
+import { getCampaignDeadline } from "../sim/campaign-deadline";
+import { getWarFatigue } from "../sim/diplomatic-peace";
+import { findWar, getWarCasualties } from "../sim/war-state";
 import { getNationName } from "../sim/nation-identity";
 import { getMesoById, getOwnerByMesoId } from "../sim/world-cache";
 import { getWarDeclarationMode, hasPoliticalTurbulence } from "../sim/simulation-settings";
@@ -14,7 +16,7 @@ import { getSubjectIntegrationIssue, integrateSubjectGovernment, setGovernancePo
 import { getDomesticUnrest } from "../sim/domestic-unrest";
 import { getMapView } from "../render/map-view-state";
 import { districtName } from "./territory-controls";
-import { getWarNegotiation, getWarAdvantage, isFightOnGovernment, getPeaceTermsIssue, assessPeaceOffer, proposePeaceTerms, acceptPeaceOffer, type PeaceTerms, type PeaceOffer } from "../sim/war-negotiations";
+import { getWarNegotiation, getWarAdvantage, getWarTrend, isFightOnGovernment, getPeaceTermsIssue, assessPeaceOffer, proposePeaceTerms, acceptPeaceOffer, type PeaceTerms, type PeaceOffer } from "../sim/war-negotiations";
 const esc = (value: unknown) => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]!));
 export function attachPeaceControls(root: HTMLElement, world: WorldState, selected: () => NationId, partner: () => NationId,
   feedback: (message: string) => void): { update: () => void } {
@@ -88,7 +90,11 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     }
     const negotiation = getWarNegotiation(world, war), own = negotiation.offers.get(a)!, opponent = negotiation.offers.get(b)!;
     const unrest = getDomesticUnrest(world, a), advantage = getWarAdvantage(world, a, b);
-    view("outlook").textContent = `War outlook: ${advantage > 0.15 ? "Favorable" : advantage < -0.15 ? "Unfavorable" : "Balanced"} · Domestic unrest: ${Math.round(unrest.pressure)}/100 · ${isFightOnGovernment(world, a) ? "Government favors fighting on despite unrest" : "Government weighs compromise against domestic danger"}.`;
+    const trend = getWarTrend(negotiation, a), deadline = getCampaignDeadline(world, a, b);
+    const position = advantage > 0.15 ? "Favorable" : advantage < -0.15 ? "Unfavorable" : "Balanced";
+    const direction = trend > 0.08 ? "improving" : trend < -0.08 ? "deteriorating" : "steady";
+    const window = deadline <= 75 ? ` · Campaign window ~${Math.ceil(deadline)}s` : "";
+    view("outlook").textContent = `War outlook: ${position}, ${direction}${window} · Domestic unrest ${Math.round(unrest.pressure)}/100 · War fatigue ${Math.round(getWarFatigue(world, a, b))}/100 · Battle casualties ${Math.round(getWarCasualties(war, a)).toLocaleString()}. ${isFightOnGovernment(world, a) ? "Government favors fighting on despite unrest." : "Government weighs compromise against domestic danger."}`;
     const incoming = assessPeaceOffer(world, a, b, opponent.terms);
     view("offers").innerHTML = summary(own) + summary(opponent) + `<p class="society-note peace-assessment">Your government’s assessment of their terms: ${esc(incoming.reason)}</p>`;
     (control("automatic") as HTMLInputElement).checked = negotiation.automatic.get(a) ?? true;

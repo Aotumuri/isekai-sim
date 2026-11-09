@@ -1,3 +1,4 @@
+import { getCrisisDeploymentReadiness } from "../sim/crisis-deployment";
 import { attachPeaceConferenceControls } from "./peace-conference-controls";
 import { attachFoodControls } from "./food-controls";
 import { attachTreasuryControls } from "./treasury-controls";
@@ -184,7 +185,9 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       view("truce-extension").innerHTML = `<div class="society-actions"><button type="button" data-action="extend-truce" ${issue ? "disabled" : ""}>Extend truce by ${TRUCE_EXTENSION.seconds}s · ${TRUCE_EXTENSION.cost}</button></div>${issue ? `<p class="society-note">${esc(issue)}</p>` : ""}`;
     } else view("truce-extension").replaceChildren();
     const crisis = relation?.crisis;
-    view("crisis").innerHTML = crisis ? `<div class="society-crisis">Ultimatum: ${n(crisis.aggressorId)} → ${n(crisis.aggressorId === a ? b : a)}${crisis.demand === "territory" ? `<br>Demands: ${(crisis.regionIds ?? []).map(districtName).join(", ")}` : ""}<br>Negotiation deadline: ${Math.max(0, crisis.deadlineSlowTick - world.time.slowTick)}s${crisis.aggressorId !== a ? `<div class="society-actions"><button type="button" data-action="negotiate">Negotiate · 15</button><button type="button" data-action="concede">${crisis.demand === "territory" ? "Accept territorial demand" : "Concede 30 weapons"}</button><button type="button" data-action="reject">Reject</button></div>` : ""}</div>` : "";
+    const staged = crisis ? getCrisisDeploymentReadiness(world, crisis.aggressorId, crisis.aggressorId === a ? b : a) : undefined;
+    const deployment = staged === undefined ? "" : `<br>Border force assembled: ${Math.round(staged * 100)}%`;
+    view("crisis").innerHTML = crisis ? `<div class="society-crisis">Ultimatum: ${n(crisis.aggressorId)} → ${n(crisis.aggressorId === a ? b : a)}${crisis.demand === "territory" ? `<br>Demands: ${(crisis.regionIds ?? []).map(districtName).join(", ")}` : ""}<br>Negotiation deadline: ${Math.max(0, crisis.deadlineSlowTick - world.time.slowTick)}s${deployment}${crisis.aggressorId !== a ? `<div class="society-actions"><button type="button" data-action="negotiate">Negotiate · 15</button><button type="button" data-action="concede">${crisis.demand === "territory" ? "Accept territorial demand" : "Concede 30 weapons"}</button><button type="button" data-action="reject">Reject</button></div>` : ""}</div>` : "";
     const offered = control("export").value as TradeResource, requested = control("import").value as TradeResource;
     const amount = Number(control("amount").value);
     setText("exchange", `${Number.isFinite(amount) ? amount : 0} ${RESOURCE_NAMES[offered]} ↔ ${(Number.isFinite(amount) ? amount * TRADE_RESOURCE_VALUES[offered] / TRADE_RESOURCE_VALUES[requested] : 0).toFixed(1)} ${RESOURCE_NAMES[requested]}. Requires an agreement, open route and surplus resources.`);

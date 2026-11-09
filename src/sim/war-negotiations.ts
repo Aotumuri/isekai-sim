@@ -66,7 +66,7 @@ function sampleWarOutlook(world: WorldState, negotiation: WarNegotiation): void 
   negotiation.outlook = { advantageA: advantage, trendA: old ? old.trendA * 0.4 + trend * 0.6 : 0, sampledAtSlowTick: world.time.slowTick };
 }
 
-function getWarTrend(negotiation: WarNegotiation, nation: NationId): number {
+export function getWarTrend(negotiation: WarNegotiation, nation: NationId): number {
   return (negotiation.outlook?.trendA ?? 0) * (nation === negotiation.a ? 1 : -1);
 }
 
