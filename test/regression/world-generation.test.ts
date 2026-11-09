@@ -140,23 +140,31 @@ test("historical seeds produce connected land, separate continents, and a sea wi
   }
 });
 
-test("the larger default map has three major landmasses of different sizes", () => {
+test("the larger default map varies the orientation of its three major landmasses", () => {
   const config = createDefaultWorldConfig();
   assert.ok(config.width > 2560 && config.height > 1440);
   assert.ok(config.microRegionCount > 210_000);
 
+  const orientations = new Set<string>();
   for (const seed of [1, 2, 3, 6, 17, 21, 57, 64, 76]) {
     const world = createWorld({ ...config, seed, microRegionCount: 12_000 });
     const remaining = new Map(world.microRegions.filter((region) => !region.isSea)
       .map((region) => [region.id, region]));
-    const continentSizes: number[] = [];
+    const continents: MicroRegion[][] = [];
     for (const region of remaining.values()) {
       const land = collectConnectedRegions(region, remaining);
-      if (land.length > world.microRegions.length * 0.05) continentSizes.push(land.length);
+      if (land.length > world.microRegions.length * 0.05) continents.push(land);
     }
-    assert.equal(continentSizes.length, 3, `seed ${seed}`);
-    assert.ok(Math.max(...continentSizes) > Math.min(...continentSizes) * 1.5, `seed ${seed}`);
+    assert.equal(continents.length, 3, `seed ${seed}`);
+    const [largest, , smallest] = continents.sort((a, b) => b.length - a.length);
+    assert.ok(largest!.length > smallest!.length * 1.5, `seed ${seed}`);
+    const xs = largest!.map(({ site }) => site.x);
+    const ys = largest!.map(({ site }) => site.y);
+    const width = (Math.max(...xs) - Math.min(...xs)) / config.width;
+    const height = (Math.max(...ys) - Math.min(...ys)) / config.height;
+    orientations.add(width > height ? "horizontal" : "vertical");
   }
+  assert.equal(orientations.size, 2);
 });
 
 function collectConnectedRegions(

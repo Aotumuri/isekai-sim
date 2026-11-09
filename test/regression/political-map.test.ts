@@ -110,7 +110,8 @@ test("puppets use a darker shade of their overlord's political color", () => {
 });
 
 test("political colors distinguish neighboring countries and reserve dark shades for puppets", () => {
-  const world = createWorld({ ...createDefaultWorldConfig(), seed: 17, microRegionCount: 32_000 });
+  const world = createWorld({ ...createDefaultWorldConfig(), seed: 17, microRegionCount: 32_000,
+    nationTargetMacroRegionsPerNation: 2 });
   const colors = world.nations.map(({ id }) => getPoliticalFill(world, id));
   assert.equal(new Set(colors).size, colors.length);
   const channels = (color: number) => [color >> 16, (color >> 8) & 0xff, color & 0xff];

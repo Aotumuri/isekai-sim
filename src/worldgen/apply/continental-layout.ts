@@ -13,6 +13,8 @@ interface Landform {
 interface ContinentalLayout {
   flipX: boolean;
   flipY: boolean;
+  swapAxes?: boolean;
+  rotation?: number;
   landforms: Landform[];
   coastReliefScale: number;
   minimumLandformStrength: number;
@@ -23,15 +25,10 @@ export function createContinentalLayout(seed: number, layout?: WorldConfig["cont
   const rng = new SeededRng(seed ^ 0x671295ab);
   if (layout === "oceanic") {
     const continents = [
-      { x: 0.23, y: 0.25, rx: rng.range(0.18, 0.21), ry: rng.range(0.14, 0.18) },
-      { x: 0.23, y: 0.74, rx: rng.range(0.15, 0.18), ry: rng.range(0.16, 0.19) },
-      { x: 0.77, y: 0.47, rx: rng.range(0.15, 0.19), ry: rng.range(0.30, 0.35) },
-    ].map(({ x, y, rx, ry }) => ({
-      x: x + rng.range(-0.025, 0.025),
-      y: y + rng.range(-0.025, 0.025),
-      rx,
-      ry,
-    }));
+      { x: rng.range(0.19, 0.26), y: rng.range(0.20, 0.27), rx: rng.range(0.18, 0.21), ry: rng.range(0.14, 0.18) },
+      { x: rng.range(0.18, 0.28), y: rng.range(0.73, 0.80), rx: rng.range(0.15, 0.18), ry: rng.range(0.16, 0.19) },
+      { x: rng.range(0.75, 0.80), y: rng.range(0.40, 0.55), rx: rng.range(0.15, 0.19), ry: rng.range(0.30, 0.35) },
+    ];
     const easternCoast = { x: continents[2]!.x + 0.09, y: continents[2]!.y + 0.21, rx: 0.13, ry: 0.15 };
     const islands = [
       { x: 0.45, y: 0.55, rx: 0.040, ry: 0.024 },
@@ -47,6 +44,8 @@ export function createContinentalLayout(seed: number, layout?: WorldConfig["cont
       flipY,
       landforms: [...continents, easternCoast, ...islands]
         .map((landform) => ({ ...landform, coastPhase: rng.range(0, 2 * Math.PI) })),
+      swapAxes: rng.nextFloat() < 0.5,
+      rotation: rng.range(-0.16, 0.16),
       // Leave room for the coastline noise between landforms instead of carving a channel through them.
       coastReliefScale: 0.52,
       minimumLandformStrength: 0.4,

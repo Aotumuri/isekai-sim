@@ -14,12 +14,20 @@ export function applyContinentalElevation(
   const [, , , , beltBend, beltOffset, hillX, hillY] =
     Array.from({ length: 8 }, () => rng.range(0, 2 * Math.PI));
   const layout = createContinentalLayout(config.seed, config.continentalLayout);
+  const cosine = Math.cos(layout.rotation ?? 0), sine = Math.sin(layout.rotation ?? 0);
 
   for (const region of regions) {
     const u = region.site.x / config.width;
     const v = region.site.y / config.height;
-    const x = layout.flipX ? 1 - u : u;
-    const y = layout.flipY ? 1 - v : v;
+    const horizontal = layout.swapAxes ? v : u;
+    const vertical = layout.swapAxes ? u : v;
+    let x = layout.flipX ? 1 - horizontal : horizontal;
+    let y = layout.flipY ? 1 - vertical : vertical;
+    if (layout.rotation) {
+      const localX = x - 0.5, localY = y - 0.5;
+      x = localX * cosine - localY * sine + 0.5;
+      y = localX * sine + localY * cosine + 0.5;
+    }
     let interior = -Infinity;
     for (const continent of layout.landforms) {
       const dx = (x - continent.x) / continent.rx;
@@ -41,7 +49,7 @@ export function applyContinentalElevation(
     const belt = Math.sin(17 * x + 10 * y + 1.4 * Math.sin(13 * y + beltBend) + beltOffset);
     const ridges = Math.exp(-8 * belt ** 2);
     const hills = Math.sin(34 * x + hillX) * Math.sin(39 * y + hillY);
-    const rim = Math.min(x, 1 - x, y, 1 - y);
+    const rim = Math.min(u, 1 - u, v, 1 - v);
     const edgeFade = Math.max(0, 1 - rim / 0.12) ** 2;
     // Fade the coastal displacement inland so the mountain belts keep their relief.
     const coastalWeight = clamp(1 - interior / 0.30, 0, 1);
