@@ -1,7 +1,7 @@
 export type MapGenerator = "legacy" | "historical";
 
 export const WORLD_BALANCE = {
-  mapGenerator: "legacy" as MapGenerator, // Set to "historical" for continental terrain and drainage.
+  mapGenerator: "historical" as MapGenerator, // Set to "legacy" to restore the original generator.
   microRegion: {
     density: 1 / 10,
     minCount: 120,
