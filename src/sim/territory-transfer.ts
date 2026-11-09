@@ -52,6 +52,8 @@ export interface FoundingTransfer {
 
 export function canTransferTerritories(world: WorldState, legs: TerritoryTransfer[], founding?: FoundingTransfer): boolean {
   if (!legs.length) return false;
+  if (founding && (world.nations.some((nation) => nation.id === founding.nation.id) ||
+    !legs.some((leg) => leg.to === founding.nation.id && leg.regionIds.includes(founding.nation.capitalMesoId)))) return false;
   const owners = getOwnerByMesoId(world), regions = getMesoById(world), used = new Set<MesoRegionId>();
   const remaining = new Map<NationId, number>();
   for (const owner of owners.values()) remaining.set(owner, (remaining.get(owner) ?? 0) + 1);

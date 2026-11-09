@@ -173,7 +173,7 @@ export function proposePeaceTerms(world: WorldState, proposer: NationId, target:
   const negotiation = getWarNegotiation(world, findWar(world.wars, proposer, target)!);
   const old = negotiation.offers.get(proposer)!;
   negotiation.offers.set(proposer, { proposerId: proposer, terms: { ...terms, demandedRegionIds: [...terms.demandedRegionIds], offeredRegionIds: [...terms.offeredRegionIds],
-    partition: terms.partition && { ...terms.partition, districtIds: [...terms.partition.districtIds] } }, revisedAtSlowTick: world.time.slowTick, revision: old.revision + 1, source: "manual" });
+    ...(terms.partition ? { partition: { ...terms.partition, districtIds: [...terms.partition.districtIds] } } : {}) }, revisedAtSlowTick: world.time.slowTick, revision: old.revision + 1, source: "manual" });
   negotiation.automatic.set(proposer, false);
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [proposer, target], message: `${getNationName(world, proposer)} proposed peace to ${getNationName(world, target)}: ${terms.puppetTarget ? "puppet government, " : ""}${terms.demandedRegionIds.length} districts demanded, ${terms.offeredRegionIds.length} offered, ${terms.demandedWeapons || -terms.offeredWeapons} weapons reparations.` });
   return true;
