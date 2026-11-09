@@ -1,3 +1,4 @@
+import { attachFoodControls } from "./food-controls";
 import { attachTreasuryControls } from "./treasury-controls";
 import { attachPoliticsControls } from "./politics-controls";
 import { attachPeaceControls } from "./peace-controls";
@@ -51,11 +52,12 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
         <label><input type="checkbox" data-setting="researchEnabled"> National research and automatic refits</label>
         <label><input type="checkbox" data-setting="armsAidEnabled"> Arms aid</label>
         <label><input type="checkbox" data-setting="tradeEnabled"> Resource trade</label>
+        <label><input type="checkbox" data-setting="foodEnabled"> Harvests, rationing and famine</label>
         <p data-view="mode"></p>
       </details>
       <div class="society-selectors"><label>Selected nation<select data-control="nation" aria-label="Selected nation"></select></label><label>Diplomatic partner<select data-control="partner" aria-label="Diplomatic partner"></select></label></div>
       <div class="society-country" data-view="country"></div><div data-exile-ui></div>
-      <nav class="society-tabs" aria-label="Information views"><button type="button" data-tab="diplomacy" aria-pressed="true">Diplomacy</button><button type="button" data-tab="politics" aria-pressed="false">Politics</button><button type="button" data-tab="territory" aria-pressed="false">Territories</button><button type="button" data-tab="military" aria-pressed="false">Military</button><button type="button" data-tab="treasury" aria-pressed="false">Treasury</button><button type="button" data-tab="research" aria-pressed="false">Research</button><button type="button" data-tab="factions" aria-pressed="false">Factions</button><button type="button" data-tab="history" aria-pressed="false">World history</button></nav>
+      <nav class="society-tabs" aria-label="Information views"><button type="button" data-tab="diplomacy" aria-pressed="true">Diplomacy</button><button type="button" data-tab="politics" aria-pressed="false">Politics</button><button type="button" data-tab="territory" aria-pressed="false">Territories</button><button type="button" data-tab="military" aria-pressed="false">Military</button><button type="button" data-tab="food" aria-pressed="false">Food</button><button type="button" data-tab="treasury" aria-pressed="false">Treasury</button><button type="button" data-tab="research" aria-pressed="false">Research</button><button type="button" data-tab="factions" aria-pressed="false">Factions</button><button type="button" data-tab="history" aria-pressed="false">World history</button></nav>
       <p class="society-feedback" role="status" aria-live="polite">Nations act autonomously. Select a nation to guide its policies and diplomacy.</p>
       <section data-pane="diplomacy">
         <div data-view="relation"></div><div data-view="truce-extension"></div>
@@ -71,6 +73,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       <section data-pane="politics" hidden><div data-politics-ui></div></section>
       <section data-pane="territory" hidden><div data-territory-ui></div></section>
       <section data-pane="military" hidden><div data-mobilization-ui></div></section>
+      <section data-pane="food" hidden><div data-food-ui></div></section>
       <section data-pane="treasury" hidden><div data-treasury-ui></div></section>
       <section data-pane="research" hidden>
         <p class="society-note">One national research budget is shared by all equipment programs. Choose a program, set its priority, and select the improvement to emphasize. Pausing a program preserves its progress.</p>
@@ -106,6 +109,8 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
   const politics = attachPoliticsControls(wrapper.querySelector<HTMLElement>("[data-politics-ui]")!, world,
     () => nationSelect.value as NationId, () => partnerSelect.value as NationId,
     (message) => { feedback.textContent = message; update(true); });
+  const food = attachFoodControls(wrapper.querySelector<HTMLElement>("[data-food-ui]")!, world,
+    () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; });
   const treasury = attachTreasuryControls(wrapper.querySelector<HTMLElement>("[data-treasury-ui]")!, world,
     () => nationSelect.value as NationId, (message) => { feedback.textContent = message; });
   const peaceControls = attachPeaceControls(wrapper.querySelector<HTMLElement>("[data-peace-ui]")!, world, () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
@@ -211,6 +216,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       TransportShip: "Transport ships: expand cargo capacity, improve survivability or increase speed. Capacity gains diminish: a standard 10-unit ship reaches at most 25 units at level 10. Larger hulls cost more, burn more fuel and move more slowly.",
     }[family]);
     if (!panel.querySelector<HTMLElement>('[data-pane="politics"]')?.hidden) politics.update(nation);
+    if (!panel.querySelector<HTMLElement>('[data-pane="food"]')?.hidden) food.update(nation);
     if (!panel.querySelector<HTMLElement>('[data-pane="treasury"]')?.hidden) treasury.update(nation);
     peaceControls.update();
     exileControls.update();
