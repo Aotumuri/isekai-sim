@@ -48,6 +48,7 @@ export function attachPoliticsControls(
   });
   return {
     update(nation: NationRuntime): void {
+      if (root.contains(document.activeElement) && document.activeElement?.matches("[data-expulsion-target]")) return;
       const politics = getNationalPolitics(world, nation);
       const ideologies = new Map(getIdeologies(world).map((item) => [item.id, item.name]));
       const name = (id: string) => esc(ideologies.get(id) ?? id);

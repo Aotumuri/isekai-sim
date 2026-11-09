@@ -65,10 +65,11 @@ function displaceGroup(source: RegionalPopulation, target: RegionalPopulation, o
 function considerExpulsion(world: WorldState, nation: NationRuntime): void {
   const now = world.time.slowTick;
   const dimension = displacementDimension(nation);
+  const pressure = world.domesticUnrest?.byNationId.get(nation.id)?.pressure ?? 0;
   if (!dimension || nation.displacementOrder || (nation.nextDisplacementOrderAt ?? 0) > now ||
     nation.politics?.system !== "monarchy" ||
-    (world.domesticUnrest?.byNationId.get(nation.id)?.pressure ?? 0) < 85 ||
-    getNationCharacter(world, nation.id).aggression < 0.65) return;
+    pressure < 85 || (getNationCharacter(world, nation.id).aggression < 0.65 &&
+    !(dimension === "ancestry" && pressure >= 95))) return;
   const groups = world.regionalPopulations?.get(nation.capitalMesoId)?.[dimension];
   if (!groups) return;
   const target = groups.reduce((best, count, group) =>
@@ -88,7 +89,7 @@ export function updateForcedDisplacement(world: WorldState): void {
   const fallout = new Map<NationId, Map<NationId, number>>();
   for (const nation of world.nations) {
     const order = nation.displacementOrder;
-    if (order && (world.time.slowTick > order.until || !isNationActive(nation) ||
+    if (order && (world.time.slowTick >= order.until || !isNationActive(nation) ||
       displacementDimension(nation) !== order.dimension || nation.populationPolicy?.group === order.group ||
       getWarDeclarationMode(world) !== "diplomacy")) endDisplacementOrder(world, nation);
   }
