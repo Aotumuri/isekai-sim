@@ -37,6 +37,19 @@ function populationByNation(world: WorldState) {
   return totals;
 }
 
+function createTreasury(balance: number): NationalTreasury {
+  return { balance, taxRate: 15, population: 0, taxablePopulation: 0, lastRevenue: 0,
+    researchFunding: false, militaryFunding: false,
+    spent: { research: 0, military: 0, relief: 0, construction: 0 } };
+}
+
+export function splitTreasury(parent: NationalTreasury | undefined, share: number): NationalTreasury | undefined {
+  if (!parent) return undefined;
+  const allocated = parent.balance * Math.max(0, Math.min(1, share));
+  parent.balance -= allocated;
+  return { ...createTreasury(allocated), taxRate: parent.taxRate, automaticBudget: parent.automaticBudget };
+}
+
 export function updateTreasuries(world: WorldState): void {
   if (!world.regionalPopulations || world.time.slowTick % TAX_COLLECTION_INTERVAL !== 0 ||
     world.lastTaxCollectionTick === world.time.slowTick) return;
@@ -48,11 +61,7 @@ export function updateTreasuries(world: WorldState): void {
       continue;
     }
     const { population, taxablePopulation } = totals.get(nation.id) ?? { population: 0, taxablePopulation: 0 };
-    const treasury = nation.treasury ??= {
-      balance: 20 + population * 0.75, taxRate: 15, population, taxablePopulation, lastRevenue: 0,
-      researchFunding: false, militaryFunding: false,
-      spent: { research: 0, military: 0, relief: 0, construction: 0 },
-    };
+    const treasury = nation.treasury ??= createTreasury(20 + population * 0.75);
     treasury.population = population;
     treasury.taxablePopulation = taxablePopulation;
     treasury.lastRevenue = world.time.slowTick === 0 ? 0 : taxablePopulation * treasury.taxRate / 100;

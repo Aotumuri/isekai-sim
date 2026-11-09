@@ -1,3 +1,4 @@
+import { splitTreasury } from "./treasury";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { culturalDistance } from "./annexation";
@@ -101,5 +102,6 @@ export function dividePartitionResources(world: WorldState, parent: NationRuntim
     successor.resources[key] = parent.resources[key] * share;
     parent.resources[key] -= successor.resources[key];
   }
+  successor.treasury = splitTreasury(parent.treasury, share);
   assignNationIdentities(world);
 }

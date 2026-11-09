@@ -1,3 +1,4 @@
+import { splitTreasury } from "./treasury";
 import { updateDomesticUnrest, canRevolt, recordRevolution } from "./domestic-unrest";
 import { establishRevolutionaryGovernment } from "./politics";
 import { getNationName } from "./nation-identity";
@@ -131,6 +132,7 @@ export function updateCivilWar(world: WorldState): void {
       warCooperation: cooperationBalance.max,
       warCooperationBoost: 0,
       resources: rebelResources,
+      treasury: splitTreasury(nation.treasury, rebelShare),
       resourceFlow: createNationResourceFlow(),
       nextUnitProductionTick: isUnitProductionEnabled
         ? nextScheduledTickRange(
