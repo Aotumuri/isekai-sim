@@ -1,3 +1,4 @@
+import type { DisplacementOrder } from "./forced-displacement";
 import type { NationalFoodSupply } from "./food-supply";
 import type { NationalTreasury } from "./treasury";
 import type { PopulationPolicy } from "./population-politics";
@@ -47,6 +48,8 @@ export function createNationResourceFlow(): NationResourceFlow {
 export type NationRuntime = Nation & {
   food?: NationalFoodSupply;
   treasury?: NationalTreasury;
+  displacementOrder?: DisplacementOrder;
+  nextDisplacementOrderAt?: number;
   populationPolicy?: PopulationPolicy;
   character?: NationCharacter;
   preGovernmentCharacter?: NationCharacter;

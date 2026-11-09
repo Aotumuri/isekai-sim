@@ -1,3 +1,4 @@
+import { updateForcedDisplacement } from "./forced-displacement";
 import { updatePeaceConferences } from "./peace-conference";
 import { updateFoodTrade } from "./food-trade";
 import { updateFoodSupply } from "./food-supply";
@@ -225,6 +226,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateFoodTrade(world);
   updateInternationalTrade(world);
   updatePopulationMigration(world);
+  updateForcedDisplacement(world);
   updateFoodSupply(world);
   updatePopulationPolitics(world);
   updateArmsAid(world);
