@@ -4,7 +4,7 @@ import { canRevolt, getDomesticUnrest, updateDomesticUnrest } from "../../src/si
 import { getRelation } from "../../src/sim/diplomacy";
 import { FOOD_INTERVAL, updateFoodSupply } from "../../src/sim/food-supply";
 import { updateFoodTrade } from "../../src/sim/food-trade";
-import { findTradeRoute, proposeResourceTrade, updateInternationalTrade } from "../../src/sim/international-trade";
+import { findTradeRoute, proposeResourceTrade, sendGrainAid, updateInternationalTrade } from "../../src/sim/international-trade";
 import { createSimulationSettings } from "../../src/sim/simulation-settings";
 import { installSubjectGovernment } from "../../src/sim/subject-governments";
 import { setSubjectFoodLevy } from "../../src/sim/subject-food-levy";
@@ -122,4 +122,39 @@ test("subject requisitions transfer a share of the harvest and stop under embarg
   updateFoodSupply(world);
   assert.equal(subject.food!.levy, 0);
   assert.equal(overlord.food!.levy, 0);
+});
+
+test("grain aid reaches a recipient with an empty treasury without charging it", () => {
+  const { world, seller, buyer } = tradingScene();
+  buyer.treasury!.balance = 0;
+  const before = buyer.food!.stock;
+  assert(sendGrainAid(world, seller.id, buyer.id, 20));
+  const deal = world.internationalTrade!.deals[0]!;
+  assert(deal.humanitarian);
+  world.time.slowTick = deal.arrivesAtSlowTick;
+  updateInternationalTrade(world);
+  assert.equal(deal.status, "delivered");
+  assert.equal(buyer.treasury!.balance, 0);
+  assert.equal(buyer.food!.stock, before + 20);
+});
+
+test("a low grain reserve warns once until the reserve recovers", () => {
+  const world = scene(), nation = world.nations[0]!;
+  for (const [id, owner] of getOwnerByMesoId(world)) if (owner === nation.id) {
+    world.agriculturalLand?.set(id, { arableShare: 0, harvest: 0 });
+  }
+  nation.food!.stock = nation.food!.demand * 6;
+  for (const tick of [10, 20]) {
+    world.time.slowTick = tick;
+    updateFoodSupply(world);
+  }
+  const warnings = () => world.events!.filter((event) => event.nationIds.includes(nation.id) && event.message.includes("grain reserve will last")).length;
+  assert.equal(warnings(), 1);
+  nation.food!.stock = nation.food!.demand * 15;
+  world.time.slowTick = 30;
+  updateFoodSupply(world);
+  nation.food!.stock = nation.food!.demand * 6;
+  world.time.slowTick = 40;
+  updateFoodSupply(world);
+  assert.equal(warnings(), 2);
 });
