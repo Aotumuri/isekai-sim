@@ -4,7 +4,6 @@ import type { UnitState } from "../unit";
 import { getMoveMsPerRegion } from "../movement";
 import type {
   MesoRegion,
-  MesoRegionBuilding,
   MesoRegionId,
 } from "../../worldgen/meso-region";
 import type { NationId } from "../../worldgen/nation";
@@ -1573,51 +1572,25 @@ function isPassable(meso: MesoRegion): boolean {
   return meso.type !== "sea";
 }
 
-function collectOwnedTargets(
+function collectDefenseTargets(
   nationId: NationId,
   mesoById: Map<MesoRegionId, MesoRegion>,
   ownerByMesoId: Map<MesoRegionId, NationId>,
-): MesoRegionId[] {
-  const targets: MesoRegionId[] = [];
-  for (const [mesoId, owner] of ownerByMesoId.entries()) {
-    if (owner !== nationId) {
-      continue;
-    }
-    const meso = mesoById.get(mesoId);
-    if (meso && isPassable(meso)) {
-      targets.push(mesoId);
-    }
-  }
-  return targets;
-}
-
-function collectBuildingTargets(
-  nationId: NationId,
-  building: MesoRegionBuilding,
-  mesoById: Map<MesoRegionId, MesoRegion>,
-  ownerByMesoId: Map<MesoRegionId, NationId>,
-): MesoRegionId[] {
-  const targets: MesoRegionId[] = [];
-  for (const [mesoId, owner] of ownerByMesoId.entries()) {
-    if (owner !== nationId) {
-      continue;
-    }
-    const meso = mesoById.get(mesoId);
-    if (!meso || !isPassable(meso)) {
-      continue;
-    }
-    if (meso.building === building) {
-      targets.push(mesoId);
-    }
-  }
-  return targets;
-}
-
-function filterTargetsToScope(
-  targets: MesoRegionId[],
   scope?: ReadonlySet<MesoRegionId>,
-): MesoRegionId[] {
-  return scope ? targets.filter((targetId) => scope.has(targetId)) : targets;
+) {
+  const ownedTargets: MesoRegionId[] = [];
+  const capitalTargets: MesoRegionId[] = [];
+  const cityTargets: MesoRegionId[] = [];
+  for (const mesoId of scope ?? ownerByMesoId.keys()) {
+    if (ownerByMesoId.get(mesoId) !== nationId) continue;
+    const meso = mesoById.get(mesoId);
+    if (!meso || !isPassable(meso)) continue;
+
+    ownedTargets.push(mesoId);
+    if (meso.building === "capital") capitalTargets.push(mesoId);
+    if (meso.building === "city") cityTargets.push(mesoId);
+  }
+  return { ownedTargets, capitalTargets, cityTargets };
 }
 
 function collectIntrusionTargetsByNation(
@@ -1743,14 +1716,9 @@ function assignDefenseTargets(
     "spread",
   );
   const borderSet = new Set(borderList);
-  const ownedTargets = collectOwnedTargets(nationId, mesoById, ownerByMesoId);
-  const capitalTargets = collectBuildingTargets(
-    nationId,
-    "capital",
-    mesoById,
-    ownerByMesoId,
+  const { ownedTargets, capitalTargets, cityTargets } = collectDefenseTargets(
+    nationId, mesoById, ownerByMesoId,
   );
-  const cityTargets = collectBuildingTargets(nationId, "city", mesoById, ownerByMesoId);
 
   if (
     intrusionSet.size === 0 &&
@@ -1915,17 +1883,8 @@ function assignScopedDefenseTargets(
   mesoById: Map<MesoRegionId, MesoRegion>,
   ownerByMesoId: Map<MesoRegionId, NationId>,
 ): void {
-  const capitalTargets = filterTargetsToScope(
-    collectBuildingTargets(nationId, "capital", mesoById, ownerByMesoId),
-    regionScope,
-  );
-  const cityTargets = filterTargetsToScope(
-    collectBuildingTargets(nationId, "city", mesoById, ownerByMesoId),
-    regionScope,
-  );
-  const ownedTargets = filterTargetsToScope(
-    collectOwnedTargets(nationId, mesoById, ownerByMesoId),
-    regionScope,
+  const { ownedTargets, capitalTargets, cityTargets } = collectDefenseTargets(
+    nationId, mesoById, ownerByMesoId, regionScope,
   );
   const tiers = [
     capitalTargets,
