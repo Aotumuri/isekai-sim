@@ -10,6 +10,7 @@ export interface SimulationSettings {
   armsAidEnabled: boolean;
   tradeEnabled: boolean;
   foodEnabled?: boolean;
+  politicalTurbulenceEnabled?: boolean;
 }
 
 export function createSimulationSettings(overrides: Partial<SimulationSettings> = {}): SimulationSettings {
@@ -29,6 +30,10 @@ export interface SimulationEvent {
   category: "diplomacy" | "research" | "aid" | "trade" | "military" | "politics";
   nationIds: string[];
   message: string;
+}
+
+export function hasPoliticalTurbulence(world: WorldState): boolean {
+  return world.settings?.politicalTurbulenceEnabled === true && getWarDeclarationMode(world) === "diplomacy";
 }
 
 export function recordSimulationEvent(world: WorldState, event: Omit<SimulationEvent, "tick">): void {

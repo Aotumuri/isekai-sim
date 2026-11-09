@@ -9,6 +9,7 @@ import { updateTreasuries } from "./treasury";
 import { updateSubjectAutonomy } from "./subject-autonomy";
 import { updateAnnexations } from "./annexation";
 import { updatePopulationPolitics } from "./population-politics";
+import { updateNationalistMovements } from "./nationalist-movements";
 import { updatePopulationMigration } from "./population-migration";
 import { updateCoastalInvestment } from "./coastal-investment";
 import { updateSubjectGovernments } from "./subject-governments";
@@ -198,6 +199,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateTerritorialClaims(world);
   updateForeignPoliticalInfluence(world);
   updateNationalPolitics(world);
+  updateNationalistMovements(world);
   updateDiplomaticRelations(world);
   updateMilitaryAccess(world);
   updateFactions(world);

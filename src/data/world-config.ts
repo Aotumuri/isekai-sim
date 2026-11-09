@@ -56,6 +56,7 @@ export function createDefaultWorldConfig(): WorldConfig {
   return {
     ...createWorldConfig(4096, 2304, 320_000),
     continentalLayout: "oceanic",
+    systems: { politicalTurbulenceEnabled: true },
     nationTargetMacroRegionsPerNation: 6,
   };
 }
