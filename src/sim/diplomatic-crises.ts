@@ -92,6 +92,32 @@ export function respondToCrisis(world: WorldState, responderId: NationId, otherI
   return true;
 }
 
+function counterTerritorialDemand(world: WorldState, attacker: NationId, defender: NationId,
+  maxCost: number): boolean {
+  const crisis = getRelation(world, attacker, defender).crisis;
+  const demanded = crisis?.regionIds;
+  if (!crisis || !demanded || demanded.length < 2) return false;
+  const capital = world.nations.find(({ id }) => id === defender)?.capitalMesoId;
+  const character = getNationCharacter(world, attacker);
+  const satisfaction = Math.max(0.2, character.aggression - character.cooperation * 0.4);
+  const minimumGain = getTerritorialValue(world, attacker, demanded) * satisfaction;
+  const provinces = getWholeProvinces(world, defender, demanded);
+  const parcels = provinces?.map(({ mesoRegionIds }) => mesoRegionIds) ?? demanded.map((id) => [id]);
+  const counter = parcels.map((ids) => ({ ids, cost: getTerritorialValue(world, defender, ids) }))
+    .sort((a, b) => a.cost - b.cost)
+    .find(({ ids, cost }) => ids.length < demanded.length && !ids.includes(capital!) && cost <= maxCost &&
+      getTerritorialValue(world, attacker, ids) >= minimumGain && canSettleTerritorialDemand(world, defender, attacker, ids));
+  if (!counter) return false;
+  crisis.regionIds = [...counter.ids];
+  if (!respondToCrisis(world, defender, attacker, "concede")) {
+    crisis.regionIds = demanded;
+    return false;
+  }
+  recordSimulationEvent(world, { category: "diplomacy", nationIds: [attacker, defender],
+    message: `${attacker} accepted ${counter.ids.length} of ${demanded.length} demanded districts to avert war.` });
+  return true;
+}
+
 export function resolveCrisisPeacefully(world: WorldState, a: NationId, b: NationId, reason: string): void {
   const relation = getRelation(world, a, b);
   if (!relation.crisis) return;
@@ -167,12 +193,16 @@ export function updateDiplomaticCrises(world: WorldState): void {
     if (now < crisis.deadlineSlowTick) {
       const character = getNationCharacter(world, defender);
       const demanded = crisis.regionIds ?? [];
-      const territorialCost = getTerritorialValue(world, defender, demanded) / getNationalTerritorialValue(world, defender);
+      const nationalValue = getNationalTerritorialValue(world, defender);
+      const territorialCost = getTerritorialValue(world, defender, demanded) / nationalValue;
       const capitalDemanded = demanded.includes(world.nations.find((nation) => nation.id === defender)!.capitalMesoId);
       const escalationCost = Math.max(0, Math.log(ratio / 1.4)) * character.cooperation * 0.45;
       const acceptableTerritory = crisis.demand !== "territory" || (!capitalDemanded && territorialCost <= escalationCost);
-      if (ratio > 1.4 && character.cooperation > 0.6 && acceptableTerritory) respondToCrisis(world, defender, attacker, "concede");
-      else if (character.cooperation > 0.7 && relation.trust >= 45) respondToCrisis(world, defender, attacker, "negotiate");
+      if (ratio > 1.4 && character.cooperation > 0.6) {
+        if (acceptableTerritory && respondToCrisis(world, defender, attacker, "concede")) continue;
+        if (crisis.demand === "territory" && counterTerritorialDemand(world, attacker, defender, escalationCost * nationalValue)) continue;
+      }
+      if (character.cooperation > 0.7 && relation.trust >= 45) respondToCrisis(world, defender, attacker, "negotiate");
       continue;
     }
     if (world.wars.filter((war) => war.nationAId === attacker || war.nationBId === attacker).length >= 2) {
