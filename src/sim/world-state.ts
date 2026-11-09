@@ -1,3 +1,4 @@
+import type { AgriculturalLand } from "../worldgen/agricultural-land";
 import type { PublicWork } from "./public-works";
 import type { Annexation } from "./annexation";
 import type { RegionalPopulation } from "./regional-population";
@@ -74,6 +75,7 @@ export interface WorldState {
   publicWorks?: Map<MesoRegionId, PublicWork>;
   annexations?: Map<MesoRegionId, Annexation>;
   regionalPopulations?: Map<MesoRegionId, RegionalPopulation>;
+  agriculturalLand?: Map<MesoRegionId, AgriculturalLand>;
   populationRevision?: number;
   populationPolicyRevision?: number;
   armsAid?: ArmsAidState;

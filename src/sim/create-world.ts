@@ -1,3 +1,4 @@
+import { mapAgriculturalLand } from "../worldgen/agricultural-land";
 import { updateTreasuries } from "./treasury";
 import { getRegionalPopulations } from "./regional-population";
 import { getTerritorialClaims } from "./territorial-claims";
@@ -155,6 +156,7 @@ export function createWorld(config: WorldConfig): WorldState {
     microRegions,
     microRegionEdges,
     mesoRegions,
+    agriculturalLand: mapAgriculturalLand(mesoRegions, microRegions, config.elevationSeaLevel, config.height),
     macroRegions,
     nations: runtimeNations,
     wars,
