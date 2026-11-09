@@ -1,3 +1,4 @@
+import type { PublicWork } from "./public-works";
 import type { Annexation } from "./annexation";
 import type { RegionalPopulation } from "./regional-population";
 import type { MesoRegionId } from "../worldgen/meso-region";
@@ -70,6 +71,7 @@ export interface WorldState {
   research?: ResearchState;
   internationalTrade?: InternationalTradeState;
   lastTaxCollectionTick?: number;
+  publicWorks?: Map<MesoRegionId, PublicWork>;
   annexations?: Map<MesoRegionId, Annexation>;
   regionalPopulations?: Map<MesoRegionId, RegionalPopulation>;
   populationRevision?: number;

@@ -10,7 +10,7 @@ import type { WorldState } from "./world-state";
 
 export const PORT_CONSTRUCTION_COST = { steel: 120, fuel: 40 } as const;
 
-export function getPortConstructionIssue(world: WorldState, nationId: NationId, regionId: MesoRegionId): string | null {
+export function getPortSiteIssue(world: WorldState, nationId: NationId, regionId: MesoRegionId): string | null {
   const nation = world.nations.find((item) => item.id === nationId && isNationActive(item));
   const regions = getMesoById(world);
   const region = regions.get(regionId);
@@ -23,6 +23,14 @@ export function getPortConstructionIssue(world: WorldState, nationId: NationId, 
     !isNationRegionSupplied(world, nationId, regionId)) {
     return "The district must be under your control, safe and supplied.";
   }
+  return null;
+}
+
+export function getPortConstructionIssue(world: WorldState, nationId: NationId, regionId: MesoRegionId): string | null {
+  const issue = getPortSiteIssue(world, nationId, regionId);
+  if (issue) return issue;
+  if (world.publicWorks?.has(regionId)) return "A public works project already uses this site.";
+  const nation = world.nations.find((item) => item.id === nationId)!;
   if (nation.resources.steel < PORT_CONSTRUCTION_COST.steel || nation.resources.fuel < PORT_CONSTRUCTION_COST.fuel) {
     return "Insufficient steel or fuel.";
   }
@@ -35,9 +43,14 @@ export function constructPort(world: WorldState, nationId: NationId, regionId: M
   const nation = world.nations.find((item) => item.id === nationId)!;
   changeResource(nation, "steel", -PORT_CONSTRUCTION_COST.steel);
   changeResource(nation, "fuel", -PORT_CONSTRUCTION_COST.fuel);
+  completePortConstruction(world, nationId, regionId);
+  return true;
+}
+
+/** Apply a port project after the caller has verified the site and paid for it. */
+export function completePortConstruction(world: WorldState, nationId: NationId, regionId: MesoRegionId): void {
   getMesoById(world).get(regionId)!.building = "port";
   world.buildingVersion += 1;
   recordSimulationEvent(world, { category: "military", nationIds: [nationId],
     message: `${nationId} built a port in District ${regionId.replace("meso-", "")}.` });
-  return true;
 }
