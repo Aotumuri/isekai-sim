@@ -1,3 +1,4 @@
+import { getRegionalPopulations } from "./regional-population";
 import { isMilitaryFunded } from "./military-funding";
 import { WORLD_BALANCE } from "../data/balance";
 import type { NationId } from "../worldgen/nation";
@@ -69,17 +70,22 @@ export function getMobilizationThreat(world: WorldState, nationId: NationId): nu
 }
 export function getArmyLimits(world: WorldState, nation: NationRuntime, item = getMobilization(world, nation.id)) {
   const owners = getOwnerByMesoId(world);
-  let districts = 0, cities = 0;
+  const populations = getRegionalPopulations(world);
+  let districts = 0, cities = 0, population = 0;
   for (const region of world.mesoRegions) if (region.type !== "sea" && owners.get(region.id) === nation.id &&
     (!world.occupation.mesoById.has(region.id) || world.occupation.mesoById.get(region.id) === nation.id)) {
+    population += populations.get(region.id)?.size ?? 0;
     districts++; if (region.building === "city" || region.building === "capital") cities++;
   }
-  const populationCeiling = Math.min(WORLD_BALANCE.production.maxMobilizedLandUnits, Math.max(24, districts * 8 + cities * 6));
+  // Population is abstract. Convert one population unit to four infantry divisions
+  // of recruitment capacity, independently of the engine's army-size limit.
+  const populationCapacity = Math.max(1, population * 4);
+  const populationCeiling = Math.min(WORLD_BALANCE.production.maxMobilizedLandUnits, Math.max(24, populationCapacity));
   const support = clamp(nation.warCooperation), personality = getNationCharacter(world, nation.id);
   const maximum = Math.max(4, Math.floor(populationCeiling * (0.2 + support * 0.8) * (1 - item.burden * 0.003)));
   const baselineStanding = Math.max(3, Math.min(24, Math.ceil(3 + cities * 0.65 + districts * 0.08 + personality.aggression * 2)));
   const standing = Math.min(maximum, isMilitaryFunded(world, nation.treasury) ? Math.ceil(baselineStanding * 1.25) : baselineStanding);
-  return { standing, maximum, authorized: Math.max(standing, Math.floor(standing + (maximum - standing) * item.readiness)) };
+  return { populationCapacity, standing, maximum, authorized: Math.max(standing, Math.floor(standing + (maximum - standing) * item.readiness)) };
 }
 export function updateMobilization(world: WorldState): void {
   if (!world.settings?.mobilizationEnabled) {
@@ -108,8 +114,7 @@ export function updateMobilization(world: WorldState): void {
     item.landUnits = ownUnits.filter((unit) => unit.domain === "land" && unit.manpower > 0).length;
     item.deployedManpower = ownUnits.reduce((sum, unit) => sum + Math.max(0, unit.manpower) * (unit.domain === "naval" ? 0.5 : 1), 0);
     const support = clamp(nation.warCooperation), safeShare = atWar ? 0.3 + support * 0.2 : 0.12;
-    const populationCapacity = Math.max(24, Math.min(WORLD_BALANCE.production.maxMobilizedLandUnits, limits.maximum / Math.max(0.2, 0.2 + support * 0.8)));
-    const share = item.deployedManpower / (populationCapacity * WORLD_BALANCE.unit.types.Infantry.manpower);
+    const share = item.deployedManpower / (limits.populationCapacity * WORLD_BALANCE.unit.types.Infantry.manpower);
     if (item.landUnits > item.standingArmy) item.continuousDeployment += elapsed;
     else item.continuousDeployment = Math.max(0, item.continuousDeployment - elapsed * 3);
     const fatigue = 1 + Math.min(1, item.continuousDeployment / 300);
