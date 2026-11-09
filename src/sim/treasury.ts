@@ -5,7 +5,7 @@ import type { WorldState } from "./world-state";
 
 export const TAX_RATES = [5, 10, 15, 20, 25, 30] as const;
 export type TaxRate = typeof TAX_RATES[number];
-export type SpendingCategory = "research" | "military" | "relief" | "construction";
+export type SpendingCategory = "research" | "military" | "relief" | "construction" | "aid";
 
 export interface NationalTreasury {
   balance: number;
@@ -13,6 +13,7 @@ export interface NationalTreasury {
   population: number;
   taxablePopulation: number;
   lastRevenue: number;
+  nextAidTick?: number;
   nextReliefTick?: number;
   researchFunding: boolean;
   automaticBudget?: boolean;
@@ -40,7 +41,7 @@ function populationByNation(world: WorldState) {
 function createTreasury(balance: number): NationalTreasury {
   return { balance, taxRate: 15, population: 0, taxablePopulation: 0, lastRevenue: 0,
     researchFunding: false, militaryFunding: false,
-    spent: { research: 0, military: 0, relief: 0, construction: 0 } };
+    spent: { research: 0, military: 0, relief: 0, construction: 0, aid: 0 } };
 }
 
 export function splitTreasury(parent: NationalTreasury | undefined, share: number): NationalTreasury | undefined {
@@ -79,7 +80,7 @@ export function setTaxRate(world: WorldState, id: NationId, rate: number): boole
 export function spendTreasury(treasury: NationalTreasury | undefined, category: SpendingCategory, amount: number): boolean {
   if (!treasury || !Number.isFinite(amount) || amount <= 0 || treasury.balance < amount) return false;
   treasury.balance -= amount;
-  treasury.spent[category] += amount;
+  treasury.spent[category] = (treasury.spent[category] ?? 0) + amount;
   return true;
 }
 

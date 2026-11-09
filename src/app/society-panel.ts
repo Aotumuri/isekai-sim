@@ -112,7 +112,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
   const food = attachFoodControls(wrapper.querySelector<HTMLElement>("[data-food-ui]")!, world,
     () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; });
   const treasury = attachTreasuryControls(wrapper.querySelector<HTMLElement>("[data-treasury-ui]")!, world,
-    () => nationSelect.value as NationId, (message) => { feedback.textContent = message; });
+    () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; });
   const peaceControls = attachPeaceControls(wrapper.querySelector<HTMLElement>("[data-peace-ui]")!, world, () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   const factions = attachFactionControls(wrapper.querySelector<HTMLElement>("[data-faction-ui]")!, world, () => nationSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   const territories = attachTerritoryControls(wrapper.querySelector<HTMLElement>("[data-territory-ui]")!, world, () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });

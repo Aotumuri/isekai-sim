@@ -1,3 +1,4 @@
+import { FINANCIAL_AID, getFinancialAidIssue, sendFinancialAid } from "../sim/financial-aid";
 import { getDomesticUnrest } from "../sim/domestic-unrest";
 import { isMilitaryFunded, militaryFundingCost } from "../sim/military-funding";
 import { isNationActive } from "../sim/nation-active";
@@ -13,7 +14,7 @@ import type { NationId } from "../worldgen/nation";
 const districtName = (id: MesoRegionId): string => `District ${id.replace("meso-", "")}`;
 const cash = (value: number): string => value.toFixed(1);
 
-export function attachTreasuryControls(root: HTMLElement, world: WorldState, selected: () => NationId,
+export function attachTreasuryControls(root: HTMLElement, world: WorldState, selected: () => NationId, partner: () => NationId,
   feedback: (message: string) => void) {
   root.innerHTML = `
     <h2>National treasury</h2><p data-finance-view="balance"></p><p class="society-note" data-finance-view="revenue"></p>
@@ -27,6 +28,8 @@ export function attachTreasuryControls(root: HTMLElement, world: WorldState, sel
     <p class="society-note" data-finance-view="military"></p>
     <button type="button" data-finance-action="relief">Distribute emergency relief</button>
     <p class="society-note" data-finance-view="relief"></p>
+    <button type="button" data-finance-action="aid">Send financial aid · ${FINANCIAL_AID} cash</button>
+    <p class="society-note" data-finance-view="aid"></p>
     <h2>Public works</h2>
     <div class="society-selectors"><label>Project <select data-finance-control="kind"><option value="city">City</option><option value="port">Port</option></select></label>
     <label>District <select data-finance-control="district"></select></label></div>
@@ -64,6 +67,9 @@ export function attachTreasuryControls(root: HTMLElement, world: WorldState, sel
     control("tax").value = String(treasury?.taxRate ?? 15);
     control("kind").disabled = control("district").disabled = !active;
     action("build").disabled = action("relief").disabled = true;
+    const aidIssue = getFinancialAidIssue(world, nation.id, partner());
+    action("aid").disabled = !!aidIssue;
+    view("aid").textContent = aidIssue ?? "Transfer cash to the selected partner and improve trust.";
     if (!treasury || !active) {
       for (const name of ["revenue", "pressure", "military", "relief", "construction", "spending"]) view(name).textContent = "";
       return;
@@ -82,7 +88,7 @@ export function attachTreasuryControls(root: HTMLElement, world: WorldState, sel
     view("construction").textContent = project
       ? `${districtName(project[0])} · ${project[1].kind} · ${project[1].remaining}s left${project[1].paused ? " · Paused for safety or supply" : ""}.`
       : `${cost.cash} cash + ${cost.steel} steel + ${cost.fuel} fuel · ${cost.duration}s.${issue ? ` ${issue}` : ""}`;
-    view("spending").textContent = `Total spent · Research ${cash(treasury.spent.research)} · Military ${cash(treasury.spent.military)} · Relief ${cash(treasury.spent.relief)} · Construction ${cash(treasury.spent.construction)}.`;
+    view("spending").textContent = `Total spent · Research ${cash(treasury.spent.research)} · Military ${cash(treasury.spent.military)} · Relief ${cash(treasury.spent.relief)} · Construction ${cash(treasury.spent.construction)} · Aid ${cash(treasury.spent.aid ?? 0)}.`;
   }
 
   root.addEventListener("change", (event) => {
@@ -99,6 +105,13 @@ export function attachTreasuryControls(root: HTMLElement, world: WorldState, sel
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-finance-action]");
     if (!button) return;
     const id = selected(), relief = button.dataset.financeAction === "relief";
+    if (button.dataset.financeAction === "aid") {
+      const sent = sendFinancialAid(world, id, partner());
+      feedback(sent ? "Financial aid sent." : getFinancialAidIssue(world, id, partner()) ?? "Financial aid unavailable.");
+      const nation = world.nations.find((item) => item.id === id);
+      if (nation) update(nation);
+      return;
+    }
     const success = relief ? distributePublicRelief(world, id) : commissionPublicWork(world, id, district(), kind());
     feedback(success ? relief ? "Emergency relief distributed." : "Construction commissioned." : "The current conditions no longer allow this spending.");
     const nation = world.nations.find((item) => item.id === id);
