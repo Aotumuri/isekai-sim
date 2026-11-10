@@ -17,28 +17,36 @@ const WAR_ISSUES = {
   protected: "同じ陣営、宗属関係、または防衛協定で保護されています。",
 };
 
-export function attachPlayerDiplomacyControls(panel: HTMLElement, world: WorldState): () => void {
+export function attachPlayerDiplomacyControls(panel: HTMLElement, world: WorldState, openNegotiations: () => void): () => void {
   const section = document.createElement("details");
   section.innerHTML = `<summary>外交</summary>
-    <p>地図で外交相手の国をクリック</p>
-    <p>相手国 <strong data-target></strong></p>
-    <label>行動 <select data-action>
+    <div class="player-counterpart"><small>外交相手</small><strong data-target></strong></div>
+    <div data-diplomatic-actions hidden>
+    <div class="player-war-actions">
+      <button type="button" data-declare>宣戦布告</button>
+      <button type="button" data-propose-peace>白紙講和を提案</button>
+      <button type="button" data-negotiations>講和条件を見る</button>
+    </div>
+    <p data-war-note></p>
+    <label>その他の外交 <select data-action>
       <option value="relations">関係改善</option>
       <option value="trade">通商条約</option>
       <option value="non-aggression">不可侵条約</option>
       <option value="alliance">同盟</option>
       <option value="crisis">最後通牒</option>
       <option value="negotiate">最後通牒に交渉で応じる</option>
-      <option value="war">宣戦布告</option>
       <option value="break-nap">不可侵条約を破棄</option>
       <option value="break-alliance">同盟条約を破棄</option>
-      <option value="peace">講和を提案</option>
     </select></label>
-    <p data-war-note></p><button type="button">実行</button><p role="status"></p>`;
+    <button type="button" data-execute>実行</button><p role="status"></p></div>`;
   panel.append(section);
   const target = section.querySelector<HTMLElement>("[data-target]")!;
   const action = section.querySelector<HTMLSelectElement>("[data-action]")!;
-  const button = section.querySelector("button")!;
+  const actions = section.querySelector<HTMLElement>("[data-diplomatic-actions]")!;
+  const button = section.querySelector<HTMLButtonElement>("[data-execute]")!;
+  const declare = section.querySelector<HTMLButtonElement>("[data-declare]")!;
+  const propose = section.querySelector<HTMLButtonElement>("[data-propose-peace]")!;
+  const negotiations = section.querySelector<HTMLButtonElement>("[data-negotiations]")!;
   const result = section.querySelector<HTMLElement>("[role=status]")!;
   const warNote = section.querySelector<HTMLElement>("[data-war-note]")!;
   const getPartner = () => world.nations.find((nation) =>
@@ -56,13 +64,24 @@ export function attachPlayerDiplomacyControls(panel: HTMLElement, world: WorldSt
       case "alliance": accepted = proposeTreaty(world, actor, partner, action.value); break;
       case "crisis": accepted = openDiplomaticCrisis(world, actor, partner); break;
       case "negotiate": accepted = respondToCrisis(world, actor, partner, "negotiate"); break;
-      case "war": accepted = startPlayerWar(world, partner); break;
       case "break-nap": accepted = breakTreaty(world, actor, partner, "non-aggression"); break;
       case "break-alliance": accepted = breakTreaty(world, actor, partner, "alliance"); break;
-      case "peace": accepted = offerPeace(world, actor, partner); break;
     }
     result.textContent = accepted ? "外交行動を実行しました。" : "現在の関係や世界設定では実行できません。";
   };
+  declare.onclick = () => {
+    const partner = getPartner();
+    if (partner && startPlayerWar(world, partner)) result.textContent = "宣戦しました。";
+  };
+  propose.onclick = () => {
+    const actor = getPlayerNation(world)?.nationId;
+    const partner = getPartner();
+    if (!actor || !partner) return;
+    result.textContent = offerPeace(world, actor, partner)
+      ? getPlayerWarIssue(world, partner) === "already-at-war" ? "白紙講和を提案しました。相手の回答を待っています。" : "相手が白紙講和を受諾しました。"
+      : "現在は講和を提案できません。";
+  };
+  negotiations.onclick = openNegotiations;
   return () => {
     const actor = getPlayerNation(world)?.nationId;
     section.hidden = !actor;
@@ -72,14 +91,16 @@ export function attachPlayerDiplomacyControls(panel: HTMLElement, world: WorldSt
       selection = key;
       result.textContent = "";
     }
-    const name = partner ? getNationName(world, partner) : "未選択";
+    const name = partner ? getNationName(world, partner) : "地図で相手国を選択";
     if (target.textContent !== name) target.textContent = name;
-    const issue = action.value === "war" && partner ? getPlayerWarIssue(world, partner) : null;
-    const note = action.value === "war" && partner
-      ? issue ? WAR_ISSUES[issue] : "宣戦は即時です。離れた国へ進軍するには別途、移動や上陸の準備が必要です。"
-      : "";
+    actions.hidden = !actor || !partner;
+    if (!actor || !partner) return;
+    const issue = getPlayerWarIssue(world, partner);
+    const atWar = issue === "already-at-war";
+    declare.hidden = atWar;
+    declare.disabled = !!issue;
+    propose.hidden = negotiations.hidden = !atWar;
+    const note = issue ? WAR_ISSUES[issue] : "宣戦すると、すぐに交戦状態になります。";
     if (warNote.textContent !== note) warNote.textContent = note;
-    button.disabled = !actor || !partner || actor === partner || !!issue;
-    button.textContent = action.value === "war" ? "宣戦する" : "実行";
   };
 }

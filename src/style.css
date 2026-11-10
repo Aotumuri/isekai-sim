@@ -217,3 +217,9 @@ canvas {
 .player-controls .society-research-row { grid-template-columns: minmax(0, 1.2fr) 34px minmax(0, 1fr) 32px; gap: 5px; }
 .player-controls .society-research-row progress { width: 100%; min-width: 0; }
 .player-controls .society-selectors > label { min-width: 0; }
+.player-counterpart { display: grid; gap: 3px; margin: 10px 0; padding: 9px 11px; background: #0a192b; border-radius: 6px; }
+.player-counterpart small { color: #adc5dc; }
+.player-war-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.player-war-actions [data-declare] { color: #ffc0b9; border-color: #a36963; }
+.player-controls button:disabled { opacity: .55; cursor: default; }
+.player-controls [data-war-note] { color: #c2d4e4; font-size: 12px; margin: 6px 0; }

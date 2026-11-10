@@ -9,7 +9,7 @@ import type { WorldState } from "../sim/world-state";
 import { getMapView, selectMapNation } from "../render/map-view-state";
 
 export function attachPlayerControls(
-  root: HTMLElement, world: WorldState, getDestination: () => MesoRegionId | null, setGovernmentHost: (host: HTMLElement | null) => void,
+  root: HTMLElement, world: WorldState, getDestination: () => MesoRegionId | null, setGovernmentHost: (host: HTMLElement | null) => void, openNegotiations: () => void,
 ): () => void {
   const panel = document.createElement("aside");
   panel.className = "map-controls player-controls";
@@ -43,7 +43,10 @@ export function attachPlayerControls(
     const player = getPlayerNation(world);
     if (player) player.automaticGovernment = automatic.checked;
   };
-  const updateDiplomacy = attachPlayerDiplomacyControls(orders, world);
+  const updateDiplomacy = attachPlayerDiplomacyControls(orders, world, () => {
+    selectTab("government");
+    openNegotiations();
+  });
   const updateMilitary = attachPlayerMilitaryControls(orders, world, getDestination);
   const updateLandings = attachPlayerLandingControls(orders, world, getDestination);
   const heading = panel.querySelector("h2")!;
