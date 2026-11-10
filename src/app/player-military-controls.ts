@@ -1,4 +1,3 @@
-import { UNIT_LABELS } from "../render/japanese-labels";
 import { issuePlayerNavalOrder } from "../sim/player-naval-orders";
 import { clearPlayerMovementOrders, issuePlayerLandOrder, setPlayerCommandMode } from "../sim/player-land-orders";
 import { getPlayerNation } from "../sim/player-nation";
@@ -9,18 +8,18 @@ export function attachPlayerMilitaryControls(
   panel: HTMLElement, world: WorldState, getDestination: () => MesoRegionId | null,
 ): () => void {
   const section = document.createElement("details");
-  section.innerHTML = `<summary>軍事指揮</summary>
-    <label>指揮方式 <select data-mode>
-      <option value="automatic">自動</option>
-      <option value="assisted">補助あり</option>
-      <option value="manual">手動</option>
+  section.innerHTML = `<summary>Military command</summary>
+    <label>Command mode <select data-mode>
+      <option value="automatic">Automatic</option>
+      <option value="assisted">Assisted</option>
+      <option value="manual">Manual</option>
     </select></label>
     <div data-orders>
       <p data-destination></p>
-      <label data-unit-label>部隊 <select data-unit></select></label>
-      <label data-count-label>部隊数 <input data-count type="number" min="1" value="1"></label>
-      <button type="button" data-move>選択した地域へ移動</button>
-      <button type="button" data-clear>移動命令を解除</button>
+      <label data-unit-label>Unit <select data-unit></select></label>
+      <label data-count-label>Unit count <input data-count type="number" min="1" value="1"></label>
+      <button type="button" data-move>Move to selected district</button>
+      <button type="button" data-clear>Clear movement orders</button>
     </div><p role="status"></p>`;
   panel.append(section);
   const mode = section.querySelector<HTMLSelectElement>("[data-mode]")!;
@@ -46,11 +45,11 @@ export function attachPlayerMilitaryControls(
         ? Number(issuePlayerNavalOrder(world, selected.id, target))
         : issuePlayerLandOrder(world, target, order)
       : 0;
-    result.textContent = issued ? `${issued} 部隊に命令しました。` : "地域または移動可能な部隊を選んでください。";
+    result.textContent = issued ? `${issued} units received orders.` : "Select a destination and available units.";
   };
   section.querySelector<HTMLButtonElement>("[data-clear]")!.onclick = () => {
     clearPlayerMovementOrders(world);
-    result.textContent = "移動命令を解除しました。";
+    result.textContent = "Movement orders cleared.";
   };
   return () => {
     const player = getPlayerNation(world);
@@ -65,13 +64,13 @@ export function attachPlayerMilitaryControls(
     section.querySelector<HTMLElement>("[data-unit-label]")!.hidden = player.commandMode !== "manual";
     section.querySelector<HTMLElement>("[data-count-label]")!.hidden = player.commandMode !== "assisted";
     const target = getDestination();
-    destination.textContent = target ? `選択地域 ${target}` : "目的地を地図で選んでください。";
+    destination.textContent = target ? `Selected district: ${target}` : "Select a destination on the map.";
     if (player.commandMode !== "manual") return;
     const units = world.units.filter((item) => item.nationId === player.nationId);
     const key = units.map((item) => `${item.id}:${item.regionId}`).join(",");
     if (key === roster) return;
     const previous = unit.value;
-    unit.replaceChildren(...units.map((item) => new Option(`${UNIT_LABELS[item.type]} ${item.id} · ${item.regionId}`, item.id)));
+    unit.replaceChildren(...units.map((item) => new Option(`${item.type} ${item.id} · ${item.regionId}`, item.id)));
     if (units.some(({ id }) => id === previous)) unit.value = previous;
     roster = key;
   };

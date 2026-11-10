@@ -66,7 +66,7 @@ function updateReserveWarning(world: WorldState, id: NationId, food: NationalFoo
   if (food.reserveWarning || seconds > 60 || food.shortageCycles >= FAMINE_THRESHOLD) return;
   food.reserveWarning = true;
   recordSimulationEvent(world, { category: "politics", nationIds: [id],
-    message: `${id}の穀物備蓄は現在の収穫と配給を続けると約${seconds}秒で尽きます。` });
+    message: `${id}'s grain reserve will last about ${seconds} more seconds at current harvest and ration levels.` });
 }
 
 function applyFamineDeaths(world: WorldState, districts: MesoRegionId[], mortality: number): number {
@@ -115,7 +115,7 @@ export function updateFoodSupply(world: WorldState): void {
       world.populationRevision = (world.populationRevision ?? 0) + 1;
     }
     if (famine !== wasFamine) recordSimulationEvent(world, { category: "politics", nationIds: [nation.id],
-      message: famine ? `${nation.id}で飢饉が発生しました。配給の充足率は${Math.round(food.rationCoverage * 100)}%です。`
+      message: famine ? `Famine in ${nation.id}: only ${Math.round(food.rationCoverage * 100)}% of rations were supplied.`
         : `Food deliveries have eased the famine in ${nation.id}.` });
   }
 }

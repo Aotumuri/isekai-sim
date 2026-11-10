@@ -56,7 +56,7 @@ export function openDiplomaticCrisis(world: WorldState, aggressorId: NationId, t
   relation.opinion = Math.max(-100, relation.opinion - 10);
   getDiplomacyState(world).crisesOpened += 1;
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [aggressorId, targetId],
-    message: `${aggressorId}が${targetId}に最後通牒を発出しました。${regionIds ? `要求領土は${regionIds.length}地区です。` : ""}交渉期限は30秒です。` });
+    message: `${aggressorId} issued an ultimatum to ${targetId}${regionIds ? ` for ${regionIds.length} claimed regions` : ""}; negotiations last 30 ticks.` });
   return true;
 }
 
@@ -115,7 +115,7 @@ function counterTerritorialDemand(world: WorldState, attacker: NationId, defende
     return false;
   }
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [attacker, defender],
-    message: `${attacker}は要求した${demanded.length}地区のうち${counter.ids.length}地区で合意し、開戦を回避しました。` });
+    message: `${attacker} accepted ${counter.ids.length} of ${demanded.length} demanded districts to avert war.` });
   return true;
 }
 
@@ -128,7 +128,7 @@ export function resolveCrisisPeacefully(world: WorldState, a: NationId, b: Natio
   relation.treaties = relation.treaties.filter((treaty) => treaty.type !== "truce");
   relation.treaties.push({ type: "truce", expiresAtSlowTick: world.time.slowTick + 120 });
   getDiplomacyState(world).crisesResolved += 1;
-  recordSimulationEvent(world, { category: "diplomacy", nationIds: [a, b], message: `${a}と${b}の外交危機が解消しました（${reason}）。` });
+  recordSimulationEvent(world, { category: "diplomacy", nationIds: [a, b], message: `${a} and ${b} defused their crisis (${reason}).` });
 }
 
 export function startDiplomaticWar(world: WorldState, aggressorId: NationId, targetId: NationId,
@@ -182,7 +182,7 @@ function createDiplomaticWar(world: WorldState, aggressorId: NationId, targetId:
     other.opinion = Math.max(-100, other.opinion - (cause === "diplomatic-crisis" || cause === "player-declaration" ? 8 : 1));
   }
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [aggressorId, targetId],
-    message: `${aggressorId}が${targetId}に宣戦しました。` });
+    message: `${aggressorId} declared war on ${targetId} (${cause}).` });
   return true;
 }
 
@@ -247,7 +247,7 @@ export function updateDiplomaticCrises(world: WorldState): void {
       staged !== undefined && staged < 0.4) {
       crisis.deadlineSlowTick = now + 10;
       recordSimulationEvent(world, { category: "military", nationIds: [attacker, defender],
-        message: `${attacker}が国境部隊の集結を待つため開戦を延期しました（集結率${Math.round(staged * 100)}%）。` });
+        message: `${attacker} delayed escalation while its border force assembled (${Math.round(staged * 100)}% in position).` });
       continue;
     }
     startDiplomaticWar(world, attacker, defender);
@@ -315,6 +315,6 @@ export function betrayTerritorialSettlement(world: WorldState, aggressorId: Nati
   for (const other of getDiplomacyState(world).relations.values()) if (other !== relation &&
     (other.nationAId === aggressorId || other.nationBId === aggressorId)) other.trust = Math.max(0, other.trust - 15);
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [aggressorId, targetId],
-    message: `${aggressorId}が領土合意を破棄して${targetId}を攻撃し、国際的な信頼が低下しました。` });
+    message: `${aggressorId} betrayed a territorial settlement and attacked ${targetId}; international trust fell.` });
   return true;
 }

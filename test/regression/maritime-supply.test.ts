@@ -880,11 +880,11 @@ test("naval status follows active support, enemy interference and fleet losses",
   const ship = world.units.find((unit) => unit.type === "CombatShip")!;
   ship.regionId = id("sea-ab");
   updateNavalStrategy(world);
-  assert.match(formatNavalUnitStatus(world, ship)!, /沿岸砲撃.*port-b/);
-  assert.match(formatCoastalSupportStatus(world, id("port-b")).join("\n"), /\+12% 組織率への圧力/);
+  assert.match(formatNavalUnitStatus(world, ship)!, /Shore bombardment.*port-b/);
+  assert.match(formatCoastalSupportStatus(world, id("port-b")).join("\n"), /\+12% organization pressure/);
   assert.equal(summarizeNavy(world, NATION_A).combatShips, 1);
   world.units.push(createUnitForType(createUnitId(world.unitIdCounter++), NATION_B, id("sea-ab"), "CombatShip"));
-  assert.match(formatCoastalSupportStatus(world, id("port-b")).join("\n"), /交戦中/);
+  assert.match(formatCoastalSupportStatus(world, id("port-b")).join("\n"), /contested/);
   world.units = world.units.filter((unit) => unit.id !== ship.id);
   assert.equal(summarizeNavy(world, NATION_A).combatShips, 0);
 });

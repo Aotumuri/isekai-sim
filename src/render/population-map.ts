@@ -4,7 +4,7 @@ import type { MesoRegionId } from "../worldgen/meso-region";
 
 export const MIXED_POPULATION_THRESHOLD = 0.2;
 
-export const POPULATION_LABELS = { ancestry: "系統", culture: "文化", faith: "宗教" };
+export const POPULATION_LABELS = { ancestry: "Ancestry", culture: "Culture", faith: "Religion" };
 
 export function isPopulationMode(mode: string): mode is PopulationDimension {
   return POPULATION_DIMENSIONS.some((dimension) => mode === dimension);

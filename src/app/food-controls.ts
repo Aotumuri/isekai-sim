@@ -18,26 +18,26 @@ const quantity = (amount: number): string => amount.toFixed(1);
 export function attachFoodControls(root: HTMLElement, world: WorldState, selected: () => NationId,
   partner: () => NationId, feedback: (message: string) => void) {
   root.innerHTML = `
-    <h2>国内の食料供給</h2>
+    <h2>National food supply</h2>
     <p data-food-view="stock"></p><p class="society-note" data-food-view="balance"></p>
     <p data-food-view="status"></p><p class="society-note" data-food-view="deaths"></p>
-    <p class="society-note">地図の表示設定で農地を確認できます。占領された地区の収穫は国に届きません。</p>
-    <label>配給政策 <select data-food-control="rations"><option value="normal">通常 · 100%</option><option value="conserve">節約 · 94%</option><option value="emergency">緊急 · 88%</option></select></label>
-    <label><input type="checkbox" data-food-control="asylum"> 近隣からの難民受け入れを拡大</label>
+    <p class="society-note">Open Display settings on the map to see agricultural land. Occupied districts stop supplying the national harvest.</p>
+    <label>Ration policy <select data-food-control="rations"><option value="normal">Normal · 100%</option><option value="conserve">Conserve · 94%</option><option value="emergency">Emergency · 88%</option></select></label>
+    <label><input type="checkbox" data-food-control="asylum"> Expand refugee reception from neighboring crises</label>
     <p class="society-note" data-food-view="refugees"></p>
-    <button type="button" data-food-action="storage">穀物倉庫を拡張</button>
+    <button type="button" data-food-action="storage">Expand grain storage</button>
     <p class="society-note" data-food-view="storage"></p>
-    <h2>灌漑</h2><label>農地区 <select data-food-control="irrigation"></select></label>
-    <button type="button" data-food-action="irrigate">灌漑設備を建設</button>
-    <p class="society-note">${IRRIGATION_COST.cash} 資金と鋼材${IRRIGATION_COST.steel}を使い、選んだ地区の収穫を40%増やします。耕作可能で、支配下にあり、補給が届く地区が必要です。</p>
-    <label><input type="checkbox" data-food-control="export-protection"> 60秒分の穀物を輸出対象から外す</label>
-    <h2>相手国との穀物取引</h2>
-    <p class="society-note">不足が迫る国は供給元を自動で探します。輸送には協定、通行可能な経路、輸出できる備蓄が必要です。</p>
-    <label>穀物の数量 <input type="number" min="1" max="1000" step="1" value="20" data-food-control="amount"></label>
-    <div class="society-actions"><button type="button" data-food-action="buy">穀物を購入</button><button type="button" data-food-action="aid">食料援助を送る</button><button type="button" data-food-action="embargo"></button></div>
+    <h2>Irrigation</h2><label>Farm district <select data-food-control="irrigation"></select></label>
+    <button type="button" data-food-action="irrigate">Build irrigation</button>
+    <p class="society-note">${IRRIGATION_COST.cash} cash and ${IRRIGATION_COST.steel} steel · +40% harvest in the selected district. Requires workable land, control and supply.</p>
+    <label><input type="checkbox" data-food-control="export-protection"> Protect 60 seconds of grain from export</label>
+    <h2>Grain trade with selected partner</h2>
+    <p class="society-note">Governments with a looming shortage look for suppliers automatically. Shipments require an agreement, open route and exportable stock.</p>
+    <label>Grain quantity <input type="number" min="1" max="1000" step="1" value="20" data-food-control="amount"></label>
+    <div class="society-actions"><button type="button" data-food-action="buy">Buy grain</button><button type="button" data-food-action="aid">Send grain relief</button><button type="button" data-food-action="embargo"></button></div>
     <p class="society-note" data-food-view="trade"></p>
-    <h2>従属国からの徴収</h2>
-    <label>相手国の収穫から徴収する割合 <select data-food-control="levy">${FOOD_LEVY_RATES.map((rate) => `<option value="${rate}">${Math.round(rate * 100)}%</option>`).join("")}</select></label>
+    <h2>Subject requisitions</h2>
+    <label>Share of the selected partner’s harvest <select data-food-control="levy">${FOOD_LEVY_RATES.map((rate) => `<option value="${rate}">${Math.round(rate * 100)}%</option>`).join("")}</select></label>
     <p class="society-note" data-food-view="levy"></p>`;
   const view = (name: string) => root.querySelector<HTMLElement>(`[data-food-view="${name}"]`)!;
   const buy = root.querySelector<HTMLButtonElement>('[data-food-action="buy"]')!;
@@ -58,19 +58,19 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
     const target = world.nations.find((item) => item.id === partner()), food = nation.food;
     const enabled = world.settings?.foodEnabled !== false;
     const domestic = enabled && !!food && isNationActive(nation);
-    view("stock").textContent = domestic ? `穀物備蓄 ${quantity(food.stock)} / ${quantity(foodStorageLimit(food.demand, food.storageLevel))}`
-      : enabled ? "稼働中の食料供給はありません。" : "食料シミュレーションは停止中です。";
+    view("stock").textContent = domestic ? `Grain stockpile ${quantity(food.stock)} / ${quantity(foodStorageLimit(food.demand, food.storageLevel))}`
+      : enabled ? "No active food supply." : "Food simulation is paused.";
     const level = food?.storageLevel ?? 0, storageCost = grainStorageCost(level);
     storage.disabled = !domestic || level >= GRAIN_STORAGE_MAX || (nation.treasury?.balance ?? 0) < storageCost.cash ||
       nation.resources.steel < storageCost.steel;
-    view("storage").textContent = level >= GRAIN_STORAGE_MAX ? "戦略穀物倉庫は最大まで拡張済みです。"
-      : `レベル ${level}/${GRAIN_STORAGE_MAX} · ${storageCost.cash} 資金 ＋ ${storageCost.steel} 鋼材で、通常配給60秒分の備蓄容量を追加できます。`;
+    view("storage").textContent = level >= GRAIN_STORAGE_MAX ? "Strategic grain storage fully expanded."
+      : `Level ${level}/${GRAIN_STORAGE_MAX} · ${storageCost.cash} cash + ${storageCost.steel} steel for 60 more seconds of full-ration capacity.`;
     const key = `${nation.id}:${world.territoryVersion}:${world.irrigatedDistricts?.size ?? 0}`;
     if (key !== irrigationKey) {
       irrigationKey = key;
       const previous = irrigation.value;
       const sites = [...(world.agriculturalLand?.keys() ?? [])].filter((id) => canIrrigate(world, nation.id, id));
-      irrigation.replaceChildren(...sites.map((id) => new Option(`地区 ${id.replace("meso-", "")}`, id)));
+      irrigation.replaceChildren(...sites.map((id) => new Option(`District ${id.replace("meso-", "")}`, id)));
       if (sites.includes(previous as MesoRegionId)) irrigation.value = previous;
     }
     irrigation.disabled = !domestic || !irrigation.options.length;
@@ -78,7 +78,7 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
       nation.resources.steel < IRRIGATION_COST.steel;
     asylum.disabled = !domestic;
     asylum.checked = food?.asylum ?? false;
-    view("refugees").textContent = domestic ? `直近10秒 · ${(food.refugeesReceived ?? 0).toFixed(2)}人口単位の難民を飢饉・占領地域から受け入れました。食料需要と課税人口が増加します。` : "";
+    view("refugees").textContent = domestic ? `Last 10s · ${(food.refugeesReceived ?? 0).toFixed(2)} population units received from famine or occupation. Arrivals increase food demand and the tax base.` : "";
     protection.disabled = !domestic;
     protection.checked = food?.protectGrainExports ?? false;
     rations.disabled = !domestic;
@@ -86,16 +86,16 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
     if (domestic) {
       const transfer = food.levy ?? 0;
       const seconds = foodReserveSeconds(food);
-      view("balance").textContent = `${FOOD_INTERVAL}秒ごと· 収穫 ${quantity(food.harvest)}· 配給 ${quantity(food.demand)}· 徴収差引 ${transfer >= 0 ? "+" : ""}${quantity(transfer)}.`;
-      const status = food.shortageCycles >= FAMINE_THRESHOLD ? "飢饉" : food.rationCoverage + 1e-8 < RATION_POLICIES[food.rationPolicy ?? "normal"] ? "食料不足" : Number.isFinite(seconds) ? "備蓄を使用中" : "配給充足";
-      view("status").textContent = `${status}· 前回の配給充足率 ${Math.round(food.rationCoverage * 100)}%${Number.isFinite(seconds) ? ` · 現在の不足が続くと約${seconds}秒で備蓄が尽きます` : ""}.`;
-      view("deaths").textContent = food.deaths > 0 ? `飢饉による累計死者：${food.deaths.toFixed(2)}人口単位。` : "";
+      view("balance").textContent = `Per ${FOOD_INTERVAL}s · Harvest ${quantity(food.harvest)} · Rations ${quantity(food.demand)} · Net requisitions ${transfer >= 0 ? "+" : ""}${quantity(transfer)}.`;
+      const status = food.shortageCycles >= FAMINE_THRESHOLD ? "Famine" : food.rationCoverage + 1e-8 < RATION_POLICIES[food.rationPolicy ?? "normal"] ? "Food shortage" : Number.isFinite(seconds) ? "Using reserves" : "Rations met";
+      view("status").textContent = `${status} · Last ration coverage ${Math.round(food.rationCoverage * 100)}%${Number.isFinite(seconds) ? ` · Reserves last about ${seconds}s at the current deficit` : ""}.`;
+      view("deaths").textContent = food.deaths > 0 ? `Famine deaths to date: ${food.deaths.toFixed(2)} population units.` : "";
     } else for (const key of ["balance", "status", "deaths"]) view(key).textContent = "";
     const trade = !!target && target !== nation && isNationActive(nation) && isNationActive(target) &&
       getWarDeclarationMode(world) === "diplomacy" && !!world.settings?.tradeEnabled;
     const ownEmbargo = !!target && hasTradeEmbargo(world, nation.id, target.id);
     const blocked = !!target && isTradeEmbargoed(world, nation.id, target.id);
-    embargo.textContent = ownEmbargo ? "禁輸を解除" : "禁輸を実施";
+    embargo.textContent = ownEmbargo ? "Lift embargo" : "Impose trade embargo";
     embargo.disabled = !trade;
     const agreement = !!target && hasTradeAgreement(world, nation.id, target.id);
     const offered = Number(amount.value), validAmount = amount.validity.valid && Number.isFinite(offered) && offered >= 1;
@@ -104,14 +104,14 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
       target.food.stock < offered + resourceReserve(target, "food");
     aid.disabled = !domestic || !trade || blocked || !agreement || !validAmount || !target?.food ||
       food.stock < offered + resourceReserve(nation, "food");
-    view("trade").textContent = blocked ? "禁輸により、穀物を含む双方向の取引が停止しています。" :
-      `${quantity(validAmount ? price() : 0)} 資金 · ${target?.food ? `相手国の輸出可能な穀物 ${quantity(Math.max(0, target.food.stock - resourceReserve(target, "food")))}.` : "相手国に食料備蓄がありません。"}${trade && !agreement ? " 先に通商条約を結んでください。" : ""}`;
+    view("trade").textContent = blocked ? "An embargo blocks trade in both directions, including grain." :
+      `${quantity(validAmount ? price() : 0)} cash · ${target?.food ? `Partner exportable grain ${quantity(Math.max(0, target.food.stock - resourceReserve(target, "food")))}.` : "Partner has no food stockpile."}${trade && !agreement ? " Negotiate a trade pact first." : ""}`;
     const subject = !!target && getSubjectOverlord(world, target.id) === nation.id;
     levy.disabled = !domestic || !subject;
     levy.value = String(subject ? target.subjectGovernment?.foodLevy ?? 0 : 0);
     view("levy").textContent = subject
-      ? "徴収には通行可能な経路が必要です。徴収すると従属国の独立要求が強まり、食料不足を招くことがあります。"
-      : "徴収率を設定するには、従属国を外交相手に選んでください。";
+      ? "Requisitions require an open route. Taking harvests increases the subject’s independence pressure and can leave its population short of food."
+      : "Select one of this nation’s subjects as the diplomatic partner to set a levy.";
   }
 
   const refresh = () => {
@@ -124,7 +124,7 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
   });
   storage.addEventListener("click", () => {
     const expanded = expandGrainStorage(world, selected());
-    feedback(expanded ? "戦略穀物倉庫を拡張しました。" : "倉庫の拡張には、首都への補給と資金が必要です。");
+    feedback(expanded ? "Strategic grain storage expanded." : "Storage expansion requires a supplied capital and available funds.");
     refresh();
   });
   asylum.addEventListener("change", () => {
@@ -133,31 +133,31 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
   });
   irrigate.addEventListener("click", () => {
     const built = installIrrigation(world, selected(), irrigation.value as MesoRegionId);
-    feedback(built ? "灌漑設備が完成しました。" : "灌漑には、安全で補給の届く農地区と資金が必要です。");
+    feedback(built ? "Irrigation completed." : "Irrigation requires a safe, supplied farm district and available funds.");
     refresh();
   });
   rations.addEventListener("change", () => {
-    if (setRationPolicy(world, selected(), rations.value as RationPolicy)) feedback("配給政策を変更しました。");
+    if (setRationPolicy(world, selected(), rations.value as RationPolicy)) feedback("Ration policy updated.");
     refresh();
   });
   amount.addEventListener("input", refresh);
   levy.addEventListener("change", () => {
-    if (setSubjectFoodLevy(world, selected(), partner(), Number(levy.value))) feedback("収穫の徴収政策を変更しました。");
+    if (setSubjectFoodLevy(world, selected(), partner(), Number(levy.value))) feedback("Harvest requisition policy updated.");
     refresh();
   });
   aid.addEventListener("click", () => {
     const sent = sendGrainAid(world, selected(), partner(), Number(amount.value));
-    feedback(sent ? "穀物援助を送りました。" : "穀物援助には、通行可能な経路、協定、十分な余剰穀物が必要です。");
+    feedback(sent ? "Grain relief dispatched." : "Grain relief needs an open route, an agreement and sufficient surplus grain.");
     refresh();
   });
   buy.addEventListener("click", () => {
     const success = proposeResourceTrade(world, partner(), selected(), "food", Number(amount.value), "cash", price());
-    feedback(success ? "穀物を購入しました。現在輸送中です。" : "発送できませんでした。経路、協定、在庫を確認してください。");
+    feedback(success ? "Grain order dispatched. The cargo is in transit." : "The order could not be dispatched. Check the route, agreement and available stock.");
     refresh();
   });
   embargo.addEventListener("click", () => {
     const enabled = !hasTradeEmbargo(world, selected(), partner());
-    if (setTradeEmbargo(world, selected(), partner(), enabled)) feedback(enabled ? "禁輸を開始しました。" : "禁輸を解除しました。");
+    if (setTradeEmbargo(world, selected(), partner(), enabled)) feedback(enabled ? "Trade embargo imposed." : "Trade embargo lifted.");
     refresh();
   });
   return { update };

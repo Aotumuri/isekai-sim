@@ -8,9 +8,9 @@ export type PopulationDimension = typeof POPULATION_DIMENSIONS[number];
 
 const colors = [0xefaa52, 0x68d5bf, 0xae9bf4, 0xe98099, 0x9cce67, 0x70b7ef];
 export const POPULATION_GROUPS = {
-  ancestry: ["オーヴレン", "ヴェヤリ", "ケスレン", "オルーヴィ", "ナライ", "イストレン"],
-  culture: ["葦の宮廷", "潮の組合", "螺旋庭園", "灯火街道", "環状列石", "風の文庫"],
-  faith: ["残火の盟約", "九つの泉", "静寂の軌道", "曙の織機", "鏡の夜警", "虚ろな星"],
+  ancestry: ["Auvren", "Veyari", "Kethren", "Orruvi", "Nhalai", "Istren"],
+  culture: ["Reed Courts", "Tide Guilds", "Spiral Gardens", "Lantern Roads", "Stone Circles", "Wind Archives"],
+  faith: ["Ember Covenant", "Nine Wells", "Silent Orbit", "Dawn Loom", "Mirror Vigil", "Hollow Star"],
 };
 export const populationColor = (index: number): number => colors[index]!;
 

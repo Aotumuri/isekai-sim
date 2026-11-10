@@ -163,7 +163,7 @@ export function updateCivilWar(world: WorldState): void {
       ? `over ${origin.dimension === "faith" ? "religious" : origin.dimension === "ancestry" ? "ancestry-based" : "cultural"} tensions involving ${POPULATION_GROUPS[origin.dimension][origin.group]}`
       : "after sustained domestic unrest";
     recordSimulationEvent(world, { category: "diplomacy", nationIds: [nation.id, newNationId],
-      message: `革命が${getNationName(world, nation.id)}で発生しました ${cause}。${getNationName(world, newNationId)}が独立を宣言しました。` });
+      message: `Revolution in ${getNationName(world, nation.id)} ${cause}; ${getNationName(world, newNationId)} declared independence.` });
 
     const boost = Math.max(0, cooperationBalance.civilWarBoost);
     nation.warCooperationBoost = clamp(

@@ -13,14 +13,14 @@ export const FINANCIAL_AID = 25;
 
 export function getFinancialAidIssue(world: WorldState, donorId: NationId, recipientId: NationId): string | null {
   if (getWarDeclarationMode(world) !== "diplomacy" || donorId === recipientId ||
-    findWar(world.wars, donorId, recipientId) || isTradeEmbargoed(world, donorId, recipientId)) return "資金援助には平和な外交関係と通行可能な経路が必要です。";
+    findWar(world.wars, donorId, recipientId) || isTradeEmbargoed(world, donorId, recipientId)) return "Financial aid requires peaceful diplomatic access.";
   const donor = world.nations.find((nation) => nation.id === donorId);
   const recipient = world.nations.find((nation) => nation.id === recipientId);
-  if (!donor?.treasury || !recipient?.treasury || !isNationActive(donor) || !isNationActive(recipient)) return "両国に利用可能な国庫が必要です。";
+  if (!donor?.treasury || !recipient?.treasury || !isNationActive(donor) || !isNationActive(recipient)) return "Both nations need active treasuries.";
   if (!areFactionPartners(world, donorId, recipientId) && !areSubjectPartners(world, donorId, recipientId) &&
-    !hasTreaty(world, donorId, recipientId, "alliance")) return "同盟国、同じ陣営の国、従属国のいずれかを選んでください。";
-  if ((donor.treasury.nextAidTick ?? 0) > world.time.slowTick) return "最近、資金援助を送ったため、まだ再送できません。";
-  if (donor.treasury.balance < FINANCIAL_AID + 10) return "援助後に資金10を残せるだけの国庫残高が必要です。";
+    !hasTreaty(world, donorId, recipientId, "alliance")) return "Select an ally, faction partner or subject.";
+  if ((donor.treasury.nextAidTick ?? 0) > world.time.slowTick) return "The donor recently sent financial aid.";
+  if (donor.treasury.balance < FINANCIAL_AID + 10) return "The donor needs enough cash to keep a reserve of 10.";
   return null;
 }
 
@@ -34,6 +34,6 @@ export function sendFinancialAid(world: WorldState, donorId: NationId, recipient
   const relation = getRelation(world, donorId, recipientId);
   relation.trust = Math.min(100, relation.trust + 2);
   recordSimulationEvent(world, { category: "aid", nationIds: [donorId, recipientId],
-    message: `${donorId}が${recipientId}に資金${FINANCIAL_AID}を援助しました。` });
+    message: `${donorId} granted ${FINANCIAL_AID} cash to ${recipientId}.` });
   return true;
 }

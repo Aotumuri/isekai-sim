@@ -13,17 +13,17 @@ export function attachPlayerControls(
 ): () => void {
   const panel = document.createElement("aside");
   panel.className = "map-controls player-controls";
-  panel.setAttribute("aria-label", "国家情報");
+  panel.setAttribute("aria-label", "Nation information");
   panel.innerHTML = `<header><small></small><h2></h2><p data-overview></p></header>
-    <button type="button" data-enter>この国を操作する</button>
+    <button type="button" data-enter>Take control</button>
     <div data-command data-current-tab="orders" hidden>
       <div class="player-toolbar">
-        <label><input type="checkbox" data-automatic> 内政・外交をAIに任せる</label>
-        <button type="button" data-leave>観戦に戻る</button>
+        <label><input type="checkbox" data-automatic> Delegate government and diplomacy to AI</label>
+        <button type="button" data-leave>Return to observer mode</button>
       </div>
-      <nav aria-label="国家操作">
-        <button type="button" data-player-tab="orders" aria-pressed="true">外交・軍事</button>
-        <button type="button" data-player-tab="government" aria-pressed="false">内政・研究</button>
+      <nav aria-label="Nation controls">
+        <button type="button" data-player-tab="orders" aria-pressed="true">Diplomacy & Military</button>
+        <button type="button" data-player-tab="government" aria-pressed="false">Government & Research</button>
       </nav>
       <div data-orders-pane></div>
     </div>`;
@@ -62,10 +62,10 @@ export function attachPlayerControls(
     if (!nation) return;
     const name = getNationName(world, nation.id);
     const wars = world.wars.filter((war) => war.nationAId === id || war.nationBId === id).length;
-    const summary = `領土 ${nation.macroRegionIds.length} 州 · ${wars ? `交戦 ${wars} 件` : "平時"}`;
+    const summary = `Provinces: ${nation.macroRegionIds.length} · ${wars ? `Active wars: ${wars}` : "At peace"}`;
     if (overview.textContent !== summary) overview.textContent = summary;
     if (heading.textContent !== name) heading.textContent = name;
-    const caption = player ? "操作中の国家" : "選択中の国家";
+    const caption = player ? "Controlled nation" : "Selected nation";
     if (label.textContent !== caption) label.textContent = caption;
     enter.hidden = !!player || !isNationActive(nation);
     command.hidden = !player;

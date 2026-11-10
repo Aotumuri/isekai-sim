@@ -15,5 +15,5 @@ export function getIdeologicalAffinity(world: WorldState, a: NationId, b: Nation
   return ideologyCompatibility(getNationIdeology(world, a).id, getNationIdeology(world, b).id);
 }
 export function ideologyAffinityLabel(affinity: number): string {
-  return affinity >= 0.75 ? "近い" : affinity <= -0.75 ? "対立" : affinity <= -0.5 ? "相いれない" : "異なる";
+  return affinity >= 0.75 ? "Aligned" : affinity <= -0.75 ? "Opposed" : affinity <= -0.5 ? "Conflicting" : "Different";
 }

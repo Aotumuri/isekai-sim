@@ -53,7 +53,7 @@ export function openPeaceConference(world: WorldState, proposer: NationId, oppon
     wars: wars.map((war) => ({ a: war.nationAId, b: war.nationBId, key: warFatigueKey(war) })),
     expiresAt: world.time.slowTick + 90 });
   recordSimulationEvent(world, { category: "diplomacy", nationIds: participants,
-    message: `${proposer}が${wars.length}件の戦争を対象とする共同講和会議を開きました。` });
+    message: `${proposer} opened a joint peace conference covering ${wars.length} wars.` });
   return true;
 }
 
@@ -70,9 +70,9 @@ function conferenceIssue(world: WorldState, conference: PeaceConference): string
 
 function finishConference(world: WorldState, conference: PeaceConference, issue?: string): void {
   world.peaceConferences = world.peaceConferences?.filter((item) => item !== conference);
-  if (!issue) for (const { a, b } of conference.wars) concludePeace(world, a, b, "共同講和会議");
+  if (!issue) for (const { a, b } of conference.wars) concludePeace(world, a, b, "joint peace conference");
   recordSimulationEvent(world, { category: "diplomacy", nationIds: conference.participants,
-    message: issue ? `共同講和会議が終了しました（${issue}）。` : `対象となった${conference.wars.length}件すべての戦争で共同講和が成立しました。` });
+    message: issue ? `Joint peace conference closed: ${issue}.` : `Joint peace signed in all ${conference.wars.length} listed wars.` });
 }
 
 export function respondToPeaceConference(world: WorldState, id: number, nation: NationId, accept: boolean): boolean {

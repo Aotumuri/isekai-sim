@@ -22,7 +22,7 @@ export function getPoliticalCampaignIssue(world: WorldState, sponsorId: NationId
     a === sponsorId && b === targetId || b === sponsorId && a === targetId) ||
     areFactionPartners(world, sponsorId, targetId) ||
     hasTreaty(world, sponsorId, targetId, "trade") || hasTreaty(world, sponsorId, targetId, "alliance");
-  if (!hasContact) return "隣接国、通商条約の相手国、同盟国、または同じ陣営の国が対象です。";
+  if (!hasContact) return "Requires a shared border, trade pact, alliance or faction.";
   if (getRelation(world, sponsorId, targetId).crisis) return "Political outreach is suspended during a diplomatic crisis.";
   const ideology = getNationIdeology(world, sponsorId);
   const sourcePolitics = getNationalPolitics(world, sponsor);

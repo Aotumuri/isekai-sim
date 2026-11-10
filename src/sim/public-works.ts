@@ -28,7 +28,7 @@ function siteIssue(world: WorldState, id: NationId, district: MesoRegionId, kind
   if (kind === "port") return getPortSiteIssue(world, id, district);
   const region = getMesoById(world).get(district);
   if (!region || region.type === "sea" || region.building !== null || getOwnerByMesoId(world).get(district) !== id) {
-    return "施設のない自国の地区を選んでください。";
+    return "Select an empty district you own.";
   }
   return isSafeControlledRegion(world, id, district, { excludeBattles: true }) && isNationRegionSupplied(world, id, district)
     ? null : "The district must be under your control, safe and supplied.";
@@ -36,14 +36,14 @@ function siteIssue(world: WorldState, id: NationId, district: MesoRegionId, kind
 
 export function getPublicWorkIssue(world: WorldState, id: NationId, district: MesoRegionId, kind: PublicWorkKind): string | null {
   const nation = world.nations.find((item) => item.id === id);
-  if (!nation?.treasury || !isNationActive(nation)) return "利用可能な国庫が必要です。";
-  if (world.publicWorks?.has(district)) return "この地区ではすでに公共事業が進行しています。";
-  if ([...(world.publicWorks?.values() ?? [])].some((project) => project.nationId === id)) return "この国ではすでに公共事業が進行しています。";
+  if (!nation?.treasury || !isNationActive(nation)) return "An active treasury is required.";
+  if (world.publicWorks?.has(district)) return "A public works project already uses this site.";
+  if ([...(world.publicWorks?.values() ?? [])].some((project) => project.nationId === id)) return "This nation already has a project.";
   const issue = siteIssue(world, id, district, kind);
   if (issue) return issue;
   const cost = PUBLIC_WORKS[kind];
   if (nation.treasury.balance < cost.cash || nation.resources.steel < cost.steel || nation.resources.fuel < cost.fuel) {
-    return "資金、鋼材、または燃料が不足しています。";
+    return "Insufficient cash, steel or fuel.";
   }
   return null;
 }
@@ -85,7 +85,7 @@ export function updatePublicWorks(world: WorldState): void {
       const nation = world.nations.find((item) => item.id === nationId);
       if (nation) nation.initialCityCount++;
       recordSimulationEvent(world, { category: "politics", nationIds: [nationId],
-        message: `${nationId}が地区${district.replace("meso-", "")}に都市を建設しました。` });
+        message: `${nationId} founded a city in District ${district.replace("meso-", "")}.` });
     }
   }
 }

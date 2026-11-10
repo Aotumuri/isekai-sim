@@ -2,7 +2,6 @@ import type { MicroRegion } from "../worldgen/micro-region";
 
 const SEA_COLOR = 0x24465b;
 const RIVER_COLOR = 0x668eb3;
-export const TERRAIN_LABELS = { plains: "平原", highlands: "高地", mountains: "山地" };
 export const TERRAIN_COLORS = {
   plains: 0x80aa69,
   highlands: 0xb49e6b,

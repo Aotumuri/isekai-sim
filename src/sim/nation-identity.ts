@@ -4,8 +4,8 @@ import type { WorldState } from "./world-state";
 
 export interface Ideology { id: string; name: string }
 export const BUILTIN_IDEOLOGIES: readonly Ideology[] = [
-  { id: "communism", name: "共産主義" }, { id: "capitalism", name: "資本主義" },
-  { id: "cohesionism", name: "結束主義" }, { id: "avian-supremacy", name: "鳥類至上主義" },
+  { id: "communism", name: "Communism" }, { id: "capitalism", name: "Capitalism" },
+  { id: "cohesionism", name: "Cohesionism" }, { id: "avian-supremacy", name: "Avian Supremacy" },
 ];
 const PREFIXES = [
   "Aster", "Val", "Nor", "Eld", "Cal", "Syl", "Raven", "Sol", "Mer", "Vel", "Arden", "Lun", "Cor", "Thal", "Iver", "Or", "Bran", "Zeph", "Dun", "Fen", "Kest", "Hal", "Tir", "Wyn",

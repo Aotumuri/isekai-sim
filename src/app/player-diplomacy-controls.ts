@@ -8,37 +8,37 @@ import { getPlayerNation } from "../sim/player-nation";
 import type { WorldState } from "../sim/world-state";
 
 const WAR_ISSUES = {
-  "invalid-target": "地図で相手国を選んでください。",
-  "already-at-war": "すでに交戦中です。講和を提案できます。",
-  subject: "従属国は宗主国が交戦している相手にのみ宣戦できます。",
-  truce: "休戦中です。休戦の期限が切れるまで宣戦できません。",
-  "non-aggression": "不可侵条約を破棄すると宣戦できます。",
-  alliance: "同盟条約を破棄すると宣戦できます。",
-  protected: "同じ陣営、宗属関係、または防衛協定で保護されています。",
+  "invalid-target": "Select a partner on the map.",
+  "already-at-war": "You are already at war with this nation. You can propose peace.",
+  subject: "A subject may only declare war on a nation its overlord is already fighting.",
+  truce: "You can declare war after the truce expires.",
+  "non-aggression": "End the non-aggression pact before declaring war.",
+  alliance: "End the alliance before declaring war.",
+  protected: "A shared faction, subject relationship, or defense pact prevents a declaration.",
 };
 
 export function attachPlayerDiplomacyControls(panel: HTMLElement, world: WorldState, openNegotiations: () => void): () => void {
   const section = document.createElement("details");
-  section.innerHTML = `<summary>外交</summary>
-    <div class="player-counterpart"><small>外交相手</small><strong data-target></strong></div>
+  section.innerHTML = `<summary>Diplomacy</summary>
+    <div class="player-counterpart"><small>Diplomatic partner</small><strong data-target></strong></div>
     <div data-diplomatic-actions hidden>
     <div class="player-war-actions">
-      <button type="button" data-declare>宣戦布告</button>
-      <button type="button" data-propose-peace>白紙講和を提案</button>
-      <button type="button" data-negotiations>講和条件を見る</button>
+      <button type="button" data-declare>Declare war</button>
+      <button type="button" data-propose-peace>Propose white peace</button>
+      <button type="button" data-negotiations>View peace terms</button>
     </div>
     <p data-war-note></p>
-    <label>その他の外交 <select data-action>
-      <option value="relations">関係改善</option>
-      <option value="trade">通商条約</option>
-      <option value="non-aggression">不可侵条約</option>
-      <option value="alliance">同盟</option>
-      <option value="crisis">最後通牒</option>
-      <option value="negotiate">最後通牒に交渉で応じる</option>
-      <option value="break-nap">不可侵条約を破棄</option>
-      <option value="break-alliance">同盟条約を破棄</option>
+    <label>Other diplomatic actions <select data-action>
+      <option value="relations">Improve relations</option>
+      <option value="trade">Trade pact</option>
+      <option value="non-aggression">Non-aggression pact</option>
+      <option value="alliance">Alliance</option>
+      <option value="crisis">Ultimatum</option>
+      <option value="negotiate">Negotiate an ultimatum</option>
+      <option value="break-nap">End non-aggression pact</option>
+      <option value="break-alliance">End alliance</option>
     </select></label>
-    <button type="button" data-execute>実行</button><p role="status"></p></div>`;
+    <button type="button" data-execute>Apply</button><p role="status"></p></div>`;
   panel.append(section);
   const target = section.querySelector<HTMLElement>("[data-target]")!;
   const action = section.querySelector<HTMLSelectElement>("[data-action]")!;
@@ -67,19 +67,19 @@ export function attachPlayerDiplomacyControls(panel: HTMLElement, world: WorldSt
       case "break-nap": accepted = breakTreaty(world, actor, partner, "non-aggression"); break;
       case "break-alliance": accepted = breakTreaty(world, actor, partner, "alliance"); break;
     }
-    result.textContent = accepted ? "外交行動を実行しました。" : "現在の関係や世界設定では実行できません。";
+    result.textContent = accepted ? "Diplomatic action completed." : "Current relations or simulation settings prevent this action.";
   };
   declare.onclick = () => {
     const partner = getPartner();
-    if (partner && startPlayerWar(world, partner)) result.textContent = "宣戦しました。";
+    if (partner && startPlayerWar(world, partner)) result.textContent = "War declared.";
   };
   propose.onclick = () => {
     const actor = getPlayerNation(world)?.nationId;
     const partner = getPartner();
     if (!actor || !partner) return;
     result.textContent = offerPeace(world, actor, partner)
-      ? getPlayerWarIssue(world, partner) === "already-at-war" ? "白紙講和を提案しました。相手の回答を待っています。" : "相手が白紙講和を受諾しました。"
-      : "現在は講和を提案できません。";
+      ? getPlayerWarIssue(world, partner) === "already-at-war" ? "White peace proposed. Awaiting a response." : "The other nation accepted white peace."
+      : "Peace cannot be proposed right now.";
   };
   negotiations.onclick = openNegotiations;
   return () => {
@@ -91,7 +91,7 @@ export function attachPlayerDiplomacyControls(panel: HTMLElement, world: WorldSt
       selection = key;
       result.textContent = "";
     }
-    const name = partner ? getNationName(world, partner) : "地図で相手国を選択";
+    const name = partner ? getNationName(world, partner) : "Select a partner on the map";
     if (target.textContent !== name) target.textContent = name;
     actions.hidden = !actor || !partner;
     if (!actor || !partner) return;
@@ -100,7 +100,7 @@ export function attachPlayerDiplomacyControls(panel: HTMLElement, world: WorldSt
     declare.hidden = atWar;
     declare.disabled = !!issue;
     propose.hidden = negotiations.hidden = !atWar;
-    const note = issue ? WAR_ISSUES[issue] : "宣戦すると、すぐに交戦状態になります。";
+    const note = issue ? WAR_ISSUES[issue] : "Declaring war starts hostilities immediately.";
     if (warNote.textContent !== note) warNote.textContent = note;
   };
 }

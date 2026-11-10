@@ -26,6 +26,6 @@ export function installIrrigation(world: WorldState, id: NationId, district: Mes
   changeResource(nation, "steel", -IRRIGATION_COST.steel);
   (world.irrigatedDistricts ??= new Set()).add(district);
   recordSimulationEvent(world, { category: "politics", nationIds: [id],
-    message: `${id}が地区${district.replace("meso-", "")}に灌漑設備を完成させました。` });
+    message: `${id} completed irrigation in District ${district.replace("meso-", "")}.` });
   return true;
 }

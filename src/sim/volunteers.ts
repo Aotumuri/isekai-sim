@@ -73,7 +73,7 @@ export function sendVolunteers(world: WorldState, donorId: NationId, recipientId
   while (state.missions.length > 40) { const index = state.missions.findIndex((item) => ["completed", "lost", "integrated"].includes(item.status)); if (index < 0) break; state.missions.splice(index, 1); }
   const relation = getRelation(world, donorId, recipientId); relation.opinion = Math.min(100, relation.opinion + 4);
   for (const enemy of enemies(world, recipientId)) { const relation = getRelation(world, donorId, enemy); relation.opinion = Math.max(-100, relation.opinion - 12); relation.grievance = Math.min(100, relation.grievance + 8); }
-  recordSimulationEvent(world, { category: "military", nationIds: [donorId, recipientId], message: `${donorId}が${recipientId}に義勇軍${count}部隊を派遣しました。派遣国は参戦していません。` });
+  recordSimulationEvent(world, { category: "military", nationIds: [donorId, recipientId], message: `${donorId} dispatched ${count} volunteer units to ${recipientId}; the donor remains outside its wars.` });
   return mission;
 }
 export function recallVolunteers(world: WorldState, donorId: NationId, missionId: number): boolean {
@@ -134,7 +134,7 @@ export function updateVolunteers(world: WorldState): void {
         world.units.push(unit); mission.returnedUnits++;
       }
       mission.transitUnits = []; mission.status = "completed"; mission.endedAtSlowTick = world.time.slowTick;
-      recordSimulationEvent(world, { category: "military", nationIds: [mission.donorId, mission.recipientId], message: `生き残った義勇軍${mission.returnedUnits}部隊が${mission.donorId}に帰還しました。` });
+      recordSimulationEvent(world, { category: "military", nationIds: [mission.donorId, mission.recipientId], message: `${mission.returnedUnits} surviving volunteer units returned to ${mission.donorId}.` });
     }
     if (mission.status === "lost") mission.endedAtSlowTick = world.time.slowTick;
   }

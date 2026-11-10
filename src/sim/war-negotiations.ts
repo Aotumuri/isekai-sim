@@ -88,18 +88,18 @@ function legsFor(proposer: NationId, target: NationId, terms: PeaceTerms): Terri
 }
 export function getPeaceTermsIssue(world: WorldState, proposer: NationId, target: NationId, terms: PeaceTerms): string | null {
   const war = findWar(world.wars, proposer, target);
-  if (!war || (war.cause !== "player-declaration" && getWarDeclarationMode(world) !== "diplomacy")) return "両国は講和交渉が可能な交戦状態にありません。";
-  if (!Array.isArray(terms.demandedRegionIds) || !Array.isArray(terms.offeredRegionIds)) return "有効な領土を選択してください。";
+  if (!war || (war.cause !== "player-declaration" && getWarDeclarationMode(world) !== "diplomacy")) return "These nations are not negotiating an active war.";
+  if (!Array.isArray(terms.demandedRegionIds) || !Array.isArray(terms.offeredRegionIds)) return "Select valid territories.";
   if (![terms.demandedWeapons, terms.offeredWeapons].every((amount) => Number.isInteger(amount) && amount >= 0 && amount <= 100) ||
-    (terms.demandedWeapons > 0 && terms.offeredWeapons > 0) || !Number.isInteger(terms.truceSeconds) || terms.truceSeconds < 180 || terms.truceSeconds > 900) return "賠償額と休戦期間を確認してください。";
+    (terms.demandedWeapons > 0 && terms.offeredWeapons > 0) || !Number.isInteger(terms.truceSeconds) || terms.truceSeconds < 180 || terms.truceSeconds > 900) return "Check reparations and the truce duration.";
   if (terms.resourceReparation !== undefined && !isValidResourceReparation(terms.resourceReparation)) {
-    return "資源を選び、1回あたり1〜10の賠償を要求してください。";
+    return "Select a resource and demand between 1 and 10 units per delivery.";
   }
   if (terms.puppetTarget || terms.partition) {
-    if (terms.offeredRegionIds.length) return "傀儡政権を樹立する講和では、敗戦国に州を与えることはできません。";
+    if (terms.offeredRegionIds.length) return "A puppet settlement cannot grant provinces to the defeated government.";
     const targetCapital = world.nations.find((nation) => nation.id === target)?.capitalMesoId;
     if (targetCapital && terms.demandedRegionIds.includes(targetCapital)) {
-      return "敗戦国には首都を残す必要があります。";
+      return "The defeated government must retain its capital.";
     }
     const puppetIssue = getPuppetTermsIssue(world, proposer, target);
     if (puppetIssue) return puppetIssue;
@@ -110,22 +110,22 @@ export function getPeaceTermsIssue(world: WorldState, proposer: NationId, target
   }
   const a = world.nations.find((nation) => nation.id === proposer && nation.macroRegionIds.length);
   const b = world.nations.find((nation) => nation.id === target && nation.macroRegionIds.length);
-  if (!a || !b) return "この合意には両国に領土が必要です。";
+  if (!a || !b) return "Both governments need territory to sign this settlement.";
   if (terms.resourceReparation && (a.resources[terms.resourceReparation.resource] === undefined ||
-    b.resources[terms.resourceReparation.resource] === undefined)) return "この世界ではその資源を利用できません。";
-  if (a.resources.weapons < terms.offeredWeapons || b.resources.weapons < terms.demandedWeapons) return "支払国に賠償を支払う余力がありません。";
+    b.resources[terms.resourceReparation.resource] === undefined)) return "This resource is unavailable in this world.";
+  if (a.resources.weapons < terms.offeredWeapons || b.resources.weapons < terms.demandedWeapons) return "The paying country cannot afford the proposed reparations.";
   const legs = legsFor(proposer, target, terms);
   if (terms.localSubject) {
     if (!hasPoliticalTurbulence(world) || terms.puppetTarget || terms.partition || terms.offeredRegionIds.length) {
-      return "現地の従属国を設立する場合、要求した領土のみを新政府に移譲できます。";
+      return "A local subject settlement only transfers the selected demands to a new government.";
     }
     const plan = planLocalSubject(world, proposer, target, terms.demandedRegionIds);
-    if (!plan) return "現地の従属国には、隣接する2地区以上と、敗戦国の首都以外の政庁所在地が必要です。";
+    if (!plan) return "A local subject needs at least two connected districts and a seat outside the defeated capital.";
     const nation = preparePartitionNation(world, b, plan);
     return canTransferTerritories(world, [{ from: target, to: nation.id, regionIds: plan.districtIds }],
       { nation, occupationSponsor: proposer }) ? null : "A third party controls part of the proposed subject.";
   }
-  if (legs.length && !canTransferTerritories(world, legs)) return "領有状況が変わったか、第三国が対象地区を支配しているか、いずれかの国が最後の領土を失います。";
+  if (legs.length && !canTransferTerritories(world, legs)) return "Territory changed, a third party controls a district, or a country would lose its last territory.";
   const borderIssue = getPeaceBorderIssue(world, legs);
   if (borderIssue) return borderIssue;
   return null;
@@ -233,7 +233,7 @@ export function getWarNegotiation(world: WorldState, war: WarState): WarNegotiat
       negotiation.offers.set(proposer, { proposerId: proposer, terms: openingTerms(world, war, proposer, target), revisedAtSlowTick: world.time.slowTick, revision: 0, source: "opening" });
     }
     recordSimulationEvent(world, { category: "diplomacy", nationIds: [negotiation.a, negotiation.b],
-      message: `${getNationName(world, negotiation.a)}と${getNationName(world, negotiation.b)}が当初の講和条件を示しました。` });
+      message: `${getNationName(world, negotiation.a)} and ${getNationName(world, negotiation.b)} published opening peace conditions.` });
   }
   return negotiation;
 }
@@ -294,10 +294,10 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
   const matureEnough = ageSeconds >= 90 || (ageSeconds >= 30 && (exchangedBlows || urgency >= 0.8));
   if (!matureEnough) return { accepts: false, score, reason: "The government is waiting for battlefield evidence before accepting terms." };
   const reason = score >= 0 ? foodPressure >= 10 ? "The food emergency makes continued fighting too costly."
-    : "損害や国内不安を拡大させるより、ここで戦争を終える方が有利です。"
-    : sacrificeCost > 8 && score + sacrificeCost >= 0 ? "政府はすでに出た犠牲に見合う成果を必要としています。"
-    : landCost + paymentCost > 25 ? "要求された譲歩は、戦争を続ける現時点の負担より大きいと判断しています。"
-    : "政府は戦争を続ければより良い結果を得られると考えています。";
+    : "Ending the war now is preferable to continued losses and domestic danger."
+    : sacrificeCost > 8 && score + sacrificeCost >= 0 ? "The government needs gains it can justify against the casualties already suffered."
+    : landCost + paymentCost > 25 ? "The requested concessions outweigh the current cost of continuing the war."
+    : "The government expects a better outcome by continuing the war.";
   return { accepts: score >= 0, score, reason };
 }
 export function proposePeaceTerms(world: WorldState, proposer: NationId, target: NationId, terms: PeaceTerms): boolean {
@@ -308,7 +308,7 @@ export function proposePeaceTerms(world: WorldState, proposer: NationId, target:
     ...(terms.resourceReparation ? { resourceReparation: { ...terms.resourceReparation } } : {}),
     ...(terms.partition ? { partition: { ...terms.partition, districtIds: [...terms.partition.districtIds] } } : {}) }, revisedAtSlowTick: world.time.slowTick, revision: old.revision + 1, source: "manual" });
   negotiation.automatic.set(proposer, false);
-  recordSimulationEvent(world, { category: "diplomacy", nationIds: [proposer, target], message: `${getNationName(world, proposer)}が${getNationName(world, target)}に講和を提案しました。${terms.puppetTarget ? "傀儡政権の樹立、" : ""}要求${terms.demandedRegionIds.length}地区、譲渡${terms.offeredRegionIds.length}地区、武器賠償${terms.demandedWeapons || -terms.offeredWeapons}。` });
+  recordSimulationEvent(world, { category: "diplomacy", nationIds: [proposer, target], message: `${getNationName(world, proposer)} proposed peace to ${getNationName(world, target)}: ${terms.puppetTarget ? "puppet government, " : ""}${terms.demandedRegionIds.length} districts demanded, ${terms.offeredRegionIds.length} offered, ${terms.demandedWeapons || -terms.offeredWeapons} weapons reparations.` });
   return true;
 }
 export function acceptPeaceOffer(world: WorldState, recipient: NationId, proposer: NationId, expectedRevision?: number): boolean {
@@ -326,7 +326,7 @@ export function acceptPeaceOffer(world: WorldState, recipient: NationId, propose
   const founding = successor && { nation: successor, occupationSponsor: proposer };
   if (legs.length && !transferTerritories(world, legs, "agreement", founding)) return false;
   // Validation and territory transfer are synchronous and cannot remove this war.
-  if (!concludePeace(world, recipient, proposer, "講和条件を受諾")) return false;
+  if (!concludePeace(world, recipient, proposer, "accepted negotiated terms")) return false;
   const a = world.nations.find((nation) => nation.id === proposer)!, b = world.nations.find((nation) => nation.id === recipient)!;
   const payment = terms.demandedWeapons - terms.offeredWeapons;
   changeResource(a, "weapons", payment); changeResource(b, "weapons", -payment);
@@ -376,7 +376,7 @@ function tryMutualCompromise(world: WorldState, negotiation: WarNegotiation): bo
     return false;
   }
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [a, b],
-    message: `${a}と${b}が、休戦期間の延長と武器${deal.terms.demandedWeapons}の賠償で合意しました。` });
+    message: `${a} and ${b} found a mutual compromise: a longer truce and ${deal.terms.demandedWeapons} weapons in reparations.` });
   return true;
 }
 
@@ -403,7 +403,7 @@ export function updateWarNegotiations(world: WorldState): void {
         if (JSON.stringify(terms) !== JSON.stringify(old.terms)) {
           negotiation.offers.set(proposer, { proposerId: proposer, terms, revisedAtSlowTick: world.time.slowTick, revision: old.revision + 1, source: "automatic" });
           recordSimulationEvent(world, { category: "diplomacy", nationIds: [proposer, target],
-            message: `${getNationName(world, proposer)}が講和条件を更新しました。要求${terms.demandedRegionIds.length}地区、武器賠償${terms.demandedWeapons || -terms.offeredWeapons}。` });
+            message: `${getNationName(world, proposer)} revised its peace terms: ${terms.demandedRegionIds.length} districts demanded, ${terms.demandedWeapons || -terms.offeredWeapons} weapons reparations.` });
         }
       }
     }

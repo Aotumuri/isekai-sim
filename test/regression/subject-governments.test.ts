@@ -73,7 +73,7 @@ test("puppet terms are revalidated at acceptance and grant independence removes 
   assert.equal(acceptPeaceOffer(world, target.id, overlord.id), false);
   assert.ok(findWar(world.wars, overlord.id, target.id));
   occupy();
-  assert.match(getPeaceTermsIssue(world, overlord.id, target.id, { ...terms, demandedRegionIds: [target.capitalMesoId] })!, /首都を残す/);
+  assert.match(getPeaceTermsIssue(world, overlord.id, target.id, { ...terms, demandedRegionIds: [target.capitalMesoId] })!, /retain its capital/);
   assert.ok(acceptPeaceOffer(world, target.id, overlord.id));
   assert.equal(releaseSubjectGovernment(world, third.id, target.id), false);
   assert.ok(releaseSubjectGovernment(world, overlord.id, target.id));

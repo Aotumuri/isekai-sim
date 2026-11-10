@@ -13,7 +13,7 @@ import type { WorldState } from "./world-state";
 
 export const EQUIPMENT_FAMILIES = ["Infantry", "Tank", "CombatShip", "TransportShip"] as const satisfies readonly UnitType[];
 export type EquipmentFamily = typeof EQUIPMENT_FAMILIES[number];
-export const EQUIPMENT_FAMILY_NAMES: Record<EquipmentFamily, string> = { Infantry: "小火器", Tank: "戦車", CombatShip: "戦闘艦", TransportShip: "輸送船" };
+export const EQUIPMENT_FAMILY_NAMES: Record<EquipmentFamily, string> = { Infantry: "Small arms", Tank: "Tanks", CombatShip: "Warships", TransportShip: "Transport ships" };
 export const RESEARCH_BRANCHES = ["firepower", "reliability", "materials", "fuel", "logistics", "production", "armor", "mobility", "handling", "capacity"] as const;
 export type ResearchBranch = typeof RESEARCH_BRANCHES[number];
 export type ResearchLevels = Record<ResearchBranch, number>;
@@ -23,7 +23,7 @@ export const FAMILY_RESEARCH_BRANCHES: Record<EquipmentFamily, readonly Research
   CombatShip: ["firepower", "armor", "mobility", "reliability", "fuel", "materials", "logistics", "production"],
   TransportShip: ["capacity", "armor", "mobility", "reliability", "fuel", "materials", "logistics", "production"],
 };
-export const RESEARCH_BRANCH_NAMES: Record<ResearchBranch, string> = { firepower: "火力", reliability: "信頼性", materials: "資材効率", fuel: "燃費", logistics: "補給", production: "生産", armor: "防御", mobility: "速度", handling: "精度・取り回し", capacity: "輸送容量" };
+export const RESEARCH_BRANCH_NAMES: Record<ResearchBranch, string> = { firepower: "Firepower", reliability: "Reliability", materials: "Material efficiency", fuel: "Fuel efficiency", logistics: "Logistics", production: "Production", armor: "Protection", mobility: "Speed", handling: "Accuracy & handling", capacity: "Cargo capacity" };
 export type ResearchPriority = "auto" | "paused" | "low" | "normal" | "high";
 export interface ResearchPortfolio {
   levels: ResearchLevels; progress: ResearchLevels; focus: ResearchBranch | "auto";
@@ -198,7 +198,7 @@ export function updateResearch(world: WorldState): void {
         const cost = getResearchCost(program, branch);
         if (program.progress[branch] + 1e-9 < cost) continue;
         program.progress[branch] = Math.max(0, program.progress[branch] - cost); program.levels[branch]++; program.completedProjects++;
-        recordSimulationEvent(world, { category: "research", nationIds: [nation.id], message: `${nation.id}が${EQUIPMENT_FAMILY_NAMES[family]}の${RESEARCH_BRANCH_NAMES[branch]}をレベル${program.levels[branch]}まで研究しました。` });
+        recordSimulationEvent(world, { category: "research", nationIds: [nation.id], message: `${nation.id} completed ${EQUIPMENT_FAMILY_NAMES[family]} / ${RESEARCH_BRANCH_NAMES[branch]} level ${program.levels[branch]}.` });
       }
     }
     const steel = usedBudget * 0.4, weapons = usedBudget * 0.2;

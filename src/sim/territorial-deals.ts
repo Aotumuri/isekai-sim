@@ -65,7 +65,7 @@ export function proposeTerritorialExchange(world: WorldState, proposerId: Nation
     if (index < 0) break; state.offers.splice(index, 1);
   }
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [proposerId, targetId],
-    message: `${proposerId}が${targetId}に、${offered.length}地区と${requested.length}地区の交換を提案しました。` });
+    message: `${proposerId} offered ${offered.length} regions to ${targetId} in exchange for ${requested.length}.` });
   return offer;
 }
 export function respondToTerritorialOffer(world: WorldState, nationId: NationId, offerId: number, accept: boolean): boolean {
@@ -84,7 +84,7 @@ export function respondToTerritorialOffer(world: WorldState, nationId: NationId,
     relation.grievance = Math.max(0, relation.grievance - 10); relation.tension = Math.max(0, relation.tension - 10);
   }
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [offer.proposerId, offer.targetId],
-    message: `${offer.targetId}が${offer.proposerId}の領土交換を${offer.status === "accepted" ? "受諾" : "拒否"}しました。` });
+    message: `${offer.targetId} ${offer.status} the territorial exchange proposed by ${offer.proposerId}.` });
   return true;
 }
 export function withdrawTerritorialOffer(world: WorldState, nationId: NationId, offerId: number): boolean {

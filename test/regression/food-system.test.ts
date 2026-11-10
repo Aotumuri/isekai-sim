@@ -148,7 +148,7 @@ test("a low grain reserve warns once until the reserve recovers", () => {
     world.time.slowTick = tick;
     updateFoodSupply(world);
   }
-  const warnings = () => world.events!.filter((event) => event.nationIds.includes(nation.id) && event.message.includes("穀物備蓄は現在の収穫と配給を続けると")).length;
+  const warnings = () => world.events!.filter((event) => event.nationIds.includes(nation.id) && event.message.includes("grain reserve will last")).length;
   assert.equal(warnings(), 1);
   nation.food!.stock = nation.food!.demand * 15;
   world.time.slowTick = 30;

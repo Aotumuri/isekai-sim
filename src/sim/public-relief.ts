@@ -18,6 +18,6 @@ export function distributePublicRelief(world: WorldState, id: NationId): boolean
   unrest.lowSupportSeconds = Math.max(0, unrest.lowSupportSeconds - 15);
   treasury.nextReliefTick = world.time.slowTick + RELIEF_COOLDOWN;
   recordSimulationEvent(world, { category: "politics", nationIds: [id],
-    message: `${id}が世帯に緊急救済金を支給しました。` });
+    message: `${id} distributed emergency cash relief to households.` });
   return true;
 }

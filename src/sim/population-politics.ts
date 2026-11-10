@@ -13,8 +13,8 @@ export interface PopulationPolicy {
 }
 
 export function populationPolicyTitle(policy: PopulationPolicy): string {
-  return policy.type === "homeland" ? `${POPULATION_GROUPS.ancestry[policy.group]}の郷土国`
-    : `${POPULATION_GROUPS.faith[policy.group]}の聖国`;
+  return policy.type === "homeland" ? `${POPULATION_GROUPS.ancestry[policy.group]} Homeland`
+    : `${POPULATION_GROUPS.faith[policy.group]} Holy State`;
 }
 
 export function updatePopulationPolitics(world: WorldState): void {

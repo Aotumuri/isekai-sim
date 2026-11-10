@@ -32,6 +32,6 @@ export function updateDefensePacts(world: WorldState): void {
     partner.defensePact = { against: threat, expiresAt: now + 240 };
     partner.trust = Math.min(100, partner.trust + 5);
     recordSimulationEvent(world, { category: "diplomacy", nationIds: [a, b, threat],
-      message: `${a}と${b}が${threat}に対する一時的な相互防衛協定を結びました。` });
+      message: `${a} and ${b} signed a temporary mutual defense pact against ${threat}.` });
   }
 }
