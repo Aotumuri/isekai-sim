@@ -6,6 +6,7 @@ import { createDefaultWorldConfig, createWorldConfig } from "../../src/data/worl
 import { getOwnerByMesoId } from "../../src/sim/world-cache";
 import { SeededRng } from "../../src/utils/seeded-rng";
 import { applyDrainageRivers } from "../../src/worldgen/apply/drainage-rivers";
+import { sampleContinentalRelief } from "../../src/worldgen/apply/continental-mountains";
 import { createContinentalLayout } from "../../src/worldgen/apply/continental-layout";
 import { createIslandArc, sampleIslandArc } from "../../src/worldgen/apply/island-arcs";
 import { generateMesoRegions } from "../../src/worldgen/generate/meso-regions";
@@ -166,6 +167,14 @@ test("world map island arcs have independent peaks away from their ridge centerl
       assert.ok(sampleIslandArc(arc, island.x, island.y) >= island.height);
     }
     assert.ok(arc.segments.some(({ x, y }) => sampleIslandArc(arc, x, y) < 0));
+  }
+});
+
+test("continental relief keeps the coast low and raises broad inland areas", () => {
+  assert.ok(sampleContinentalRelief(-0.10, 0, 0, 0, 0) < 0);
+  assert.ok(sampleContinentalRelief(0.08, 0, 0, 0, 0) < 0.025);
+  for (const [x, y] of [[0.35, 0.20], [-0.35, 0.20], [0, -0.40]] as const) {
+    assert.ok(sampleContinentalRelief(0.48, x, y, 0, 0) > 0.14);
   }
 });
 

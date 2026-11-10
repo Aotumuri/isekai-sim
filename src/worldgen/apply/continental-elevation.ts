@@ -1,4 +1,4 @@
-import { sampleContinentalMountains } from "./continental-mountains";
+import { sampleContinentalRelief } from "./continental-mountains";
 import { sampleCoastRelief } from "./coast-relief";
 import { createContinentalLayout } from "./continental-layout";
 import { sampleIslandArc } from "./island-arcs";
@@ -77,13 +77,9 @@ export function applyContinentalElevation(
     }
     if (ridge - edgeFade > -0.22) region.seaRidge = clamp(1 + (ridge - edgeFade) / 0.22, 0, 1);
     const coastline = Math.max(interior + coastalWeight * layout.coastReliefScale * coastalNoise, ridge) - edgeFade;
-    let slope = 0.40 + 0.56 * ridges + 0.14 * hills;
-    if (worldMap) {
-      slope = coastline <= 0 ? 0.72
-        : 0.32 + 0.58 * sampleContinentalMountains(inlandX, inlandY, mountainPhase, coastalNoise)
-          + 0.18 * hills * hills;
-    }
-    const relief = Math.min(coastline, layout.seaCeiling(x, y)) * slope;
+    const relief = worldMap
+      ? sampleContinentalRelief(coastline, inlandX, inlandY, mountainPhase, coastalNoise)
+      : Math.min(coastline, layout.seaCeiling(x, y)) * (0.40 + 0.56 * ridges + 0.14 * hills);
     region.elevation = clamp(config.elevationSeaLevel + relief, config.elevationRange.min, config.elevationRange.max);
   }
 }
