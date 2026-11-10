@@ -6,6 +6,7 @@ import { createDefaultWorldConfig, createWorldConfig } from "../../src/data/worl
 import { getOwnerByMesoId } from "../../src/sim/world-cache";
 import { SeededRng } from "../../src/utils/seeded-rng";
 import { applyDrainageRivers } from "../../src/worldgen/apply/drainage-rivers";
+import { createContinentalLayout } from "../../src/worldgen/apply/continental-layout";
 import { createIslandArc, sampleIslandArc } from "../../src/worldgen/apply/island-arcs";
 import { generateMesoRegions } from "../../src/worldgen/generate/meso-regions";
 import { generateNations } from "../../src/worldgen/generate/nations";
@@ -153,6 +154,19 @@ test("a curved ridge produces separate island peaks with shallow gaps between th
   assert.ok(sample(4) > 0 && sample(9) > 0 && sample(15) > 0);
   assert.ok(sample(6) < 0 && sample(12) < 0);
   assert.ok(sample(12) > sampleIslandArc(arc, 0.4, 0.29));
+});
+
+test("world map island arcs have independent peaks away from their ridge centerline", () => {
+  const arcs = [2, 3, 17].flatMap((seed) => createContinentalLayout(seed, "world-map").islandArcs ?? []);
+  assert.ok(arcs.length > 0);
+  for (const arc of arcs) {
+    assert.ok(arc.islands && arc.islands.length >= 2);
+    assert.ok(arc.islands.some(({ rx }) => rx >= 0.030));
+    for (const island of arc.islands) {
+      assert.ok(sampleIslandArc(arc, island.x, island.y) >= island.height);
+    }
+    assert.ok(arc.segments.some(({ x, y }) => sampleIslandArc(arc, x, y) < 0));
+  }
 });
 
 test("the default world map moves its largest continent between seeds", () => {

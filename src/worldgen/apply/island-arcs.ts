@@ -19,6 +19,14 @@ export interface IslandArc {
   minY: number;
   maxY: number;
   slope: number;
+  islands?: IslandPeak[];
+}
+
+export interface IslandPeak extends Vec2 {
+  rx: number;
+  ry: number;
+  angle: number;
+  height: number;
 }
 
 export function createIslandArc(start: Vec2, bend: Vec2, end: Vec2, rng: SeededRng): IslandArc {
@@ -67,5 +75,17 @@ export function sampleIslandArc(arc: IslandArc, x: number, y: number): number {
     distanceSquared = distance;
     crest = segment.crest + t * segment.rise;
   }
-  return crest - Math.sqrt(distanceSquared) * arc.slope;
+  const ridge = crest - Math.sqrt(distanceSquared) * arc.slope;
+  if (!arc.islands) return ridge;
+  let elevation = Math.min(-0.095, ridge);
+  for (const island of arc.islands) {
+    const dx = x - island.x, dy = y - island.y;
+    const cosine = Math.cos(island.angle), sine = Math.sin(island.angle);
+    const u = (dx * cosine + dy * sine) / island.rx;
+    const v = (dy * cosine - dx * sine) / island.ry;
+    const bearing = Math.atan2(v, u);
+    const outline = 1 + 0.21 * Math.sin(3 * bearing + island.angle);
+    elevation = Math.max(elevation, island.height * (1 - Math.hypot(u, v) / outline));
+  }
+  return elevation;
 }
