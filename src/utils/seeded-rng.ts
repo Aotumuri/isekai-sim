@@ -6,6 +6,10 @@ export class SeededRng {
     this.state = normalized === 0 ? 0x6d2b79f5 : normalized;
   }
 
+  fork(): SeededRng {
+    return new SeededRng(this.state);
+  }
+
   nextFloat(): number {
     this.state += 0x6d2b79f5;
     let t = this.state;

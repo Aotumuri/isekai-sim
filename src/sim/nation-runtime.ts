@@ -13,7 +13,7 @@ export interface NationUnitRoles {
   occupationUnitIds: UnitId[];
 }
 
-export interface NationResources {
+export interface NationResources extends Partial<Record<import("../data/strategic-resources").StrategicResource, number>> {
   steel: number;
   fuel: number;
   manpower: number;

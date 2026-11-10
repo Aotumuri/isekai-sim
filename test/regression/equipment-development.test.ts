@@ -62,3 +62,28 @@ test("researched fuel economy affects operating consumption and keeps designs af
   assert(nation.resourceFlow.usage.fuel < heavyConsumption);
   assert(tank.design.firepower === heavyDesign.firepower && tank.combatPower > 0);
 });
+
+test("tank production switches to infantry when strategic materials run out", () => {
+  const { world, nation } = preparedWorld();
+  for (const region of world.mesoRegions) if (region.resource === "rubber") region.resource = null;
+  nation.resources.rubber = 0;
+  nation.resources.tungsten = 100;
+  world.simRng.nextFloat = () => 0;
+
+  const build = () => {
+    const existing = new Set(world.units.map(({ id }) => id));
+    nation.nextUnitProductionTick = world.time.slowTick;
+    updateProduction(world);
+    return world.units.filter((unit) => unit.nationId === nation.id && !existing.has(unit.id));
+  };
+
+  const replacements = build();
+  assert(replacements.some(({ type }) => type === "Infantry"));
+  assert(!replacements.some(({ type }) => type === "Tank"));
+
+  world.time.slowTick++;
+  nation.resources.rubber = 100;
+  const tanks = build().filter(({ type }) => type === "Tank");
+  assert(tanks.length > 0);
+  assert((nation.resourceFlow.usage.rubber ?? 0) >= tanks.length * 3);
+});

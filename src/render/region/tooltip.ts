@@ -1,3 +1,4 @@
+import { isStrategicResource, STRATEGIC_RESOURCE_NAMES } from "../../data/strategic-resources";
 import { formatPopulationDistrict, isPopulationMode } from "../population-map";
 import { getUnitTransportCapacity } from "../../sim/unit-capabilities";
 import { getMapClaims } from "../claim-map-data";
@@ -105,6 +106,7 @@ function formatBuilding(building: MesoRegion["building"]): string {
 }
 
 function formatResource(resource: MesoRegion["resource"]): string {
+  if (isStrategicResource(resource)) return STRATEGIC_RESOURCE_NAMES[resource];
   switch (resource) {
     case "steel":
       return "Steel";

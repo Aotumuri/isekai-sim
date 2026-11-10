@@ -7,7 +7,7 @@ export type MesoRegionType = "land" | "sea" | "river";
 
 export type MesoRegionBuilding = "capital" | "city" | "port";
 
-export type MesoRegionResource = "steel" | "fuel";
+export type MesoRegionResource = "steel" | "fuel" | import("../data/strategic-resources").StrategicResource;
 
 export interface MesoRegionNeighbor {
   id: MesoRegionId;

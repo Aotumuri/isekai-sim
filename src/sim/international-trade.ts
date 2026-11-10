@@ -1,3 +1,4 @@
+import { STRATEGIC_RESOURCES, isStrategicResource } from "../data/strategic-resources";
 import { isTradeEmbargoed } from "./trade-embargo";
 import { exchangePortPopulation } from "./population-migration";
 import { areFactionPartners } from "./factions";
@@ -15,7 +16,7 @@ import { buildWarAdjacency, isAtWar } from "./war-state";
 import { getUnitCombatStrength } from "./unit-strength";
 import type { WorldState } from "./world-state";
 
-const INDUSTRIAL_RESOURCES = ["steel", "fuel", "weapons"] as const;
+const INDUSTRIAL_RESOURCES = ["steel", "fuel", "weapons", ...STRATEGIC_RESOURCES] as const;
 export const TRADE_RESOURCES = [...INDUSTRIAL_RESOURCES, "food", "cash"] as const;
 export type TradeResource = typeof TRADE_RESOURCES[number];
 export interface TradeRoute { regionIds: MesoRegionId[]; maritime: boolean }
@@ -36,15 +37,15 @@ export function getInternationalTradeState(world: WorldState): InternationalTrad
     lastAISlowTick: -20, delivered: 0, returned: 0, fuelSpent: 0 };
 }
 export function changeResource(nation: NationRuntime, resource: typeof INDUSTRIAL_RESOURCES[number], amount: number): void {
-  nation.resources[resource] += amount;
-  nation.resourceFlow.delta[resource] += amount;
-  if (amount >= 0) nation.resourceFlow.income[resource] += amount;
-  else nation.resourceFlow.usage[resource] -= amount;
+  nation.resources[resource] = (nation.resources[resource] ?? 0) + amount;
+  nation.resourceFlow.delta[resource] = (nation.resourceFlow.delta[resource] ?? 0) + amount;
+  if (amount >= 0) nation.resourceFlow.income[resource] = (nation.resourceFlow.income[resource] ?? 0) + amount;
+  else nation.resourceFlow.usage[resource] = (nation.resourceFlow.usage[resource] ?? 0) - amount;
 }
 export function getTradeStock(nation: NationRuntime, resource: TradeResource): number {
   if (resource === "food") return nation.food?.stock ?? 0;
   if (resource === "cash") return nation.treasury?.balance ?? 0;
-  return nation.resources[resource];
+  return nation.resources[resource] ?? 0;
 }
 
 function changeTradeStock(nation: NationRuntime, resource: TradeResource, amount: number): void {
@@ -56,7 +57,7 @@ function changeTradeStock(nation: NationRuntime, resource: TradeResource, amount
 export function resourceReserve(nation: NationRuntime, resource: TradeResource): number {
   if (resource === "food") return (nation.food?.demand ?? 0) * (nation.food?.protectGrainExports ? 6 : 2);
   if (resource === "cash") return 10;
-  return resource === "fuel" ? Math.max(20, nation.resourceFlow.usage.fuel * 5) : resource === "weapons" ? 25 : 20;
+  return resource === "fuel" ? Math.max(20, nation.resourceFlow.usage.fuel * 5) : resource === "weapons" ? 25 : isStrategicResource(resource) ? 6 : 20;
 }
 
 /** Civilian trade charters have their own fuel cost; they do not steal military transports. */
@@ -120,7 +121,7 @@ export function isTradeRouteOpen(world: WorldState, a: NationId, b: NationId, ro
   return true;
 }
 
-export const TRADE_RESOURCE_VALUES: Record<TradeResource, number> = { steel: 1, fuel: 1.4, weapons: 2.4, food: 0.7, cash: 1 };
+export const TRADE_RESOURCE_VALUES: Record<TradeResource, number> = { steel: 1, fuel: 1.4, weapons: 2.4, copper: 1.6, rubber: 1.8, tungsten: 2, food: 0.7, cash: 1 };
 
 export function hasTradeAgreement(world: WorldState, a: NationId, b: NationId): boolean {
   return areFactionPartners(world, a, b) || hasTreaty(world, a, b, "trade") || hasTreaty(world, a, b, "alliance");
@@ -128,6 +129,7 @@ export function hasTradeAgreement(world: WorldState, a: NationId, b: NationId): 
 
 function supportsTradeResource(world: WorldState, nation: NationRuntime, resource: TradeResource): boolean {
   if (resource === "food") return world.settings?.foodEnabled !== false && !!nation.food;
+  if (isStrategicResource(resource)) return nation.resources[resource] !== undefined;
   return resource !== "cash" || !!nation.treasury;
 }
 export function proposeResourceTrade(world: WorldState, sellerId: NationId, buyerId: NationId,
@@ -237,12 +239,12 @@ export function updateInternationalTrade(world: WorldState): void {
   for (const relation of getDiplomacyState(world).relations.values()) {
     const a = world.nations.find((nation) => nation.id === relation.nationAId), b = world.nations.find((nation) => nation.id === relation.nationBId);
     if (!a || !b || relation.crisis) continue;
-    const surplus = (nation: NationRuntime, resource: typeof INDUSTRIAL_RESOURCES[number]) => nation.resources[resource] / resourceReserve(nation, resource);
+    const surplus = (nation: NationRuntime, resource: typeof INDUSTRIAL_RESOURCES[number]) => getTradeStock(nation, resource) / resourceReserve(nation, resource);
     const offered = INDUSTRIAL_RESOURCES.find((resource) => surplus(a, resource) > 1.5 && surplus(b, resource) < surplus(a, resource) * 0.6);
     const requested = INDUSTRIAL_RESOURCES.find((resource) => resource !== offered && surplus(b, resource) > 1.5 && surplus(a, resource) < surplus(b, resource) * 0.6);
     if (!offered || !requested) continue;
-    const amount = Math.min(12, (a.resources[offered] - resourceReserve(a, offered)) * 0.15,
-      (b.resources[requested] - resourceReserve(b, requested)) * TRADE_RESOURCE_VALUES[requested] / TRADE_RESOURCE_VALUES[offered] * 0.15);
+    const amount = Math.min(12, (getTradeStock(a, offered) - resourceReserve(a, offered)) * 0.15,
+      (getTradeStock(b, requested) - resourceReserve(b, requested)) * TRADE_RESOURCE_VALUES[requested] / TRADE_RESOURCE_VALUES[offered] * 0.15);
     if (amount >= 1) proposeResourceTrade(world, a.id, b.id, offered, amount, requested, amount * TRADE_RESOURCE_VALUES[offered] / TRADE_RESOURCE_VALUES[requested]);
   }
 }

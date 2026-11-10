@@ -117,9 +117,10 @@ export function preparePartitionNation(world: WorldState, parent: NationRuntime,
 export function dividePartitionResources(world: WorldState, parent: NationRuntime, successor: NationRuntime,
   plan: PuppetPartition): void {
   const share = plan.districtIds.length / (plan.districtIds.length + remainingLand(world, parent.id, []).size);
-  for (const key of Object.keys(successor.resources) as (keyof NationRuntime["resources"])[]) {
-    successor.resources[key] = parent.resources[key] * share;
-    parent.resources[key] -= successor.resources[key];
+  for (const key of Object.keys(parent.resources) as (keyof NationRuntime["resources"])[]) {
+    const stock = parent.resources[key] ?? 0;
+    successor.resources[key] = stock * share;
+    parent.resources[key] = stock - successor.resources[key];
   }
   successor.treasury = splitTreasury(parent.treasury, share);
   successor.food = splitFoodSupply(parent.food, share);

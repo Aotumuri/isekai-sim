@@ -1,3 +1,4 @@
+import { isStrategicResource, STRATEGIC_RESOURCES, type StrategicResource } from "../data/strategic-resources";
 import { isMilitaryFunded } from "./military-funding";
 import { annexedOutputFactor } from "./annexation";
 import { allFieldUnits, getArmyLimits, getMobilization } from "./mobilization";
@@ -171,6 +172,11 @@ function updateProductionInternal(world: WorldState): void {
     ownerByMesoId,
     occupationByMesoId,
   );
+  if (world.mesoRegions.some((region) => isStrategicResource(region.resource))) {
+    for (const nation of world.nations) {
+      for (const resource of STRATEGIC_RESOURCES) nation.resources[resource] ??= 0;
+    }
+  }
   const fuelDemandByNation = collectFuelDemandByNation(world.units);
   const fuelAvailableByNation = applyResourceOutputs(
     world.nations,
@@ -590,10 +596,7 @@ function createZeroResources(): NationResources {
 
 function cloneResources(resources: NationResources): NationResources {
   return {
-    steel: resources.steel,
-    fuel: resources.fuel,
-    manpower: resources.manpower,
-    weapons: resources.weapons,
+    ...resources,
   };
 }
 
@@ -631,12 +634,17 @@ function finalizeResourceFlows(
     } else {
       flow.delta = cloneResources(nation.resources);
     }
+    for (const resource of STRATEGIC_RESOURCES) {
+      if (nation.resources[resource] !== undefined) {
+        flow.delta[resource] = (nation.resources[resource] ?? 0) - (previous?.[resource] ?? 0);
+      }
+    }
     flow.lastTick = world.time.slowTick;
     nation.resourceFlow = flow;
   }
 }
 
-interface ResourceOutput {
+interface ResourceOutput extends Partial<Record<StrategicResource, number>> {
   steel: number;
   fuel: number;
   manpower: number;
@@ -689,6 +697,8 @@ function collectResourceOutputs(
       output.steel += steelPerDeposit * factor;
     } else if (meso.resource === "fuel") {
       output.fuel += fuelPerDeposit * factor;
+    } else if (isStrategicResource(meso.resource)) {
+      output[meso.resource] = (output[meso.resource] ?? 0) + 2 * factor;
     }
 
     const microCount = meso.microRegionIds.length;
@@ -736,6 +746,11 @@ function applyResourceOutputs(
     const flow = getFlow(flowByNation, nation.id);
     const output = outputs.get(nation.id);
     if (output) {
+      for (const resource of STRATEGIC_RESOURCES) {
+        if (output[resource] === undefined) continue;
+        flow.income[resource] = output[resource];
+        resources[resource] = (resources[resource] ?? 0) + output[resource];
+      }
       const steelIncome = Math.max(0, output.steel);
       const fuelIncome = Math.max(0, output.fuel);
       const manpowerIncome = Math.max(0, output.manpower);
@@ -840,6 +855,12 @@ function consumeResourcesForUnit(
   }
   const weaponCost = getDevelopedUnitWeaponCost(unitType, design);
   const manpowerCost = getUnitManpowerCost(unitType);
+  for (const resource of STRATEGIC_RESOURCES) {
+    const cost = UNIT_MATERIAL_COSTS[unitType][resource] ?? 0;
+    if (resources[resource] === undefined || !cost) continue;
+    resources[resource] -= cost;
+    if (usage) usage[resource] = (usage[resource] ?? 0) + cost;
+  }
   resources.weapons = Math.max(0, resources.weapons - weaponCost);
   resources.manpower = Math.max(0, resources.manpower - manpowerCost);
   if (usage) {
@@ -849,10 +870,19 @@ function consumeResourcesForUnit(
   return true;
 }
 
+const UNIT_MATERIAL_COSTS: Record<UnitType, Partial<Record<StrategicResource, number>>> = {
+  Infantry: {},
+  Tank: { rubber: 3, tungsten: 3 },
+  CombatShip: { copper: 3, tungsten: 4 },
+  TransportShip: { copper: 2, rubber: 2 },
+};
+
 function canAffordUnit(resources: NationResources, unitType: UnitType, design?: WeaponDesign): boolean {
   const weaponCost = getDevelopedUnitWeaponCost(unitType, design);
   const manpowerCost = getUnitManpowerCost(unitType);
-  return resources.weapons >= weaponCost && resources.manpower >= manpowerCost;
+  return resources.weapons >= weaponCost && resources.manpower >= manpowerCost &&
+    STRATEGIC_RESOURCES.every((resource) => resources[resource] === undefined ||
+      resources[resource] >= (UNIT_MATERIAL_COSTS[unitType][resource] ?? 0));
 }
 
 function getUnitManpowerCost(unitType: UnitType): number {

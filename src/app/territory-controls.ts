@@ -1,3 +1,4 @@
+import { isStrategicResource, STRATEGIC_RESOURCE_NAMES } from "../data/strategic-resources";
 import { getPeaceBorderIssue } from "../sim/peace-borders";
 import type { NationId } from "../worldgen/nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
@@ -42,7 +43,7 @@ export function attachTerritoryControls(root: HTMLElement, world: WorldState, se
       for (const [side, owner] of [["offered", a], ["requested", b]] as const) {
         view(side).innerHTML = world.macroRegions.filter((macro) => macro.nationId === owner).map((macro, index) => `<details class="territory-province"><summary>Province ${index + 1} · ${macro.mesoRegionIds.length} ${macro.mesoRegionIds.length === 1 ? "district" : "districts"}</summary><label><input type="checkbox" data-province-side="${side}" data-province-id="${esc(macro.id)}"> Select entire province ${index + 1}</label>${macro.mesoRegionIds.map((id) => {
           const region = world.mesoRegions.find((item) => item.id === id);
-          const features = [region?.resource === "fuel" ? "Fuel" : region?.resource === "steel" ? "Steel" : "", region?.building ?? ""].filter(Boolean).join(" · ");
+          const features = [region?.resource === "fuel" ? "Fuel" : region?.resource === "steel" ? "Steel" : isStrategicResource(region?.resource) ? STRATEGIC_RESOURCE_NAMES[region.resource] : "", region?.building ?? ""].filter(Boolean).join(" · ");
           return `<label><input type="checkbox" data-parcel-side="${side}" data-province="${esc(macro.id)}" value="${esc(id)}"> ${districtName(id)}${features ? ` · ${features}` : ""}</label>`;
         }).join("")}</details>`).join("");
       }

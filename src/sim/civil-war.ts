@@ -1,3 +1,4 @@
+import { STRATEGIC_RESOURCES } from "../data/strategic-resources";
 import { isFamineRevolution, splitFoodSupply } from "./food-supply";
 import { splitTreasury } from "./treasury";
 import { updateDomesticUnrest, canRevolt, getDomesticUnrest, recordRevolution } from "./domestic-unrest";
@@ -400,6 +401,12 @@ function transferResources(
   resources.fuel = Math.max(0, resources.fuel - taken.fuel);
   resources.manpower = Math.max(0, resources.manpower - taken.manpower);
   resources.weapons = Math.max(0, resources.weapons - taken.weapons);
+  for (const resource of STRATEGIC_RESOURCES) {
+    const stock = resources[resource];
+    if (stock === undefined) continue;
+    taken[resource] = Math.floor(stock * ratio);
+    resources[resource] = stock - taken[resource];
+  }
   return taken;
 }
 

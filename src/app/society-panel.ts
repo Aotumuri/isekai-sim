@@ -1,3 +1,4 @@
+import { STRATEGIC_RESOURCE_NAMES, STRATEGIC_RESOURCES } from "../data/strategic-resources";
 import { getCrisisDeploymentReadiness } from "../sim/crisis-deployment";
 import { attachPeaceConferenceControls } from "./peace-conference-controls";
 import { attachFoodControls } from "./food-controls";
@@ -35,7 +36,7 @@ const BRANCH_NAMES = RESEARCH_BRANCH_NAMES;
 const DOCTRINES = { expansionist: "Expansionist", merchant: "Mercantile", technocrat: "Technocratic",
   guardian: "Defensive", pragmatist: "Pragmatic", isolationist: "Isolationist" };
 const TREATY_NAMES = { alliance: "Defensive alliance", trade: "Trade pact", "non-aggression": "Non-aggression", truce: "Truce" };
-const RESOURCE_NAMES: Record<TradeResource, string> = { steel: "Steel", fuel: "Fuel", weapons: "Weapons", food: "Food", cash: "Cash" };
+const RESOURCE_NAMES: Record<TradeResource, string> = { ...STRATEGIC_RESOURCE_NAMES, steel: "Steel", fuel: "Fuel", weapons: "Weapons", food: "Food", cash: "Cash" };
 const RESEARCH_STATUS = { researching: "Researching", "saving resources": "Saving research funds", "capital isolated": "Capital isolated", complete: "Research complete", paused: "Preparing", "government in exile": "Government in exile" };
 const esc = (value: unknown) => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]!));
 
@@ -70,7 +71,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
         <details><summary>Break a treaty (damages trust and opinion)</summary><div class="society-actions"><button type="button" data-action="break-alliance">Break alliance</button><button type="button" data-action="break-pact">Break non-aggression</button><button type="button" data-action="break-trade">Break trade pact</button></div></details>
         <div data-military-cooperation-ui></div>
         <h2>Resource exchange</h2><p class="society-note">Exchange equal value. Exports are reserved at dispatch and arrive after transit.</p>
-        <div class="society-trade-form"><label>Export<select data-control="export" aria-label="Export resource">${resourceOptions}</select></label><label>Amount<input data-control="amount" aria-label="Export quantity" type="number" min="1" max="50" value="12" step="1"></label><label>Import<select data-control="import" aria-label="Import resource">${resourceOptions}</select></label><button type="button" data-action="exchange">Propose exchange</button></div><p class="society-note" data-view="exchange"></p>
+        <div class="society-trade-form"><label>Export<select data-control="export" aria-label="Export resource">${resourceOptions}</select></label><label>Amount<input data-control="amount" aria-label="Export quantity" type="number" min="1" max="50" value="12" step="1"></label><label>Import<select data-control="import" aria-label="Import resource">${resourceOptions}</select></label><button type="button" data-action="exchange">Propose exchange</button></div><p class="society-note" data-view="exchange"></p><p class="society-note" data-view="materials"></p>
         <div data-view="shipments"></div><h2>Relations</h2><div data-view="relations"></div>
       </section>
       <section data-pane="politics" hidden><div data-politics-ui></div></section>
@@ -190,6 +191,8 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     view("crisis").innerHTML = crisis ? `<div class="society-crisis">Ultimatum: ${n(crisis.aggressorId)} → ${n(crisis.aggressorId === a ? b : a)}${crisis.demand === "territory" ? `<br>Demands: ${(crisis.regionIds ?? []).map(districtName).join(", ")}` : ""}<br>Negotiation deadline: ${Math.max(0, crisis.deadlineSlowTick - world.time.slowTick)}s${deployment}${crisis.aggressorId !== a ? `<div class="society-actions"><button type="button" data-action="negotiate">Negotiate · 15</button><button type="button" data-action="concede">${crisis.demand === "territory" ? "Accept territorial demand" : "Concede 30 weapons"}</button><button type="button" data-action="reject">Reject</button></div>` : ""}</div>` : "";
     const offered = control("export").value as TradeResource, requested = control("import").value as TradeResource;
     const amount = Number(control("amount").value);
+    setText("materials", STRATEGIC_RESOURCES.filter((resource) => nation?.resources[resource] !== undefined)
+      .map((resource) => `${RESOURCE_NAMES[resource]}: ${Math.floor(nation!.resources[resource] ?? 0)}`).join(" · "));
     setText("exchange", `${Number.isFinite(amount) ? amount : 0} ${RESOURCE_NAMES[offered]} ↔ ${(Number.isFinite(amount) ? amount * TRADE_RESOURCE_VALUES[offered] / TRADE_RESOURCE_VALUES[requested] : 0).toFixed(1)} ${RESOURCE_NAMES[requested]}. Requires an agreement, open route and surplus resources.`);
     const trades = (world.internationalTrade?.deals ?? []).filter((deal) => deal.sellerId === a || deal.buyerId === a).slice(-4);
     const aid = (world.armsAid?.shipments ?? []).filter((shipment) => shipment.donorId === a || shipment.recipientId === a).slice(-3);

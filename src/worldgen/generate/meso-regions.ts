@@ -1,3 +1,4 @@
+import { STRATEGIC_RESOURCES } from "../../data/strategic-resources";
 import { rankGeologicalDeposits } from "../apply/geological-deposits";
 import type { WorldConfig } from "../../data/world-config";
 import { SeededRng } from "../../utils/seeded-rng";
@@ -294,6 +295,7 @@ function assignResources(
     );
     setResources(mesoRegions, steelIndices, "steel");
     setResources(mesoRegions, fuelIndices, "fuel");
+    assignStrategicDeposits(mesoRegions, candidates, rng.fork());
     return;
   }
 
@@ -305,6 +307,17 @@ function assignResources(
 
   setResources(mesoRegions, steelIndices, "steel");
   setResources(mesoRegions, fuelIndices, "fuel");
+  assignStrategicDeposits(mesoRegions, candidates, rng.fork());
+}
+
+function assignStrategicDeposits(regions: MesoRegion[], candidates: number[], rng: SeededRng): void {
+  const available = candidates.filter((index) => !regions[index].resource);
+  if (available.length < STRATEGIC_RESOURCES.length) return;
+  shuffleInPlace(available, rng);
+  const count = Math.min(Math.floor(available.length / STRATEGIC_RESOURCES.length), Math.max(1, Math.floor(candidates.length * 0.025)));
+  STRATEGIC_RESOURCES.forEach((resource, index) => {
+    setResources(regions, available.slice(index * count, (index + 1) * count), resource);
+  });
 }
 
 function computeResourceCount(count: number, ratio: number, minCount: number): number {

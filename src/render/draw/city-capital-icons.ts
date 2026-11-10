@@ -1,3 +1,4 @@
+import { isStrategicResource } from "../../data/strategic-resources";
 import { Graphics, type Container } from "pixi.js";
 import { clearLayer } from "../clear-layer";
 import type { MesoRegion } from "../../worldgen/meso-region";
@@ -80,6 +81,10 @@ export function drawCityCapitalIcons(layer: Container, mesoRegions: MesoRegion[]
     graphics.lineStyle(RESOURCE_STROKE_WIDTH, RESOURCE_STROKE, 1);
     if (meso.resource === "steel") {
       graphics.beginFill(STEEL_FILL, 1);
+      drawDiamond(graphics, center, RESOURCE_ICON_SIZE);
+      graphics.endFill();
+    } else if (isStrategicResource(meso.resource)) {
+      graphics.beginFill({ copper: 0xd88a50, rubber: 0x60bf73, tungsten: 0xa693e5 }[meso.resource], 1);
       drawDiamond(graphics, center, RESOURCE_ICON_SIZE);
       graphics.endFill();
     } else if (meso.resource === "fuel") {

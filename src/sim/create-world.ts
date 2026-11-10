@@ -1,3 +1,4 @@
+import { isStrategicResource } from "../data/strategic-resources";
 import { updateFoodSupply } from "./food-supply";
 import { mapAgriculturalLand } from "../worldgen/agricultural-land";
 import { updateTreasuries } from "./treasury";
@@ -84,6 +85,8 @@ export function createWorld(config: WorldConfig): WorldState {
   const declareBalance = WORLD_BALANCE.war.declare;
   const declareRange = declareBalance.slowTickRange;
   const isWarDeclarationEnabled = declareRange.min > 0 && declareRange.max > 0;
+  const strategicStock = mesoRegions.some((region) => isStrategicResource(region.resource))
+    ? { copper: 8, rubber: 8, tungsten: 8 } : {};
   const runtimeNations: NationRuntime[] = nations.map((nation) => ({
     ...nation,
     unitRoles: {
@@ -96,7 +99,7 @@ export function createWorld(config: WorldConfig): WorldState {
     initialCityCount: 0,
     warCooperation: WORLD_BALANCE.war.cooperation.max,
     warCooperationBoost: 0,
-    resources: createNationResources(),
+    resources: { ...createNationResources(), ...strategicStock },
     resourceFlow: createNationResourceFlow(),
     nextUnitProductionTick: isUnitProductionEnabled
       ? nextScheduledTickRange(0, unitRange.min, unitRange.max, simRng)
