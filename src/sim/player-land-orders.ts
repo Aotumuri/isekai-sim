@@ -59,9 +59,11 @@ export function issuePlayerLandOrder(
   return selected.length;
 }
 
-export function clearPlayerLandOrders(world: WorldState): void {
+export function clearPlayerMovementOrders(world: WorldState): void {
   const player = getPlayerNation(world);
-  if (!player?.landOrders.size) return;
+  if (!player) return;
+  player.navalOrders.clear();
+  if (!player.landOrders.size) return;
   player.landOrders.clear();
   player.commandRevision += 1;
 }

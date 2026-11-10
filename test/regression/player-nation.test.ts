@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { updateBattles } from "../../src/sim/battles";
+import { declareWar } from "../../src/sim/war-state";
 import { createUnitForType } from "../../src/sim/create-units";
 import { repositionUnits } from "../../src/sim/nation/reposition-units";
 import { issuePlayerLandOrder, setPlayerCommandMode } from "../../src/sim/player-land-orders";
@@ -29,9 +31,9 @@ test("manual land movement accepts only the controlled nation's units and preser
   assert.equal(getPlayerNation(world)?.commandMode, "automatic");
 });
 
-test("manual naval orders move ships to sea and reject inland targets", () => {
+test("manual naval orders move ships into battle and reject inland targets", () => {
   const world = createFixedSocietyWorld();
-  const home = world.nations[0];
+  const [home, foreign] = world.nations;
   const ship = createUnitForType(createUnitId(world.unitIdCounter++), home.id, fixedSocietyDistrict(1, 1), "CombatShip");
   world.units.push(ship);
   assert(enterPlayerNation(world, home.id));
@@ -41,4 +43,9 @@ test("manual naval orders move ships to sea and reject inland targets", () => {
   assert(issuePlayerNavalOrder(world, ship.id, sea));
   updatePlayerNavalOrders(world, 10_000);
   assert.equal(ship.regionId, sea);
+  const enemy = createUnitForType(createUnitId(world.unitIdCounter++), foreign.id, sea, "CombatShip");
+  world.units.push(enemy);
+  declareWar(world.wars, home.id, foreign.id, 0);
+  updateBattles(world);
+  assert(world.battles.some((battle) => battle.mesoId === sea));
 });

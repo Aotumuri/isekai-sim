@@ -1,3 +1,4 @@
+import { getPlayerNation } from "./player-nation";
 import { getRiverCrossingPressure } from "./river-crossings";
 import { getUnitProtection } from "./unit-strength";
 import { getCoastalSupportModifier } from "./coastal-support";
@@ -436,7 +437,9 @@ function isCombatShip(unit: UnitState): boolean {
 
 function isActiveMissionCombatShip(world: WorldState, unit: UnitState): boolean {
   if (!isOperationalCombatShip(unit) || unit.combatPower <= 0) return false;
+  const player = getPlayerNation(world);
   if (getNavalUnitOwnership(world, unit.id)?.controller === "AMPHIBIOUS_OPERATION") return true;
+  if (player?.nationId === unit.nationId && player.commandMode === "manual") return player.navalOrders.has(unit.id);
   const mission = getNavalMission(world, unit.id);
   return mission?.status === "ACTIVE" && mission.type !== "RESERVE";
 }

@@ -34,7 +34,7 @@ export function updatePlayerNavalOrders(world: WorldState, dtMs: number): void {
       continue;
     }
     moveNavalUnitToward(world, unit, target, dtMs);
-    if (!unit.moveTargetId) orders.delete(unit.id);
+    if (!unit.moveTargetId && unit.regionId !== target) orders.delete(unit.id);
   }
 }
 

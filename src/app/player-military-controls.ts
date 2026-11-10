@@ -1,5 +1,5 @@
 import { issuePlayerNavalOrder } from "../sim/player-naval-orders";
-import { clearPlayerLandOrders, issuePlayerLandOrder, setPlayerCommandMode } from "../sim/player-land-orders";
+import { clearPlayerMovementOrders, issuePlayerLandOrder, setPlayerCommandMode } from "../sim/player-land-orders";
 import { getPlayerNation } from "../sim/player-nation";
 import type { WorldState } from "../sim/world-state";
 import type { MesoRegionId } from "../worldgen/meso-region";
@@ -19,7 +19,7 @@ export function attachPlayerMilitaryControls(
       <label data-unit-label>部隊 <select data-unit></select></label>
       <label data-count-label>部隊数 <input data-count type="number" min="1" value="1"></label>
       <button type="button" data-move>選択した地域へ移動</button>
-      <button type="button" data-clear>陸軍の命令を解除</button>
+      <button type="button" data-clear>移動命令を解除</button>
     </div><p role="status"></p>`;
   panel.append(section);
   const mode = section.querySelector<HTMLSelectElement>("[data-mode]")!;
@@ -48,8 +48,8 @@ export function attachPlayerMilitaryControls(
     result.textContent = issued ? `${issued} 部隊に命令しました。` : "地域または移動可能な部隊を選んでください。";
   };
   section.querySelector<HTMLButtonElement>("[data-clear]")!.onclick = () => {
-    clearPlayerLandOrders(world);
-    result.textContent = "陸軍の命令を解除しました。";
+    clearPlayerMovementOrders(world);
+    result.textContent = "移動命令を解除しました。";
   };
   return () => {
     const player = getPlayerNation(world);
