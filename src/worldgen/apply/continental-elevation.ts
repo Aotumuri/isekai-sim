@@ -16,6 +16,11 @@ export function applyContinentalElevation(
     Array.from({ length: 8 }, () => rng.range(0, 2 * Math.PI));
   const layout = createContinentalLayout(config.seed, config.continentalLayout);
   const islandArcs = layout.islandArcs ?? [];
+  const landforms = layout.landforms.map((landform) => ({
+    ...landform,
+    cosine: Math.cos(landform.orientation ?? 0),
+    sine: Math.sin(landform.orientation ?? 0),
+  }));
   const cosine = Math.cos(layout.rotation ?? 0), sine = Math.sin(layout.rotation ?? 0);
 
   for (const region of regions) {
@@ -31,9 +36,10 @@ export function applyContinentalElevation(
       y = localX * sine + localY * cosine + 0.5;
     }
     let interior = -Infinity;
-    for (const continent of layout.landforms) {
-      const dx = (x - continent.x) / continent.rx;
-      const dy = (y - continent.y) / continent.ry;
+    for (const continent of landforms) {
+      const offsetX = x - continent.x, offsetY = y - continent.y;
+      const dx = (offsetX * continent.cosine + offsetY * continent.sine) / continent.rx;
+      const dy = (offsetY * continent.cosine - offsetX * continent.sine) / continent.ry;
       let distance = Math.hypot(dx, dy);
       if (continent.coastPhase !== undefined) {
         const angle = Math.atan2(dy, dx), phase = continent.coastPhase;

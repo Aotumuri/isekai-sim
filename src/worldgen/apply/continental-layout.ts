@@ -1,17 +1,19 @@
+import { createWorldMapLayout } from "./world-map-layout";
 import { SeededRng } from "../../utils/seeded-rng";
 import type { WorldConfig } from "../../data/world-config";
 import { createInlandSeaCeiling } from "./inland-sea";
 import { createIslandArc, type IslandArc } from "./island-arcs";
 
-interface Landform {
+export interface Landform {
   x: number;
   y: number;
   rx: number;
   ry: number;
   coastPhase?: number;
+  orientation?: number;
 }
 
-interface ContinentalLayout {
+export interface ContinentalLayout {
   flipX: boolean;
   flipY: boolean;
   swapAxes?: boolean;
@@ -25,6 +27,7 @@ interface ContinentalLayout {
 
 export function createContinentalLayout(seed: number, layout?: WorldConfig["continentalLayout"]): ContinentalLayout {
   const rng = new SeededRng(seed ^ 0x671295ab);
+  if (layout === "world-map") return createWorldMapLayout(rng);
   if (layout === "oceanic") {
     const continents = [
       { x: rng.range(0.19, 0.26), y: rng.range(0.20, 0.27), rx: rng.range(0.18, 0.21), ry: rng.range(0.14, 0.18) },

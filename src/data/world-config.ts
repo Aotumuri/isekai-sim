@@ -8,7 +8,7 @@ export interface Range {
 
 export interface WorldConfig {
   systems?: Partial<SimulationSettings>;
-  continentalLayout?: "oceanic";
+  continentalLayout?: "oceanic" | "world-map";
   nationBorderStyle?: "terrain";
   width: number;
   height: number;
