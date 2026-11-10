@@ -22,7 +22,7 @@ export function setMapMode(world: WorldState, mode: MapMode): boolean {
     const focus = playerId ?? view.selectedNationId;
     if (!focus) return false;
     view.diplomaticFocusId = focus;
-    view.targetNationId = view.selectedNationId !== focus ? view.selectedNationId : null;
+    if (!playerId) view.targetNationId = null;
   }
   if (mode === "claims" && view.mode !== "claims") view.claimsReturnMode = view.mode;
   view.mode = mode; view.revision += 1; return true;
@@ -30,10 +30,10 @@ export function setMapMode(world: WorldState, mode: MapMode): boolean {
 export function selectMapNation(world: WorldState, nationId: NationId | null): void {
   const view = getMapView(world);
   const playerId = getPlayerNation(world)?.nationId;
-  if (playerId && view.mode === "diplomacy") {
+  if (playerId) {
     view.selectedNationId = playerId;
     view.diplomaticFocusId = playerId;
-    view.targetNationId = nationId !== playerId ? nationId : null;
+    if (nationId) view.targetNationId = nationId !== playerId ? nationId : null;
     view.revision += 1;
     return;
   }

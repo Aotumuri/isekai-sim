@@ -1,3 +1,4 @@
+import { getPlayerNation } from "../sim/player-nation";
 import { createAgricultureOverlay } from "./agriculture-overlay";
 import { getPopulationMapStyle, isPopulationMode } from "./population-map";
 import { Container, Graphics, Text, TextStyle, Rectangle, WRAP_MODES } from "pixi.js";
@@ -223,6 +224,10 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
       parcelSelection.endFill(); parcelSelection.lineStyle(2.4, 0xffdb73, 1);
       for (const id of preview) stroke(parcelSelection, districtOutlines.get(id) ?? []);
       if (view.selectedNationId) { selection.lineStyle(3.2, 0xfff5cf, 0.95); stroke(selection, outlines.get(view.selectedNationId) ?? []); }
+      if (view.targetNationId && getPlayerNation(world)) {
+        selection.lineStyle(3.2, 0x83d8ff, 0.95);
+        stroke(selection, outlines.get(view.targetNationId) ?? []);
+      }
       for (const anchor of getNationLabelAnchors(world)) {
         const faction = getNationFaction(world, anchor.nationId);
         const subject = getSubjectOverlord(world, anchor.nationId);

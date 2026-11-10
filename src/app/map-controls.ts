@@ -1,3 +1,4 @@
+import { getPlayerNation } from "../sim/player-nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import { TERRAIN_COLORS } from "../render/terrain-color";
 import { AGRICULTURE_COLORS } from "../render/agriculture-overlay";
@@ -56,7 +57,7 @@ export function attachMapControls(root: HTMLElement, renderer: Renderer, world: 
     const owner = region?.mesoRegionId ? getOwnerByMesoId(world).get(region.mesoRegionId) ?? null : null;
     onRegionSelected?.(region?.mesoRegionId ?? null);
     selectMapNation(world, owner);
-    if (getMapView(world).mode === "diplomacy" && owner) society.openDiplomacy();
+    if (getMapView(world).mode === "diplomacy" && owner && !getPlayerNation(world)) society.openDiplomacy();
     update(true);
   });
   window.addEventListener("keydown", (event) => {

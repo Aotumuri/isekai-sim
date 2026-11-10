@@ -1,3 +1,4 @@
+import { getMapView } from "../render/map-view-state";
 import { offerPeace } from "../sim/diplomatic-peace";
 import { openDiplomaticCrisis, respondToCrisis, startDiplomaticWar } from "../sim/diplomatic-crises";
 import { improveRelations, proposeTreaty } from "../sim/diplomacy";
@@ -9,7 +10,8 @@ import type { WorldState } from "../sim/world-state";
 export function attachPlayerDiplomacyControls(panel: HTMLElement, world: WorldState): () => void {
   const section = document.createElement("details");
   section.innerHTML = `<summary>外交</summary>
-    <label>相手国 <select data-target></select></label>
+    <p>地図で外交相手の国をクリック</p>
+    <p>相手国 <strong data-target></strong></p>
     <label>行動 <select data-action>
       <option value="relations">関係改善</option>
       <option value="trade">通商条約</option>
@@ -22,15 +24,16 @@ export function attachPlayerDiplomacyControls(panel: HTMLElement, world: WorldSt
     </select></label>
     <button type="button">実行</button><p role="status"></p>`;
   panel.append(section);
-  const target = section.querySelector<HTMLSelectElement>("[data-target]")!;
+  const target = section.querySelector<HTMLElement>("[data-target]")!;
   const action = section.querySelector<HTMLSelectElement>("[data-action]")!;
   const button = section.querySelector("button")!;
   const result = section.querySelector("p")!;
-  let roster = "";
-  let actorId = "";
+  const getPartner = () => world.nations.find((nation) =>
+    nation.id === getMapView(world).targetNationId && isNationActive(nation))?.id;
+  let selection = "";
   button.onclick = () => {
     const actor = getPlayerNation(world)?.nationId;
-    const partner = world.nations.find((nation) => nation.id === target.value && isNationActive(nation))?.id;
+    const partner = getPartner();
     if (!actor || !partner || actor === partner) return;
     let accepted = false;
     switch (action.value) {
@@ -48,19 +51,14 @@ export function attachPlayerDiplomacyControls(panel: HTMLElement, world: WorldSt
   return () => {
     const actor = getPlayerNation(world)?.nationId;
     section.hidden = !actor;
-    if (actorId !== (actor ?? "")) {
+    const partner = getPartner();
+    const key = `${actor ?? ""}:${partner ?? ""}`;
+    if (selection !== key) {
+      selection = key;
       result.textContent = "";
-      actorId = actor ?? "";
     }
-    if (!actor) return;
-    const nations = world.nations.filter((nation) => nation.id !== actor && isNationActive(nation));
-    const entries = nations.map(({ id }) => [id, getNationName(world, id)] as const);
-    const key = JSON.stringify(entries);
-    if (key === roster) return;
-    const previous = target.value;
-    target.replaceChildren(...entries.map(([id, name]) => new Option(name, id)));
-    if (entries.some(([id]) => id === previous)) target.value = previous;
-    button.disabled = entries.length === 0;
-    roster = key;
+    const name = partner ? getNationName(world, partner) : "未選択";
+    if (target.textContent !== name) target.textContent = name;
+    button.disabled = !actor || !partner || actor === partner;
   };
 }
