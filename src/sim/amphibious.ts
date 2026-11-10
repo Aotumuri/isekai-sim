@@ -568,30 +568,28 @@ export function updateAmphibiousPlanning(world: WorldState): void {
       .filter((id) => isEffectivelyControlledPort(world, demand.nationId, id));
     const enemyPorts = (portsByNation.get(demand.enemyNationId) ?? [])
       .filter((id) => isValidTargetPort(world, demand.nationId, demand.enemyNationId, id));
+    const committed = hasCompleteFleetLease(demand) && ownPorts.includes(demand.departurePortId);
     const opportunityValid = isAtWar(demand.nationId, demand.enemyNationId, warAdjacency) &&
       ownPorts.length > 0 && enemyPorts.length > 0 &&
-      isStrategicOpportunity(world, demand.nationId, demand.enemyNationId);
-    // Reassess the target without resetting fleet positioning whenever its score changes.
-    const assemblyPorts = hasCompleteFleetLease(demand) && ownPorts.includes(demand.departurePortId)
-      ? [demand.departurePortId] : ownPorts;
-    let candidate = opportunityValid
-      ? chooseCandidate(world, demand.nationId, demand.enemyNationId, assemblyPorts, enemyPorts)
+      (committed || isStrategicOpportunity(world, demand.nationId, demand.enemyNationId));
+    let candidate = opportunityValid && committed && enemyPorts.includes(demand.destinationPortId)
+      ? chooseCandidate(world, demand.nationId, demand.enemyNationId, [demand.departurePortId], [demand.destinationPortId])
       : null;
-    if (opportunityValid && !candidate && assemblyPorts !== ownPorts) {
+    if (opportunityValid && !candidate) {
       candidate = chooseCandidate(world, demand.nationId, demand.enemyNationId, ownPorts, enemyPorts);
     }
     if (demand.readyAtTick !== null) reportOperationConnection({
       demandId: demand.id, tick: world.time.fastTick, stage: "candidate", candidateAvailable: candidate !== null,
       gates: {
         warActive: isAtWar(demand.nationId, demand.enemyNationId, warAdjacency), controlledDeparturePortCount: ownPorts.length,
-        validDestinationPortCount: enemyPorts.length, strategicOpportunity: isStrategicOpportunity(world, demand.nationId, demand.enemyNationId),
+        validDestinationPortCount: enemyPorts.length, strategicOpportunity: committed || isStrategicOpportunity(world, demand.nationId, demand.enemyNationId),
         candidateAvailable: candidate !== null,
       },
       failedGates: [
         ...(!isAtWar(demand.nationId, demand.enemyNationId, warAdjacency) ? ["war-ended"] : []),
         ...(ownPorts.length === 0 ? ["no-controlled-departure-port"] : []),
         ...(enemyPorts.length === 0 ? ["no-valid-destination-port"] : []),
-        ...(!isStrategicOpportunity(world, demand.nationId, demand.enemyNationId) ? ["strategic-opportunity-lost"] : []),
+        ...(!committed && !isStrategicOpportunity(world, demand.nationId, demand.enemyNationId) ? ["strategic-opportunity-lost"] : []),
         ...(opportunityValid && candidate === null ? ["no-valid-candidate"] : []),
       ],
     });
@@ -610,20 +608,19 @@ export function updateAmphibiousPlanning(world: WorldState): void {
     const ownPorts = (portsByNation.get(nation.id) ?? []).filter((id) => isEffectivelyControlledPort(world, nation.id, id));
     if (ownPorts.length === 0) continue;
     const enemies = [...(warAdjacency.get(nation.id) ?? [])].sort(compareIds);
+    let best: LandingCandidate | null = null;
     for (const enemyId of enemies) {
       const enemyPorts = (portsByNation.get(enemyId) ?? []).filter((id) => isValidTargetPort(world, nation.id, enemyId, id));
       if (enemyPorts.length === 0 || !isStrategicOpportunity(world, nation.id, enemyId)) continue;
-      world.amphibiousOperations.opportunities += 1;
-      world.instrumentation?.incrementCounter("amphibious.opportunities");
       const candidate = chooseCandidate(world, nation.id, enemyId, ownPorts, enemyPorts);
-      if (candidate) {
-        const demand = createCapabilityDemand(world, candidate);
-        refreshCapabilityProgress(world, demand);
-        if (demand.state === "ready") createOperationForDemand(world, demand, candidate);
-        activeNations.add(nation.id);
-      }
-      break;
+      if (candidate && (!best || candidate.score > best.score)) best = candidate;
     }
+    if (!best) continue;
+    world.amphibiousOperations.opportunities += 1;
+    world.instrumentation?.incrementCounter("amphibious.opportunities");
+    const demand = createCapabilityDemand(world, best);
+    refreshCapabilityProgress(world, demand);
+    if (demand.state === "ready") createOperationForDemand(world, demand, best);
   }
   rebuildOwnership(world);
   if (world.instrumentation) {

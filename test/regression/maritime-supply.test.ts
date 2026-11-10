@@ -443,6 +443,25 @@ test("an amphibious plan waits rather than stripping a land front below its requ
   assert.equal(world.frontAllocations.frontIdByUnitId.get(infantry.id), frontId);
 });
 
+test("an unreachable enemy does not block an expedition against another enemy", () => {
+  const { world } = createAmphibiousVoyageWorld();
+  const unreachable = "nation-0" as NationId;
+  const isolated = world.mesoRegions.find((region) => region.id === id("port-d"))!;
+  isolated.neighbors = [];
+  for (const region of world.mesoRegions) {
+    region.neighbors = region.neighbors.filter(({ id: neighbor }) => neighbor !== isolated.id);
+  }
+  const province = world.macroRegions.find((macro) => macro.mesoRegionIds.includes(isolated.id))!;
+  province.nationId = unreachable;
+  world.nations.push(createNation(unreachable, isolated.id, [province.id]));
+  world.cache.ownerByMesoId.clear();
+  declareWar(world.wars, NATION_A, unreachable, 0);
+
+  updateAmphibiousPlanning(world);
+  const operation = world.amphibiousOperations.operations.find((entry) => entry.nationId === NATION_A);
+  assert.equal(operation?.enemyNationId, NATION_B);
+});
+
 test("an island war bootstraps amphibious capability from zero through naval production", () => {
   const world = createMaritimeWorld(true, 0);
   const enemyMacroIds = world.macroRegions
