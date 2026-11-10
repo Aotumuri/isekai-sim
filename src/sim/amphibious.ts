@@ -23,6 +23,7 @@ import { getCapitalDefenseAssessment } from "./capital-defense";
 import { isNationActive } from "./nation-active";
 
 const PREPARATION_TIMEOUT_TICKS = 2400;
+const PREFLIGHT_RETRY_DELAY_TICKS = 60;
 
 export type AmphibiousPhase = "preparing" | "embarking" | "escort-wait" | "transporting" | "landed" | "cancelled";
 export type AmphibiousCancellationReason = "transport-lost" | "transport-capacity" | "escort-lost" | "convoy-lost" | "assets-not-assembled" | "departure-port-lost" | "target-invalid" | "route-invalid" | "war-ended" | "force-lost" | "preparation-timeout" | "strategic-capital-critical";
@@ -533,6 +534,9 @@ export function updateAmphibiousPlanning(world: WorldState): void {
     if (campaign.status === "active") activeNations.add(campaign.nationId);
   }
   const warAdjacency = buildWarAdjacency(world.wars);
+  const recentRejections = new Set(world.amphibiousOperations.launchRejections
+    .filter((rejection) => world.time.fastTick - rejection.evaluatedAtTick < PREFLIGHT_RETRY_DELAY_TICKS)
+    .map((rejection) => landingRouteKey(rejection.nationId, rejection.departurePortId, rejection.destinationPortId)));
   const portsByNation = getPortTargetsByNation(world);
   const player = getPlayerNation(world);
   const playerCommands = player?.commandMode !== "automatic" ? player?.nationId : undefined;
@@ -573,10 +577,10 @@ export function updateAmphibiousPlanning(world: WorldState): void {
       ownPorts.length > 0 && enemyPorts.length > 0 &&
       (committed || isStrategicOpportunity(world, demand.nationId, demand.enemyNationId));
     let candidate = opportunityValid && committed && enemyPorts.includes(demand.destinationPortId)
-      ? chooseCandidate(world, demand.nationId, demand.enemyNationId, [demand.departurePortId], [demand.destinationPortId])
+      ? chooseCandidate(world, demand.nationId, demand.enemyNationId, [demand.departurePortId], [demand.destinationPortId], recentRejections)
       : null;
     if (opportunityValid && !candidate) {
-      candidate = chooseCandidate(world, demand.nationId, demand.enemyNationId, ownPorts, enemyPorts);
+      candidate = chooseCandidate(world, demand.nationId, demand.enemyNationId, ownPorts, enemyPorts, recentRejections);
     }
     if (demand.readyAtTick !== null) reportOperationConnection({
       demandId: demand.id, tick: world.time.fastTick, stage: "candidate", candidateAvailable: candidate !== null,
@@ -612,7 +616,7 @@ export function updateAmphibiousPlanning(world: WorldState): void {
     for (const enemyId of enemies) {
       const enemyPorts = (portsByNation.get(enemyId) ?? []).filter((id) => isValidTargetPort(world, nation.id, enemyId, id));
       if (enemyPorts.length === 0 || !isStrategicOpportunity(world, nation.id, enemyId)) continue;
-      const candidate = chooseCandidate(world, nation.id, enemyId, ownPorts, enemyPorts);
+      const candidate = chooseCandidate(world, nation.id, enemyId, ownPorts, enemyPorts, recentRejections);
       if (candidate && (!best || candidate.score > best.score)) best = candidate;
     }
     if (!best) continue;
@@ -841,7 +845,12 @@ interface LandingCandidate {
   bridgeheadCampaignId: string | null;
   waveNumber: number | null;
 }
-function chooseCandidate(world: WorldState, nationId: NationId, enemyId: NationId, departures: MesoRegionId[], destinations: MesoRegionId[]): LandingCandidate | null {
+function landingRouteKey(nation: NationId, departure: MesoRegionId, destination: MesoRegionId): string {
+  return `${nation}:${departure}:${destination}`;
+}
+
+function chooseCandidate(world: WorldState, nationId: NationId, enemyId: NationId, departures: MesoRegionId[],
+  destinations: MesoRegionId[], recentRejections?: ReadonlySet<string>): LandingCandidate | null {
   const startedAt = world.instrumentation ? performance.now() : 0;
   const mesoById = getMesoById(world);
   const neighborsById = getNeighborsById(world);
@@ -875,6 +884,7 @@ function chooseCandidate(world: WorldState, nationId: NationId, enemyId: NationI
       expansionRegions * value.inlandExpansionPerRegion +
       (nearbyFriendlyObjective ? value.nearbyFriendlyObjective : 0);
     for (const departure of [...departures].sort(compareIds).slice(0, 8)) {
+      if (recentRejections?.has(landingRouteKey(nationId, departure, destination))) continue;
       const route = getCachedMaritimeRoute(world, world.supplyAssessment.maritimeConnectivity, departure, destination);
       if (!route) continue;
       const risk = WORLD_BALANCE.unit.amphibiousAssault.landingRisk;
@@ -1459,7 +1469,12 @@ function createOperation(world: WorldState, demand: AmphibiousCapabilityDemand, 
       departurePortId: candidate.departure, destinationPortId: candidate.destination,
       falsePositiveEvaluated: false,
     });
-    world.amphibiousOperations.version += 1;
+    if (demand.kind === "landing") {
+      expireCapabilityDemand(world, demand);
+      rebuildOwnership(world);
+    } else {
+      world.amphibiousOperations.version += 1;
+    }
     return null;
   }
   for (const unit of units) releaseUnitFromFrontAllocation(world, unit.id);

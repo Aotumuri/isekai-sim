@@ -662,6 +662,10 @@ test("amphibious launch preflight rejects a landing that cannot fit its strategi
   assert(rejection.estimatedCompletionTicks > rejection.estimatedOpportunityWindowTicks);
   assert(rejection.safetyMarginTicks < 0);
   assert.equal(world.amphibiousOperations.operationByUnitId.size, 0);
+  assert.equal(world.amphibiousOperations.capabilityDemandByUnitId.has(infantry.id), false);
+  world.time.fastTick += 10;
+  updateAmphibiousPlanning(world);
+  assert.equal(world.amphibiousOperations.operationsRejected, 1);
   assert.equal(infantry.moveTargetId, null);
   world.time.fastTick = rejection.estimatedCompletionTick;
   updateAmphibiousPlanning(world);
