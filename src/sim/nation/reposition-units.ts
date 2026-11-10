@@ -1,3 +1,6 @@
+import { isAmphibiousOwnedUnit } from "../amphibious";
+import { getPlayerNation, type PlayerNation } from "../player-nation";
+import { isPlayerDirectedLandUnit } from "../player-land-orders";
 import { applyCrisisDeployments } from "../crisis-deployment";
 import { getMilitaryRoutingOwners, applyMilitaryStagingOrders } from "../military-access";
 import type { WorldState } from "../world-state";
@@ -67,6 +70,8 @@ interface LandAiRuntime {
   collapseAdvanceVersion: number;
   amphibiousVersion: number;
   warAdjacency: WarAdjacency;
+  player: PlayerNation | undefined;
+  playerCommandRevision: number | undefined;
   movementGroups: LandMovementGroup[];
   unitsExpectedToHaveTarget: Set<UnitState["id"]>;
   forceReassignment: boolean;
@@ -106,6 +111,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
   }
   applyMilitaryStagingOrders(world);
   const runtime = getLandAiRuntime(world);
+  const player = getPlayerNation(world);
   const instrumentation = world.instrumentation;
   invalidateSharedPathFields(runtime, world, instrumentation);
 
@@ -151,6 +157,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     LAND_TARGET_REASSIGN_INTERVAL_TICKS;
   const shouldReassign =
     runtime.forceReassignment ||
+    runtime.player !== player || runtime.playerCommandRevision !== player?.commandRevision ||
     expectedTargetWasCleared ||
     territoryChanged ||
     occupationChanged ||
@@ -206,12 +213,24 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
       );
     }
     updateAssignmentRuntimeSources(runtime, world, landUnits);
+    runtime.player = player;
+    runtime.playerCommandRevision = player?.commandRevision;
   }
 
   applyCrisisDeployments(world);
   applyMilitaryStagingOrders(world);
   const movementStartedAt = instrumentation ? performance.now() : 0;
-  for (const group of runtime.movementGroups) {
+  const directed = player ? landUnits.filter((unit) => isPlayerDirectedLandUnit(player, unit) &&
+    !isAmphibiousOwnedUnit(world, unit.id)) : [];
+  for (const unit of directed) {
+    const target = player?.landOrders.get(unit.id) ?? null;
+    if (unit.moveTargetId !== target) {
+      resetMovement(unit);
+      unit.moveTargetId = target;
+    }
+  }
+  const groups = player && directed.length ? [...runtime.movementGroups, { nationId: player.nationId, units: directed }] : runtime.movementGroups;
+  for (const group of groups) {
     const isBlockedByEnemy = (toId: MesoRegionId): boolean => {
       const present = nationsWithLandUnitsByMesoId.get(toId);
       if (!present || present.size === 0) {
@@ -241,6 +260,11 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
       group.controlledOnly ?? false,
       instrumentation,
     );
+    if (group.units === directed && player) {
+      for (const unit of directed) {
+        if (!unit.moveTargetId && player.landOrders.delete(unit.id)) player.commandRevision += 1;
+      }
+    }
     if (orderInvalidated) {
       runtime.forceReassignment = true;
     }
@@ -277,6 +301,8 @@ function getLandAiRuntime(world: WorldState): LandAiRuntime {
     collapseAdvanceVersion: -1,
     amphibiousVersion: -1,
     warAdjacency: new Map(),
+    player: undefined,
+    playerCommandRevision: undefined,
     movementGroups: [],
     unitsExpectedToHaveTarget: new Set(),
     forceReassignment: true,
@@ -436,8 +462,10 @@ function rebuildLandAssignments(
     nation.unitRoles.occupationUnitIds = [];
   }
 
+  const player = getPlayerNation(world);
   const unitsByNation = new Map<NationId, UnitState[]>();
   for (const unit of landUnits) {
+    if (isPlayerDirectedLandUnit(player, unit) && !isAmphibiousOwnedUnit(world, unit.id)) continue;
     const list = unitsByNation.get(unit.nationId);
     if (list) {
       list.push(unit);
@@ -447,7 +475,7 @@ function rebuildLandAssignments(
   }
 
   const movementGroups: LandMovementGroup[] = [];
-  const unitById = new Map(landUnits.map((unit) => [unit.id, unit]));
+  const unitById = new Map([...unitsByNation.values()].flat().map((unit) => [unit.id, unit]));
   for (const [nationId, units] of unitsByNation.entries()) {
     const borderTargets = borderByNationId.get(nationId) ?? [];
     const intrusionTargets = intrusionTargetsByNationId.get(nationId) ?? [];

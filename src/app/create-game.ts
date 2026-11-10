@@ -1,3 +1,4 @@
+import type { MesoRegionId } from "../worldgen/meso-region";
 import { attachPlayerControls } from "./player-controls";
 import { attachMapControls } from "./map-controls";
 import { attachPlayerMap } from "../render/player-map";
@@ -85,8 +86,9 @@ export function createGame(root: HTMLElement, setup: { world?: WorldState; pause
   const timeHud = attachTimeHud(renderer);
   const frontDebugOverlay = attachFrontDebugOverlay(renderer, world);
   const playerMap = attachPlayerMap(renderer, world);
-  const mapControls = attachMapControls(root, renderer, world, frontDebugOverlay, societyPanel);
-  const updatePlayerControls = attachPlayerControls(root, world);
+  let selectedDistrict: MesoRegionId | null = null;
+  const mapControls = attachMapControls(root, renderer, world, frontDebugOverlay, societyPanel, (id) => { selectedDistrict = id; });
+  const updatePlayerControls = attachPlayerControls(root, world, () => selectedDistrict);
   playerMap.update();
   let lastOccupationVersion = world.occupation.version;
   let lastTerritoryVersion = world.territoryVersion;

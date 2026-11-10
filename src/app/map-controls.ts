@@ -1,3 +1,4 @@
+import type { MesoRegionId } from "../worldgen/meso-region";
 import { TERRAIN_COLORS } from "../render/terrain-color";
 import { AGRICULTURE_COLORS } from "../render/agriculture-overlay";
 import { isPopulationMode, POPULATION_LABELS } from "../render/population-map";
@@ -20,7 +21,7 @@ const POPULATION_KEYS = ["Q", "W", "R"] as const;
 const color = (value: number) => `#${value.toString(16).padStart(6, "0")}`;
 
 export function attachMapControls(root: HTMLElement, renderer: Renderer, world: WorldState,
-  debug: FrontDebugOverlay, society: { openDiplomacy: () => void; openFactions: () => void; close: () => void }): { update: () => void } {
+  debug: FrontDebugOverlay, society: { openDiplomacy: () => void; openFactions: () => void; close: () => void }, onRegionSelected?: (id: MesoRegionId | null) => void): { update: () => void } {
   const controls = document.createElement("section"); controls.className = "map-controls"; controls.setAttribute("aria-label", "Map display");
   controls.innerHTML = `<nav class="map-mode-buttons" aria-label="Map modes"><button type="button" data-map-mode="political">Political</button><button type="button" data-map-mode="terrain">Terrain</button><button type="button" data-map-mode="diplomacy">Diplomacy <kbd>E</kbd></button><button type="button" data-map-mode="factions">Factions</button><button type="button" data-map-mode="claims">Claims <kbd>C</kbd></button>${POPULATION_DIMENSIONS.map((mode, index) => `<button type="button" data-map-mode="${mode}">${POPULATION_LABELS[mode]} <kbd>${POPULATION_KEYS[index]}</kbd></button>`).join("")}<button type="button" data-map-mode="debug">Debug <kbd>F</kbd></button></nav>
     <details class="map-display-options"><summary>Display settings</summary><label><input type="checkbox" data-map-option="provinceBorders" checked> Province borders</label><label><input type="checkbox" data-map-option="districtBorders"> District grid</label><label><input type="checkbox" data-map-option="labels" checked> Country names</label><label><input type="checkbox" data-map-option="occupations" checked> Occupation overlay</label><label><input type="checkbox" data-map-option="farmland"> Agricultural land</label></details>
@@ -53,6 +54,7 @@ export function attachMapControls(root: HTMLElement, renderer: Renderer, world: 
     if (dragged || event.button !== 0 || event.global.x > renderer.app.screen.width - renderer.uiRightWidth) { dragged = false; return; }
     const point = renderer.worldContainer.toLocal(event.global), region = findRegion(point, world.microRegions, bounds);
     const owner = region?.mesoRegionId ? getOwnerByMesoId(world).get(region.mesoRegionId) ?? null : null;
+    onRegionSelected?.(region?.mesoRegionId ?? null);
     selectMapNation(world, owner);
     if (getMapView(world).mode === "diplomacy" && owner) society.openDiplomacy();
     update(true);

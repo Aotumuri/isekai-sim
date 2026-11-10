@@ -1,3 +1,5 @@
+import { attachPlayerMilitaryControls } from "./player-military-controls";
+import type { MesoRegionId } from "../worldgen/meso-region";
 import { attachPlayerDiplomacyControls } from "./player-diplomacy-controls";
 import { isNationActive } from "../sim/nation-active";
 import { getNationName } from "../sim/nation-identity";
@@ -5,7 +7,7 @@ import { enterPlayerNation, getPlayerNation, leavePlayerNation } from "../sim/pl
 import type { WorldState } from "../sim/world-state";
 import { getMapView, selectMapNation } from "../render/map-view-state";
 
-export function attachPlayerControls(root: HTMLElement, world: WorldState): () => void {
+export function attachPlayerControls(root: HTMLElement, world: WorldState, getDestination: () => MesoRegionId | null): () => void {
   const panel = document.createElement("details");
   panel.className = "map-controls player-controls";
   panel.innerHTML = `<summary>国家プレイ</summary>
@@ -14,6 +16,7 @@ export function attachPlayerControls(root: HTMLElement, world: WorldState): () =
     <button type="button" data-leave hidden>観戦に戻る</button>
     <p role="status"></p>`;
   root.append(panel);
+  const updateMilitary = attachPlayerMilitaryControls(panel, world, getDestination);
   const updateDiplomacy = attachPlayerDiplomacyControls(panel, world);
   const country = panel.querySelector<HTMLSelectElement>("[data-country]")!;
   const enter = panel.querySelector<HTMLButtonElement>("[data-enter]")!;
@@ -23,6 +26,7 @@ export function attachPlayerControls(root: HTMLElement, world: WorldState): () =
   let mapSelection = getMapView(world).selectedNationId;
   const update = () => {
     updateDiplomacy();
+    updateMilitary();
     const player = getPlayerNation(world);
     const nations = world.nations.filter(isNationActive);
     const names = nations.map((nation) => getNationName(world, nation.id));
