@@ -19,12 +19,14 @@ import { getNationColor } from "../render/nation-color";
 import type { NationId } from "../worldgen/nation";
 import { attachFrontDebugOverlay } from "../render/front-debug-overlay";
 import { createWorld } from "../sim/create-world";
+import { leavePlayerNation } from "../sim/player-nation";
 import { createSimClock, getSpeedMultiplier } from "../sim/time";
 import { updateSimulation } from "../sim/update";
 import { attachTimeControls } from "./time-controls";
 import type { WorldState } from "../sim/world-state";
 
 const MAX_UNIT_ANIMATION_SPEED = 4;
+const NATION_PLAY_ENABLED = false;
 
 export function createGame(root: HTMLElement, setup: { world?: WorldState; paused?: boolean; preset?: WorldMapPreset } = {}): void {
   const config = setup.world
@@ -35,6 +37,7 @@ export function createGame(root: HTMLElement, setup: { world?: WorldState; pause
   const renderer = createRenderer(root);
   setTerritoryEffectsRenderer(renderer.app.renderer);
   const world = setup.world ?? createWorld(config);
+  if (!NATION_PLAY_ENABLED) leavePlayerNation(world);
   const nationColor = (id: NationId) => getNationColor(id, world);
   drawMicroRegions(renderer.worldLayers.layers.MicroTerrain, world.microRegions);
   drawMesoBorders(renderer.worldLayers.layers.MesoBorder, world.microRegions);
@@ -87,8 +90,11 @@ export function createGame(root: HTMLElement, setup: { world?: WorldState; pause
   const frontDebugOverlay = attachFrontDebugOverlay(renderer, world);
   const playerMap = attachPlayerMap(renderer, world);
   let selectedDistrict: MesoRegionId | null = null;
-  const mapControls = attachMapControls(root, renderer, world, frontDebugOverlay, societyPanel, (id) => { selectedDistrict = id; });
-  const updatePlayerControls = attachPlayerControls(root, world, () => selectedDistrict, societyPanel.setEmbedded, societyPanel.openNegotiations);
+  const mapControls = attachMapControls(root, renderer, world, frontDebugOverlay, societyPanel,
+    NATION_PLAY_ENABLED ? (id) => { selectedDistrict = id; } : undefined);
+  const updatePlayerControls = NATION_PLAY_ENABLED
+    ? attachPlayerControls(root, world, () => selectedDistrict, societyPanel.setEmbedded, societyPanel.openNegotiations)
+    : undefined;
   playerMap.update();
   let lastOccupationVersion = world.occupation.version;
   let lastTerritoryVersion = world.territoryVersion;
@@ -137,7 +143,7 @@ export function createGame(root: HTMLElement, setup: { world?: WorldState; pause
     }
     timeHud.update(world.time, clock);
     mapControls.update();
-    updatePlayerControls();
+    updatePlayerControls?.();
     playerMap.update();
     societyPanel.update();
     nationInfoBar.update();
