@@ -8,6 +8,7 @@ export interface PlayerNation {
   nationId: NationId;
   landOrders: Map<UnitId, MesoRegionId>;
   commandRevision: number;
+  landingPlanIds: Set<string>;
   commandMode: "automatic" | "assisted" | "manual";
 }
 
@@ -21,7 +22,7 @@ export function getPlayerNation(world: WorldState): PlayerNation | undefined {
 
 export function enterPlayerNation(world: WorldState, nationId: NationId): boolean {
   if (!world.nations.some((nation) => nation.id === nationId && isNationActive(nation))) return false;
-  world.playerNation = { nationId, commandMode: "automatic", landOrders: new Map(), commandRevision: 0 };
+  world.playerNation = { nationId, commandMode: "automatic", landOrders: new Map(), commandRevision: 0, landingPlanIds: new Set() };
   return true;
 }
 

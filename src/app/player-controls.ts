@@ -1,3 +1,4 @@
+import { attachPlayerLandingControls } from "./player-landing-controls";
 import { attachPlayerMilitaryControls } from "./player-military-controls";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import { attachPlayerDiplomacyControls } from "./player-diplomacy-controls";
@@ -17,6 +18,7 @@ export function attachPlayerControls(root: HTMLElement, world: WorldState, getDe
     <p role="status"></p>`;
   root.append(panel);
   const updateMilitary = attachPlayerMilitaryControls(panel, world, getDestination);
+  const updateLandings = attachPlayerLandingControls(panel, world, getDestination);
   const updateDiplomacy = attachPlayerDiplomacyControls(panel, world);
   const country = panel.querySelector<HTMLSelectElement>("[data-country]")!;
   const enter = panel.querySelector<HTMLButtonElement>("[data-enter]")!;
@@ -27,6 +29,7 @@ export function attachPlayerControls(root: HTMLElement, world: WorldState, getDe
   const update = () => {
     updateDiplomacy();
     updateMilitary();
+    updateLandings();
     const player = getPlayerNation(world);
     const nations = world.nations.filter(isNationActive);
     const names = nations.map((nation) => getNationName(world, nation.id));

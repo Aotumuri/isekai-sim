@@ -1,3 +1,4 @@
+import { getPlayerNation } from "./player-nation";
 import { getMoveTicksPerRegion } from "./movement";
 import { getDesignTransportCapacity, getFleetTransportCapacity, planTransportLoading } from "./unit-capabilities";
 import { getNationalDesign } from "./research";
@@ -37,6 +38,7 @@ export type AmphibiousCapabilityDemandState =
   | "cancelled";
 
 export interface AmphibiousCapabilityDemand {
+  playerPlan?: { unitCount: number; launchTick: number };
   id: string;
   nationId: NationId;
   enemyNationId: NationId;
@@ -466,6 +468,57 @@ export function createAmphibiousOperationState(): AmphibiousOperationState {
 }
 
 /** Slow-tick strategic evaluator. It only considers cached ports, fronts and supply data. */
+export function queuePlayerLanding(
+  world: WorldState, departure: MesoRegionId, destination: MesoRegionId, unitCount: number, launchTick: number,
+): AmphibiousCapabilityDemand | null {
+  const player = getPlayerNation(world);
+  if (!WORLD_BALANCE.unit.naval?.amphibiousEnabled || player?.commandMode !== "assisted" ||
+    !Number.isSafeInteger(unitCount) || unitCount < 1 ||
+    !Number.isSafeInteger(launchTick) || launchTick < world.time.fastTick) return null;
+  const nationId = player.nationId;
+  const enemyId = world.occupation.mesoById.get(destination) ?? getOwnerByMesoId(world).get(destination);
+  if (!enemyId || unitCount > world.units.filter((unit) => unit.nationId === nationId && unit.domain === "land").length ||
+    !isAtWar(nationId, enemyId, buildWarAdjacency(world.wars)) ||
+    !isEffectivelyControlledPort(world, nationId, departure) ||
+    !isValidTargetPort(world, nationId, enemyId, destination)) return null;
+  if (world.amphibiousOperations.capabilityDemands.some((item) =>
+    item.nationId === nationId && item.destinationPortId === destination && isActiveCapabilityDemand(item))) return null;
+  const candidate = chooseCandidate(world, nationId, enemyId, [departure], [destination]);
+  if (!candidate) return null;
+  const demand = createCapabilityDemand(world, candidate, { unitCount, launchTick });
+  player.landingPlanIds.add(demand.id);
+  return demand;
+}
+
+export function cancelPlayerLanding(world: WorldState, id: string): boolean {
+  const player = getPlayerNation(world);
+  const demand = world.amphibiousOperations.capabilityDemands.find((item) => item.id === id);
+  if (!player?.landingPlanIds.has(id) || !demand || !isActiveCapabilityDemand(demand)) return false;
+  expireCapabilityDemand(world, demand);
+  rebuildOwnership(world);
+  return true;
+}
+
+function updatePlayerLanding(world: WorldState, demand: AmphibiousCapabilityDemand): void {
+  const player = getPlayerNation(world);
+  const { nationId, enemyNationId, departurePortId, destinationPortId } = demand;
+  const valid = player?.commandMode === "assisted" && player.landingPlanIds.has(demand.id) &&
+    isAtWar(nationId, enemyNationId, buildWarAdjacency(world.wars)) &&
+    isEffectivelyControlledPort(world, nationId, departurePortId) &&
+    isValidTargetPort(world, nationId, enemyNationId, destinationPortId);
+  const candidate = valid
+    ? chooseCandidate(world, nationId, enemyNationId, [departurePortId], [destinationPortId]) : null;
+  if (!candidate) {
+    expireCapabilityDemand(world, demand);
+    return;
+  }
+  applyCandidateToDemand(world, demand, candidate);
+  refreshCapabilityProgress(world, demand);
+  if (demand.state === "ready" && world.time.fastTick >= demand.playerPlan!.launchTick) {
+    createOperationForDemand(world, demand, candidate);
+  }
+}
+
 export function updateAmphibiousPlanning(world: WorldState): void {
   if (!WORLD_BALANCE.unit.naval?.amphibiousEnabled) return;
   const startedAt = world.instrumentation ? performance.now() : 0;
@@ -480,8 +533,18 @@ export function updateAmphibiousPlanning(world: WorldState): void {
   }
   const warAdjacency = buildWarAdjacency(world.wars);
   const portsByNation = getPortTargetsByNation(world);
+  const player = getPlayerNation(world);
+  const playerCommands = player?.commandMode !== "automatic" ? player?.nationId : undefined;
   for (const demand of world.amphibiousOperations.capabilityDemands) {
     if (!isActiveCapabilityDemand(demand)) continue;
+    if (demand.playerPlan) {
+      updatePlayerLanding(world, demand);
+      continue;
+    }
+    if (demand.nationId === playerCommands) {
+      expireCapabilityDemand(world, demand);
+      continue;
+    }
     if (demand.kind === "bridgehead-reinforcement") {
       const campaign = world.amphibiousOperations.bridgeheadCampaigns.find((item) =>
         item.id === demand.bridgeheadCampaignId && item.status === "active");
@@ -541,7 +604,7 @@ export function updateAmphibiousPlanning(world: WorldState): void {
     activeNations.add(demand.nationId);
   }
   for (const nation of [...world.nations].sort((a, b) => compareIds(a.id, b.id))) {
-    if (activeNations.has(nation.id)) continue;
+    if (nation.id === playerCommands || activeNations.has(nation.id)) continue;
     const ownPorts = (portsByNation.get(nation.id) ?? []).filter((id) => isEffectivelyControlledPort(world, nation.id, id));
     if (ownPorts.length === 0) continue;
     const enemies = [...(warAdjacency.get(nation.id) ?? [])].sort(compareIds);
@@ -929,9 +992,11 @@ function estimateAssaultStrength(
   };
 }
 
-function createCapabilityDemand(world: WorldState, candidate: LandingCandidate): AmphibiousCapabilityDemand {
-  const requirement = deriveForceRequirement(world, candidate.nationId, candidate.departure, candidate.requiredStrength);
+function createCapabilityDemand(world: WorldState, candidate: LandingCandidate,
+  playerPlan?: AmphibiousCapabilityDemand["playerPlan"]): AmphibiousCapabilityDemand {
+  const requirement = deriveForceRequirement(world, candidate.nationId, candidate.departure, candidate.requiredStrength, playerPlan?.unitCount);
   const demand: AmphibiousCapabilityDemand = {
+    ...(playerPlan ? { playerPlan } : {}),
     id: `amphibious-capability-${world.amphibiousOperations.nextCapabilityDemandNumber++}`,
     nationId: candidate.nationId,
     enemyNationId: candidate.enemyId,
@@ -1014,7 +1079,7 @@ function applyCandidateToDemand(world: WorldState, demand: AmphibiousCapabilityD
   demand.selectedReason = candidate.selectedReason;
   demand.targetTypes = candidate.targetTypes;
   const requirement = deriveForceRequirement(world, demand.nationId, demand.departurePortId,
-    demand.requiredLandingStrength);
+    demand.requiredLandingStrength, demand.playerPlan?.unitCount);
   demand.desiredLandingUnitCount = requirement.landUnitCount;
   demand.desiredTransportCount = hasCompleteFleetLease(demand) ? demand.assignedTransportIds.length : requirement.transportCount;
   demand.desiredEscortCount = hasCompleteFleetLease(demand) ? demand.assignedEscortIds.length : requirement.escortCount;
@@ -1085,10 +1150,11 @@ function refreshCapabilityProgress(world: WorldState, demand: AmphibiousCapabili
     ? demand.availableLandingStrength / demand.requiredLandingStrength : 0;
   demand.lastValidatedAtTick = world.time.fastTick;
   const forceReady = demand.availableLandingUnitCount > 0 &&
-    demand.availableLandingStrength >= demand.requiredLandingStrength;
+    (demand.playerPlan ? demand.availableLandingUnitCount === demand.playerPlan.unitCount
+      : demand.availableLandingStrength >= demand.requiredLandingStrength);
   if (forceReady) demand.desiredLandingUnitCount = demand.availableLandingUnitCount;
   const opportunityWindow = estimateOpportunityWindow(world, demand.nationId, demand.enemyNationId).ticks;
-  const emergencyForceReady = opportunityWindow <= WORLD_BALANCE.unit.amphibiousAssault.emergencyWindowTicks &&
+  const emergencyForceReady = !demand.playerPlan && opportunityWindow <= WORLD_BALANCE.unit.amphibiousAssault.emergencyWindowTicks &&
     demand.assaultRatio >= WORLD_BALANCE.unit.amphibiousAssault.emergencyMinimumAssaultRatio;
   const reinforcementForceReady = demand.kind === "bridgehead-reinforcement" &&
     demand.availableLandingUnitCount > 0 && demand.assaultRatio >= 0.35;
@@ -1323,7 +1389,8 @@ function createOperation(world: WorldState, demand: AmphibiousCapabilityDemand, 
     Number.isFinite(transport.moveTicksPerRegion));
   const transportsAtDeparture = transports.every((transport) => transport.regionId === candidate.departure);
   const landingForceSufficient = units.length > 0 &&
-    (strength >= demand.requiredLandingStrength || emergencyReady || reinforcementReady);
+    (demand.playerPlan ? units.length === demand.playerPlan.unitCount
+      : strength >= demand.requiredLandingStrength || emergencyReady || reinforcementReady);
   const escortsSufficient = escorts.length >= Math.min(demand.desiredEscortCount, transports.length);
   const escortsOperational = escorts.every((escort) => isOperationalCombatShip(escort, candidate.nationId) &&
     Number.isFinite(escort.moveTicksPerRegion));
@@ -1377,7 +1444,7 @@ function createOperation(world: WorldState, demand: AmphibiousCapabilityDemand, 
   if (!landForceAtDeparture) return null;
   const acceptedFeasibility = feasibility!;
   recordFeasibilitySample(world, acceptedFeasibility);
-  if (!acceptedFeasibility.accepted) {
+  if (!acceptedFeasibility.accepted && !demand.playerPlan) {
     world.amphibiousOperations.operationsRejected += 1;
     world.amphibiousOperations.launchRejections.push({
       ...acceptedFeasibility, nationId: candidate.nationId, enemyNationId: candidate.enemyId,
@@ -1660,6 +1727,7 @@ function createBridgeheadCampaign(world: WorldState, operation: AmphibiousOperat
 
 function updateBridgeheadCampaigns(world: WorldState): void {
   const warAdjacency = buildWarAdjacency(world.wars);
+  const player = getPlayerNation(world);
   if (world.amphibiousOperations.bridgeheadCampaigns.some((campaign) => campaign.status === "active")) {
     world.amphibiousOperations.version += 1;
   }
@@ -1726,6 +1794,7 @@ function updateBridgeheadCampaigns(world: WorldState): void {
       continue;
     }
     campaign.activeDemandId = null;
+    if (player?.nationId === campaign.nationId && player.commandMode !== "automatic") continue;
     campaign.currentTransportCapacity = getFleetTransportCapacity(findAvailableTransports(world, campaign.nationId, campaign.departurePortId));
     campaign.currentEscortCapacity = findAvailableEscorts(world, campaign.nationId,
       campaign.departurePortId).length;
@@ -2185,8 +2254,10 @@ function selectLandingForce(
     ...world.offensiveOperations.operations.filter((operation) => operation.outcome === null)
       .flatMap((operation) => operation.assignedUnitIds),
   ]);
+  const player = getPlayerNation(world);
   const candidates = world.units.filter((unit) =>
     unit.domain === "land" && unit.nationId === nationId &&
+    !(player?.nationId === nationId && player.landOrders.has(unit.id)) &&
     getUnitCombatStrength(unit) > 0 && !unavailable.has(unit.id) &&
     !world.amphibiousOperations.operationByUnitId.has(unit.id) &&
     (!world.amphibiousOperations.capabilityDemandByUnitId.has(unit.id) || previousIds.has(unit.id)) &&
@@ -2195,6 +2266,10 @@ function selectLandingForce(
     Number(b.regionId === departurePortId) - Number(a.regionId === departurePortId) ||
     Number(previousIds.has(b.id)) - Number(previousIds.has(a.id)) ||
     compareLandingUnits(a, b));
+  if (demand.playerPlan) {
+    const units = candidates.slice(0, demand.playerPlan.unitCount);
+    return { units, strength: units.reduce((sum, unit) => sum + getUnitCombatStrength(unit), 0) };
+  }
   const preferred = assembleLandingForce(candidates, requiredLandingStrength);
   const capacity = leasedCapacity || getFleetTransportCapacity(
     findAvailableTransports(world, nationId, departurePortId));
@@ -2223,6 +2298,7 @@ function deriveForceRequirement(
   nationId: NationId,
   departurePortId: MesoRegionId,
   requiredStrength: number,
+  requestedUnitCount?: number,
 ): { landUnitCount: number; transportCount: number; escortCount: number } {
   const distance = getControlledDistanceField(world, nationId, [departurePortId]).distanceByRegionId;
   const unavailable = new Set([
@@ -2251,7 +2327,7 @@ function deriveForceRequirement(
   if (assembledStrength < requiredStrength) {
     landUnitCount += Math.ceil((requiredStrength - assembledStrength) / Math.max(0.5, averageStrength));
   }
-  landUnitCount = Math.max(1, landUnitCount);
+  landUnitCount = requestedUnitCount ?? Math.max(1, landUnitCount);
   const transportCapacity = getDesignTransportCapacity(getNationalDesign(world, nationId, "TransportShip"));
   const transportCount = Math.max(1, Math.ceil(landUnitCount / transportCapacity));
   const escortCount = Math.max(1, Math.ceil(transportCount /
