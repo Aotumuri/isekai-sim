@@ -180,6 +180,20 @@ canvas {
 
 .peace-assessment { grid-column: 1 / -1; }
 
-.map-controls.player-controls { top: auto; right: 12px; bottom: 58px; width: min(350px, calc(100vw - 24px)); max-height: 48dvh; overflow: auto; }
-.player-controls summary { cursor: pointer; }
-.player-controls select { max-width: 100%; }
+.map-controls.player-controls {
+  top: 12px; right: auto; left: 12px; width: min(300px, calc(100vw - 24px));
+  max-height: calc(100dvh - 84px); overflow: auto; box-sizing: border-box;
+  padding: 16px; font-size: 14px; background: #102336f7;
+}
+.player-controls header { margin-bottom: 12px; }
+.player-controls header small { color: #b4cde3; }
+.player-controls h2 { margin: 3px 0 0; font-size: 22px; overflow-wrap: anywhere; }
+.player-controls nav { display: flex; flex-wrap: wrap; gap: 6px; }
+.player-controls details { border-top: 1px solid #49627d; margin-top: 12px; padding-top: 9px; }
+.player-controls summary { cursor: pointer; font-weight: 600; }
+.player-controls label { display: block; margin: 8px 0; }
+.player-controls select, .player-controls input { max-width: 100%; font: inherit; }
+.player-controls p:empty { display: none; }
+@media(max-width:720px) {
+  .map-controls.player-controls { top: auto; bottom: 58px; max-height: 40dvh; }
+}

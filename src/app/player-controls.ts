@@ -11,55 +11,57 @@ import { getMapView, selectMapNation } from "../render/map-view-state";
 export function attachPlayerControls(
   root: HTMLElement, world: WorldState, getDestination: () => MesoRegionId | null, openResearch: () => void,
 ): () => void {
-  const panel = document.createElement("details");
+  const panel = document.createElement("aside");
   panel.className = "map-controls player-controls";
-  panel.innerHTML = `<summary>国家プレイ</summary>
-    <label>国家 <select data-country></select></label>
-    <button type="button" data-enter>操作する</button>
-    <button type="button" data-government hidden>国家運営・研究</button>
-    <button type="button" data-leave hidden>観戦に戻る</button>
-    <p role="status"></p>`;
+  panel.setAttribute("aria-label", "国家情報");
+  panel.innerHTML = `<header><small></small><h2></h2></header>
+    <button type="button" data-enter>この国を操作する</button>
+    <div data-command hidden>
+      <nav aria-label="国家操作">
+        <button type="button" data-government>国家運営・研究</button>
+        <button type="button" data-leave>観戦に戻る</button>
+      </nav>
+    </div>`;
   root.append(panel);
-  const updateMilitary = attachPlayerMilitaryControls(panel, world, getDestination);
-  const updateLandings = attachPlayerLandingControls(panel, world, getDestination);
-  const updateDiplomacy = attachPlayerDiplomacyControls(panel, world);
-  const country = panel.querySelector<HTMLSelectElement>("[data-country]")!;
+  const command = panel.querySelector<HTMLElement>("[data-command]")!;
+  const updateDiplomacy = attachPlayerDiplomacyControls(command, world);
+  const updateMilitary = attachPlayerMilitaryControls(command, world, getDestination);
+  const updateLandings = attachPlayerLandingControls(command, world, getDestination);
+  const heading = panel.querySelector("h2")!;
+  const label = panel.querySelector("small")!;
   const enter = panel.querySelector<HTMLButtonElement>("[data-enter]")!;
-  const leave = panel.querySelector<HTMLButtonElement>("[data-leave]")!;
-  const government = panel.querySelector<HTMLButtonElement>("[data-government]")!;
-  const status = panel.querySelector("p")!;
-  let roster = "";
-  let mapSelection = getMapView(world).selectedNationId;
   const update = () => {
-    updateDiplomacy();
-    updateMilitary();
-    updateLandings();
     const player = getPlayerNation(world);
-    const nations = world.nations.filter(isNationActive);
-    const names = nations.map((nation) => getNationName(world, nation.id));
-    const nextRoster = JSON.stringify(nations.map((nation, index) => [nation.id, names[index]]));
-    if (roster !== nextRoster) {
-      const previous = country.value;
-      country.replaceChildren(...nations.map((nation, index) => new Option(names[index], nation.id)));
-      if (nations.some((nation) => nation.id === previous)) country.value = previous;
-      roster = nextRoster;
+    const id = player?.nationId ?? getMapView(world).selectedNationId;
+    panel.hidden = !id;
+    if (!id) return;
+    const name = getNationName(world, id);
+    if (heading.textContent !== name) heading.textContent = name;
+    label.textContent = player ? "操作中の国家" : "選択中の国家";
+    enter.hidden = !!player || !world.nations.some((nation) => nation.id === id && isNationActive(nation));
+    command.hidden = !player;
+    if (player) {
+      updateDiplomacy();
+      updateMilitary();
+      updateLandings();
     }
-    const selected = getMapView(world).selectedNationId;
-    if (selected !== mapSelection && nations.some((nation) => nation.id === selected)) country.value = selected!;
-    mapSelection = selected;
-    enter.disabled = !country.value || player?.nationId === country.value;
-    leave.hidden = !player;
-    government.hidden = !player;
-    status.textContent = player ? `${names[nations.findIndex((nation) => nation.id === player.nationId)]}を操作中` : "観戦中";
   };
-  government.onclick = openResearch;
-  country.addEventListener("change", update);
-  enter.addEventListener("click", () => {
-    const nation = world.nations.find((entry) => entry.id === country.value);
-    if (nation && enterPlayerNation(world, nation.id)) selectMapNation(world, nation.id);
+  panel.querySelector<HTMLButtonElement>("[data-government]")!.onclick = openResearch;
+  enter.onclick = () => {
+    const id = getMapView(world).selectedNationId;
+    if (id && enterPlayerNation(world, id)) {
+      getMapView(world).targetNationId = null;
+      selectMapNation(world, id);
+      command.querySelector("details")!.open = true;
+    }
     update();
-  });
-  leave.addEventListener("click", () => { leavePlayerNation(world); update(); });
+  };
+  panel.querySelector<HTMLButtonElement>("[data-leave]")!.onclick = () => {
+    const id = getPlayerNation(world)?.nationId;
+    leavePlayerNation(world);
+    if (id) selectMapNation(world, id);
+    update();
+  };
   update();
   return update;
 }

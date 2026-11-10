@@ -1,3 +1,4 @@
+import { getPlayerNation } from "../sim/player-nation";
 import { getMapView } from "./map-view-state";
 import { getNationName } from "../sim/nation-identity";
 import { Container, Graphics, Text, TextStyle, type FederatedPointerEvent } from "pixi.js";
@@ -239,7 +240,9 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
       lastScreenHeight = screen.height;
     }
 
-    const sidebarWidth = computeSidebarWidth(screen.width, isExpanded);
+    const playerActive = !!getPlayerNation(world);
+    root.visible = !playerActive;
+    const sidebarWidth = playerActive ? 0 : computeSidebarWidth(screen.width, isExpanded);
     const worldWidth = Math.max(0, screen.width - sidebarWidth);
     renderer.uiRightWidth = sidebarWidth;
 
@@ -256,6 +259,7 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
       lastMaskHeight = screen.height;
     }
 
+    if (playerActive) return;
     if (!isExpanded) {
       panelContent.visible = false;
       layoutTab(
