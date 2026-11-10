@@ -1,5 +1,6 @@
 import type { SeededRng } from "../../utils/seeded-rng";
-import type { Vec2 } from "../../utils/vector";
+import { createWorldMapIslandArcs } from "./world-map-island-arcs";
+import { distanceFromShore } from "./landform-shore";
 import type { ContinentalLayout, Landform } from "./continental-layout";
 
 export function createWorldMapLayout(rng: SeededRng): ContinentalLayout {
@@ -23,6 +24,7 @@ export function createWorldMapLayout(rng: SeededRng): ContinentalLayout {
     flipX: false,
     flipY: false,
     landforms,
+    islandArcs: createWorldMapIslandArcs(landforms, rng),
     coastReliefScale: 0.64,
     minimumLandformStrength: 0.42,
     seaCeiling: () => Infinity,
@@ -48,11 +50,4 @@ function placeLandform(shape: Omit<Landform, "x" | "y">, existing: Landform[], r
     }
   }
   return best;
-}
-
-export function distanceFromShore(land: Landform, point: Vec2): number {
-  const dx = point.x - land.x, dy = point.y - land.y;
-  const angle = Math.atan2(dy, dx) - (land.orientation ?? 0);
-  const radius = 1 / Math.hypot(Math.cos(angle) / land.rx, Math.sin(angle) / land.ry);
-  return Math.hypot(dx, dy) - radius;
 }
