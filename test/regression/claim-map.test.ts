@@ -53,7 +53,7 @@ test("formal demands remain visible below the interest threshold and disappear w
   selectMapNation(world, a.id); setMapMode(world, "claims");
   const micro = world.microRegions.find((item) => item.mesoRegionId === region.id)!;
   const tooltip = formatRegionTooltip(micro, region, macro, b, [], world);
-  assert.match(tooltip, /Claim strength:/); assert.match(tooltip, /Active territorial ultimatum/);
+  assert.match(tooltip, /請求の強さ：/); assert.match(tooltip, /発出中の領土最後通牒/);
   relation.crisis = null;
   assert(!getMapClaims(world, a.id).some((claim) => claim.regionId === region.id));
   assert(!getMapClaims(world, b.id).some((claim) => claim.regionId === region.id));

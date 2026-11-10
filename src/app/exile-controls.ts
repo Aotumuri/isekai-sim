@@ -18,11 +18,11 @@ export function attachExileControls(root: HTMLElement, world: WorldState, select
     const id = selected(), record = world.exileGovernments?.byNationId.get(id);
     const hosted = [...(world.exileGovernments?.byNationId.values() ?? [])].filter((item) => item.status === "exiled" && item.hostId === id);
     const n = (value: NationId) => esc(getNationName(world, value));
-    root.innerHTML = `${record ? `<article class="society-country society-exile"><strong>${record.status === "exiled" ? "Government in exile" : record.status === "restored" ? "Government restored" : "Exile government dissolved"}</strong>
-      <small>Host: ${n(record.hostId)} · Homeland: ${record.homelandIds.length} districts · Restored: ${record.restoredDistricts}<br>
+    root.innerHTML = `${record ? `<article class="society-country society-exile"><strong>${record.status === "exiled" ? "亡命政府" : record.status === "restored" ? "政府が帰還" : "亡命政府が解散"}</strong>
+      <small>受入国： ${n(record.hostId)} · Homeland: ${record.homelandIds.length} districts · Restored: ${record.restoredDistricts}<br>
       Free forces: ${world.units.filter((unit) => unit.exileOriginId === id).length} under allied command · ${record.reserveUnits.length} in transit</small>
-      <p class="society-note">${record.status === "exiled" ? "National recruitment and production cease without territory. A trusted ally continues the liberation war. Liberated homeland is returned automatically; surviving free forces follow the government home." : record.status === "restored" ? "The government has returned home. Free forces leave allied command when clear of combat and active orders; national recruitment resumes." : "No trusted ally remained able to continue the liberation war."}</p>
-      <button type="button" data-exile-nation="${esc(id)}" data-exile-action="claims">View homeland claims · C</button></article>` : ""}
-      ${hosted.length ? `<details open><summary>Hosted governments in exile · ${hosted.length}</summary>${hosted.map((item) => `<p>${n(item.nationId)} · ${item.evacuatedUnits} units evacuated <button type="button" data-exile-nation="${esc(item.nationId)}">Inspect government</button></p>`).join("")}</details>` : ""}`;
+      <p class="society-note">${record.status === "exiled" ? "領土を失うと徴兵と生産は停止します。信頼できる同盟国が解放戦争を継続します。解放した本国領は自動で返還され、生き残った亡命軍は政府と共に帰還します。" : record.status === "restored" ? "政府は本国に帰還しました。亡命軍は戦闘や命令が終了すると同盟国の指揮を離れ、自国の徴兵が再開します。" : "解放戦争を継続できる、信頼できる同盟国がありませんでした。"}</p>
+      <button type="button" data-exile-nation="${esc(id)}" data-exile-action="claims">本国への領土請求を見る · C</button></article>` : ""}
+      ${hosted.length ? `<details open><summary>Hosted governments in exile · ${hosted.length}</summary>${hosted.map((item) => `<p>${n(item.nationId)} · ${item.evacuatedUnits} units evacuated <button type="button" data-exile-nation="${esc(item.nationId)}">政府を確認</button></p>`).join("")}</details>` : ""}`;
   } };
 }

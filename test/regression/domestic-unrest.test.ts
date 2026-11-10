@@ -74,7 +74,7 @@ for (const dimension of POPULATION_DIMENSIONS) {
     const rebels = world.nations.at(-1)!;
     assert.equal(rebels.capitalMesoId, seat.id);
     assert.deepEqual(rebels.macroRegionIds, [province.id]);
-    assert.ok(world.events?.some(({ message }) => message.startsWith("Revolution") && message.includes(POPULATION_GROUPS[dimension][1]!)));
+    assert.ok(world.events?.some(({ message }) => message.startsWith("革命") && message.includes(POPULATION_GROUPS[dimension][1]!)));
   });
 }
 

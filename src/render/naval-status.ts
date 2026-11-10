@@ -1,3 +1,4 @@
+import { LANDING_PHASE_LABELS } from "./japanese-labels";
 import { getNationName } from "../sim/nation-identity";
 import { getCoastalSupportModifier } from "../sim/coastal-support";
 import { getNavalUnitOwnership } from "../sim/naval-strategy";
@@ -7,8 +8,8 @@ import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 
 const MISSION_NAMES = {
-  ESCORT: "Convoy escort", RAID: "Convoy raiding", INTERCEPT: "Intercepting enemy fleet",
-  BLOCKADE: "Port blockade", SUPPORT: "Shore bombardment", RESERVE: "Reserve",
+  ESCORT: "船団護衛", RAID: "船団襲撃", INTERCEPT: "敵艦隊の迎撃",
+  BLOCKADE: "港湾封鎖", SUPPORT: "沿岸砲撃", RESERVE: "予備",
 } as const;
 
 export function summarizeNavy(world: WorldState, nationId: NationId): {
@@ -26,25 +27,25 @@ export function summarizeNavy(world: WorldState, nationId: NationId): {
 export function formatNavalUnitStatus(world: WorldState, unit: UnitState): string | null {
   if (unit.domain !== "naval") return null;
   const owner = getNavalUnitOwnership(world, unit.id);
-  if (!owner) return "Naval order: Awaiting assignment";
+  if (!owner) return "海軍命令：配属待ち";
   if (owner.controller === "AMPHIBIOUS_OPERATION") {
     const operation = world.amphibiousOperations.operationByUnitId.get(unit.id)!;
-    const role = owner.missionType === "ESCORT" ? "Landing escort" : "Troop transport";
-    return `Naval order: ${role} → ${operation.destinationPortId} (${operation.phase})`;
+    const role = owner.missionType === "ESCORT" ? "上陸船団の護衛" : "部隊輸送";
+    return `海軍命令：${role} → ${operation.destinationPortId} (${LANDING_PHASE_LABELS[operation.phase]})`;
   }
   if (owner.controller === "AMPHIBIOUS_CAPABILITY") {
-    return `Naval order: Assembling landing fleet (${owner.missionType === "ESCORT" ? "escort" : "transport"})`;
+    return `海軍命令：上陸艦隊を集結中 (${owner.missionType === "ESCORT" ? "護衛" : "輸送"})`;
   }
   if (owner.controller === "MARITIME_LOGISTICS") {
-    if (owner.missionType === "RESERVE") return "Naval order: Transport reserve";
+    if (owner.missionType === "RESERVE") return "海軍命令：予備輸送船";
     const convoy = owner.assignmentId ? world.supplyAssessment.convoys.convoyByLinkId.get(owner.assignmentId) : undefined;
-    return convoy ? `Naval order: Supply convoy → ${convoy.route.destinationPortId} (${convoy.state})`
-      : "Naval order: Supply transport positioning";
+    return convoy ? `海軍命令：補給船団 → ${convoy.route.destinationPortId} (${convoy.state})`
+      : "海軍命令：補給輸送船を移動中";
   }
   const mission = world.supplyAssessment.navalStrategy.missionById.get(owner.missionId);
-  if (!mission) return "Naval order: Awaiting assignment";
+  if (!mission) return "海軍命令：配属待ち";
   const target = mission.targetCoastId ?? mission.targetPortId ?? mission.targetSeaRegionId;
-  return `Naval order: ${MISSION_NAMES[mission.type]}${target ? ` → ${target}` : ""}${mission.status === "UNAVAILABLE" ? " (unavailable)" : ""}`;
+  return `海軍命令：${MISSION_NAMES[mission.type]}${target ? ` → ${target}` : ""}${mission.status === "UNAVAILABLE" ? "（実行不可）" : ""}`;
 }
 
 export function formatCoastalSupportStatus(world: WorldState, coastId: MesoRegionId): string[] {
@@ -52,6 +53,6 @@ export function formatCoastalSupportStatus(world: WorldState, coastId: MesoRegio
     mission.type === "SUPPORT" && mission.targetCoastId === coastId).map((mission) => mission.nationId));
   return [...nations].sort().slice(0, 3).map((nationId) => {
     const bonus = Math.round((getCoastalSupportModifier(world, nationId, coastId) - 1) * 100);
-    return `Shore support: ${getNationName(world, nationId)} ${bonus > 0 ? `+${bonus}% organization pressure` : "not on station / contested"}`;
+    return `沿岸支援：${getNationName(world, nationId)} ${bonus > 0 ? `+${bonus}% 組織率への圧力` : "未配置または交戦中"}`;
   });
 }

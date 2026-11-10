@@ -101,12 +101,12 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
     fill: PANEL_TEXT,
   });
 
-  const titleText = new Text("Nation", titleStyle);
-  const nameText = new Text("Select a nation", nameStyle);
-  const overviewLabel = new Text("OVERVIEW", sectionStyle);
-  const resourcesLabel = new Text("RESOURCES", sectionStyle);
-  const supportLabel = new Text("WAR SUPPORT", sectionStyle);
-  const surrenderLabel = new Text("SURRENDER", sectionStyle);
+  const titleText = new Text("国家", titleStyle);
+  const nameText = new Text("国を選択", nameStyle);
+  const overviewLabel = new Text("概要", sectionStyle);
+  const resourcesLabel = new Text("資源", sectionStyle);
+  const supportLabel = new Text("戦争支持", sectionStyle);
+  const surrenderLabel = new Text("降伏", sectionStyle);
   titleText.resolution = renderer.app.renderer.resolution;
   nameText.resolution = renderer.app.renderer.resolution;
   overviewLabel.resolution = renderer.app.renderer.resolution;
@@ -115,33 +115,33 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
   surrenderLabel.resolution = renderer.app.renderer.resolution;
 
   const overviewRows = {
-    units: createRow("Units", "-", labelStyle, valueStyle, renderer),
-    fleet: createRow("Fleet", "-", labelStyle, valueStyle, renderer),
-    seaSupply: createRow("Sea supply", "-", labelStyle, valueStyle, renderer),
-    meso: createRow("Regions", "-", labelStyle, valueStyle, renderer),
-    cities: createRow("Cities", "-", labelStyle, valueStyle, renderer),
-    wars: createRow("Wars", "-", labelStyle, valueStyle, renderer),
+    units: createRow("部隊", "-", labelStyle, valueStyle, renderer),
+    fleet: createRow("艦隊", "-", labelStyle, valueStyle, renderer),
+    seaSupply: createRow("海上補給", "-", labelStyle, valueStyle, renderer),
+    meso: createRow("地区", "-", labelStyle, valueStyle, renderer),
+    cities: createRow("都市", "-", labelStyle, valueStyle, renderer),
+    wars: createRow("戦争", "-", labelStyle, valueStyle, renderer),
   };
   const resourcesRows = {
-    steel: createRow("Steel", "-", labelStyle, valueStyle, renderer),
-    fuel: createRow("Fuel", "-", labelStyle, valueStyle, renderer),
-    manpower: createRow("Manpower", "-", labelStyle, valueStyle, renderer),
-    weapons: createRow("Weapons", "-", labelStyle, valueStyle, renderer),
+    steel: createRow("鋼材", "-", labelStyle, valueStyle, renderer),
+    fuel: createRow("燃料", "-", labelStyle, valueStyle, renderer),
+    manpower: createRow("人的資源", "-", labelStyle, valueStyle, renderer),
+    weapons: createRow("武器", "-", labelStyle, valueStyle, renderer),
   };
   const supportRows = {
-    support: createRow("Support", "-", labelStyle, valueStyle, renderer),
-    duration: createRow("Duration", "-", labelStyle, valueStyle, renderer),
-    capital: createRow("Capital", "-", labelStyle, valueStyle, renderer),
-    cityLoss: createRow("City Loss", "-", labelStyle, valueStyle, renderer),
-    role: createRow("Role", "-", labelStyle, valueStyle, renderer),
-    boost: createRow("Boost", "-", labelStyle, valueStyle, renderer),
+    support: createRow("支持", "-", labelStyle, valueStyle, renderer),
+    duration: createRow("期間", "-", labelStyle, valueStyle, renderer),
+    capital: createRow("首都", "-", labelStyle, valueStyle, renderer),
+    cityLoss: createRow("都市喪失", "-", labelStyle, valueStyle, renderer),
+    role: createRow("役割", "-", labelStyle, valueStyle, renderer),
+    boost: createRow("補正", "-", labelStyle, valueStyle, renderer),
   };
   const surrenderRows = {
-    progress: createRow("Progress", "-", labelStyle, valueStyle, renderer),
-    occupation: createRow("Occupation", "-", labelStyle, valueStyle, renderer),
-    capital: createRow("Capital", "-", labelStyle, valueStyle, renderer),
-    cityLoss: createRow("City Loss", "-", labelStyle, valueStyle, renderer),
-    unitLoss: createRow("Unit Loss", "-", labelStyle, valueStyle, renderer),
+    progress: createRow("進捗", "-", labelStyle, valueStyle, renderer),
+    occupation: createRow("占領", "-", labelStyle, valueStyle, renderer),
+    capital: createRow("首都", "-", labelStyle, valueStyle, renderer),
+    cityLoss: createRow("都市喪失", "-", labelStyle, valueStyle, renderer),
+    unitLoss: createRow("部隊損失", "-", labelStyle, valueStyle, renderer),
     multiplier: createRow("Support Mult", "-", labelStyle, valueStyle, renderer),
   };
 
@@ -189,7 +189,7 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
     fontWeight: "600",
     letterSpacing: 1,
   });
-  const tabText = new Text("NATION", tabTextStyle);
+  const tabText = new Text("国家", tabTextStyle);
   tabText.resolution = renderer.app.renderer.resolution;
   tabText.anchor.set(0.5);
   tabText.angle = -90;
@@ -285,8 +285,8 @@ export function attachNationInfoBar(renderer: Renderer, world: WorldState): Nati
           nameText.text = stats.displayName;
           setRowValue(overviewRows.units, `${stats.unitCount}`);
           const navy = summarizeNavy(world, nation.id);
-          setRowValue(overviewRows.fleet, `${navy.combatShips} combat / ${navy.transports} transport`);
-          setRowValue(overviewRows.seaSupply, `${navy.activeRoutes}/${navy.totalRoutes} routes active`);
+          setRowValue(overviewRows.fleet, `${navy.combatShips} 戦闘艦 / ${navy.transports} 輸送船`);
+          setRowValue(overviewRows.seaSupply, `${navy.activeRoutes}/${navy.totalRoutes} 経路が稼働中`);
           setRowValue(overviewRows.meso, `${stats.mesoCount}`);
           setRowValue(overviewRows.cities, `${stats.cityCount}`);
           setRowValue(overviewRows.wars, `${stats.warCount}`);
@@ -460,7 +460,7 @@ function layoutEmptyPanel(
   surrenderBarBg: Graphics,
   surrenderBarFill: Graphics,
 ): number {
-  nameText.text = "Select a nation";
+  nameText.text = "国を選択";
   for (const row of Object.values(overviewRows)) {
     setRowValue(row, "-");
   }
@@ -609,7 +609,7 @@ function layoutTab(
   screenHeight: number,
   isExpanded: boolean,
 ): void {
-  tabText.text = isExpanded ? "CLOSE" : "NATION";
+  tabText.text = isExpanded ? "閉じる" : "国家";
   tabBg.clear();
   tabBg.beginFill(TAB_BG, 0.96);
   tabBg.lineStyle(1, TAB_BORDER, 0.9);
@@ -926,7 +926,7 @@ function formatSignedInteger(value: number): string {
 }
 
 function formatResourceValue(amount: number, delta: number, usage: number): string {
-  return `${formatInteger(amount)} (Net ${formatSignedInteger(delta)} / Use ${formatInteger(usage)})`;
+  return `${formatInteger(amount)} (増減 ${formatSignedInteger(delta)} / 消費 ${formatInteger(usage)})`;
 }
 
 function formatPercent(value: number): string {

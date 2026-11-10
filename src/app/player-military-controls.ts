@@ -1,3 +1,4 @@
+import { UNIT_LABELS } from "../render/japanese-labels";
 import { issuePlayerNavalOrder } from "../sim/player-naval-orders";
 import { clearPlayerMovementOrders, issuePlayerLandOrder, setPlayerCommandMode } from "../sim/player-land-orders";
 import { getPlayerNation } from "../sim/player-nation";
@@ -70,7 +71,7 @@ export function attachPlayerMilitaryControls(
     const key = units.map((item) => `${item.id}:${item.regionId}`).join(",");
     if (key === roster) return;
     const previous = unit.value;
-    unit.replaceChildren(...units.map((item) => new Option(`${item.type} ${item.id} · ${item.regionId}`, item.id)));
+    unit.replaceChildren(...units.map((item) => new Option(`${UNIT_LABELS[item.type]} ${item.id} · ${item.regionId}`, item.id)));
     if (units.some(({ id }) => id === previous)) unit.value = previous;
     roster = key;
   };

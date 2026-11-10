@@ -133,7 +133,7 @@ export function proposeTreaty(world: WorldState, proposerId: NationId, partnerId
   relation.tension = Math.max(0, relation.tension - 15);
   getDiplomacyState(world).treatiesSigned += 1;
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [proposerId, partnerId],
-    message: `${proposerId} and ${partnerId} signed ${type}.` });
+    message: `${proposerId}と${partnerId}が条約（${type}）を締結しました。` });
   return true;
 }
 
@@ -150,18 +150,18 @@ export function getTruceExtensionIssue(world: WorldState, proposer: NationId, pa
   if (getWarDeclarationMode(world) !== "diplomacy" || proposer === partner || !relation || !truce ||
     findWar(world.wars, proposer, partner) || hasExileConflict(world, proposer, partner) ||
     ![proposer, partner].every((id) => world.nations.some((nation) => nation.id === id && isNationPresent(world, nation)))) {
-    return "Both nations need an active truce.";
+    return "両国の間に有効な休戦が必要です。";
   }
   if (relation.territorialSettlement && truce.expiresAtSlowTick === relation.territorialSettlement.atSlowTick + 120) {
-    return "Territorial settlement truces have fixed terms.";
+    return "領土合意に伴う休戦期間は変更できません。";
   }
   if (truce.expiresAtSlowTick - world.time.slowTick > TRUCE_EXTENSION.negotiationWindow) {
     return `Available in the last ${TRUCE_EXTENSION.negotiationWindow} seconds of the truce.`;
   }
   if (relation.crisis || relation.opinion < 0 || relation.trust < 50 || relation.tension > 35) {
-    return "The partner requires neutral opinion, 50 trust, tension at most 35 and no active crisis.";
+    return "関係が中立以上、信頼50以上、緊張35以下で、外交危機がないことが必要です。";
   }
-  return getInfluence(world, proposer) < TRUCE_EXTENSION.cost ? "Insufficient influence." : null;
+  return getInfluence(world, proposer) < TRUCE_EXTENSION.cost ? "影響力が不足しています。" : null;
 }
 
 export function extendTruce(world: WorldState, proposer: NationId, partner: NationId): boolean {
@@ -169,7 +169,7 @@ export function extendTruce(world: WorldState, proposer: NationId, partner: Nati
   const relation = getRelation(world, proposer, partner);
   getActiveTruce(world, relation)!.expiresAtSlowTick += TRUCE_EXTENSION.seconds;
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [proposer, partner],
-    message: `${proposer} and ${partner} extended their truce by ${TRUCE_EXTENSION.seconds} seconds.` });
+    message: `${proposer}と${partner}が休戦を${TRUCE_EXTENSION.seconds}秒延長しました。` });
   return true;
 }
 
@@ -187,7 +187,7 @@ export function breakTreaty(world: WorldState, breakerId: NationId, partnerId: N
     if (other !== relation && (other.nationAId === breakerId || other.nationBId === breakerId)) other.trust = Math.max(0, other.trust - 5);
   }
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [breakerId, partnerId],
-    message: `${breakerId} broke the ${type} treaty with ${partnerId}.` });
+    message: `${breakerId}が${partnerId}との条約（${type}）を破棄しました。` });
   return true;
 }
 
@@ -201,7 +201,7 @@ export function improveRelations(world: WorldState, nationId: NationId, partnerI
   relation.trust = Math.min(100, relation.trust + 3);
   relation.tension = Math.max(0, relation.tension - 8);
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [nationId, partnerId],
-    message: `${nationId} sent a diplomatic mission to ${partnerId}.` });
+    message: `${nationId}が${partnerId}に使節を派遣しました。` });
   return true;
 }
 
@@ -221,7 +221,7 @@ export function updateDiplomaticRelations(world: WorldState): void {
     if (!active.has(a) || !active.has(b)) { state.relations.delete(key); continue; }
     const expired = relation.treaties.filter((treaty) => treaty.expiresAtSlowTick <= now);
     for (const treaty of expired) recordSimulationEvent(world, { category: "diplomacy", nationIds: [a, b],
-      message: `${a} and ${b}: ${treaty.type} expired.` });
+      message: `${a}と${b}の条約（${treaty.type}）が失効しました。` });
     relation.treaties = relation.treaties.filter((treaty) => treaty.expiresAtSlowTick > now);
     if (isAtWar(a, b, wars) || hasExileConflict(world, a, b)) { relation.opinion = Math.max(-100, relation.opinion - 3); continue; }
     const first = getNationCharacter(world, a), second = getNationCharacter(world, b);

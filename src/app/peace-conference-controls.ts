@@ -5,10 +5,10 @@ import type { NationId } from "../worldgen/nation";
 
 export function attachPeaceConferenceControls(root: HTMLElement, world: WorldState,
   selected: () => NationId, partner: () => NationId, feedback: (message: string) => void) {
-  root.innerHTML = `<h2>Joint peace conference</h2><p class="society-note" data-conference-status></p>
-    <div class="society-actions"><button type="button" data-conference-action="open">Invite both sides</button>
-    <button type="button" data-conference-action="accept">Consent to joint peace</button>
-    <button type="button" data-conference-action="decline">Decline / withdraw</button></div>`;
+  root.innerHTML = `<h2>共同講和会議</h2><p class="society-note" data-conference-status></p>
+    <div class="society-actions"><button type="button" data-conference-action="open">両陣営を招待</button>
+    <button type="button" data-conference-action="accept">共同講和に同意</button>
+    <button type="button" data-conference-action="decline">拒否・同意撤回</button></div>`;
   const status = root.querySelector<HTMLElement>("[data-conference-status]")!;
   const button = (name: string) => root.querySelector<HTMLButtonElement>(`[data-conference-action="${name}"]`)!;
   let activeId: number | undefined;
@@ -33,14 +33,14 @@ export function attachPeaceConferenceControls(root: HTMLElement, world: WorldSta
   }
 
   button("open").addEventListener("click", () => {
-    feedback(openPeaceConference(world, selected(), partner()) ? "Joint peace invitations sent." : "These wars cannot join a new conference.");
+    feedback(openPeaceConference(world, selected(), partner()) ? "共同講和の招待を送りました。" : "現在の戦争では新たな会議を開けません。");
     update();
   });
   for (const [action, accept] of [["accept", true], ["decline", false]] as const) button(action).addEventListener("click", () => {
     if (activeId === undefined) return;
     const accepted = respondToPeaceConference(world, activeId, selected(), accept);
     const stillOpen = world.peaceConferences?.some((item) => item.id === activeId);
-    feedback(accepted ? accept ? stillOpen ? "Consent recorded." : "Joint peace signed." : "Conference declined." : "This conference is no longer available.");
+    feedback(accepted ? accept ? stillOpen ? "同意を記録しました。" : "共同講和が成立しました。" : "講和会議を拒否しました。" : "この会議はすでに終了しています。");
     update();
   });
   return { update };

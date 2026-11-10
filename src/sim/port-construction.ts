@@ -52,5 +52,5 @@ export function completePortConstruction(world: WorldState, nationId: NationId, 
   getMesoById(world).get(regionId)!.building = "port";
   world.buildingVersion += 1;
   recordSimulationEvent(world, { category: "military", nationIds: [nationId],
-    message: `${nationId} built a port in District ${regionId.replace("meso-", "")}.` });
+    message: `${nationId}が地区${regionId.replace("meso-", "")}に港を建設しました。` });
 }

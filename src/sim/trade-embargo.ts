@@ -43,7 +43,7 @@ export function updateFactionSanctions(world: WorldState): void {
         participants.push(member);
       }
       if (participants.length) recordSimulationEvent(world, { category: "trade", nationIds: [...participants, aggressor],
-        message: `${faction.name} coordinated trade sanctions against ${aggressor} after aggression against a member.` });
+        message: `加盟国への攻撃を受け、${faction.name}が${aggressor}への共同制裁を開始しました。` });
     }
   }
 }
@@ -66,6 +66,6 @@ export function setTradeEmbargo(world: WorldState, issuer: NationId, target: Nat
     if (!targets.size) embargoes.delete(issuer);
   }
   recordSimulationEvent(world, { category: "trade", nationIds: [issuer, target],
-    message: enabled ? `${issuer} embargoed trade with ${target}.` : `${issuer} lifted its embargo on ${target}.` });
+    message: enabled ? `${issuer}が${target}への禁輸を開始しました。` : `${issuer}が${target}への禁輸を解除しました。` });
   return true;
 }

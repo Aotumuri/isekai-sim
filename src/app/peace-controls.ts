@@ -25,18 +25,18 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
   root.innerHTML = `<details open data-peace-panel><summary>講和交渉</summary><p class="society-note" data-peace-view="outlook"></p>
     <p class="society-note" data-peace-view="deliveries"></p><div data-peace-view="subject"></div><div class="peace-offers" data-peace-view="offers"></div><div data-peace-editor>
     <label><input type="checkbox" data-peace-control="automatic" checked> 講和条件の更新・受諾をAIに任せる</label>
-    <p class="society-note">Both governments maintain standing terms from the start of war. Battle losses, occupation, fatigue and domestic unrest change willingness to accept. Publishing your own terms switches this government's negotiations to manual control.</p>
-    <div class="society-selectors"><label>Demand provinces<select multiple size="4" data-peace-control="demand" aria-label="Peace demanded provinces"></select></label><label>Offer provinces<select multiple size="4" data-peace-control="offer" aria-label="Peace offered provinces"></select></label></div>
-    <div class="society-selectors"><label>Demand weapons<input type="number" min="0" max="100" step="1" value="0" data-peace-control="demand-weapons" aria-label="Peace demanded weapons"></label><label>Offer weapons<input type="number" min="0" max="100" step="1" value="0" data-peace-control="offer-weapons" aria-label="Peace offered weapons"></label></div>
-    <div class="society-selectors"><label>Resource reparations<select data-peace-control="reparation-resource"><option value="">None</option>${REPARATION_RESOURCES.map((resource) => `<option value="${resource}">${resource}</option>`).join("")}</select></label><label>Units per ${REPARATION_INTERVAL}s<input type="number" min="1" max="10" step="1" value="3" data-peace-control="reparation-amount"></label></div>
-    <label><input type="checkbox" data-peace-control="puppet"> Install a puppet government in the opposing country</label>
-    <label><input type="checkbox" data-peace-control="partition"> Divide the remainder into two puppet governments</label>
-    ${hasPoliticalTurbulence(world) ? '<label><input type="checkbox" data-peace-control="local-subject"> Establish a local subject in the demanded provinces instead of annexing them</label>' : ""}
+    <p class="society-note">開戦時から両国に基本の講和条件があります。損害、占領、戦争疲弊、国内不安が受諾の判断に影響します。自ら条件を提示すると交渉は手動に切り替わります。</p>
+    <div class="society-selectors"><label>要求する州<select multiple size="4" data-peace-control="demand" aria-label="Peace demanded provinces"></select></label><label>譲渡する州<select multiple size="4" data-peace-control="offer" aria-label="Peace offered provinces"></select></label></div>
+    <div class="society-selectors"><label>要求する武器<input type="number" min="0" max="100" step="1" value="0" data-peace-control="demand-weapons" aria-label="Peace demanded 武器"></label><label>譲渡する武器<input type="number" min="0" max="100" step="1" value="0" data-peace-control="offer-weapons" aria-label="Peace offered 武器"></label></div>
+    <div class="society-selectors"><label>資源による賠償<select data-peace-control="reparation-resource"><option value="">なし</option>${REPARATION_RESOURCES.map((resource) => `<option value="${resource}">${resource}</option>`).join("")}</select></label><label>Units per ${REPARATION_INTERVAL}s<input type="number" min="1" max="10" step="1" value="3" data-peace-control="reparation-amount"></label></div>
+    <label><input type="checkbox" data-peace-control="puppet"> 相手国に傀儡政権を設置</label>
+    <label><input type="checkbox" data-peace-control="partition"> 残る領土を2つの傀儡政権に分割</label>
+    ${hasPoliticalTurbulence(world) ? '<label><input type="checkbox" data-peace-control="local-subject"> 要求した州を併合せず、現地の従属国を設立</label>' : ""}
     <p class="society-note" data-peace-view="puppet"></p>
     <p class="society-note" data-peace-view="governance"></p>
-    <label>Truce duration<select data-peace-control="truce" aria-label="Peace truce duration"><option value="300">5 minutes</option><option value="600">10 minutes</option><option value="900">15 minutes</option></select></label>
+    <label>休戦期間<select data-peace-control="truce" aria-label="Peace truce duration"><option value="300">5分</option><option value="600">10分</option><option value="900">15分</option></select></label>
     <p class="society-note" data-peace-view="preview"></p><div class="society-actions"><button type="button" data-peace-action="propose">講和条件を提示</button><button type="button" data-peace-action="accept">相手の条件を受諾</button><button type="button" data-peace-action="map">対象州を地図で確認</button></div>
-    <p class="society-note">Select provinces on either side with Ctrl / Command. Ceded territory must connect to existing territory or form a complete island. Ordinary cessions preserve remaining borders. Use partition terms to found a second government. Both signatories retain territory. Third-party occupations require a separate settlement. Resources and land change only when an offer is accepted; unrelated wars continue.</p></div></details>`;
+    <p class="society-note">Ctrl または Command キーで複数の州を選択できます。譲渡する領土は既存領に接するか、島全体を含む必要があります。分割条件で別の政府を設立できます。双方とも領土を残し、第三国の占領地は別途交渉します。条件の受諾時に資源と領土が移り、他の戦争は継続します。</p></div></details>`;
   const control = (name: string) => root.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-peace-control="${name}"]`)!;
   const view = (name: string) => root.querySelector<HTMLElement>(`[data-peace-view="${name}"]`)!;
   const editor = root.querySelector<HTMLElement>("[data-peace-editor]")!;
@@ -56,7 +56,7 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     const owner = getOwnerByMesoId(world).get(ids[0]);
     const provinces = owner ? getWholeProvinces(world, owner, ids) : null;
     return (provinces ? provinces.map((macro) => `Province ${macro.id.replace("macro-", "")}`)
-      : ids.map(districtName)).map(esc).join(", ") || "No territory";
+      : ids.map(districtName)).map(esc).join(", ") || "領土なし";
   };
   let partitionKey = "", cachedPartition: PuppetPartition | undefined;
   const read = (): PeaceTerms => {
@@ -76,8 +76,8 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
       localSubject: root.querySelector<HTMLInputElement>('[data-peace-control="local-subject"]')?.checked || undefined,
       partition: split ? cachedPartition ?? { capitalId: "" as MesoRegionId, districtIds: [] } : undefined };
   };
-  const summary = (offer: PeaceOffer) => `<article class="peace-offer"><strong>${esc(getNationName(world, offer.proposerId))}'s conditions</strong><p>Demands: ${describe(offer.terms.demandedRegionIds)} · ${offer.terms.demandedWeapons} weapons${offer.terms.resourceReparation
-    ? ` · ${offer.terms.resourceReparation.amount} ${esc(offer.terms.resourceReparation.resource)} every ${REPARATION_INTERVAL}s during the truce` : ""}</p><p>Offers: ${describe(offer.terms.offeredRegionIds)} · ${offer.terms.offeredWeapons} weapons</p>${offer.terms.partition ? `<p><strong>Two puppet governments</strong> · New capital at ${esc(districtName(offer.terms.partition.capitalId))} · ${offer.terms.partition.districtIds.length} districts in the new state</p>` : offer.terms.puppetTarget ? "<p><strong>Install a puppet government in the opposing country</strong></p>" : offer.terms.localSubject ? "<p><strong>Establish a local subject in the demanded provinces</strong></p>" : ""}<small>Truce ${offer.terms.truceSeconds / 60} min · ${offer.source === "opening" ? "Opening terms" : offer.source === "manual" ? "Manually proposed" : "Revised by government"}</small></article>`;
+  const summary = (offer: PeaceOffer) => `<article class="peace-offer"><strong>${esc(getNationName(world, offer.proposerId))}の講和条件</strong><p>要求：${describe(offer.terms.demandedRegionIds)} · ${offer.terms.demandedWeapons} 武器${offer.terms.resourceReparation
+    ? ` · ${offer.terms.resourceReparation.amount} ${esc(offer.terms.resourceReparation.resource)} every ${REPARATION_INTERVAL}s during the truce` : ""}</p><p>譲渡：${describe(offer.terms.offeredRegionIds)} · ${offer.terms.offeredWeapons} 武器</p>${offer.terms.partition ? `<p><strong>2つの傀儡政権</strong> · New capital at ${esc(districtName(offer.terms.partition.capitalId))} · ${offer.terms.partition.districtIds.length} districts in the new state</p>` : offer.terms.puppetTarget ? "<p><strong>相手国に傀儡政権を設置</strong></p>" : offer.terms.localSubject ? "<p><strong>Establish a local subject in the demanded provinces</strong></p>" : ""}<small>休戦 ${offer.terms.truceSeconds / 60} min · ${offer.source === "opening" ? "当初の条件" : offer.source === "manual" ? "手動で提示" : "政府が更新"}</small></article>`;
   const update = () => {
     const a = selected(), b = partner(), war = findWar(world.wars, a, b);
     const enabled = !!war && (war.cause === "player-declaration" || getWarDeclarationMode(world) === "diplomacy");
@@ -94,15 +94,15 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
       ? `<p><strong>${esc(getNationName(world, id))}</strong> is a subject of ${esc(getNationName(world, overlord))}. The overlord guarantees its defense and shares military access. Autonomy pressure ${Math.round(world.nations.find((nation) => nation.id === id)?.subjectGovernment?.autonomy ?? 0)}/100.</p>`
       : "";
     view("subject").innerHTML = describeSubject(a, ownOverlord) + (a !== b ? describeSubject(b, partnerOverlord) : "") +
-      (partnerOverlord === a ? '<button type="button" data-peace-action="release">Grant independence</button>' : "") +
-      (partnerOverlord === a && hasPoliticalTurbulence(world) ? `<p>Subject policy: ${subjectPolicy?.policy ?? "centralized"} · Stability ${Math.round(subjectPolicy?.stability ?? 100)}/100 · Cultural and religious alignment ${Math.round((subjectPolicy?.alignment ?? 0) * 100)}%</p>
-        <div class="society-actions"><button type="button" data-peace-action="subject-assimilation">Order assimilation</button><button type="button" data-peace-action="subject-autonomy">Protect regional autonomy</button>
-        <button type="button" data-peace-action="integrate" ${integrationIssue ? "disabled" : ""}>Integrate subject</button></div>
+      (partnerOverlord === a ? '<button type="button" data-peace-action="release">独立を認める</button>' : "") +
+      (partnerOverlord === a && hasPoliticalTurbulence(world) ? `<p>従属国の統治方針：${subjectPolicy?.policy ?? "centralized"}· 安定度 ${Math.round(subjectPolicy?.stability ?? 100)}/100· 文化・宗教の一致度 ${Math.round((subjectPolicy?.alignment ?? 0) * 100)}%</p>
+        <div class="society-actions"><button type="button" data-peace-action="subject-assimilation">同化政策を実施</button><button type="button" data-peace-action="subject-autonomy">地域の自治を保障</button>
+        <button type="button" data-peace-action="integrate" ${integrationIssue ? "disabled" : ""}>従属国を統合</button></div>
         ${integrationIssue ? `<p class="society-note">${esc(integrationIssue)}</p>` : ""}` : "");
     if (!enabled || !war) {
       const signed = [...(world.warNegotiations?.settlements ?? [])].reverse().find((item) =>
         (item.a === a && item.b === b) || (item.a === b && item.b === a));
-      view("outlook").textContent = signed ? `Peace signed · ${signed.terms.truceSeconds / 60}-minute truce. Domestic unrest: ${Math.round(getDomesticUnrest(world, a).pressure)}/100. ${world.wars.some((item) => item.nationAId === a || item.nationBId === a) ? "Other wars continue." : "The government can recover in peacetime."}` : getWarDeclarationMode(world) !== "diplomacy" ? "Enable diplomacy to negotiate peace conditions." : "Select a nation currently at war with the diplomatic partner to review peace conditions.";
+      view("outlook").textContent = signed ? `講和成立 · ${signed.terms.truceSeconds / 60}分間の休戦。 国内不安：${Math.round(getDomesticUnrest(world, a).pressure)}/100. ${world.wars.some((item) => item.nationAId === a || item.nationBId === a) ? "ほかの戦争は継続しています。" : "平時に入り、国内の立て直しが可能です。"}` : getWarDeclarationMode(world) !== "diplomacy" ? "講和交渉を行うには外交システムを有効にしてください。" : "講和条件を確認するには、交戦中の相手国を選んでください。";
       view("offers").innerHTML = signed ? summary({ proposerId: signed.proposerId, terms: signed.terms, source: "manual", revisedAtSlowTick: signed.atSlowTick, revision: 0 }) : "";
       key = ""; return;
     }
@@ -112,9 +112,9 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     const position = advantage > 0.15 ? "Favorable" : advantage < -0.15 ? "Unfavorable" : "Balanced";
     const direction = trend > 0.08 ? "improving" : trend < -0.08 ? "deteriorating" : "steady";
     const window = deadline <= 75 ? ` · Campaign window ~${Math.ceil(deadline)}s` : "";
-    view("outlook").textContent = `War outlook: ${position}, ${direction}${window} · Domestic unrest ${Math.round(unrest.pressure)}/100 · War fatigue ${Math.round(getWarFatigue(world, a, b))}/100 · Battle casualties ${Math.round(getWarCasualties(war, a)).toLocaleString()}. ${isFightOnGovernment(world, a) ? "Government favors fighting on despite unrest." : "Government weighs compromise against domestic danger."}`;
+    view("outlook").textContent = `戦況：${position}, ${direction}${window} · 国内不安 ${Math.round(unrest.pressure)}/100· 戦争疲弊 ${Math.round(getWarFatigue(world, a, b))}/100 · Battle casualties ${Math.round(getWarCasualties(war, a)).toLocaleString()}. ${isFightOnGovernment(world, a) ? "Government favors fighting on despite unrest." : "Government weighs compromise against domestic danger."}`;
     const incoming = assessPeaceOffer(world, a, b, opponent.terms);
-    view("offers").innerHTML = summary(own) + summary(opponent) + `<p class="society-note peace-assessment">Your government’s assessment of their terms: ${esc(incoming.reason)}</p>`;
+    view("offers").innerHTML = summary(own) + summary(opponent) + `<p class="society-note peace-assessment">相手の条件に対する自国の評価：${esc(incoming.reason)}</p>`;
     const automatic = control("automatic") as HTMLInputElement;
     automatic.disabled = getManualGovernmentId(world) === a;
     automatic.checked = !automatic.disabled && (negotiation.automatic.get(a) ?? true);
@@ -129,7 +129,7 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
           parcels.set(macro.id, macro.mesoRegionIds);
           const capital = macro.mesoRegionIds.some((regionId) => regions.get(regionId)?.building === "capital");
           const deposits = describeDeposits(macro.mesoRegionIds);
-          output.push(`<option value="${esc(macro.id)}">Province ${esc(macro.id.replace("macro-", ""))} · ${macro.mesoRegionIds.length} districts${capital ? " · Capital" : ""}${deposits ? ` · ${esc(deposits)}` : ""}</option>`);
+          output.push(`<option value="${esc(macro.id)}">州 ${esc(macro.id.replace("macro-", ""))} · ${macro.mesoRegionIds.length} districts${capital ? " · Capital" : ""}${deposits ? ` · ${esc(deposits)}` : ""}</option>`);
           if (!macro.mesoRegionIds.every((regionId) => current.has(regionId))) {
             for (const regionId of macro.mesoRegionIds.filter((item) => current.has(item))) {
               parcels.set(regionId, [regionId]);
@@ -159,7 +159,7 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     puppet.disabled = !puppet.checked && !!puppetIssue;
     const partition = control("partition") as HTMLInputElement;
     partition.disabled = !partition.checked && !!puppetIssue;
-    view("puppet").textContent = puppetIssue ?? "Puppet governments keep their remaining districts and receive protection. Partition requires the capital and 60% of the remaining districts to be occupied.";
+    view("puppet").textContent = puppetIssue ?? "傀儡政権は残る地区を保持し、保護を受けます。分割には、首都と残る地区の60%を占領する必要があります。";
     const terms = read(), issue = getPeaceTermsIssue(world, a, b, terms), assessment = assessPeaceOffer(world, b, a, terms);
     const regions = getMesoById(world);
     const districts = terms.demandedRegionIds;
@@ -174,7 +174,7 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
       terms.puppetTarget ? "Subjects without domestic steel or fuel may need aid. Large subjects can seek independence when the overlord is weak." : "",
     ].filter(Boolean).join(" ");
     const separateIssue = getSeparatePeaceIssue(world, a, b);
-    view("preview").textContent = separateIssue ?? (issue ? `Cannot publish: ${issue}` : `Opponent’s expected response to your draft: ${assessment.accepts ? "Acceptable under current conditions" : "Likely refusal"}. ${assessment.reason}`);
+    view("preview").textContent = separateIssue ?? (issue ? `条件を提示できません：${issue}` : `相手国の予想される回答：${assessment.accepts ? "現在の条件なら受諾の見込み" : "Likely refusal"}. ${assessment.reason}`);
     root.querySelector<HTMLButtonElement>('[data-peace-action="propose"]')!.disabled = !!issue;
     const accept = root.querySelector<HTMLButtonElement>('[data-peace-action="accept"]')!;
     accept.disabled = !!separateIssue || !!getPeaceTermsIssue(world, b, a, opponent.terms); accept.dataset.peaceRevision = String(opponent.revision);
@@ -193,7 +193,7 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     if (button.dataset.peaceAction === "map") { const map = getMapView(world), terms = read(); map.territoryPreviewIds = [...terms.demandedRegionIds, ...terms.offeredRegionIds, ...(terms.partition?.districtIds ?? [])]; map.revision++; return; }
     if (button.dataset.peaceAction === "release") {
       const released = releaseSubjectGovernment(world, a, b);
-      feedback(released ? "Independence granted. Shared military access has ended." : "The selected partner is no longer your subject.");
+      feedback(released ? "独立を認めました。軍事通行権の共有を終了しました。" : "相手国はすでに従属国ではありません。");
       update();
       return;
     }
@@ -201,7 +201,7 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
       const action = button.dataset.peaceAction;
       const success = action === "integrate" ? integrateSubjectGovernment(world, a, b) :
         getSubjectOverlord(world, b) === a && setGovernancePolicy(world, a, b, action === "subject-assimilation" ? "assimilation" : "autonomy");
-      feedback(success ? action === "integrate" ? "Subject integrated." : "Subject governance policy updated." : "The subject cannot take this action now.");
+      feedback(success ? action === "integrate" ? "従属国を統合しました。" : "従属国の統治政策を変更しました。" : "現在は従属国に対してこの操作を行えません。");
       update();
       return;
     }
@@ -213,7 +213,7 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
       update();
       return;
     }
-    feedback(success ? button.dataset.peaceAction === "accept" ? "Peace signed. Agreed territory, reparations and the truce are in effect." : "Peace conditions published. The other government will reevaluate them as circumstances change." : "The settlement is no longer valid. Review territory, resources and the current war."); update();
+    feedback(success ? button.dataset.peaceAction === "accept" ? "講和が成立し、領土、賠償、休戦の合意が発効しました。" : "講和条件を提示しました。相手国は情勢に応じて判断します。" : "この合意はすでに無効です。領土、資源、戦況を確認してください。"); update();
   });
   return { update };
 }

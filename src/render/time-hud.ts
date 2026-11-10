@@ -38,12 +38,12 @@ export function attachTimeHud(renderer: Renderer): TimeHud {
 
   const update = (time: SimTime, clock: SimClock): void => {
     const nextText = [
-      `Time ${formatClock(time.elapsedMs)}`,
-      clock.paused ? "Paused" : `Speed x${formatSpeed(getSpeedMultiplier(clock))}`,
-      "Keys [ ] or 1-8",
-      "Hold Space: Region / naval orders",
-      "E: Diplomacy · C: Claims · F: Debug",
-      "D: Debug settings · P: Pause",
+      `時刻 ${formatClock(time.elapsedMs)}`,
+      clock.paused ? "一時停止中" : `速度 ×${formatSpeed(getSpeedMultiplier(clock))}`,
+      "速度変更：[ ] または 1〜8",
+      "Space 長押し：地区情報・海軍命令",
+      "E：外交 · C：領土請求 · F：デバッグ",
+      "D：デバッグ設定 · P：一時停止",
     ].join("\n");
     if (nextText === lastText) {
       return;

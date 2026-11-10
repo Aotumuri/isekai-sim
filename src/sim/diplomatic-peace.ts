@@ -22,7 +22,7 @@ export function getWarFatigue(world: WorldState, a: NationId, b: NationId): numb
 }
 
 /** Status-quo peace: occupied land and embarked troops are returned by agreement. */
-export function concludePeace(world: WorldState, a: NationId, b: NationId, reason = "negotiated settlement"): boolean {
+export function concludePeace(world: WorldState, a: NationId, b: NationId, reason = "交渉による合意"): boolean {
   if (getWarDeclarationMode(world) !== "diplomacy") return false;
   const war = findWar(world.wars, a, b);
   if (!war) return false;
@@ -65,7 +65,7 @@ export function concludePeace(world: WorldState, a: NationId, b: NationId, reaso
   world.warNegotiations?.active.delete(warFatigueKey(war));
   relieveUnrestAfterPeace(world, a); relieveUnrestAfterPeace(world, b);
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [a, b],
-    message: `${a} and ${b} signed peace (${reason}); occupations and expeditionary troops returned.` });
+    message: `${a}と${b}が講和し、占領地と派遣部隊が返還されました（${reason}）。` });
   return true;
 }
 

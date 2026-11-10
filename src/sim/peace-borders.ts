@@ -37,14 +37,14 @@ export function getPeaceBorderIssue(world: WorldState, legs: TerritoryTransfer[]
     // Existing islands and enclaves are permitted, but no original land component may be cut apart.
     for (const group of connectedRegionGroups(original, neighbors)) {
       const remainingGroups = new Set(group.filter((id) => final.has(id)).map((id) => groupById.get(id)));
-      if (remainingGroups.size > 1) return "This settlement would split a country's remaining territory. Choose a different border.";
+      if (remainingGroups.size > 1) return "この合意では残る領土が分断されます。別の境界線を選んでください。";
     }
     for (const group of groups) {
       if (group.some((id) => original.has(id))) continue;
       // A complete island can change hands overseas. A resource pocket or isolated coastal
       // district on someone else's landmass cannot: its land boundary would touch other land.
       if (group.some((id) => (neighbors.get(id) ?? []).some((next) => !final.has(next)))) {
-        return "Ceded districts must connect to the receiving country's territory, or form a complete island. Isolated enclaves are not allowed.";
+        return "譲渡する地区は受け取る国の領土に接するか、島全体を構成する必要があります。飛び地は認められません。";
       }
     }
   }

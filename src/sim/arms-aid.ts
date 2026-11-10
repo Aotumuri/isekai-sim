@@ -53,7 +53,7 @@ export function sendArmsAid(world: WorldState, donorId: NationId, recipientId: N
   state.shipments.push({ id: `aid-${state.nextShipmentNumber++}`, donorId, recipientId, weapons,
     design: getNationalDesign(world, donorId, family), route, arrivesAtSlowTick: world.time.slowTick + Math.max(3, Math.ceil(route.regionIds.length * 1.5)), status: "in-transit" });
   recordSimulationEvent(world, { category: "aid", nationIds: [donorId, recipientId],
-    message: `${donorId} sent ${weapons} weapons to ${recipientId}.` });
+    message: `${donorId}が${recipientId}へ武器${weapons}を送りました。` });
   return true;
 }
 
@@ -83,7 +83,7 @@ export function updateArmsAid(world: WorldState): void {
         !canSupportNation(world, shipment.donorId, shipment.recipientId) || !isTradeRouteOpen(world, shipment.donorId, shipment.recipientId, shipment.route)) {
         if (donor) changeResource(donor, "weapons", shipment.weapons);
         shipment.status = "returned"; state.returned += 1;
-        recordSimulationEvent(world, { category: "aid", nationIds: [shipment.donorId, shipment.recipientId], message: `${shipment.id} returned: aid route or relations unavailable.` });
+        recordSimulationEvent(world, { category: "aid", nationIds: [shipment.donorId, shipment.recipientId], message: `${shipment.id}は輸送経路または外交関係の悪化により帰還しました。` });
       } else if (world.time.slowTick >= shipment.arrivesAtSlowTick) {
         changeResource(recipient, "weapons", shipment.weapons);
         fieldImportedEquipment(world, shipment);
@@ -98,7 +98,7 @@ export function updateArmsAid(world: WorldState): void {
           hostileRelation.grievance = Math.min(100, hostileRelation.grievance + 2);
         }
         recordSimulationEvent(world, { category: "aid", nationIds: [donor.id, recipient.id],
-          message: `${shipment.id} delivered; ${recipient.id} received weapons and access to generation ${shipment.design.generation} equipment.` });
+          message: `${shipment.id}が到着し、${recipient.id}が武器と第${shipment.design.generation}世代の装備を利用できるようになりました。` });
       }
     }
     if (state.shipments.length > 100) state.shipments = [...state.shipments.filter((shipment) => shipment.status !== "in-transit").slice(-68), ...state.shipments.filter((shipment) => shipment.status === "in-transit")];

@@ -69,15 +69,15 @@ const DEFAULT_DEBUG_VISIBILITY: DebugVisibility = {
 };
 
 const DEBUG_CATEGORY_LABELS: ReadonlyArray<{ key: DebugCategory; label: string }> = [
-  { key: "fronts", label: "Front lines & sectors" },
-  { key: "supplyMarkers", label: "Supply markers" },
-  { key: "maritimeSupply", label: "Maritime supply links" },
-  { key: "navalMissions", label: "Naval missions" },
-  { key: "bridgeheadCampaigns", label: "Bridgehead campaigns" },
-  { key: "amphibiousCapabilities", label: "Amphibious capability" },
-  { key: "amphibiousOperations", label: "Amphibious operations" },
-  { key: "amphibiousRejections", label: "Launch rejections" },
-  { key: "strategicSummary", label: "Strategic summary" },
+  { key: "fronts", label: "前線と区画" },
+  { key: "supplyMarkers", label: "補給マーカー" },
+  { key: "maritimeSupply", label: "海上補給経路" },
+  { key: "navalMissions", label: "海軍任務" },
+  { key: "bridgeheadCampaigns", label: "橋頭堡作戦" },
+  { key: "amphibiousCapabilities", label: "上陸能力" },
+  { key: "amphibiousOperations", label: "上陸作戦" },
+  { key: "amphibiousRejections", label: "出撃見送り" },
+  { key: "strategicSummary", label: "戦略概要" },
 ];
 
 const FRONT_COLORS = [
@@ -435,12 +435,12 @@ function attachDebugConfigPanel(
   content.on("pointerdown", (event) => event.stopPropagation());
   content.on("pointertap", (event) => event.stopPropagation());
   const background = new Graphics();
-  const title = new Text("Debug display settings", new TextStyle({
+  const title = new Text("デバッグ表示設定", new TextStyle({
     fontFamily: FONT_FAMILY, fontSize: 13, fontWeight: "600", fill: CONFIG_ACCENT,
   }));
   title.resolution = renderer.app.renderer.resolution;
   title.position.set(10, 8);
-  const hint = new Text("Click a category to toggle it", new TextStyle({
+  const hint = new Text("項目をクリックして表示を切り替えます", new TextStyle({
     fontFamily: FONT_FAMILY, fontSize: 10, fill: CONFIG_MUTED,
   }));
   hint.resolution = renderer.app.renderer.resolution;
@@ -472,7 +472,7 @@ function attachDebugConfigPanel(
   tabBg.lineStyle(1, CONFIG_BORDER, 0.95);
   tabBg.drawRoundedRect(0, 0, CONFIG_TAB_WIDTH, CONFIG_TAB_HEIGHT, 5);
   tabBg.endFill();
-  const tabText = new Text("DEBUG", new TextStyle({
+  const tabText = new Text("デバッグ", new TextStyle({
     fontFamily: FONT_FAMILY, fontSize: 10, fontWeight: "600", fill: CONFIG_TEXT,
   }));
   tabText.resolution = renderer.app.renderer.resolution;
@@ -563,7 +563,7 @@ export function formatFrontLabel(
   ),
 ): string {
   const lines = [
-    `FRONT ${front.id}`,
+    `前線 ${front.id}`,
     `extent ${front.borderLength} edges | ${front.sideA.borderRegionIds.length}+${front.sideB.borderRegionIds.length} regions`,
     ...formatNationSide(world, front, front.nationAId),
     ...formatNationSide(world, front, front.nationBId),
@@ -626,7 +626,7 @@ export function formatSectorLabel(
   selected = false,
 ): string {
   const lines = [
-    `SECTOR ${sector.id}`,
+    `区画 ${sector.id}`,
     `front ${sector.physicalFrontId} | frontline ${sector.borderLength} edges`,
     ...formatNationSide(world, sector, sector.nationAId),
     ...formatNationSide(world, sector, sector.nationBId),
@@ -661,7 +661,7 @@ function appendOperationalDetails(
       const supply = getNationSupplyAssessment(world, nationId);
       if (supply) {
         lines.push(
-          `SUPPLY ${nationId}`,
+          `補給 ${nationId}`,
           `  sources ${supply.supplySourceRegionIds.join(", ") || "none"}`,
           `  supplied ${supply.suppliedComponentCount} | isolated ${supply.isolatedComponentCount}`,
         );
@@ -694,7 +694,7 @@ function appendOperationalDetails(
           .slice(0, 6)) {
           const effect = getUnitIsolationEffect(world, unit);
           lines.push(
-            `ISOLATION ${unit.id} | ${effect.stage.toUpperCase()}`,
+            `孤立 ${unit.id} | ${effect.stage.toUpperCase()}`,
             `  isolation age ${effect.age} ticks | passive decay ${effect.decayActive ? "ACTIVE" : "OFF"}`,
             `  organization ${unit.org.toFixed(3)} | decay/tick -${isolationSettings.organizationDecayPerSlowTick.toFixed(4)} | floor ${isolationSettings.organizationFloor.toFixed(2)}`,
             "  recovery BLOCKED",
@@ -704,7 +704,7 @@ function appendOperationalDetails(
           .filter((candidate) => candidate.nationId === nationId)
           .slice(0, 8)) {
           lines.push(
-            `PRODUCTION ${diagnostic.regionId}`,
+            `生産 ${diagnostic.regionId}`,
             diagnostic.supplyStatus === "supplied"
               ? "  SUPPLIED"
               : "  BLOCKED (Isolation)",
@@ -729,7 +729,7 @@ function appendOperationalDetails(
           getUnitEquipmentFulfillment(unit) >= readySettings.readyEquipmentRatio;
         const readyReason = organizationReady ? "readiness" : "organization";
         lines.push(
-          `REORGANIZATION ${plan.unitId} | ${plan.phase.toUpperCase()}`,
+          `再編 ${plan.unitId} | ${plan.phase.toUpperCase()}`,
           `  SUPPLY ${(plan.supplyStatus ?? "not-evaluated").toUpperCase()} | isolated ${liveIsolationDuration} ticks`,
           `  org ${((unit?.org ?? 0) * 100).toFixed(0)}% | recovery ${plan.supplyStatus === "isolated" ? "BLOCKED" : "ACTIVE"}`,
           `  org denied +${plan.organizationDeniedByIsolation.toFixed(3)}`,
@@ -755,10 +755,10 @@ function appendOperationalDetails(
       const articulation = corridor ? topology?.articulationRegions.find((item) => item.regionId === corridor.regionId) : undefined;
       if (component) {
         lines.push(
-          `TOPOLOGY ${nationId} -> ${enemyId}`,
+          `戦線構造 ${nationId} -> ${enemyId}`,
           `  component ${component.id} | regions ${component.regionCount} | strength ${formatStrength(component.enemyStrength)}`,
           `  front contacts ${component.frontlineContactCount} | rear exits ${collapseOpportunity?.exitCount ?? component.exitCount}`,
-          `COLLAPSE ${collapseOpportunity ? collapseOpportunity.score.toFixed(0) : "none"} | ${collapseOpportunity?.reasonFlags[0] ?? "coherent-front"}`,
+          `崩壊 ${collapseOpportunity ? collapseOpportunity.score.toFixed(0) : "none"} | ${collapseOpportunity?.reasonFlags[0] ?? "coherent-front"}`,
           `  reasons ${collapseOpportunity?.reasonFlags.join(", ") || "none"}`,
           ...(articulation ? [
             `  articulation ${articulation.regionId} | affected ${articulation.affectedRegionCount} regions`,
@@ -770,7 +770,7 @@ function appendOperationalDetails(
         .filter((item) => item.attackerNationId === nationId && item.sectorId === front.id)
         .slice(0, 4)) {
         lines.push(
-          `SUPPLY CUTOFF ${cutoff.targetRegionId} | ${cutoff.tacticalFeasibility ? "FEASIBLE" : "BLOCKED"}`,
+          `補給 CUTOFF ${cutoff.targetRegionId} | ${cutoff.tacticalFeasibility ? "FEASIBLE" : "BLOCKED"}`,
           `  predicted ${formatStrength(cutoff.affectedStrength)} | ${cutoff.affectedUnitCount} units | ${cutoff.affectedRegionCount} regions`,
           `  cities ${cutoff.affectedCities} | ports ${cutoff.affectedPorts} | component ${cutoff.affectedComponentIds.join(",")}`,
           `  source ${cutoff.sourceKind} | score ${cutoff.score.toFixed(1)} | reasons ${cutoff.reasonFlags.join(", ")}`,
@@ -780,7 +780,7 @@ function appendOperationalDetails(
         .filter((item) => item.nationId === nationId && item.sectorId === front.id)
         .slice(0, 3)) {
         lines.push(
-          `SUPPLY DEFENSE ${risk.regionId} | ${risk.status.toUpperCase()}`,
+          `補給 DEFENSE ${risk.regionId} | ${risk.status.toUpperCase()}`,
           `  at risk ${formatStrength(risk.threatenedStrength)} | ${risk.threatenedUnits} units | ${risk.threatenedRegions} regions`,
           `  cities ${risk.threatenedCities} | ports ${risk.threatenedPorts} | source ${risk.supplySourceType}`,
           `  defense ${formatStrength(risk.currentDefenderStrength)} / ${formatStrength(risk.requiredDefenseStrength)} | alternate routes accounted by shared cutoff analysis`,
@@ -791,7 +791,7 @@ function appendOperationalDetails(
         .filter((item) => item.nationId === nationId && item.sectorId === front.id)
         .slice(0, 2)) {
         lines.push(
-          `SUPPLY RELIEF ${relief.isolatedComponentId} | ${relief.status.toUpperCase()}`,
+          `補給 RELIEF ${relief.isolatedComponentId} | ${relief.status.toUpperCase()}`,
           `  route ${relief.routeType} | target ${relief.primaryReconnectionRegion} | score ${relief.score.toFixed(1)}`,
           `  expected ${formatStrength(relief.expectedRestoredStrength)} / ${relief.expectedRestoredUnits} units | outside ${relief.outsideForceUnitIds.length} | inside ${relief.insideForceUnitIds.length}`,
           `  restored ${formatStrength(relief.actualRestoredStrength)} / ${relief.actualRestoredUnits} units | stable ${relief.stableSinceTick === null ? "pending" : Math.max(0, world.time.fastTick - relief.stableSinceTick)}`,
@@ -801,7 +801,7 @@ function appendOperationalDetails(
         const risk = pocket.containmentActual < pocket.containmentRequired ? "HIGH"
           : pocket.containmentActual < pocket.containmentRequired * 1.25 ? "MEDIUM" : "LOW";
         lines.push(
-          `POCKET ${pocket.id}`,
+          `包囲 ${pocket.id}`,
           `  status ${pocket.status.toUpperCase()} | regions ${pocket.regionIds.length} | strength ${formatStrength(pocket.enemyStrength)} | cities ${pocket.cities}`,
           `  rear exits 0 | lifetime ${world.time.fastTick - pocket.createdTick}`,
           `  containment required ${formatStrength(pocket.containmentRequired)} | actual ${formatStrength(pocket.containmentActual)}`,
@@ -843,11 +843,11 @@ function appendOperationalDetails(
           ? operation.readinessCompletion
           : operation ? 1 : 0;
         lines.push(
-          `AI STATUS ${formatInactivityStatus(stalled.inactivityCategory)} | ${formatInactivityStatus(stalled.inactivityReason)}`,
+          `AI状態 ${formatInactivityStatus(stalled.inactivityCategory)} | ${formatInactivityStatus(stalled.inactivityReason)}`,
           `  next evaluation tick ${stalled.nextEvaluationTick}`,
-          `STALEMATE ${stalled.staticTicks} slow ticks | pressure ${stalled.pressure.toFixed(0)}${focused ? " | SCHWERPUNKT" : ""}`,
+          `膠着 ${stalled.staticTicks} slow ticks | pressure ${stalled.pressure.toFixed(0)}${focused ? " | SCHWERPUNKT" : ""}`,
           `  reasons ${stalled.reasonFlags.join(", ") || "none"}`,
-          `STRATEGIC PROGRESS ${progress?.score.toFixed(0) ?? "0"} | reset ${progress?.resetsPressure ? "YES" : "NO"}`,
+          `戦略進捗 ${progress?.score.toFixed(0) ?? "0"} | reset ${progress?.resetsPressure ? "YES" : "NO"}`,
           `  reasons ${progress?.reasonFlags.join(", ") || "none"} | last ${progress?.lastProgressReasons.join(", ") || "none"} @${progress?.lastProgressTick ?? "-"}`,
           `  displacement ${progress?.frontlineDisplacement ?? 0} | net gain ${progress?.netTerritorialGain ?? 0} | breakthrough persistence ${progress?.breakthroughPersistence ?? 0}`,
           `  capital approach ${progress?.capitalApproach ?? 0} | pressure reset ${progress?.resetsPressure ? "YES" : "NO"}`,
@@ -919,7 +919,7 @@ function appendOperationalDetails(
         ? Math.min(...candidate.manifest.map((assignment) => assignment.arrivalSlack))
         : null;
       lines.push(
-        `CANDIDATE ${nationId} ${candidate.feasible ? "FEASIBLE" : "REJECTED"}`,
+        `候補 ${nationId} ${candidate.feasible ? "FEASIBLE" : "REJECTED"}`,
         `  target ${candidate.primaryTargetRegionId} | manifest ${candidate.manifest.length} | strength ${formatStrength(committedStrength)}`,
         `  arrival slack min ${minimumArrivalSlack ?? "-"}t | evaluated @${candidate.evaluatedAtTick} (${candidate.evaluationCount}x)`,
         `  reasons ${candidate.rejectionReasons.join(", ") || "none"}`,
@@ -935,7 +935,7 @@ function appendOperationalDetails(
         return sum + (unit ? getUnitCombatStrength(unit) : 0);
       }, 0);
       lines.push(
-        `COLLAPSE ADVANCE ${collapse.enemyNationId}`,
+        `崩壊 ADVANCE ${collapse.enemyNationId}`,
         `  phase ${collapse.phase.toUpperCase()} | units ${collapse.unitIds.length} | strength ${formatStrength(strength)}`,
         `  target ${collapse.currentTargetRegionId} | depth ${collapse.targetRegionIds.length}/${WORLD_BALANCE.war.landFront.collapseAdvance.maximumDepth}`,
         `  component ${collapse.topologyComponentId} | topology ${collapse.topologyScore.toFixed(0)}`,
@@ -1208,7 +1208,7 @@ export function formatBridgeheadCampaign(
 ): string {
   const age = Math.max(0, world.time.fastTick - campaign.createdAtTick);
   return [
-    `BRIDGEHEAD ${campaign.status.toUpperCase()} | supply ${campaign.supplyStatus}`,
+    `橋頭堡 ${campaign.status.toUpperCase()} | supply ${campaign.supplyStatus}`,
     `strength ${campaign.currentStrength.toFixed(0)}/${campaign.desiredStrength.toFixed(0)} | deficit ${campaign.reinforcementDeficit.toFixed(0)}`,
     `wave ${campaign.currentWave} (${campaign.completedWaves} complete) | priority ${campaign.campaignPriority} | expansion ${campaign.expansionScore}`,
     `objective ${campaign.operationalObjectiveId ?? "secure bridgehead"} | captures R${campaign.regionsCaptured} C${campaign.citiesCaptured} P${campaign.portsCaptured} | age ${age}`,
@@ -1277,7 +1277,7 @@ export function formatAmphibiousLaunchFeasibility(
   feasibility: WorldState["amphibiousOperations"]["operations"][number]["launchFeasibility"],
 ): string {
   return [
-    `AMPHIBIOUS LAUNCH ${feasibility.accepted ? "FEASIBLE" : "REJECTED"}`,
+    `上陸部隊の出撃 ${feasibility.accepted ? "FEASIBLE" : "REJECTED"}`,
     "fleet assembled",
     `embarkation ${feasibility.estimatedEmbarkationTicks} ticks`,
     `voyage ${feasibility.estimatedVoyageTicks} ticks`,
@@ -1292,13 +1292,13 @@ export function formatAmphibiousLaunchFeasibility(
 export function formatNavalMission(world: WorldState, shipId: string): string {
   const mission = world.supplyAssessment.navalStrategy.missions.find((item) =>
     item.shipIds.includes(shipId as never));
-  if (!mission) return `NAVAL MISSION\nship ${shipId}\nmission UNASSIGNED`;
+  if (!mission) return `海軍任務\nship ${shipId}\nmission UNASSIGNED`;
   const target = mission.targetConvoyId ? `convoy ${mission.targetConvoyId}`
     : mission.targetLinkId ? `link ${mission.targetLinkId}`
       : mission.targetPortId ? `port ${mission.targetPortId}`
         : mission.targetCoastId ? `coast ${mission.targetCoastId}`
           : mission.targetShipId ? `ship ${mission.targetShipId}` : "none";
-  return ["NAVAL MISSION", `ship ${shipId}`, `mission ${mission.type}`, `mission id ${mission.id}`,
+  return ["海軍任務", `ship ${shipId}`, `mission ${mission.type}`, `mission id ${mission.id}`,
     `priority ${mission.priority.toFixed(1)}`, `target ${target}`,
     `reason ${mission.reasonFlags.join(", ") || "none"}`,
     `commitment ${Math.max(0, world.time.fastTick - mission.createdTick)} ticks`].join("\n");
@@ -1310,7 +1310,7 @@ export function formatNavalStrategySummary(world: WorldState, nationId: string):
     .find((assessment) => assessment.nationId === nationId)?.desiredForce;
   const count = (type: typeof missions[number]["type"]): number => missions
     .filter((mission) => mission.type === type).reduce((sum, mission) => sum + mission.shipIds.length, 0);
-  return ["NAVAL AI", `CombatShips ${force?.currentCombatShips ?? missions.reduce((sum, mission) => sum + mission.shipIds.length, 0)} / desired ${force?.desiredCombatShips ?? 0}`,
+  return ["海軍AI", `CombatShips ${force?.currentCombatShips ?? missions.reduce((sum, mission) => sum + mission.shipIds.length, 0)} / desired ${force?.desiredCombatShips ?? 0}`,
     `Deficit ${force?.deficit ?? 0}`,
     `Reasons ${force?.reasons.join(", ") || "none"}`,
     `Production ${force && force.deficit > 0 && force.hasUsablePort ? "CombatShip requested" : "none"}`,
@@ -1451,7 +1451,7 @@ export function formatMaritimeSupplyLink(
     `remote: units ${demand?.remoteUnitCount ?? 0}`,
     `  strength ${(demand?.remoteStrength ?? destination?.strength ?? 0).toFixed(1)}`,
     `route length: ${Math.max(0, link.routeRegionIds.length - 1)}`,
-    `SUPPLY: ${destination?.supplied ? "CONNECTED" : "ISOLATED"}`,
+    `補給： ${destination?.supplied ? "CONNECTED" : "ISOLATED"}`,
     ...(protection.skippedReason ? [`escort reason: ${protection.skippedReason}`] : []),
     ...(!link.active ? [`reason: ${link.reason ?? "route-invalid"}`] : []),
   ].join("\n");

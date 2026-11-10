@@ -29,7 +29,7 @@ function scene(ownership: string, edges: number[][]) {
 test("peace rejects an isolated resource district even when occupied by the recipient", () => {
   const { world, a, b, id, leg } = scene("abbbb", [[0, 1], [1, 2], [2, 3], [3, 4], [1, 3]]);
   world.occupation.mesoById.set(id(2), a.id);
-  assert.match(getPeaceBorderIssue(world, leg(2))!, /enclaves/);
+  assert.match(getPeaceBorderIssue(world, leg(2))!, /飛び地/);
   assert(getPeaceTermsIssue(world, a.id, b.id, { ...whitePeaceTerms(), demandedRegionIds: [id(2)] }));
   assert(!proposePeaceTerms(world, a.id, b.id, { ...whitePeaceTerms(), demandedRegionIds: [id(2)] }));
 });
@@ -39,7 +39,7 @@ test("border districts and connected corridors can be ceded together", () => {
 });
 test("peace cannot sever the donor's narrow land corridor", () => {
   const { world, leg } = scene("abbb", [[0, 2], [1, 2], [2, 3]]);
-  assert.match(getPeaceBorderIssue(world, leg(2))!, /split/);
+  assert.match(getPeaceBorderIssue(world, leg(2))!, /分断/);
 });
 test("pre-existing disconnected holdings do not prevent a sensible border settlement", () => {
   const { world, leg } = scene("abbbab", [[0, 1], [1, 2], [2, 3], [4, 5]]);
@@ -47,7 +47,7 @@ test("pre-existing disconnected holdings do not prevent a sensible border settle
 });
 test("a complete overseas island is allowed, but one coastal district of it is not", () => {
   const { world, leg } = scene("abbbb", [[0, 1], [1, 2], [3, 4]]);
-  assert.match(getPeaceBorderIssue(world, leg(3))!, /enclaves/);
+  assert.match(getPeaceBorderIssue(world, leg(3))!, /飛び地/);
   assert.equal(getPeaceBorderIssue(world, leg(3, 4)), null);
 });
 test("reciprocal exchanges use the final border including the incoming connection", () => {
@@ -56,7 +56,7 @@ test("reciprocal exchanges use the final border including the incoming connectio
 });
 test("losing a whole old component cannot hide splitting another component", () => {
   const { world, leg } = scene("abbbb", [[0, 2], [0, 4], [1, 2], [2, 3]]);
-  assert.match(getPeaceBorderIssue(world, leg(2, 4))!, /split/);
+  assert.match(getPeaceBorderIssue(world, leg(2, 4))!, /分断/);
 });
 test("acceptance rechecks changed borders without transferring land, money or ending war", () => {
   const { world, a, b, c, id } = scene("aabbb", [[0, 1], [1, 2], [2, 3], [3, 4]]);
@@ -84,7 +84,7 @@ test("individually valid cessions cannot bypass validation of the combined excha
   const offer = { from: a.id, to: b.id, regionIds: [id(1)] };
   assert.equal(getPeaceBorderIssue(world, leg(2)), null);
   assert.equal(getPeaceBorderIssue(world, [offer]), null);
-  assert.match(getPeaceBorderIssue(world, [...leg(2), offer])!, /enclaves/);
+  assert.match(getPeaceBorderIssue(world, [...leg(2), offer])!, /飛び地/);
 });
 
 test("surrender grows contiguous shares even when both victors occupied alternating provinces", () => {

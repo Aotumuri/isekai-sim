@@ -20,6 +20,6 @@ export function expandGrainStorage(world: WorldState, id: NationId): boolean {
   changeResource(nation, "steel", -cost.steel);
   nation.food.storageLevel = level + 1;
   recordSimulationEvent(world, { category: "politics", nationIds: [id],
-    message: `${id} expanded its strategic grain reserve capacity.` });
+    message: `${id}が戦略穀物備蓄を拡張しました。` });
   return true;
 }

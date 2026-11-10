@@ -1,3 +1,5 @@
+import { LANDING_PHASE_LABELS } from "../render/japanese-labels";
+import type { AmphibiousCapabilityDemand } from "../sim/amphibious";
 import { cancelPlayerLanding, queuePlayerLanding } from "../sim/amphibious";
 import { getPlayerNation } from "../sim/player-nation";
 import type { WorldState } from "../sim/world-state";
@@ -55,7 +57,7 @@ export function attachPlayerLandingControls(
     key = next;
     list.replaceChildren(...plans.map(({ demand, operation }) => {
       const item = document.createElement("li");
-      const state = operation?.phase ?? demand.waitingReason ?? demand.state;
+      const state = operation ? LANDING_PHASE_LABELS[operation.phase] : landingPreparationLabel(demand.state);
       item.textContent = `${demand.departurePortId} → ${demand.destinationPortId} · ${demand.playerPlan?.unitCount} 部隊 · ${state} `;
       if (!operation && demand.state !== "expired") {
         const cancel = document.createElement("button");
@@ -67,4 +69,15 @@ export function attachPlayerLandingControls(
       return item;
     }));
   };
+}
+
+function landingPreparationLabel(state: AmphibiousCapabilityDemand["state"]): string {
+  switch (state) {
+    case "waiting-transport": return "輸送船待ち";
+    case "waiting-escort": return "護衛艦待ち";
+    case "waiting-landing-force": return "上陸部隊待ち";
+    case "ready": return "出撃可能";
+    case "expired": return "終了";
+    default: return "集結中";
+  }
 }

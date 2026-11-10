@@ -39,6 +39,6 @@ export function updateBorderIncidents(world: WorldState): void {
     relation.grievance = Math.min(100, relation.grievance + 13);
     relation.opinion = Math.max(-100, relation.opinion - 12);
     recordSimulationEvent(world, { category: "military", nationIds: [a, b],
-      message: `Troops from ${a} and ${b} confronted each other on their border. Diplomatic tension rose.` });
+      message: `${a}と${b}の部隊が国境で対峙し、外交上の緊張が高まりました。` });
   }
 }

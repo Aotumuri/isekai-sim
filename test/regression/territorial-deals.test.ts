@@ -55,7 +55,7 @@ test("AI values resources, attachment and capitals; gifts can be accepted and em
 test("an exchange cannot create a new enclave even if both parties agree", () => {
   const { world, a, b } = scene();
   const detached = [...getOwnerByMesoId(world)].find(([id, owner]) => owner === a &&
-    getPeaceBorderIssue(world, [{ from: a, to: b, regionIds: [id] }])?.includes("enclaves"));
+    getPeaceBorderIssue(world, [{ from: a, to: b, regionIds: [id] }])?.includes("飛び地"));
   assert.ok(detached);
   assert.equal(proposeTerritorialExchange(world, a, b, [detached[0]], []), null);
   assert.equal(getDiplomacyState(world).influenceByNationId.get(a), 100);

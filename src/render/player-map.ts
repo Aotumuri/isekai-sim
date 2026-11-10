@@ -232,7 +232,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
         const faction = getNationFaction(world, anchor.nationId);
         const subject = getSubjectOverlord(world, anchor.nationId);
         const name = getNationName(world, anchor.nationId, "short");
-        const text = (subject ? `${SUBJECT_MAP_MARKER} ${name}` : name) + (view.mode === "factions" ? `\n${faction?.name ?? "Non-aligned"}` : "");
+        const text = (subject ? `${SUBJECT_MAP_MARKER} ${name}` : name) + (view.mode === "factions" ? `\n${faction?.name ?? "無所属"}` : "");
         const label = new Text(text, new TextStyle({ fontFamily: "Georgia, serif", fontSize: anchor.primary ? Math.min(22, 13 + Math.sqrt(anchor.regionCount) * 0.8) : 12,
           fontWeight: "600", fill: 0xf4f5ee, align: "center", stroke: 0x132237, strokeThickness: 3, letterSpacing: 0.7, dropShadow: true, dropShadowAlpha: 0.35, dropShadowDistance: 1 }));
         label.anchor.set(0.5);
