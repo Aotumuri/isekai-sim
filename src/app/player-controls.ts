@@ -1,3 +1,4 @@
+import { attachPlayerDiplomacyControls } from "./player-diplomacy-controls";
 import { isNationActive } from "../sim/nation-active";
 import { getNationName } from "../sim/nation-identity";
 import { enterPlayerNation, getPlayerNation, leavePlayerNation } from "../sim/player-nation";
@@ -13,6 +14,7 @@ export function attachPlayerControls(root: HTMLElement, world: WorldState): () =
     <button type="button" data-leave hidden>観戦に戻る</button>
     <p role="status"></p>`;
   root.append(panel);
+  const updateDiplomacy = attachPlayerDiplomacyControls(panel, world);
   const country = panel.querySelector<HTMLSelectElement>("[data-country]")!;
   const enter = panel.querySelector<HTMLButtonElement>("[data-enter]")!;
   const leave = panel.querySelector<HTMLButtonElement>("[data-leave]")!;
@@ -20,6 +22,7 @@ export function attachPlayerControls(root: HTMLElement, world: WorldState): () =
   let roster = "";
   let mapSelection = getMapView(world).selectedNationId;
   const update = () => {
+    updateDiplomacy();
     const player = getPlayerNation(world);
     const nations = world.nations.filter(isNationActive);
     const names = nations.map((nation) => getNationName(world, nation.id));

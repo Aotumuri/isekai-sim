@@ -1,3 +1,4 @@
+import { getPlayerNation } from "./player-nation";
 import { getCrisisDeploymentReadiness } from "./crisis-deployment";
 import { getNationalTerritorialValue, getTerritorialValue } from "./territorial-value";
 import { hasWarApproach } from "./maritime-war-readiness";
@@ -161,6 +162,7 @@ export function startDiplomaticWar(world: WorldState, aggressorId: NationId, tar
 
 export function updateDiplomaticCrises(world: WorldState): void {
   if (getWarDeclarationMode(world) !== "diplomacy") return;
+  const playerId = getPlayerNation(world)?.nationId;
   const state = getDiplomacyState(world), now = world.time.slowTick;
   if (now - state.lastCrisisSlowTick < 10) return;
   state.lastCrisisSlowTick = now;
@@ -191,6 +193,7 @@ export function updateDiplomaticCrises(world: WorldState): void {
       resolveCrisisPeacefully(world, attacker, defender, "allied deterrence"); continue;
     }
     if (now < crisis.deadlineSlowTick) {
+      if (defender === playerId) continue;
       const character = getNationCharacter(world, defender);
       const demanded = crisis.regionIds ?? [];
       const nationalValue = getNationalTerritorialValue(world, defender);
@@ -205,6 +208,7 @@ export function updateDiplomaticCrises(world: WorldState): void {
       if (character.cooperation > 0.7 && relation.trust >= 45) respondToCrisis(world, defender, attacker, "negotiate");
       continue;
     }
+    if (attacker === playerId) continue;
     if (world.wars.filter((war) => war.nationAId === attacker || war.nationBId === attacker).length >= 2) {
       resolveCrisisPeacefully(world, attacker, defender, "overextension"); continue;
     }
@@ -248,7 +252,7 @@ export function updateDiplomaticCrises(world: WorldState): void {
   for (const candidate of candidates.sort((a, b) => a.aggressorId.localeCompare(b.aggressorId) ||
     getRelation(world, b.aggressorId, b.targetNationId).tension - getRelation(world, a.aggressorId, a.targetNationId).tension)) {
     const attacker = candidate.aggressorId;
-    if (opened.has(attacker) || (buildWarAdjacency(world.wars).get(attacker)?.size ?? 0) > 0) continue;
+    if (attacker === playerId || opened.has(attacker) || (buildWarAdjacency(world.wars).get(attacker)?.size ?? 0) > 0) continue;
     const relation = getRelation(world, attacker, candidate.targetNationId);
     const character = getNationCharacter(world, attacker);
     if (relation.tension < 45 && relation.grievance < 35) continue;
