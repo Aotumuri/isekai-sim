@@ -42,7 +42,7 @@ const RESOURCE_NAMES: Record<TradeResource, string> = { ...STRATEGIC_RESOURCE_NA
 const RESEARCH_STATUS = { researching: "Researching", "saving resources": "Saving research funds", "capital isolated": "Capital isolated", complete: "Research complete", paused: "Preparing", "government in exile": "Government in exile" };
 const esc = (value: unknown) => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]!));
 
-export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: SimClock): { update: () => void; openDiplomacy: () => void; openFactions: () => void; close: () => void } {
+export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: SimClock): { update: () => void; openDiplomacy: () => void; openFactions: () => void; openResearch: () => void; close: () => void } {
   const wrapper = document.createElement("div"); wrapper.className = "society-ui";
   const branchOptions = FAMILY_RESEARCH_BRANCHES.Infantry.map((branch) => `<option value="${branch}">${BRANCH_NAMES[branch]}</option>`).join("");
   const familyOptions = EQUIPMENT_FAMILIES.map((family) => `<option value="${family}">${EQUIPMENT_FAMILY_NAMES[family]}</option>`).join("");
@@ -349,5 +349,5 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     for (const tab of wrapper.querySelectorAll<HTMLElement>("[data-tab]")) tab.setAttribute("aria-pressed", String(tab.dataset.tab === name));
     update(true);
   };
-  return { update: () => update(), openDiplomacy: () => openPane("diplomacy"), openFactions: () => openPane("factions"), close: () => setVisible(false) };
+  return { update: () => update(), openDiplomacy: () => openPane("diplomacy"), openFactions: () => openPane("factions"), openResearch: () => openPane("research"), close: () => setVisible(false) };
 }

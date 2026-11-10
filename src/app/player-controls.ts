@@ -8,12 +8,15 @@ import { enterPlayerNation, getPlayerNation, leavePlayerNation } from "../sim/pl
 import type { WorldState } from "../sim/world-state";
 import { getMapView, selectMapNation } from "../render/map-view-state";
 
-export function attachPlayerControls(root: HTMLElement, world: WorldState, getDestination: () => MesoRegionId | null): () => void {
+export function attachPlayerControls(
+  root: HTMLElement, world: WorldState, getDestination: () => MesoRegionId | null, openResearch: () => void,
+): () => void {
   const panel = document.createElement("details");
   panel.className = "map-controls player-controls";
   panel.innerHTML = `<summary>国家プレイ</summary>
     <label>国家 <select data-country></select></label>
     <button type="button" data-enter>操作する</button>
+    <button type="button" data-government hidden>国家運営・研究</button>
     <button type="button" data-leave hidden>観戦に戻る</button>
     <p role="status"></p>`;
   root.append(panel);
@@ -23,6 +26,7 @@ export function attachPlayerControls(root: HTMLElement, world: WorldState, getDe
   const country = panel.querySelector<HTMLSelectElement>("[data-country]")!;
   const enter = panel.querySelector<HTMLButtonElement>("[data-enter]")!;
   const leave = panel.querySelector<HTMLButtonElement>("[data-leave]")!;
+  const government = panel.querySelector<HTMLButtonElement>("[data-government]")!;
   const status = panel.querySelector("p")!;
   let roster = "";
   let mapSelection = getMapView(world).selectedNationId;
@@ -45,8 +49,10 @@ export function attachPlayerControls(root: HTMLElement, world: WorldState, getDe
     mapSelection = selected;
     enter.disabled = !country.value || player?.nationId === country.value;
     leave.hidden = !player;
+    government.hidden = !player;
     status.textContent = player ? `${names[nations.findIndex((nation) => nation.id === player.nationId)]}を操作中` : "観戦中";
   };
+  government.onclick = openResearch;
   country.addEventListener("change", update);
   enter.addEventListener("click", () => {
     const nation = world.nations.find((entry) => entry.id === country.value);
