@@ -2,9 +2,21 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
 import type { MesoRegionId } from "../../src/worldgen/meso-region";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 import { createScenarioWorld } from "../scenarios";
+import { setupTwoIslandAmphibious } from "../scenarios/two-island-amphibious";
+import type { WorldState } from "../../src/sim/world-state";
 import { runSimulation } from "../helpers/simulation-driver";
 import { withMutedSimulationLogs } from "../helpers/muted-logs";
+
+function createFixedIslandWorld(diplomacyEnabled = false) {
+  const world = createFixedSocietyWorld();
+  world.settings!.diplomacyEnabled = diplomacyEnabled;
+  world.settings!.researchEnabled = false;
+  world.settings!.mobilizationEnabled = false;
+  setupTwoIslandAmphibious(world);
+  return world;
+}
 
 test("two-island amphibious scenario has exactly two isolated balanced combatants", () => {
   const world = createScenarioWorld("two-island-amphibious", {
@@ -25,9 +37,7 @@ test("two-island amphibious scenario has exactly two isolated balanced combatant
 });
 
 test("competing ports do not keep island invasion fleets from sailing and landing", () => {
-  const world = createScenarioWorld("two-island-amphibious", {
-    seed: 822_748_319_788, width: 640, height: 360, quick: true,
-  });
+  const world = createFixedIslandWorld();
   withMutedSimulationLogs(() => runSimulation(world, { ticks: 2_000 }));
 
   assert.ok(world.amphibiousOperations.operations.some((operation) =>
@@ -35,10 +45,7 @@ test("competing ports do not keep island invasion fleets from sailing and landin
 });
 
 test("an island invasion lands before the AI negotiates peace", () => {
-  const world = createScenarioWorld("two-island-amphibious", {
-    seed: 9, width: 640, height: 360, quick: true,
-    config: { systems: { diplomacyEnabled: true } },
-  });
+  const world = createFixedIslandWorld(true);
   withMutedSimulationLogs(() => runSimulation(world, { ticks: 2_600 }));
 
   const settlement = world.warNegotiations?.settlements[0];
@@ -50,15 +57,14 @@ test("an island invasion lands before the AI negotiates peace", () => {
 });
 
 test("an established bridgehead remains a strategic reinforcement objective", () => {
-  const world = createScenarioWorld("two-island-amphibious", {
-    seed: 695_919_685_365, width: 640, height: 360, quick: true,
-  });
+  const world = createFixedIslandWorld();
   // This test isolates reinforcement after a successful landing. Give the
   // attacker sea control; contested crossings are covered by naval combat tests.
   const defender = world.nations[0]!;
   world.units = world.units.filter((unit) => unit.nationId !== defender.id || unit.domain !== "naval");
   defender.nextUnitProductionTick = Number.POSITIVE_INFINITY;
-  withMutedSimulationLogs(() => runSimulation(world, { ticks: 900 }));
+  // Observe the established beachhead while it is still fighting for supplies.
+  withMutedSimulationLogs(() => runSimulation(world, { ticks: 1_200 }));
 
   const landing = world.amphibiousOperations.operations.find((operation) =>
     operation.kind === "landing" && operation.beachheadOutcome === "success");
@@ -80,7 +86,7 @@ test("an established bridgehead remains a strategic reinforcement objective", ()
   assert.ok(reinforcement.desiredEscortCount > 0);
 });
 
-function countLandComponents(world: ReturnType<typeof createScenarioWorld>): number {
+function countLandComponents(world: WorldState): number {
   const byId = new Map(world.mesoRegions.map((region) => [region.id, region]));
   const seen = new Set<MesoRegionId>();
   let count = 0;
@@ -98,7 +104,7 @@ function countLandComponents(world: ReturnType<typeof createScenarioWorld>): num
   return count;
 }
 
-function countEnemyLandEdges(world: ReturnType<typeof createScenarioWorld>): number {
+function countEnemyLandEdges(world: WorldState): number {
   const owner = new Map(world.macroRegions.flatMap((macro) => macro.mesoRegionIds.map((id) => [id, macro.nationId] as const)));
   const byId = new Map(world.mesoRegions.map((region) => [region.id, region]));
   let edges = 0;

@@ -7,7 +7,7 @@ import { declareWar } from "../../src/sim/war-state";
 import { createMacroRegionId, type MacroRegion } from "../../src/worldgen/macro-region";
 import type { MesoRegion, MesoRegionId } from "../../src/worldgen/meso-region";
 import type { NationId } from "../../src/worldgen/nation";
-import type { ScenarioSetup } from "./types";
+import type { WorldState } from "../../src/sim/world-state";
 
 const INITIAL_LAND_UNITS = 18;
 const INITIAL_TRANSPORTS = 2;
@@ -16,7 +16,7 @@ const INITIAL_RESOURCE_STOCK = 25_000;
 
 /** Diagnostic-only topology. It deliberately changes scenario state, never
  * production simulation rules, so both combatants exercise the normal AI. */
-export const setupTwoIslandAmphibious: ScenarioSetup = (world) => {
+export function setupTwoIslandAmphibious(world: WorldState): void {
   const sortedX = [...world.mesoRegions].sort((a, b) => a.center.x - b.center.x || compareIds(a.id, b.id));
   const lower = sortedX[Math.floor(sortedX.length * 0.43)]?.center.x ?? world.width * 0.43;
   const upper = sortedX[Math.floor(sortedX.length * 0.57)]?.center.x ?? world.width * 0.57;
@@ -136,7 +136,7 @@ export const setupTwoIslandAmphibious: ScenarioSetup = (world) => {
   world.buildingVersion += 1;
   world.cache = createWorldCache();
   world.productionDiagnostics = createProductionDiagnosticsState(world.units);
-};
+}
 
 function configureIsland(
   regions: MesoRegion[],
