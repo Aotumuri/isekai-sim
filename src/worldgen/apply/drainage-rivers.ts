@@ -1,3 +1,4 @@
+import { applyFluvialRelief } from "./fluvial-relief";
 import type { WorldConfig } from "../../data/world-config";
 import type { MicroRegion } from "../micro-region";
 import type { MicroRegionEdge } from "../micro-region-edge";
@@ -14,20 +15,17 @@ export function applyDrainageRivers(
   if (config.riverSourceCount <= 0) return;
 
   const indexById = new Map(regions.map((region, index) => [region.id, index]));
-  const { downstream, order } = routeToSea(regions, indexById, config);
+  let { downstream, order } = routeToSea(regions, indexById, config);
+  let runoff = accumulateRunoff(regions, downstream, order, config.height);
+  if (config.continentalLayout === "world-map" || config.continentalLayout === "japan-scale") {
+    applyFluvialRelief(regions, indexById, downstream, order, runoff, config.elevationSeaLevel);
+    ({ downstream, order } = routeToSea(regions, indexById, config));
+    runoff = accumulateRunoff(regions, downstream, order, config.height);
+  }
   const landCount = order.reduce((count, index) => count + Number(!regions[index].isSea), 0);
   const threshold = Math.max(3, Math.ceil(landCount / (config.riverSourceCount * 36)));
-  const runoff = new Float64Array(regions.length);
-
-  for (let i = order.length - 1; i >= 0; i -= 1) {
-    const index = order[i];
-    const region = regions[index];
-    if (region.isSea) continue;
-    const outlet = downstream[index];
-    const rainfall = 0.65 + 0.55 * Math.sin(Math.PI * region.site.y / config.height);
-    runoff[index] += rainfall;
-    runoff[outlet] += runoff[index];
-    region.isRiver = runoff[index] >= threshold;
+  for (const index of order) {
+    if (!regions[index].isSea) regions[index].isRiver = runoff[index] >= threshold;
   }
   for (const edge of edges) {
     const a = indexById.get(edge.a);
@@ -36,6 +34,26 @@ export function applyDrainageRivers(
     edge.hasRiver = (regions[a].isRiver && downstream[a] === b)
       || (regions[b].isRiver && downstream[b] === a);
   }
+}
+
+function accumulateRunoff(
+  regions: MicroRegion[],
+  downstream: Int32Array,
+  order: number[],
+  height: number,
+): Float64Array {
+  const runoff = new Float64Array(regions.length);
+
+  for (let i = order.length - 1; i >= 0; i -= 1) {
+    const index = order[i];
+    const region = regions[index];
+    if (region.isSea) continue;
+    const outlet = downstream[index];
+    const rainfall = 0.65 + 0.55 * Math.sin(Math.PI * region.site.y / height);
+    runoff[index] += rainfall;
+    runoff[outlet] += runoff[index];
+  }
+  return runoff;
 }
 
 // Visit from the coast in spill-height order. A depression drains through the

@@ -80,6 +80,13 @@ test("historical drainage joins tributaries across a depression and reaches the 
   applyDrainageRivers(regions, edges, { ...config, riverSourceCount: 0 });
   assert.ok(edges.every(({ hasRiver }) => !hasRiver));
   assert.ok(regions.every(({ isRiver }) => !isRiver));
+
+  const seaLevel = elevations[0]!;
+  applyDrainageRivers(regions, edges, { ...config, elevationSeaLevel: seaLevel, continentalLayout: "world-map" });
+  assert.equal(regions[0]!.elevation, seaLevel);
+  assert.ok(regions[2]!.elevation < elevations[2]!);
+  assert.ok(regions.slice(1).every(({ elevation }) => elevation > seaLevel));
+  assert.ok(edges[0]!.hasRiver);
 });
 
 test("balance selects reproducible historical maps with terrain-dependent deposits", () => {
