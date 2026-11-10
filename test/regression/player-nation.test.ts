@@ -1,0 +1,44 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createUnitForType } from "../../src/sim/create-units";
+import { repositionUnits } from "../../src/sim/nation/reposition-units";
+import { issuePlayerLandOrder, setPlayerCommandMode } from "../../src/sim/player-land-orders";
+import { issuePlayerNavalOrder, updatePlayerNavalOrders } from "../../src/sim/player-naval-orders";
+import { enterPlayerNation, getPlayerNation, leavePlayerNation } from "../../src/sim/player-nation";
+import { createUnitId } from "../../src/sim/unit";
+import { createFixedSocietyWorld, fixedSocietyDistrict } from "../helpers/fixed-society-world";
+
+test("manual land movement accepts only the controlled nation's units and preserves the order through AI ticks", () => {
+  const world = createFixedSocietyWorld();
+  const [home, foreign] = world.nations;
+  const ownUnit = createUnitForType(createUnitId(world.unitIdCounter++), home.id, fixedSocietyDistrict(2, 2), "Infantry");
+  const otherUnit = createUnitForType(createUnitId(world.unitIdCounter++), foreign.id, foreign.capitalMesoId, "Infantry");
+  world.units = [ownUnit, otherUnit];
+  const target = fixedSocietyDistrict(3, 2);
+  assert(enterPlayerNation(world, home.id));
+  assert.equal(issuePlayerLandOrder(world, target, ownUnit.id), 0);
+  setPlayerCommandMode(world, "manual");
+  assert.equal(issuePlayerLandOrder(world, target, otherUnit.id), 0);
+  assert.equal(issuePlayerLandOrder(world, foreign.capitalMesoId, ownUnit.id), 0);
+  assert.equal(issuePlayerLandOrder(world, target, ownUnit.id), 1);
+  repositionUnits(world, 10_000);
+  assert.equal(ownUnit.regionId, target);
+  leavePlayerNation(world);
+  assert.equal(getPlayerNation(world), undefined);
+  assert(enterPlayerNation(world, foreign.id));
+  assert.equal(getPlayerNation(world)?.commandMode, "automatic");
+});
+
+test("manual naval orders move ships to sea and reject inland targets", () => {
+  const world = createFixedSocietyWorld();
+  const home = world.nations[0];
+  const ship = createUnitForType(createUnitId(world.unitIdCounter++), home.id, fixedSocietyDistrict(1, 1), "CombatShip");
+  world.units.push(ship);
+  assert(enterPlayerNation(world, home.id));
+  setPlayerCommandMode(world, "manual");
+  assert.equal(issuePlayerNavalOrder(world, ship.id, home.capitalMesoId), false);
+  const sea = fixedSocietyDistrict(1, 0);
+  assert(issuePlayerNavalOrder(world, ship.id, sea));
+  updatePlayerNavalOrders(world, 10_000);
+  assert.equal(ship.regionId, sea);
+});

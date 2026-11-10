@@ -1,3 +1,5 @@
+import { enterPlayerNation } from "../../src/sim/player-nation";
+import { setPlayerCommandMode } from "../../src/sim/player-land-orders";
 import { formatCoastalSupportStatus, formatNavalUnitStatus, summarizeNavy } from "../../src/render/naval-status";
 import { getCoastalSupportModifier } from "../../src/sim/coastal-support";
 import assert from "node:assert/strict";
@@ -66,6 +68,7 @@ import {
   createAmphibiousOperationState,
   getAmphibiousNavalProductionDemands,
   getAmphibiousOperationValidation,
+  queuePlayerLanding,
   updateAmphibiousCapabilityAssembly,
   updateAmphibiousOperations,
   updateAmphibiousPlanning,
@@ -134,6 +137,38 @@ test("amphibious planning creates one deterministic leased plan and reserves phy
   assert.equal(world.amphibiousOperations.successfulPortBeachheads, 1);
   assert.equal(world.amphibiousOperations.landingSiteSamples, 1);
   assert.equal(world.amphibiousOperations.launchedOperations, 1);
+});
+
+test("assisted landing preserves the requested force and waits for the scheduled tick", () => {
+  const world = createMaritimeWorld(true, 3);
+  const enemyMacroIds = world.macroRegions
+    .filter((macro) => macro.mesoRegionIds.includes(id("port-b")) || macro.mesoRegionIds.includes(id("island-b")))
+    .map((macro) => { macro.nationId = NATION_B; return macro.id; });
+  world.nations.push(createNation(NATION_B, id("island-b"), enemyMacroIds));
+  world.cache.ownerByMesoId.clear();
+  declareWar(world.wars, NATION_A, NATION_B, 0);
+  const infantry = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "Infantry");
+  const escort = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "CombatShip");
+  world.units.push(infantry, escort);
+  world.supplyAssessment.navalStrategy.missions = [{
+    id: "player-reserve", nationId: NATION_A, type: "RESERVE", shipIds: [escort.id],
+    targetPortId: id("port-a"), priority: 10, createdTick: 0, status: "ACTIVE", reasonFlags: [],
+  }];
+  assert(enterPlayerNation(world, NATION_A));
+  assert.equal(queuePlayerLanding(world, id("port-a"), id("port-b"), 1, 20), null);
+  setPlayerCommandMode(world, "assisted");
+  const demand = queuePlayerLanding(world, id("port-a"), id("port-b"), 1, 20);
+  assert(demand);
+  world.time.fastTick = 19;
+  updateAmphibiousPlanning(world);
+  assert.equal(demand.state, "ready");
+  assert.equal(world.amphibiousOperations.operations.length, 0);
+  world.time.fastTick = 20;
+  updateAmphibiousPlanning(world);
+  const operation = world.amphibiousOperations.operations[0];
+  assert(operation);
+  assert.deepEqual(operation.assignedUnitIds, [infantry.id]);
+  assert.equal(operation.destinationPortId, id("port-b"));
 });
 
 test("amphibious landing strength includes speed-based reaction forces", () => {
