@@ -1,3 +1,4 @@
+import { getManualGovernmentId } from "./player-nation";
 import type { NationId } from "../worldgen/nation";
 import { isNationActive } from "./nation-active";
 import { getOwnerByMesoId } from "./world-cache";
@@ -70,9 +71,13 @@ export function updateTreasuries(world: WorldState): void {
   }
 }
 
+export function isBudgetDelegated(world: WorldState, nationId: NationId, treasury: NationalTreasury | undefined): boolean {
+  return !!treasury?.automaticBudget && nationId !== getManualGovernmentId(world);
+}
+
 export function setTaxRate(world: WorldState, id: NationId, rate: number): boolean {
   const nation = world.nations.find((item) => item.id === id);
-  if (!nation?.treasury || !isNationActive(nation) || nation.treasury.automaticBudget || !TAX_RATES.includes(rate as TaxRate)) return false;
+  if (!nation?.treasury || !isNationActive(nation) || isBudgetDelegated(world, id, nation.treasury) || !TAX_RATES.includes(rate as TaxRate)) return false;
   nation.treasury.taxRate = rate as TaxRate;
   return true;
 }
@@ -91,7 +96,7 @@ export function taxUnrestPerTick(treasury?: NationalTreasury): number {
 export function setTreasuryPolicy(world: WorldState, id: NationId,
   policy: "automaticBudget" | "researchFunding" | "militaryFunding", enabled: boolean): boolean {
   const nation = world.nations.find((item) => item.id === id);
-  if (!nation?.treasury || !isNationActive(nation) || (policy !== "automaticBudget" && nation.treasury.automaticBudget)) return false;
+  if (!nation?.treasury || !isNationActive(nation) || (policy !== "automaticBudget" && isBudgetDelegated(world, id, nation.treasury))) return false;
   nation.treasury[policy] = enabled;
   return true;
 }

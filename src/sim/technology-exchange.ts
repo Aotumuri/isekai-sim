@@ -1,3 +1,4 @@
+import { getManualGovernmentId } from "./player-nation";
 import { areFactionPartners } from "./factions";
 import type { NationId } from "../worldgen/nation";
 import { canSupportNation } from "./arms-aid";
@@ -39,7 +40,9 @@ export function updateTechnologyExchange(world: WorldState): void {
   if (world.time.slowTick - state.lastLicenseSlowTick < 60) return;
   state.lastLicenseSlowTick = world.time.slowTick;
   for (const [key, expires] of state.licenseCooldowns) if (expires <= world.time.slowTick) state.licenseCooldowns.delete(key);
+  const player = getManualGovernmentId(world);
   for (const relation of getDiplomacyState(world).relations.values()) {
+    if (relation.nationAId === player || relation.nationBId === player) continue;
     if (relation.crisis || relation.trust < 55) continue;
     for (const [a, b] of [[relation.nationAId, relation.nationBId], [relation.nationBId, relation.nationAId]] as const) {
       const options = EQUIPMENT_FAMILIES.flatMap((family) => {

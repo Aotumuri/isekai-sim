@@ -1,3 +1,4 @@
+import { getManualGovernmentId } from "./player-nation";
 import { getDefensePact, getInfluence, getRelation, hasTreaty, spendInfluence } from "./diplomacy";
 import { areFactionPartners } from "./factions";
 import { isNationActive } from "./nation-active";
@@ -11,10 +12,11 @@ export function updateDefensePacts(world: WorldState): void {
   if (!hasPoliticalTurbulence(world) || now < 90 || now % 30 !== 0) return;
   const active = new Set(world.nations.filter(isNationActive).map(({ id }) => id));
   const wars = buildWarAdjacency(world.wars);
+  const player = getManualGovernmentId(world);
   for (const coalition of world.commonThreatCoalitions.coalitions) {
     const threat = coalition.targetNationId;
     if (coalition.pendingDissolutionReason || !active.has(threat) || now - coalition.formedAtSlowTick < 30) continue;
-    const members = coalition.memberNationIds.filter((id) => active.has(id) && !getSubjectOverlord(world, id) &&
+    const members = coalition.memberNationIds.filter((id) => id !== player && active.has(id) && !getSubjectOverlord(world, id) &&
       !hasTreaty(world, id, threat, "alliance") && !areFactionPartners(world, id, threat));
     const candidates = members.flatMap((a, index) => members.slice(index + 1).flatMap((b) => {
       if (isAtWar(a, b, wars) || areFactionPartners(world, a, b) || hasTreaty(world, a, b, "alliance") ||

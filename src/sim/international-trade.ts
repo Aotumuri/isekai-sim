@@ -1,3 +1,4 @@
+import { getManualGovernmentId } from "./player-nation";
 import { STRATEGIC_RESOURCES, isStrategicResource } from "../data/strategic-resources";
 import { isTradeEmbargoed } from "./trade-embargo";
 import { exchangePortPopulation } from "./population-migration";
@@ -236,7 +237,9 @@ export function updateInternationalTrade(world: WorldState): void {
   const trading = getInternationalTradeState(world);
   if (world.time.slowTick - trading.lastAISlowTick < 20) return;
   trading.lastAISlowTick = world.time.slowTick;
+  const player = getManualGovernmentId(world);
   for (const relation of getDiplomacyState(world).relations.values()) {
+    if (relation.nationAId === player || relation.nationBId === player) continue;
     const a = world.nations.find((nation) => nation.id === relation.nationAId), b = world.nations.find((nation) => nation.id === relation.nationBId);
     if (!a || !b || relation.crisis) continue;
     const surplus = (nation: NationRuntime, resource: typeof INDUSTRIAL_RESOURCES[number]) => getTradeStock(nation, resource) / resourceReserve(nation, resource);

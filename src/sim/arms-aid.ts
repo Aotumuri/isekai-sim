@@ -1,3 +1,4 @@
+import { getManualGovernmentId } from "./player-nation";
 import { getDesignUtility } from "./unit-capabilities";
 import { areFactionPartners } from "./factions";
 import type { NationId } from "../worldgen/nation";
@@ -107,7 +108,9 @@ export function updateArmsAid(world: WorldState): void {
   if (world.time.slowTick - aid.lastAISlowTick < 30) return;
   aid.lastAISlowTick = world.time.slowTick;
   const wars = buildWarAdjacency(world.wars);
+  const player = getManualGovernmentId(world);
   for (const donor of world.nations.filter(isNationActive)) {
+    if (donor.id === player) continue;
     if (donor.resources.weapons < 70 || getNationCharacter(world, donor.id).cooperation < 0.5) continue;
         const recipient = world.nations.filter(isNationActive).filter((nation) => {
       if (nation.id === donor.id || !canSupportNation(world, donor.id, nation.id)) return false;

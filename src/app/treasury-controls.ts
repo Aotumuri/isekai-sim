@@ -1,3 +1,4 @@
+import { getManualGovernmentId } from "../sim/player-nation";
 import { FINANCIAL_AID, getFinancialAidIssue, sendFinancialAid } from "../sim/financial-aid";
 import { getDomesticUnrest } from "../sim/domestic-unrest";
 import { isMilitaryFunded, militaryFundingCost } from "../sim/military-funding";
@@ -5,7 +6,7 @@ import { isNationActive } from "../sim/nation-active";
 import type { NationRuntime } from "../sim/nation-runtime";
 import { commissionPublicWork, getPublicWorkIssue, PUBLIC_WORKS, type PublicWorkKind } from "../sim/public-works";
 import { distributePublicRelief, reliefCost } from "../sim/public-relief";
-import { setTaxRate, setTreasuryPolicy, TAX_COLLECTION_INTERVAL, TAX_RATES } from "../sim/treasury";
+import { isBudgetDelegated, setTaxRate, setTreasuryPolicy, TAX_COLLECTION_INTERVAL, TAX_RATES } from "../sim/treasury";
 import { getMesoById, getOwnerByMesoId } from "../sim/world-cache";
 import type { WorldState } from "../sim/world-state";
 import type { MesoRegionId } from "../worldgen/meso-region";
@@ -58,12 +59,13 @@ export function attachTreasuryControls(root: HTMLElement, world: WorldState, sel
   function update(nation: NationRuntime): void {
     const treasury = nation.treasury, active = isNationActive(nation);
     view("balance").textContent = treasury ? `Cash reserves: ${cash(treasury.balance)}` : "Treasury unavailable.";
+    const delegated = isBudgetDelegated(world, nation.id, treasury);
     for (const input of policies) {
       const policy = input.dataset.financePolicy as "automaticBudget" | "researchFunding" | "militaryFunding";
-      input.checked = !!treasury?.[policy];
-      input.disabled = !treasury || !active || (policy !== "automaticBudget" && !!treasury.automaticBudget);
+      input.checked = policy === "automaticBudget" ? delegated : !!treasury?.[policy];
+      input.disabled = !treasury || !active || (policy === "automaticBudget" ? getManualGovernmentId(world) === nation.id : delegated);
     }
-    control("tax").disabled = !treasury || !active || !!treasury.automaticBudget;
+    control("tax").disabled = !treasury || !active || delegated;
     control("tax").value = String(treasury?.taxRate ?? 15);
     control("kind").disabled = control("district").disabled = !active;
     action("build").disabled = action("relief").disabled = true;

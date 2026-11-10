@@ -310,15 +310,17 @@ export function updateFactions(world: WorldState): void {
   }
   for (const faction of state.factions) ensureFactionLeadership(world, faction);
   reviewFactionCohesion(world);
+  const player = getManualGovernmentId(world);
   for (const nation of active) {
+    if (nation.id === player) continue;
     if (getNationFaction(world, nation.id)) continue;
-    const candidate = [...state.factions].map((faction) => ({ faction, score: factionJoinScore(world, nation.id, faction) }))
+    const candidate = state.factions.filter((faction) => faction.leaderId !== player).map((faction) => ({ faction, score: factionJoinScore(world, nation.id, faction) }))
       .sort((a, b) => b.score - a.score || a.faction.id.localeCompare(b.faction.id))[0];
     const charter = aiCharter(world, nation.id), character = getNationCharacter(world, nation.id);
     let founding: { partner: typeof nation; charter: FactionCharter; score: number } | undefined;
     if (getInfluence(world, nation.id) >= 20 && factionWillingness(world, nation.id, charter) >= 40) {
       for (const other of active) {
-        if (other.id === nation.id || getNationFaction(world, other.id) || getInfluence(world, other.id) < 5 || findWar(world.wars, nation.id, other.id)) continue;
+        if (other.id === player || other.id === nation.id || getNationFaction(world, other.id) || getInfluence(world, other.id) < 5 || findWar(world.wars, nation.id, other.id)) continue;
         const relation = getRelation(world, nation.id, other.id), affinity = getIdeologicalAffinity(world, nation.id, other.id);
         const sharedThreat = commonEnemy(world, nation.id, other.id);
         // Ideological blocs are the default; an exceptional shared-war coalition may admit one other ideology.
