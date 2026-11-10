@@ -30,7 +30,7 @@ export function licenseTechnology(world: WorldState, licensorId: NationId, recip
   target.progress[branch] += points;
   state.licenseCooldowns.set(key, world.time.slowTick + 120); state.licensesShared += 1;
   recordSimulationEvent(world, { category: "research", nationIds: [licensorId, recipientId],
-    message: `${licensorId} licensed ${family} / ${branch} to ${recipientId} (+${points.toFixed(1)} research; recipient retains its own development program).` });
+    message: `${licensorId}が技術を供与： ${family} / ${branch} → ${recipientId}（研究+${points.toFixed(1)}、相手国は独自の研究計画を継続）。` });
   return true;
 }
 

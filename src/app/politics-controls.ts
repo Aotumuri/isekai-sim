@@ -88,7 +88,7 @@ export function attachPoliticsControls(
       const faithBan = getReligiousBan(world, nation);
       root.innerHTML = `<h2>${democracy ? "議会制民主主義" : "君主制"}</h2>
         <p><strong>政権の思想：</strong> ${name(politics.governingIdeologyId)}</p>
-        ${ban && ban.until > world.time.slowTick ? `<p><strong>禁止された運動：</strong> ${name(ban.ideologyId)} · ${ban.until - world.time.slowTick}s remaining</p>` : ""}
+        ${ban && ban.until > world.time.slowTick ? `<p><strong>禁止された運動：</strong> ${name(ban.ideologyId)} · ${ban.until - world.time.slowTick}秒残り</p>` : ""}
         ${hasPoliticalTurbulence(world) ? `<h2>領土統治</h2>
           <p>Stability ${Math.round(governance?.stability ?? 100)}/100 · Diversity ${Math.round((governance?.diversity ?? 0) * 100)}%</p>
           <p class="society-note">自治は多様な地区の統治負担を軽くします。同化は文化と宗教を徐々に変え、反発を招くことがあります。</p>
@@ -96,7 +96,7 @@ export function attachPoliticsControls(
             `<button type="button" data-governance-policy="${policy}" aria-pressed="${(governance?.policy ?? "centralized") === policy}">${policy[0]!.toUpperCase() + policy.slice(1)}</button>`).join("")}</div>` : ""}
         ${nation.populationPolicy ? `<p><strong>${populationPolicyTitle(nation.populationPolicy)}</strong> · ${nation.populationPolicy.type === "homeland" ? "同じ系統の住民が多い近隣地区を請求します。" : "最も多く信仰される宗教を国教とします。"}</p>` : ""}
         ${hasPoliticalTurbulence(world) && nation.populationPolicy?.type === "religious" ? `<h2>宗教規制</h2>
-          <p class="society-note">${faithBan ? `All faiths except ${POPULATION_GROUPS.faith[faithBan.allowedFaith]} are outlawed for ${faithBan.until - world.time.slowTick}s.` : "他の宗教を禁止すると国内不安や国外からの反発を招きます。"}</p>
+          <p class="society-note">${faithBan ? `${POPULATION_GROUPS.faith[faithBan.allowedFaith]}以外の宗教をあと${faithBan.until - world.time.slowTick}秒間禁止しています。` : "他の宗教を禁止すると国内不安や国外からの反発を招きます。"}</p>
           ${faithBan ? '<button type="button" data-religious-ban="lift">禁止を解除</button>' :
             `<button type="button" data-religious-ban="start" ${!active || (nation.nextReligiousBanAt ?? 0) > world.time.slowTick ? "disabled" : ""}>他の宗教を禁止</button>`}` : ""}
         <p class="society-note">${active ? `Next ${democracy ? "election" : "royal succession"} in ${next}s` : "Domestic politics are paused."}
@@ -106,7 +106,7 @@ export function attachPoliticsControls(
         <tbody>${parties.map(([id, share]) => `<tr><td>${name(id)}</td><td>${share}%</td>${democracy ? `<td>${politics.seats.get(id) ?? 0}</td>` : ""}<td>${id === politics.governingIdeologyId ? "政権を主導" : politics.coalition.includes(id) ? "連立" : "野党"}</td></tr>`).join("")}</tbody></table>
         ${targets.length || order ? `<h2>特定集団への迫害</h2>
         <p class="society-note">強制追放は住民を通行可能な国境の外へ追い出します。大量殺害では人口が恒久的に失われます。どちらも国内不安と外交的反発を招きます。</p>
-        ${order ? `<p>Target: ${POPULATION_GROUPS[order.dimension][order.group]} · ${Math.max(0, order.until - world.time.slowTick)}s remaining · ${order.mode === "killing" ? `${(order.killed ?? 0).toFixed(2)} population units killed` : `${order.displaced.toFixed(2)} population units displaced`}.</p>
+        ${order ? `<p>対象：${POPULATION_GROUPS[order.dimension][order.group]} · ${Math.max(0, order.until - world.time.slowTick)}秒残り · ${order.mode === "killing" ? `${(order.killed ?? 0).toFixed(2)}人口単位が死亡` : `${order.displaced.toFixed(2)}人口単位が避難`}.</p>
         <button type="button" data-expulsion-action="stop">迫害命令を解除</button>` : `<label>対象集団 <select data-expulsion-target>
         ${targets.map(({ dimension, group, name }) => {
           const value = `${dimension}:${group}`;
@@ -114,7 +114,7 @@ export function attachPoliticsControls(
         }).join("")}</select></label>
         <div class="society-actions"><button type="button" data-expulsion-action="expel" ${!active || cooldown ? "disabled" : ""}>強制追放を命じる</button>
         ${hasPoliticalTurbulence(world) ? `<button type="button" data-expulsion-action="kill" ${!active || cooldown ? "disabled" : ""}>大量殺害を命じる</button>` : ""}</div>
-        ${cooldown ? `<p class="society-note">Available again in ${cooldown}s.</p>` : ""}`}` : ""}
+        ${cooldown ? `<p class="society-note">あと${cooldown}秒で再実施できます。</p>` : ""}`}` : ""}
         <h2>国外への政治的働きかけ</h2>
         <p class="society-note">${esc(getNationName(world, target))}で自国政権の思想を広めます。対立する運動を支援すると外交上の緊張が高まります。</p>
         ${partnerPolitics ? `<p class="society-note">相手国の政権：${name(partnerPolitics.governingIdeologyId)} · 現地の支持率：${name(politics.governingIdeologyId)}: ${partnerPolitics.support.get(politics.governingIdeologyId) ?? 0}%.</p>` : ""}

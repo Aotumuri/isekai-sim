@@ -41,7 +41,7 @@ export function attachTerritoryControls(root: HTMLElement, world: WorldState, se
     if (nextKey !== listKey) {
       listKey = nextKey; clearPreview();
       for (const [side, owner] of [["offered", a], ["requested", b]] as const) {
-        view(side).innerHTML = world.macroRegions.filter((macro) => macro.nationId === owner).map((macro, index) => `<details class="territory-province"><summary>州 ${index + 1} · ${macro.mesoRegionIds.length} ${macro.mesoRegionIds.length === 1 ? "district" : "districts"}</summary><label><input type="checkbox" data-province-side="${side}" data-province-id="${esc(macro.id)}"> Select entire province ${index + 1}</label>${macro.mesoRegionIds.map((id) => {
+        view(side).innerHTML = world.macroRegions.filter((macro) => macro.nationId === owner).map((macro, index) => `<details class="territory-province"><summary>州 ${index + 1} · ${macro.mesoRegionIds.length} ${macro.mesoRegionIds.length === 1 ? "district" : "districts"}</summary><label><input type="checkbox" data-province-side="${side}" data-province-id="${esc(macro.id)}"> 第${index + 1}州をすべて選択</label>${macro.mesoRegionIds.map((id) => {
           const region = world.mesoRegions.find((item) => item.id === id);
           const features = [region?.resource === "fuel" ? "燃料" : region?.resource === "steel" ? "鋼材" : isStrategicResource(region?.resource) ? STRATEGIC_RESOURCE_NAMES[region.resource] : "", region?.building ?? ""].filter(Boolean).join(" · ");
           return `<label><input type="checkbox" data-parcel-side="${side}" data-province="${esc(macro.id)}" value="${esc(id)}"> ${districtName(id)}${features ? ` · ${features}` : ""}</label>`;
@@ -52,7 +52,7 @@ export function attachTerritoryControls(root: HTMLElement, world: WorldState, se
     const claims = getForeignClaims(world, a, b), relation = getRelation(world, a, b), crisis = relation.crisis;
     const detail = JSON.stringify([a, b, world.time.slowTick, world.territoryVersion, picked("offered"), picked("requested"), offers.map((offer) => [offer.id, offer.status]), crisis]);
     if (detail === detailKey) return; detailKey = detail;
-    view("claims").innerHTML = `<p class="society-note">${esc(getNationName(world, b))}への領土請求：${claims.length}地区</p>${claims.slice(0, 10).map((claim) => `<p class="society-note"><button type="button" data-territory-action="select-claim" data-region-id="${esc(claim.regionId)}">Select ${districtName(claim.regionId)}</button> · Claim ${Math.round(claim.strength)}/100 · Previously owned for ${claim.heldTicks}s</p>`).join("") || '<p class="society-note">相手国への有力な領土請求はありません。</p>'}`;
+    view("claims").innerHTML = `<p class="society-note">${esc(getNationName(world, b))}への領土請求：${claims.length}地区</p>${claims.slice(0, 10).map((claim) => `<p class="society-note"><button type="button" data-territory-action="select-claim" data-region-id="${esc(claim.regionId)}">Select ${districtName(claim.regionId)}</button> · 請求の強さ ${Math.round(claim.strength)}/100 · 過去の領有期間 ${claim.heldTicks}秒</p>`).join("") || '<p class="society-note">相手国への有力な領土請求はありません。</p>'}`;
     const offered = picked("offered"), requested = picked("requested");
     view("valuation").textContent = `選択中：譲渡${offered.length}地区、要求${requested.length}地区。相手国から見た価値：受領 ${territorialValue(world, b, offered).toFixed(0)}／譲渡 ${territorialValue(world, b, requested).toFixed(0)}. 要求地区への自国の請求：${requested.map((id) => `${districtName(id)} ${Math.round(getTerritorialClaim(world, a, id))}`).join(", ") || "なし"}.`;
     const portIssue = offered.length === 1

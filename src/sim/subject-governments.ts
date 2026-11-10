@@ -69,7 +69,7 @@ export function installSubjectGovernment(world: WorldState, overlordId: NationId
   relation.trust = Math.max(50, relation.trust);
   getMilitaryAccessState(world).version++;
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [overlordId, subjectId],
-    message: `${overlordId} installed a puppet government in ${subjectId}.` });
+    message: `${overlordId}が${subjectId}に傀儡政権を設置しました。` });
 }
 
 export function releaseSubjectGovernment(world: WorldState, overlordId: NationId, subjectId: NationId): boolean {
@@ -87,7 +87,7 @@ function endSubjectGovernment(world: WorldState, overlordId: NationId, subjectId
     withdrawMilitaryVisitors(world, subjectId, overlordId);
   }
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [overlordId, subjectId],
-    message: `${subjectId} is no longer a subject of ${overlordId}.` });
+    message: `${subjectId}は${overlordId}から独立しました。` });
 }
 
 export function updateSubjectGovernments(world: WorldState): void {

@@ -28,7 +28,7 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     <p class="society-note">開戦時から両国に基本の講和条件があります。損害、占領、戦争疲弊、国内不安が受諾の判断に影響します。自ら条件を提示すると交渉は手動に切り替わります。</p>
     <div class="society-selectors"><label>要求する州<select multiple size="4" data-peace-control="demand" aria-label="Peace demanded provinces"></select></label><label>譲渡する州<select multiple size="4" data-peace-control="offer" aria-label="Peace offered provinces"></select></label></div>
     <div class="society-selectors"><label>要求する武器<input type="number" min="0" max="100" step="1" value="0" data-peace-control="demand-weapons" aria-label="Peace demanded 武器"></label><label>譲渡する武器<input type="number" min="0" max="100" step="1" value="0" data-peace-control="offer-weapons" aria-label="Peace offered 武器"></label></div>
-    <div class="society-selectors"><label>資源による賠償<select data-peace-control="reparation-resource"><option value="">なし</option>${REPARATION_RESOURCES.map((resource) => `<option value="${resource}">${resource}</option>`).join("")}</select></label><label>Units per ${REPARATION_INTERVAL}s<input type="number" min="1" max="10" step="1" value="3" data-peace-control="reparation-amount"></label></div>
+    <div class="society-selectors"><label>資源による賠償<select data-peace-control="reparation-resource"><option value="">なし</option>${REPARATION_RESOURCES.map((resource) => `<option value="${resource}">${resource}</option>`).join("")}</select></label><label>${REPARATION_INTERVAL}秒ごとの数量<input type="number" min="1" max="10" step="1" value="3" data-peace-control="reparation-amount"></label></div>
     <label><input type="checkbox" data-peace-control="puppet"> 相手国に傀儡政権を設置</label>
     <label><input type="checkbox" data-peace-control="partition"> 残る領土を2つの傀儡政権に分割</label>
     ${hasPoliticalTurbulence(world) ? '<label><input type="checkbox" data-peace-control="local-subject"> 要求した州を併合せず、現地の従属国を設立</label>' : ""}
@@ -77,7 +77,7 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
       partition: split ? cachedPartition ?? { capitalId: "" as MesoRegionId, districtIds: [] } : undefined };
   };
   const summary = (offer: PeaceOffer) => `<article class="peace-offer"><strong>${esc(getNationName(world, offer.proposerId))}の講和条件</strong><p>要求：${describe(offer.terms.demandedRegionIds)} · ${offer.terms.demandedWeapons} 武器${offer.terms.resourceReparation
-    ? ` · ${offer.terms.resourceReparation.amount} ${esc(offer.terms.resourceReparation.resource)} every ${REPARATION_INTERVAL}s during the truce` : ""}</p><p>譲渡：${describe(offer.terms.offeredRegionIds)} · ${offer.terms.offeredWeapons} 武器</p>${offer.terms.partition ? `<p><strong>2つの傀儡政権</strong> · New capital at ${esc(districtName(offer.terms.partition.capitalId))} · ${offer.terms.partition.districtIds.length} districts in the new state</p>` : offer.terms.puppetTarget ? "<p><strong>相手国に傀儡政権を設置</strong></p>" : offer.terms.localSubject ? "<p><strong>Establish a local subject in the demanded provinces</strong></p>" : ""}<small>休戦 ${offer.terms.truceSeconds / 60} min · ${offer.source === "opening" ? "当初の条件" : offer.source === "manual" ? "手動で提示" : "政府が更新"}</small></article>`;
+    ? ` · ${offer.terms.resourceReparation.amount} ${esc(offer.terms.resourceReparation.resource)} every ${REPARATION_INTERVAL}s during the truce` : ""}</p><p>譲渡：${describe(offer.terms.offeredRegionIds)} · ${offer.terms.offeredWeapons} 武器</p>${offer.terms.partition ? `<p><strong>2つの傀儡政権</strong> · 新首都：${esc(districtName(offer.terms.partition.capitalId))} · ${offer.terms.partition.districtIds.length}地区を新国家に編入</p>` : offer.terms.puppetTarget ? "<p><strong>相手国に傀儡政権を設置</strong></p>" : offer.terms.localSubject ? "<p><strong>要求した州に現地の従属国を設立</strong></p>" : ""}<small>休戦 ${offer.terms.truceSeconds / 60} min · ${offer.source === "opening" ? "当初の条件" : offer.source === "manual" ? "手動で提示" : "政府が更新"}</small></article>`;
   const update = () => {
     const a = selected(), b = partner(), war = findWar(world.wars, a, b);
     const enabled = !!war && (war.cause === "player-declaration" || getWarDeclarationMode(world) === "diplomacy");
@@ -85,7 +85,7 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     const delivery = (world.resourceReparations ?? []).find((term) =>
       (term.payerId === a && term.recipientId === b) || (term.payerId === b && term.recipientId === a));
     view("deliveries").textContent = delivery
-      ? `${getNationName(world, delivery.payerId)} owes ${delivery.amount} ${delivery.resource} every ${REPARATION_INTERVAL}s. Next delivery in ${Math.max(0, delivery.nextPaymentAt - world.time.slowTick)}s, subject to available stock.` : "";
+      ? `${getNationName(world, delivery.payerId)}は${REPARATION_INTERVAL}秒ごとに${delivery.resource}を${delivery.amount}支払います。次の支払いは${Math.max(0, delivery.nextPaymentAt - world.time.slowTick)}秒後です。在庫に応じて支払われます。` : "";
     const ownOverlord = getSubjectOverlord(world, a);
     const partnerOverlord = getSubjectOverlord(world, b);
     const subjectPolicy = world.nations.find((nation) => nation.id === b)?.governance;
@@ -133,7 +133,7 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
           if (!macro.mesoRegionIds.every((regionId) => current.has(regionId))) {
             for (const regionId of macro.mesoRegionIds.filter((item) => current.has(item))) {
               parcels.set(regionId, [regionId]);
-              output.push(`<option value="${esc(regionId)}">${esc(districtName(regionId))} · Existing terms</option>`);
+              output.push(`<option value="${esc(regionId)}">${esc(districtName(regionId))} · 現在の条件</option>`);
             }
           }
         }

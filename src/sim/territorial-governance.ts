@@ -21,7 +21,7 @@ function changePolicy(world: WorldState, nation: NationRuntime, policy: Governan
   state.since = world.time.slowTick;
   state.alignment = 0;
   recordSimulationEvent(world, { category: "politics", nationIds: [nation.id],
-    message: `${nation.id} adopted ${policy === "autonomy" ? "regional autonomy" : policy === "assimilation" ? "cultural and religious assimilation" : "centralized administration"}.` });
+    message: `${nation.id}が統治方針を変更しました：${policy === "autonomy" ? "地域の自治" : policy === "assimilation" ? "文化・宗教の同化" : "中央集権統治"}.` });
 }
 
 export function setGovernancePolicy(world: WorldState, actor: NationId, target: NationId, policy: GovernancePolicy): boolean {
@@ -77,7 +77,7 @@ export function integrateSubjectGovernment(world: WorldState, overlord: NationId
   }
   recordAnnexation(world, overlord, districts);
   recordSimulationEvent(world, { category: "politics", nationIds: [overlord, subject],
-    message: `${overlord} integrated ${subject} after a period of assimilation.` });
+    message: `同化政策を経て、${overlord}が${subject}を統合しました。` });
   return true;
 }
 
