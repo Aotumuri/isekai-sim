@@ -6,8 +6,8 @@ import type { ContinentalLayout, Landform } from "./continental-layout";
 export function createWorldMapLayout(rng: SeededRng): ContinentalLayout {
   const landforms: Landform[] = [];
   const radii = [
-    rng.range(0.24, 0.30),
-    rng.range(0.17, 0.23),
+    rng.range(0.23, 0.28),
+    rng.range(0.16, 0.22),
     rng.range(0.12, 0.18),
     ...Array.from({ length: rng.nextInt(3) + 1 }, () => rng.range(0.055, 0.115)),
   ];
@@ -41,7 +41,7 @@ function placeLandform(shape: Omit<Landform, "x" | "y">, existing: Landform[], r
     distanceFromShore(land, candidate) + distanceFromShore(candidate, land) -
     Math.hypot(land.x - candidate.x, land.y - candidate.y)));
   let bestGap = clearance(best);
-  for (let attempt = 0; attempt < 24 && bestGap < 0.038; attempt++) {
+  for (let attempt = 0; attempt < 48 && bestGap < 0.065; attempt++) {
     const candidate = sample();
     const gap = clearance(candidate);
     if (gap > bestGap) {

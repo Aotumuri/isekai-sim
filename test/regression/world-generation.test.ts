@@ -155,33 +155,40 @@ test("a curved ridge produces separate island peaks with shallow gaps between th
   assert.ok(sample(12) > sampleIslandArc(arc, 0.4, 0.29));
 });
 
-test("the larger default map varies the orientation of its three major landmasses", () => {
+test("the default world map moves its largest continent between seeds", () => {
   const config = createDefaultWorldConfig();
   assert.ok(config.width > 2560 && config.height > 1440);
   assert.ok(config.microRegionCount > 210_000);
 
-  const orientations = new Set<string>();
+  const quadrants = new Set<string>();
+  const continentCounts = new Set<number>();
+  let mapsWithSubmergedRidges = 0;
   for (const seed of [1, 2, 3, 6, 17, 21, 57, 64, 76]) {
     const world = createWorld({ ...config, seed, microRegionCount: 12_000 });
-    assert.ok(world.microRegions.some(({ isSea, seaRidge }) => isSea && seaRidge !== undefined && seaRidge > 0),
-      `seed ${seed} has a submerged ridge`);
+    if (world.microRegions.some(({ isSea, seaRidge }) => isSea && (seaRidge ?? 0) > 0)) {
+      mapsWithSubmergedRidges++;
+    }
     const remaining = new Map(world.microRegions.filter((region) => !region.isSea)
       .map((region) => [region.id, region]));
     const continents: MicroRegion[][] = [];
     for (const region of remaining.values()) {
       const land = collectConnectedRegions(region, remaining);
-      if (land.length > world.microRegions.length * 0.05) continents.push(land);
+      if (land.length > world.microRegions.length * 0.035) continents.push(land);
     }
-    assert.equal(continents.length, 3, `seed ${seed}`);
-    const [largest, , smallest] = continents.sort((a, b) => b.length - a.length);
-    assert.ok(largest!.length > smallest!.length * 1.5, `seed ${seed}`);
-    const xs = largest!.map(({ site }) => site.x);
-    const ys = largest!.map(({ site }) => site.y);
-    const width = (Math.max(...xs) - Math.min(...xs)) / config.width;
-    const height = (Math.max(...ys) - Math.min(...ys)) / config.height;
-    orientations.add(width > height ? "horizontal" : "vertical");
+    const landShare = world.microRegions.filter(({ isSea }) => !isSea).length / world.microRegions.length;
+    assert.ok(landShare > 0.25 && landShare < 0.48, `seed ${seed}: land share ${landShare}`);
+    assert.ok(continents.length >= 2, `seed ${seed}: ${continents.length} continents`);
+    continentCounts.add(continents.length);
+    const [largest] = continents.sort((a, b) => b.length - a.length);
+    const center = largest!.reduce((sum, { site }) => ({
+      x: sum.x + site.x / largest!.length,
+      y: sum.y + site.y / largest!.length,
+    }), { x: 0, y: 0 });
+    quadrants.add(`${center.x > config.width / 2},${center.y > config.height / 2}`);
   }
-  assert.equal(orientations.size, 2);
+  assert.equal(quadrants.size, 4);
+  assert.ok(continentCounts.size > 1);
+  assert.ok(mapsWithSubmergedRidges >= 5);
 });
 
 test("terrain-driven frontiers can follow a river away from the midpoint", () => {

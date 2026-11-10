@@ -56,7 +56,7 @@ const DEFAULT_SEED = Math.floor(Math.random() * 1_000_000_000_000);
 export function createDefaultWorldConfig(): WorldConfig {
   return {
     ...createWorldConfig(4096, 2304, 320_000),
-    continentalLayout: "oceanic",
+    continentalLayout: "world-map",
     nationBorderStyle: "terrain",
     systems: { politicalTurbulenceEnabled: true },
     nationTargetMacroRegionsPerNation: 6,
