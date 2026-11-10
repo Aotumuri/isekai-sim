@@ -2257,6 +2257,8 @@ function selectLandingForce(
 ): { units: UnitState[]; strength: number } {
   const { nationId, departurePortId, requiredLandingStrength } = demand;
   const previousIds = new Set(demand.assignedLandingUnitIds);
+  const distance = getControlledDistanceField(world, nationId, [departurePortId]).distanceByRegionId;
+  const assemblyTicks = (unit: UnitState) => (distance.get(unit.regionId) ?? Infinity) * getMoveTicksPerRegion(unit);
   const unavailable = new Set([
     ...world.retreatPlans.retreatIdByUnitId.keys(),
     ...world.reorganization.planIdByUnitId.keys(),
@@ -2274,8 +2276,8 @@ function selectLandingForce(
     (!world.amphibiousOperations.capabilityDemandByUnitId.has(unit.id) || previousIds.has(unit.id)) &&
     canReachControlled(world, nationId, unit.regionId, departurePortId)
   ).sort((a, b) =>
-    Number(b.regionId === departurePortId) - Number(a.regionId === departurePortId) ||
     Number(previousIds.has(b.id)) - Number(previousIds.has(a.id)) ||
+    assemblyTicks(a) - assemblyTicks(b) ||
     compareLandingUnits(a, b));
   if (demand.playerPlan) {
     const units = candidates.slice(0, demand.playerPlan.unitCount);
