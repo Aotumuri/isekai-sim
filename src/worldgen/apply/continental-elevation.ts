@@ -1,3 +1,4 @@
+import { sampleContinentalMountains } from "./continental-mountains";
 import { sampleCoastRelief } from "./coast-relief";
 import { createContinentalLayout } from "./continental-layout";
 import { sampleIslandArc } from "./island-arcs";
@@ -15,6 +16,7 @@ export function applyContinentalElevation(
   const [, , , , beltBend, beltOffset, hillX, hillY] =
     Array.from({ length: 8 }, () => rng.range(0, 2 * Math.PI));
   const layout = createContinentalLayout(config.seed, config.continentalLayout);
+  const worldMap = config.continentalLayout === "world-map";
   const islandArcs = layout.islandArcs ?? [];
   const landforms = layout.landforms.map((landform) => ({
     ...landform,
@@ -36,6 +38,7 @@ export function applyContinentalElevation(
       y = localX * sine + localY * cosine + 0.5;
     }
     let interior = -Infinity;
+    let inlandX = 0, inlandY = 0, mountainPhase = 0;
     for (const continent of landforms) {
       const offsetX = x - continent.x, offsetY = y - continent.y;
       const dx = (offsetX * continent.cosine + offsetY * continent.sine) / continent.rx;
@@ -51,7 +54,13 @@ export function applyContinentalElevation(
         distance /= radius;
       }
       const strength = clamp(continent.rx / 0.20, layout.minimumLandformStrength, 1);
-      interior = Math.max(interior, (1 - distance) * strength);
+      const landHeight = (1 - distance) * strength;
+      if (landHeight > interior) {
+        interior = landHeight;
+        inlandX = dx;
+        inlandY = dy;
+        mountainPhase = continent.coastPhase ?? 0;
+      }
     }
     // Mountain belts bend across the interior. Coastal shelves stay low.
     const belt = Math.sin(17 * x + 10 * y + 1.4 * Math.sin(13 * y + beltBend) + beltOffset);
@@ -68,7 +77,13 @@ export function applyContinentalElevation(
     }
     if (ridge - edgeFade > -0.22) region.seaRidge = clamp(1 + (ridge - edgeFade) / 0.22, 0, 1);
     const coastline = Math.max(interior + coastalWeight * layout.coastReliefScale * coastalNoise, ridge) - edgeFade;
-    const relief = Math.min(coastline, layout.seaCeiling(x, y)) * (0.40 + 0.56 * ridges + 0.14 * hills);
+    let slope = 0.40 + 0.56 * ridges + 0.14 * hills;
+    if (worldMap) {
+      slope = coastline <= 0 ? 0.72
+        : 0.32 + 0.58 * sampleContinentalMountains(inlandX, inlandY, mountainPhase, coastalNoise)
+          + 0.18 * hills * hills;
+    }
+    const relief = Math.min(coastline, layout.seaCeiling(x, y)) * slope;
     region.elevation = clamp(config.elevationSeaLevel + relief, config.elevationRange.min, config.elevationRange.max);
   }
 }
