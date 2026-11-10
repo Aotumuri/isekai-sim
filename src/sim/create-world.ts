@@ -21,7 +21,9 @@ import { generateMesoRegions } from "../worldgen/generate/meso-regions";
 import { generateNations } from "../worldgen/generate/nations";
 import type { MacroRegion } from "../worldgen/macro-region";
 import type { MesoRegion } from "../worldgen/meso-region";
-import type { NationId } from "../worldgen/nation";
+import type { MicroRegion } from "../worldgen/micro-region";
+import type { MicroRegionEdge } from "../worldgen/micro-region-edge";
+import type { Nation, NationId } from "../worldgen/nation";
 import type { BattleState } from "./battles";
 import { createInitialUnits } from "./create-units";
 import {
@@ -63,7 +65,6 @@ import { createCommonThreatCoalitionState } from "./common-threat-coalitions";
 
 export function createWorld(config: WorldConfig): WorldState {
   const rng = new SeededRng(config.seed);
-  const simRng = new SeededRng(config.seed + 1);
   const microRegions = generateMicroRegions(config, rng);
   const microRegionEdges = createMicroRegionEdges(microRegions);
   const historical = WORLD_BALANCE.mapGenerator === "historical";
@@ -79,6 +80,20 @@ export function createWorld(config: WorldConfig): WorldState {
   }
   const mesoRegions = generateMesoRegions(microRegions, config, rng, historical);
   const { macroRegions, nations } = generateNations(mesoRegions, config, rng, microRegions);
+  return createWorldFromMap(config, { microRegions, microRegionEdges, mesoRegions, macroRegions, nations });
+}
+
+type WorldMap = {
+  microRegions: MicroRegion[];
+  microRegionEdges: MicroRegionEdge[];
+  mesoRegions: MesoRegion[];
+  macroRegions: MacroRegion[];
+  nations: Nation[];
+};
+
+export function createWorldFromMap(config: WorldConfig, map: WorldMap): WorldState {
+  const { microRegions, microRegionEdges, mesoRegions, macroRegions, nations } = map;
+  const simRng = new SeededRng(config.seed + 1);
   const productionBalance = WORLD_BALANCE.production;
   const unitRange = productionBalance.unitSlowTickRange;
   const isUnitProductionEnabled = unitRange.min > 0 && unitRange.max > 0;
