@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSocietyWorld } from "../helpers/society-world";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 import { getDiplomacyState, getRelation, getInfluence } from "../../src/sim/diplomacy";
 import { createFaction, joinFaction, leaveFaction, transferFactionLeadership, expelFactionMember, ensureFactionLeadership, getFactionSuccessors } from "../../src/sim/factions";
 import { declareWar } from "../../src/sim/war-state";
 function scene() {
-  const world = createSocietyWorld(), [a, b, c] = world.nations;
+  const world = createFixedSocietyWorld(), [a, b, c] = world.nations;
   for (const nation of [a, b, c]) { nation.ideologyId = "capitalism"; getDiplomacyState(world).influenceByNationId.set(nation.id, 100); }
   for (const first of [a, b, c]) for (const second of [a, b, c]) { const r = getRelation(world, first.id, second.id); r.opinion = r.trust = 80; }
   const faction = createFaction(world, a.id, { allowedIdeologyIds: ["capitalism"], defensiveObligation: "mandatory", offensiveObligation: "none", considerPersonality: false })!;

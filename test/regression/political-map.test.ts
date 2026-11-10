@@ -8,7 +8,7 @@ import { createDefaultWorldConfig } from "../../src/data/world-config";
 import { createWorld } from "../../src/sim/create-world";
 import { getMapView, setMapMode, selectMapNation } from "../../src/render/map-view-state";
 import { classifyPoliticalBoundary, getDiplomaticStatus, getNationLabelAnchors, getPoliticalFill } from "../../src/render/political-map-data";
-import { createSocietyWorld } from "../helpers/society-world";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 
 test("player boundaries preserve coastlines and national borders without ocean or district grids", () => {
   assert.equal(classifyPoliticalBoundary(), "none");
@@ -19,7 +19,7 @@ test("player boundaries preserve coastlines and national borders without ocean o
 });
 
 test("diplomatic colors prioritize war and distinguish friendly, neutral and hostile nations", () => {
-  const world = createSocietyWorld(), [a, b] = world.nations;
+  const world = createFixedSocietyWorld(), [a, b] = world.nations;
   assert(a && b);
   const relation = getRelation(world, a.id, b.id);
   relation.opinion = 0; assert.equal(getDiplomaticStatus(world, a.id, b.id), "neutral");
@@ -33,7 +33,7 @@ test("diplomatic colors prioritize war and distinguish friendly, neutral and hos
 });
 
 test("every map mode allows national selection and selection immediately changes the diplomatic reference", () => {
-  const world = createSocietyWorld(), [a, b] = world.nations;
+  const world = createFixedSocietyWorld(), [a, b] = world.nations;
   assert(a && b);
   assert.equal(setMapMode(world, "diplomacy"), false);
   selectMapNation(world, a.id); assert(setMapMode(world, "diplomacy"));
@@ -52,7 +52,7 @@ test("every map mode allows national selection and selection immediately changes
 });
 
 test("faction mode colors allies identically and keeps non-aligned states distinct", () => {
-  const world = createSocietyWorld(), [a, b, c] = world.nations;
+  const world = createFixedSocietyWorld(), [a, b, c] = world.nations;
   assert(a && b && c);
   a.ideologyId = b.ideologyId = "capitalism";
   getDiplomacyState(world).influenceByNationId.set(a.id, 100);
@@ -65,7 +65,7 @@ test("faction mode colors allies identically and keeps non-aligned states distin
 });
 
 test("country labels are anchored on owned land, including disconnected holdings", () => {
-  const world = createSocietyWorld(), anchors = getNationLabelAnchors(world), owners = getOwnerByMesoId(world);
+  const world = createFixedSocietyWorld(), anchors = getNationLabelAnchors(world), owners = getOwnerByMesoId(world);
   assert(anchors.length >= world.nations.length);
   for (const anchor of anchors) {
     assert.equal(owners.get(anchor.regionId), anchor.nationId);
@@ -75,7 +75,7 @@ test("country labels are anchored on owned land, including disconnected holdings
 
 test("occupation overlays distinguish the owner from the controller and disappear on liberation or annexation", async () => {
   const { getPlayerOccupations, getOccupationSummary } = await import("../../src/render/political-map-data");
-  const world = createSocietyWorld(), [owner, occupier] = world.nations;
+  const world = createFixedSocietyWorld(), [owner, occupier] = world.nations;
   assert(owner && occupier);
   const macro = world.macroRegions.find((item) => item.nationId === owner.id)!;
   const occupiedRegions = macro.mesoRegionIds.slice(0, 2);
@@ -95,7 +95,7 @@ test("occupation overlays distinguish the owner from the controller and disappea
 });
 
 test("puppets use a darker shade of their overlord's political color", () => {
-  const world = createSocietyWorld(), [overlord, subject] = world.nations;
+  const world = createFixedSocietyWorld(), [overlord, subject] = world.nations;
   assert(overlord && subject);
   const original = getPoliticalFill(world, subject.id);
   const parent = getPoliticalFill(world, overlord.id);

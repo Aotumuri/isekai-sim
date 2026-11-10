@@ -9,13 +9,13 @@ import { getSubjectOverlord, releaseSubjectGovernment, updateSubjectGovernments 
 import { acceptPeaceOffer, getPeaceTermsIssue, getWarNegotiation, proposePeaceTerms, updateWarNegotiations, whitePeaceTerms } from "../../src/sim/war-negotiations";
 import { getOwnerByMesoId } from "../../src/sim/world-cache";
 import { declareWar, findWar } from "../../src/sim/war-state";
-import { createSocietyWorld } from "../helpers/society-world";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 
 const terms = { ...whitePeaceTerms(), puppetTarget: true };
 
 function scene() {
-  const world = createSocietyWorld();
-  const [overlord, target, third] = world.nations;
+  const world = createFixedSocietyWorld();
+  const [overlord, target, , third] = world.nations;
   overlord.ideologyId = "capitalism";
   target.ideologyId = "communism";
   declareWar(world.wars, overlord.id, target.id, 0);

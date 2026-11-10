@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSocietyWorld } from "../helpers/society-world";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 import { ideologyCompatibility, getIdeologicalAffinity } from "../../src/sim/ideology-relations";
 import { BUILTIN_IDEOLOGIES, createIdeology } from "../../src/sim/nation-identity";
 import { getRelation, getDiplomacyState, proposeTreaty, updateDiplomaticRelations, hasTreaty } from "../../src/sim/diplomacy";
 import { declareWar } from "../../src/sim/war-state";
 
 function scene(opposed = false) {
-  const world = createSocietyWorld(), [a, b, c] = world.nations;
+  const world = createFixedSocietyWorld(), [a, b, c] = world.nations;
   a.ideologyId = "capitalism"; b.ideologyId = opposed ? "communism" : "capitalism";
   for (const nation of [a, b]) nation.character = { doctrine: "merchant", cooperation: 0.9, aggression: 0.25, innovation: 0.5, thrift: 0.8 };
   return { world, a: a.id, b: b.id, c: c.id, relation: getRelation(world, a.id, b.id) };
 }
-function advance(world: ReturnType<typeof createSocietyWorld>, seconds: number) {
+function advance(world: ReturnType<typeof createFixedSocietyWorld>, seconds: number) {
   for (let second = 0; second < seconds; second += 10) { world.time.slowTick += 10; updateDiplomaticRelations(world); }
 }
 

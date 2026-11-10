@@ -4,10 +4,10 @@ import { getDiplomacyState, getRelation } from "../../src/sim/diplomacy";
 import { createFaction, getNationFaction, joinFaction, factionWillingness, updateFactionWarCalls, leaveFaction,
   setNationIdeology, type FactionCharter } from "../../src/sim/factions";
 import { declareWar, findWar } from "../../src/sim/war-state";
-import { createSocietyWorld } from "../helpers/society-world";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 
 function prepared() {
-  const world = createSocietyWorld();
+  const world = createFixedSocietyWorld();
   for (const nation of world.nations) {
     nation.ideologyId = "capitalism";
     getDiplomacyState(world).influenceByNationId.set(nation.id, 100);

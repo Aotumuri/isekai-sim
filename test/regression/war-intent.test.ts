@@ -6,14 +6,11 @@ import {
   assessWarIntent,
   generateWarDeclarationCandidates,
 } from "../../src/sim/war-declaration";
-import { createSeededWorld } from "../helpers/seeded-world";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 import type { NationId } from "../../src/worldgen/nation";
 
 function createIntentWorld() {
-  const world = createSeededWorld({ seed: 101, width: 640, height: 360, config: {
-    microRegionCount: 1_200, nationTargetMacroRegionsPerNation: 2,
-    nationMacroRegionSizeRange: { min: 2, max: 5 },
-  } });
+  const world = createFixedSocietyWorld();
   updateSupplyAssessment(world);
   updateStrategicThreatObservation(world);
   return world;

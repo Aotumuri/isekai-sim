@@ -6,10 +6,10 @@ import { getNationalMilitaryStrength, openDiplomaticCrisis, respondToCrisis, sta
 import { updateSupplyAssessment } from "../../src/sim/supply-assessment";
 import { updateStrategicThreatObservation } from "../../src/sim/strategic-threat-observation";
 import { findWar } from "../../src/sim/war-state";
-import { createSocietyWorld } from "../helpers/society-world";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 
 export function createCrisisWorld() {
-  const world = createSocietyWorld();
+  const world = createFixedSocietyWorld();
   updateSupplyAssessment(world); updateStrategicThreatObservation(world);
   const exposure = world.strategicThreatObservation.exposures.find((item) => item.landAdjacent)!;
   const a = exposure.observerNationId, b = exposure.threatNationId;

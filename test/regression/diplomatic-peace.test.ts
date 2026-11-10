@@ -3,14 +3,14 @@ import test from "node:test";
 import { extendTruce, getDiplomacyState, getInfluence, getRelation, hasTreaty, TRUCE_EXTENSION } from "../../src/sim/diplomacy";
 import { concludePeace, getWarFatigue, mediateCrisis, updateDiplomaticPeace } from "../../src/sim/diplomatic-peace";
 import { declareWar, findWar } from "../../src/sim/war-state";
-import { createSocietyWorld } from "../helpers/society-world";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 import { createScenarioWorld } from "../scenarios";
 import { createSimulationSettings } from "../../src/sim/simulation-settings";
 import { stepFastTick, stepSlowTick } from "../../src/sim/update";
 import { withMutedSimulationLogs } from "../helpers/muted-logs";
 
 test("negotiated peace returns occupations and troops while preserving unrelated wars", () => {
-  const world = createSocietyWorld();
+  const world = createFixedSocietyWorld();
   const [a, b, c] = world.nations.slice(0, 3);
   assert(a && b && c);
   declareWar(world.wars, a.id, b.id, 0);
@@ -32,7 +32,7 @@ test("negotiated peace returns occupations and troops while preserving unrelated
 });
 
 test("war fatigue updates once per interval and trusted third parties can mediate", () => {
-  const world = createSocietyWorld();
+  const world = createFixedSocietyWorld();
   const [a, b, c] = world.nations.slice(0, 3);
   assert(a && b && c);
   declareWar(world.wars, a.id, b.id, 0);
@@ -72,7 +72,7 @@ test("peace rescues troops embarked at sea without counting a failed landing", (
 });
 
 test("a friendly partner extends an expiring truce once and keeps both parties protected", () => {
-  const world = createSocietyWorld();
+  const world = createFixedSocietyWorld();
   const [a, b] = world.nations;
   const relation = getRelation(world, a.id, b.id);
   relation.opinion = 20;

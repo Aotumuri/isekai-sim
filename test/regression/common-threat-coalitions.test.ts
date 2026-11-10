@@ -6,13 +6,10 @@ import {
 import { updateSupplyAssessment } from "../../src/sim/supply-assessment";
 import { updateStrategicThreatObservation } from "../../src/sim/strategic-threat-observation";
 import { assessWarIntent } from "../../src/sim/war-declaration";
-import { createSeededWorld } from "../helpers/seeded-world";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 
 function createCoalitionWorld() {
-  const world = createSeededWorld({ seed: 919, width: 640, height: 360, config: {
-    microRegionCount: 1_200, nationTargetMacroRegionsPerNation: 2,
-    nationMacroRegionSizeRange: { min: 2, max: 5 },
-  } });
+  const world = createFixedSocietyWorld();
   updateSupplyAssessment(world);
   updateStrategicThreatObservation(world);
   assert(world.nations.length >= 3);

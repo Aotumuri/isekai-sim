@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSocietyWorld } from "../helpers/society-world";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 import { getRelation, getDiplomacyState } from "../../src/sim/diplomacy";
 import { requestAlliedWarEntry, respondToAlliedWarRequest, updateAlliedWarRequests, willAcceptAlliedWarRequest } from "../../src/sim/allied-war-requests";
 import { declareWar, findWar } from "../../src/sim/war-state";
 
 function scene() {
-  const world = createSocietyWorld(), [caller, ally, enemy] = world.nations;
+  const world = createFixedSocietyWorld(), [caller, ally, enemy] = world.nations;
   const relation = getRelation(world, caller.id, ally.id); relation.opinion = 80; relation.trust = 80;
   relation.treaties.push({ type: "alliance", expiresAtSlowTick: 1000 });
   declareWar(world.wars, enemy.id, caller.id, 0);
