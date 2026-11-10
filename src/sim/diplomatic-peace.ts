@@ -87,13 +87,15 @@ export function mediateCrisis(world: WorldState, mediatorId: NationId, a: Nation
 }
 
 export function updateDiplomaticPeace(world: WorldState): void {
-  if (getWarDeclarationMode(world) !== "diplomacy") return;
+  const diplomacyEnabled = getWarDeclarationMode(world) === "diplomacy";
+  const wars = diplomacyEnabled ? world.wars : world.wars.filter((war) => war.cause === "player-declaration");
+  if (!diplomacyEnabled && !wars.length) return;
   const state = getDiplomacyState(world);
   if (world.time.slowTick - state.lastPeaceSlowTick < 10) return;
   state.lastPeaceSlowTick = world.time.slowTick;
   const liveKeys = new Set(world.wars.map(warFatigueKey));
   for (const key of state.fatigueByWarId.keys()) if (!liveKeys.has(key)) state.fatigueByWarId.delete(key);
-  for (const war of [...world.wars]) {
+  for (const war of wars) {
     const key = warFatigueKey(war);
     const legacyFatigue = state.fatigueByWarId.get(key) ?? 0;
     const sides = war.exhaustionByNationId ??= new Map();
@@ -108,6 +110,7 @@ export function updateDiplomaticPeace(world: WorldState): void {
 
   }
   updateWarNegotiations(world);
+  if (!diplomacyEnabled) return;
   for (const relation of state.relations.values()) {
     if (!relation.crisis || world.time.slowTick - relation.crisis.openedAtSlowTick < 10) continue;
     const mediator = world.nations.filter(isNationActive).find((nation) => nation.id !== relation.nationAId &&

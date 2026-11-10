@@ -86,7 +86,8 @@ function legsFor(proposer: NationId, target: NationId, terms: PeaceTerms): Terri
     ...(terms.offeredRegionIds.length ? [{ from: proposer, to: target, regionIds: terms.offeredRegionIds }] : [])];
 }
 export function getPeaceTermsIssue(world: WorldState, proposer: NationId, target: NationId, terms: PeaceTerms): string | null {
-  if (getWarDeclarationMode(world) !== "diplomacy" || !findWar(world.wars, proposer, target)) return "These nations are not negotiating an active war.";
+  const war = findWar(world.wars, proposer, target);
+  if (!war || (war.cause !== "player-declaration" && getWarDeclarationMode(world) !== "diplomacy")) return "These nations are not negotiating an active war.";
   if (!Array.isArray(terms.demandedRegionIds) || !Array.isArray(terms.offeredRegionIds)) return "Select valid territories.";
   if (![terms.demandedWeapons, terms.offeredWeapons].every((amount) => Number.isInteger(amount) && amount >= 0 && amount <= 100) ||
     (terms.demandedWeapons > 0 && terms.offeredWeapons > 0) || !Number.isInteger(terms.truceSeconds) || terms.truceSeconds < 180 || terms.truceSeconds > 900) return "Check reparations and the truce duration.";
@@ -379,13 +380,15 @@ function tryMutualCompromise(world: WorldState, negotiation: WarNegotiation): bo
 }
 
 export function updateWarNegotiations(world: WorldState): void {
-  if (getWarDeclarationMode(world) !== "diplomacy") return;
+  const wars = getWarDeclarationMode(world) === "diplomacy" ? world.wars
+    : world.wars.filter((war) => war.cause === "player-declaration");
+  if (!wars.length && getWarDeclarationMode(world) !== "diplomacy") return;
   const state = getWarNegotiationState(world), live = new Set(world.wars.map(warFatigueKey));
   for (const key of state.active.keys()) if (!live.has(key)) state.active.delete(key);
-  for (const war of world.wars) getWarNegotiation(world, war);
+  for (const war of wars) getWarNegotiation(world, war);
   if (world.time.slowTick - state.lastAISlowTick < 10) return;
   state.lastAISlowTick = world.time.slowTick;
-  for (const war of [...world.wars]) {
+  for (const war of [...wars]) {
     if (hasConferenceWar(world, war)) continue;
     const negotiation = getWarNegotiation(world, war);
     sampleWarOutlook(world, negotiation);

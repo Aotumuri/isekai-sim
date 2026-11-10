@@ -12,12 +12,12 @@ import { canTransferTerritories, transferTerritories } from "./territory-transfe
 import { getOwnerByMesoId } from "./world-cache";
 import { areFactionPartners, getFactionDefenders } from "./factions";
 import type { NationId } from "../worldgen/nation";
-import { getDefensePact, getDiplomacyState, getRelation, hasTreaty, isDiplomaticallyProtected, spendInfluence } from "./diplomacy";
+import { getDefensePact, getDiplomacyState, getRelation, hasTreaty, relationKey, isDiplomaticallyProtected, spendInfluence } from "./diplomacy";
 import { getNationCharacter } from "./nation-character";
 import { isNationActive } from "./nation-active";
 import { getWarDeclarationMode, recordSimulationEvent } from "./simulation-settings";
 import { assessWarIntent, generateWarDeclarationCandidates } from "./war-declaration";
-import { buildWarAdjacency, declareWar, findWar } from "./war-state";
+import { buildWarAdjacency, declareWar, findWar, type WarState } from "./war-state";
 import { getUnitCombatStrength } from "./unit-strength";
 import type { WorldState } from "./world-state";
 
@@ -139,6 +139,32 @@ export function startDiplomaticWar(world: WorldState, aggressorId: NationId, tar
   const overlord = getSubjectOverlord(world, aggressorId);
   if (overlord && !findWar(world.wars, overlord, targetId)) return false;
   if (cause === "diplomatic-crisis" && !hasWarApproach(world, aggressorId, targetId)) return false;
+  return createDiplomaticWar(world, aggressorId, targetId, cause);
+}
+
+export function getPlayerWarIssue(world: WorldState, targetId: NationId) {
+  const aggressorId = getPlayerNation(world)?.nationId;
+  if (!aggressorId || aggressorId === targetId ||
+    !world.nations.some((nation) => nation.id === targetId && isNationActive(nation))) return "invalid-target";
+  if (findWar(world.wars, aggressorId, targetId)) return "already-at-war";
+  const overlord = getSubjectOverlord(world, aggressorId);
+  if (overlord && !findWar(world.wars, overlord, targetId)) return "subject";
+  for (const treaty of ["truce", "non-aggression", "alliance"] as const) {
+    if (hasTreaty(world, aggressorId, targetId, treaty)) return treaty;
+  }
+  if (isDiplomaticallyProtected(world, aggressorId, targetId)) return "protected";
+  return null;
+}
+
+export function startPlayerWar(world: WorldState, targetId: NationId): boolean {
+  const aggressorId = getPlayerNation(world)?.nationId;
+  if (!aggressorId || getPlayerWarIssue(world, targetId)) return false;
+  const relation = world.diplomacy?.relations.get(relationKey(aggressorId, targetId));
+  const cause = getWarDeclarationMode(world) === "diplomacy" && relation?.crisis?.aggressorId === aggressorId ? "diplomatic-crisis" : "player-declaration";
+  return createDiplomaticWar(world, aggressorId, targetId, cause);
+}
+
+function createDiplomaticWar(world: WorldState, aggressorId: NationId, targetId: NationId, cause: NonNullable<WarState["cause"]>): boolean {
   prepareMilitaryAccessForWar(world, aggressorId, targetId);
   const war = declareWar(world.wars, aggressorId, targetId, world.time.fastTick);
   if (!war) return false;
@@ -153,7 +179,7 @@ export function startDiplomaticWar(world: WorldState, aggressorId: NationId, tar
   getWarNegotiation(world, war);
   for (const other of getDiplomacyState(world).relations.values()) {
     if (other === relation || (other.nationAId !== aggressorId && other.nationBId !== aggressorId)) continue;
-    other.opinion = Math.max(-100, other.opinion - (cause === "diplomatic-crisis" ? 8 : 1));
+    other.opinion = Math.max(-100, other.opinion - (cause === "diplomatic-crisis" || cause === "player-declaration" ? 8 : 1));
   }
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [aggressorId, targetId],
     message: `${aggressorId} declared war on ${targetId} (${cause}).` });

@@ -19,7 +19,7 @@ export function updateFactionSanctions(world: WorldState): void {
   const now = world.time.slowTick;
   if (!hasPoliticalTurbulence(world) || !world.settings?.tradeEnabled || now % 20 !== 0 || !world.factions?.factions.length) return;
   const active = new Set(world.nations.filter(isNationActive).map(({ id }) => id));
-  const threats = world.wars.filter((war) => !war.cause || war.cause === "diplomatic-crisis")
+  const threats = world.wars.filter((war) => !war.cause || war.cause === "diplomatic-crisis" || war.cause === "player-declaration")
     .map(({ aggressorId, defenderId }) => ({ aggressorId, defenderId }));
   for (const relation of getDiplomacyState(world).relations.values()) {
     const aggressorId = relation.crisis?.aggressorId;
