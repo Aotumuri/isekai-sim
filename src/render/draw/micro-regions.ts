@@ -1,6 +1,6 @@
 import { Graphics, type Container } from "pixi.js";
 import { clearLayer } from "../clear-layer";
-import type { MicroRegion } from "../worldgen/micro-region";
+import type { MicroRegion } from "../../worldgen/micro-region";
 import { createTerrainColorScale } from "../terrain-color";
 
 export function drawMicroRegions(layer: Container, microRegions: MicroRegion[]): void {

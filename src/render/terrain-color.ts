@@ -1,9 +1,12 @@
 import type { MicroRegion } from "../worldgen/micro-region";
 
-const SEA_COLOR = 0xc4c4e0;
-const LAND_LOW_COLOR = 0xf1f1f1;
-const LAND_HIGH_COLOR = 0xc4c4af;
-const RIVER_COLOR = 0xc4c4ff;
+const SEA_COLOR = 0x24465b;
+const RIVER_COLOR = 0x668eb3;
+export const TERRAIN_COLORS = {
+  plains: 0x80aa69,
+  highlands: 0xb49e6b,
+  mountains: 0xeee5d5,
+};
 
 export function createTerrainColorScale(
   microRegions: MicroRegion[],
@@ -31,8 +34,10 @@ export function createTerrainColorScale(
       return SEA_COLOR;
     }
 
-    const t = landRange === 0 ? 1 : (region.elevation - landMin) / landRange;
-    return mixColor(LAND_LOW_COLOR, LAND_HIGH_COLOR, t);
+    const t = landRange === 0 ? 0 : (region.elevation - landMin) / landRange;
+    if (t <= 0.15) return TERRAIN_COLORS.plains;
+    if (t < 0.52) return mixColor(TERRAIN_COLORS.plains, TERRAIN_COLORS.highlands, (t - 0.15) / 0.37);
+    return mixColor(TERRAIN_COLORS.highlands, TERRAIN_COLORS.mountains, (t - 0.52) / 0.48);
   };
 }
 

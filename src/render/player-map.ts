@@ -121,7 +121,7 @@ export function attachPlayerMap(renderer: Renderer, world: WorldState): { update
   renderer.worldLayers.layers.NationLabels.addChild(labels, selection, parcelSelection);
   const update = () => {
     const view = getMapView(world), debug = view.mode === "debug";
-    layer.visible = !debug; renderer.worldLayers.layers.NationLabels.visible = true; labels.visible = !debug && view.labels;
+    layer.visible = !debug && view.mode !== "terrain"; renderer.worldLayers.layers.NationLabels.visible = true; labels.visible = !debug && view.labels;
     renderer.worldLayers.layers.NationFill.visible = debug;
     renderer.worldLayers.layers.MesoBorder.visible = debug;
     renderer.worldLayers.layers.TerritoryEffects.visible = debug;
