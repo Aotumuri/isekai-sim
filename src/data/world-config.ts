@@ -6,9 +6,11 @@ export interface Range {
   max: number;
 }
 
+export type WorldMapPreset = "world-map" | "japan-scale";
+
 export interface WorldConfig {
   systems?: Partial<SimulationSettings>;
-  continentalLayout?: "oceanic" | "world-map";
+  continentalLayout?: "oceanic" | WorldMapPreset;
   nationBorderStyle?: "terrain";
   width: number;
   height: number;
@@ -53,10 +55,10 @@ export interface WorldConfig {
 // ランダムよう
 const DEFAULT_SEED = Math.floor(Math.random() * 1_000_000_000_000);
 
-export function createDefaultWorldConfig(): WorldConfig {
+export function createDefaultWorldConfig(preset: WorldMapPreset = "world-map"): WorldConfig {
   return {
-    ...createWorldConfig(4096, 2304, 320_000),
-    continentalLayout: "world-map",
+    ...createWorldConfig(4096, 2304, preset === "japan-scale" ? 160_000 : 320_000),
+    continentalLayout: preset,
     nationBorderStyle: "terrain",
     systems: { politicalTurbulenceEnabled: true },
     nationTargetMacroRegionsPerNation: 6,

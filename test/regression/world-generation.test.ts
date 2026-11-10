@@ -215,6 +215,23 @@ test("the default world map moves its largest continent between seeds", () => {
   assert.ok(mapsWithSubmergedRidges >= 5);
 });
 
+test("Japan scale produces an elongated mountainous archipelago", () => {
+  const config = createDefaultWorldConfig("japan-scale");
+  let mapsWithMajorStraits = 0;
+  for (const seed of [2, 17, 76]) {
+    const world = createWorld({ ...config, seed, microRegionCount: 12_000 });
+    const land = world.microRegions.filter((region) => !region.isSea);
+    const remaining = new Map(land.map((region) => [region.id, region]));
+    const islands = [...remaining.values()].flatMap((region) =>
+      remaining.has(region.id) ? [collectConnectedRegions(region, remaining)] : []);
+    const majorIslands = islands.filter((island) => island.length > world.microRegions.length * 0.008);
+    if (majorIslands.length >= 2) mapsWithMajorStraits++;
+    assert.ok(land.length > 1000 && land.length < 3700, `seed ${seed}`);
+    assert.ok(land.some((region) => region.elevation > config.elevationSeaLevel + 0.23));
+  }
+  assert.ok(mapsWithMajorStraits >= 2);
+});
+
 test("terrain-driven frontiers can follow a river away from the midpoint", () => {
   const config = { ...createWorldConfig(200, 100), seed: 1 };
   const neighbors = Array.from({ length: 9 }, (_, index) => [index - 1, index + 1].filter((id) => id >= 0 && id < 9));
