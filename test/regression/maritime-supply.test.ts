@@ -259,6 +259,8 @@ test("amphibious planning delays for combat power then launches multiple transpo
   const demand = world.amphibiousOperations.capabilityDemands[0]!;
   assert(demand.requiredLandingStrength > demand.availableLandingStrength);
   assert.equal(demand.desiredTransportCount, 2);
+  assert.deepEqual(demand.assignedLandingUnitIds, []);
+  assert.equal(world.amphibiousOperations.capabilityDemandByUnitId.size, 0);
   assert.equal(demand.state, "waiting-landing-force");
   assert.equal(demand.launchReady, false);
   assert.equal(world.amphibiousOperations.operations.length, 0);
@@ -449,6 +451,7 @@ test("an island war bootstraps amphibious capability from zero through naval pro
   assert.equal(world.units.filter((unit) => unit.type === "CombatShip").length, 1);
   updateAmphibiousPlanning(world);
   assert.equal(demand.state, "waiting-escort");
+  assert.deepEqual(demand.assignedLandingUnitIds, []);
   assert.deepEqual(demand.assignedTransportIds, []);
   assert.deepEqual(demand.assignedEscortIds, []);
   assert.equal(world.amphibiousOperations.capabilityDemandByUnitId.has(

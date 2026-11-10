@@ -1126,21 +1126,10 @@ function refreshCapabilityProgress(world: WorldState, demand: AmphibiousCapabili
     demand.assignedTransportIds = leaseTransports;
     demand.assignedEscortIds = leaseEscorts;
   }
-  const previousLandingIds = new Set(demand.assignedLandingUnitIds);
   rebuildOwnership(world);
   const leasedCapacity = getFleetTransportCapacity(leaseTransports.map((id) => unitById.get(id)!));
   const landingForce = selectLandingForce(world, demand, leaseStillComplete ? leasedCapacity : 0);
   const selectedLandingUnits = landingForce.units;
-  demand.assignedLandingUnitIds = selectedLandingUnits.map((unit) => unit.id);
-  for (const id of demand.assignedLandingUnitIds) previousLandingIds.delete(id);
-  for (const id of previousLandingIds) {
-    const unit = unitById.get(id);
-    if (unit?.moveTargetId === demand.departurePortId) resetMovement(unit);
-  }
-  for (const unit of selectedLandingUnits) {
-    releaseUnitFromFrontAllocation(world, unit.id);
-    if (unit.regionId !== demand.departurePortId) unit.moveTargetId = demand.departurePortId;
-  }
   const previousState = demand.state;
   demand.availableTransportCount = demand.assignedTransportIds.length;
   demand.availableEscortCount = demand.assignedEscortIds.length;
@@ -1178,7 +1167,7 @@ function refreshCapabilityProgress(world: WorldState, demand: AmphibiousCapabili
     const escorts = findAvailableEscorts(world, demand.nationId, demand.departurePortId);
     demand.availableTransportCount = transports.length;
     demand.availableEscortCount = escorts.length;
-    attemptFleetLease(world, demand, transports, escorts);
+    attemptFleetLease(world, demand, transports, escorts, selectedLandingUnits.length);
   } else if (!hasCompleteFleetLease(demand)) {
     demand.availableTransportCount = findAvailableTransports(world, demand.nationId, demand.departurePortId).length;
     demand.availableEscortCount = findAvailableEscorts(world, demand.nationId, demand.departurePortId).length;
@@ -1191,6 +1180,7 @@ function refreshCapabilityProgress(world: WorldState, demand: AmphibiousCapabili
     getFleetTransportCapacity(demand.assignedTransportIds.flatMap((id) => { const unit = unitById.get(id); return unit ? [unit] : []; })) >= demand.availableLandingUnitCount &&
     demand.availableEscortCount >= Math.min(demand.desiredEscortCount, demand.availableTransportCount);
   demand.launchReady = fleetReachable && forceReady || emergencyReady || reinforcementReady;
+  assignLandingForce(world, demand, demand.launchReady ? selectedLandingUnits : [], unitById);
   if (!fleetReachable || !forceReady) {
     if (emergencyReady || reinforcementReady) {
       demand.waitingReason = null;
@@ -1218,6 +1208,25 @@ function refreshCapabilityProgress(world: WorldState, demand: AmphibiousCapabili
   }
 }
 
+function assignLandingForce(
+  world: WorldState,
+  demand: AmphibiousCapabilityDemand,
+  units: UnitState[],
+  unitById: ReadonlyMap<UnitId, UnitState>,
+): void {
+  const previous = new Set(demand.assignedLandingUnitIds);
+  demand.assignedLandingUnitIds = units.map((unit) => unit.id);
+  for (const unit of units) {
+    previous.delete(unit.id);
+    releaseUnitFromFrontAllocation(world, unit.id);
+    if (unit.regionId !== demand.departurePortId) unit.moveTargetId = demand.departurePortId;
+  }
+  for (const id of previous) {
+    const unit = unitById.get(id);
+    if (unit?.moveTargetId === demand.departurePortId) resetMovement(unit);
+  }
+}
+
 function hasCompleteFleetLease(demand: AmphibiousCapabilityDemand): boolean {
   return demand.assignedTransportIds.length === demand.desiredTransportCount &&
     demand.assignedEscortIds.length === demand.desiredEscortCount;
@@ -1228,10 +1237,10 @@ function attemptFleetLease(
   demand: AmphibiousCapabilityDemand,
   transports: readonly UnitState[],
   escorts: readonly UnitState[],
+  required: number,
 ): void {
   const state = world.amphibiousOperations;
   state.fleetLeaseAttempts += 1;
-  const required = demand.assignedLandingUnitIds.length || demand.desiredLandingUnitCount;
   const chosen: UnitState[] = [];
   for (const transport of transports) { chosen.push(transport); if (getFleetTransportCapacity(chosen) >= required) break; }
   const capacity = getFleetTransportCapacity(chosen);
@@ -2399,7 +2408,7 @@ function rebuildOwnership(world: WorldState): void {
   const capabilityMap = new Map<UnitId, AmphibiousCapabilityDemand>();
   for (const demand of world.amphibiousOperations.capabilityDemands) {
     if (!isActiveCapabilityDemand(demand)) continue;
-    // Land-force ownership is independent; naval ownership exists only for a full fleet lease.
+    // Only committed landing units are assigned; naval ownership requires a complete fleet lease.
     const navalIds = hasCompleteFleetLease(demand)
       ? [...demand.assignedTransportIds, ...demand.assignedEscortIds] : [];
     for (const id of [...navalIds, ...demand.assignedLandingUnitIds]) {
