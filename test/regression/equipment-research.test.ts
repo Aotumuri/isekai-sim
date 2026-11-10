@@ -6,7 +6,7 @@ import { EQUIPMENT_FAMILIES, getResearchPortfolio, getNationalDesign, getNationa
   getResearchCost, emptyResearchLevels, designFromResearch, cargoCapacityMultiplier, getResearchPriorities } from "../../src/sim/research";
 function scene() {
   const world = createSocietyWorld(), nation = world.nations[0]!;
-  nation.resources.steel = nation.resources.weapons = 1000; updateSupplyAssessment(world);
+  nation.resources.steel = nation.resources.weapons = 1000; nation.resources.fuel = 100; updateSupplyAssessment(world);
   return { world, nation };
 }
 test("equipment programs have independent levels, progress, focus and priorities", () => {
@@ -86,4 +86,22 @@ test("recognized exile governments retain separate research programs while work 
   assert.equal(getResearchPortfolio(world, a.id, "Tank"), tank);
   assert.equal(tank.levels.armor, 5); assert.equal(tank.progress.mobility, 20);
   assert.equal(tank.status, "government in exile"); assert.equal(tank.lastScience, 0);
+});
+
+test("a prototype material shortage pauses only the affected program", () => {
+  const { world, nation } = scene();
+  Object.assign(nation.resources, { copper: 10, rubber: 0, tungsten: 10 });
+  const tank = getResearchPortfolio(world, nation.id, "Tank");
+  const infantry = getResearchPortfolio(world, nation.id);
+  updateResearch(world);
+  assert.equal(tank.status, "saving resources");
+  assert(infantry.lastScience > 0);
+  assert(nation.resources.copper! < 10);
+
+  nation.resources.rubber = 10;
+  world.time.slowTick++;
+  updateResearch(world);
+  assert(tank.lastScience > 0);
+  assert(nation.resources.rubber < 10);
+  assert(nation.resources.fuel < 100);
 });

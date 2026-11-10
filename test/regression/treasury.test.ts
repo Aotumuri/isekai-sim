@@ -77,6 +77,7 @@ test("military funds expire when the next appropriation cannot be paid", () => {
 test("research funding spends cash only when materials support additional work", () => {
   const world = scene(), nation = world.nations[0]!, treasury = nation.treasury!;
   treasury.researchFunding = true;
+  nation.resources.fuel = 100;
   nation.resources.steel = 0;
   nation.resources.weapons = 100;
   updateSupplyAssessment(world);

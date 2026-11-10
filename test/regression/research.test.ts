@@ -74,6 +74,7 @@ test("the military economy reserves enough steel for research instead of consumi
   const { world, nation, portfolio } = fundedWorld();
   nation.resources.steel = 10;
   nation.resources.weapons = 20;
+  nation.resources.copper = 10;
   nation.nextUnitProductionTick = Infinity;
   updateProduction(world);
   const scienceStock = nation.resources.steel;

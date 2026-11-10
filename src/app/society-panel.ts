@@ -1,3 +1,4 @@
+import { getPrototypeMaterialRates } from "../sim/research-materials";
 import { STRATEGIC_RESOURCE_NAMES, STRATEGIC_RESOURCES } from "../data/strategic-resources";
 import { getCrisisDeploymentReadiness } from "../sim/crisis-deployment";
 import { attachPeaceConferenceControls } from "./peace-conference-controls";
@@ -85,7 +86,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
         <div class="society-selectors"><label>Equipment program<select data-control="research-family" aria-label="Equipment research program">${familyOptions}</select></label>
         <label>Program priority<select data-control="research-priority" aria-label="Equipment research priority"><option value="auto">Automatic: national personality</option><option value="paused">Paused</option><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option></select></label></div>
         <div class="society-selectors"><label>Research focus<select data-control="focus" aria-label="Research focus"><option value="auto">Automatic: personality and circumstances</option>${branchOptions}</select></label><label>National research budget<select data-control="investment" aria-label="Research budget"><option value="economy">Economy (0.5×)</option><option value="balanced">Balanced (1×)</option><option value="ambitious">Ambitious (1.5×)</option></select></label></div>
-        <p class="society-note" data-view="research-status"></p><div data-view="research"></div>
+        <p class="society-note" data-view="research-status"></p><p class="society-note" data-view="prototype-materials"></p><div data-view="research"></div>
         <p class="society-note" data-view="program-description"></p><h2 data-view="design-title">Latest domestic design</h2><div class="society-design" data-view="design"></div><p class="society-note">Firepower, protection, speed and payload have cost, fuel, weight or reliability penalties. Efficiency research offsets them. New units receive their own family’s design; existing units refit gradually at supplied facilities.</p>
         <div class="society-actions"><button type="button" data-action="refit">Refit up to 2 units in this program</button></div>
         <h2>Technology licensing</h2><div class="society-trade-form"><label>Technology to license<select data-control="license" aria-label="Licensed technology">${branchOptions}</select></label><button type="button" data-action="license">License to selected partner</button></div><p class="society-note">Licenses the selected equipment program only. Requires an alliance or trade pact, trust 55 and a technology advantage. Costs 5 influence; the partner pays 4 weapons and 2 steel to accelerate its research.</p>
@@ -204,6 +205,9 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     }).join("")}</tbody></table>`;
     const family = control("research-family").value as EquipmentFamily;
     const portfolio = getResearchPortfolio(world, a, family), national = getResearchPortfolio(world, a);
+    const prototypeMaterials = nation ? getPrototypeMaterialRates(nation.resources, family) : [];
+    setText("prototype-materials", ["Per science point: 0.4 Steel, 0.2 Weapons",
+      ...prototypeMaterials.map(([resource, rate]) => `${rate} ${RESOURCE_NAMES[resource]} (${(nation?.resources[resource] ?? 0).toFixed(1)} in stock)`)].join(" · "));
     if (researchOptionFamily !== family) {
       const options = FAMILY_RESEARCH_BRANCHES[family].map((branch) => `<option value="${branch}">${BRANCH_NAMES[branch]}</option>`).join("");
       control("focus").innerHTML = `<option value="auto">Automatic: personality and circumstances</option>${options}`;

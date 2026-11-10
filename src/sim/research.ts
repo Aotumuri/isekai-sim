@@ -1,3 +1,5 @@
+import { changeResource } from "./international-trade";
+import { getPrototypeMaterialRates } from "./research-materials";
 import { spendTreasury } from "./treasury";
 import { buildWarAdjacency } from "./war-state";
 import type { NationId } from "../worldgen/nation";
@@ -173,21 +175,21 @@ export function updateResearch(world: WorldState): void {
     const investment = root.investment === "ambitious" ? 1.5 : root.investment === "economy" ? 0.5 : 1;
     const capacity = Math.min(3, 0.6 + (cities.get(nation.id)?.length ?? 0) * 0.12 + getNationCharacter(world, nation.id).innovation * 0.5) * investment;
     const materialLimit = Math.min(Math.max(0, nation.resources.steel - 6) / 0.4, Math.max(0, nation.resources.weapons - 6) / 0.2);
-    let budget = Math.min(capacity, materialLimit);
-    if (nation.treasury?.researchFunding && budget >= 0.1) {
-      const bonus = Math.min(capacity * 0.6, materialLimit - budget, nation.treasury.balance / 2);
-      if (spendTreasury(nation.treasury, "research", bonus * 2)) budget += bonus;
-    }
-    if (budget < 0.1) { for (const family of EQUIPMENT_FAMILIES) if (weights[family]) getResearchPortfolio(world, nation.id, family).status = "saving resources"; continue; }
-    const steel = budget * 0.4, weapons = budget * 0.2;
-    nation.resources.steel -= steel; nation.resources.weapons -= weapons;
-    nation.resourceFlow.usage.steel += steel; nation.resourceFlow.delta.steel -= steel;
-    nation.resourceFlow.usage.weapons += weapons; nation.resourceFlow.delta.weapons -= weapons;
-    state.steelSpent += steel; state.weaponsSpent += weapons;
+    const baseBudget = Math.min(capacity, materialLimit);
+    const bonus = nation.treasury?.researchFunding && baseBudget >= 0.1
+      ? Math.min(capacity * 0.6, materialLimit - baseBudget, nation.treasury.balance / 2) : 0;
+    const budget = baseBudget + bonus;
+    let usedBudget = 0;
     for (const family of EQUIPMENT_FAMILIES) {
       if (!weights[family]) continue;
       const program = getResearchPortfolio(world, nation.id, family), priorities = getResearchPriorities(world, nation.id, family);
-      const sum = Object.values(priorities).reduce((value, item) => value + item, 0), science = budget * weights[family] / total;
+      const sum = Object.values(priorities).reduce((value, item) => value + item, 0);
+      const materials = getPrototypeMaterialRates(nation.resources, family);
+      const science = materials.reduce((limit, [resource, rate]) =>
+        Math.min(limit, Math.max(0, (nation.resources[resource] ?? 0) - 2) / rate), budget * weights[family] / total);
+      if (budget < 0.1 || science <= 0) { program.status = "saving resources"; continue; }
+      for (const [resource, rate] of materials) changeResource(nation, resource, -science * rate);
+      usedBudget += science;
       program.primaryBranch = [...FAMILY_RESEARCH_BRANCHES[family]].sort((a, b) => priorities[b] - priorities[a])[0]!;
       program.lastScience = science; program.totalScience += science; program.status = "researching";
       for (const branch of FAMILY_RESEARCH_BRANCHES[family]) {
@@ -198,6 +200,13 @@ export function updateResearch(world: WorldState): void {
         program.progress[branch] = Math.max(0, program.progress[branch] - cost); program.levels[branch]++; program.completedProjects++;
         recordSimulationEvent(world, { category: "research", nationIds: [nation.id], message: `${nation.id} completed ${EQUIPMENT_FAMILY_NAMES[family]} / ${RESEARCH_BRANCH_NAMES[branch]} level ${program.levels[branch]}.` });
       }
+    }
+    const steel = usedBudget * 0.4, weapons = usedBudget * 0.2;
+    if (usedBudget > 0) {
+      changeResource(nation, "steel", -steel);
+      changeResource(nation, "weapons", -weapons);
+      state.steelSpent += steel; state.weaponsSpent += weapons;
+      if (nation.treasury && usedBudget > baseBudget) spendTreasury(nation.treasury, "research", (usedBudget - baseBudget) * 2);
     }
   }
 }
