@@ -181,12 +181,13 @@ canvas {
 .peace-assessment { grid-column: 1 / -1; }
 
 .map-controls.player-controls {
-  top: 12px; right: auto; left: 12px; width: min(300px, calc(100vw - 24px));
-  max-height: calc(100dvh - 84px); overflow: auto; box-sizing: border-box;
+  top: 138px; right: auto; left: 12px; width: min(300px, calc(100vw - 24px));
+  max-height: calc(100dvh - 196px); overflow: auto; box-sizing: border-box;
   padding: 16px; font-size: 14px; background: #102336f7;
 }
 .player-controls header { margin-bottom: 12px; }
-.player-controls header small { color: #b4cde3; }
+.player-controls header small, .player-controls [data-overview] { color: #b4cde3; }
+.player-controls [data-overview] { margin: 4px 0 0; }
 .player-controls h2 { margin: 3px 0 0; font-size: 22px; overflow-wrap: anywhere; }
 .player-controls nav { display: flex; flex-wrap: wrap; gap: 6px; }
 .player-controls details { border-top: 1px solid #49627d; margin-top: 12px; padding-top: 9px; }

@@ -14,7 +14,7 @@ export function attachPlayerControls(
   const panel = document.createElement("aside");
   panel.className = "map-controls player-controls";
   panel.setAttribute("aria-label", "国家情報");
-  panel.innerHTML = `<header><small></small><h2></h2></header>
+  panel.innerHTML = `<header><small></small><h2></h2><p data-overview></p></header>
     <button type="button" data-enter>この国を操作する</button>
     <div data-command hidden>
       <nav aria-label="国家操作">
@@ -29,16 +29,22 @@ export function attachPlayerControls(
   const updateLandings = attachPlayerLandingControls(command, world, getDestination);
   const heading = panel.querySelector("h2")!;
   const label = panel.querySelector("small")!;
+  const overview = panel.querySelector<HTMLElement>("[data-overview]")!;
   const enter = panel.querySelector<HTMLButtonElement>("[data-enter]")!;
   const update = () => {
     const player = getPlayerNation(world);
     const id = player?.nationId ?? getMapView(world).selectedNationId;
-    panel.hidden = !id;
-    if (!id) return;
-    const name = getNationName(world, id);
+    const nation = world.nations.find((entry) => entry.id === id);
+    panel.hidden = !nation;
+    if (!nation) return;
+    const name = getNationName(world, nation.id);
+    const wars = world.wars.filter((war) => war.nationAId === id || war.nationBId === id).length;
+    const summary = `領土 ${nation.macroRegionIds.length} 州 · ${wars ? `交戦 ${wars} 件` : "平時"}`;
+    if (overview.textContent !== summary) overview.textContent = summary;
     if (heading.textContent !== name) heading.textContent = name;
-    label.textContent = player ? "操作中の国家" : "選択中の国家";
-    enter.hidden = !!player || !world.nations.some((nation) => nation.id === id && isNationActive(nation));
+    const caption = player ? "操作中の国家" : "選択中の国家";
+    if (label.textContent !== caption) label.textContent = caption;
+    enter.hidden = !!player || !isNationActive(nation);
     command.hidden = !player;
     if (player) {
       updateDiplomacy();
