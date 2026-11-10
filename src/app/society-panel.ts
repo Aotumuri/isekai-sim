@@ -42,7 +42,7 @@ const RESOURCE_NAMES: Record<TradeResource, string> = { ...STRATEGIC_RESOURCE_NA
 const RESEARCH_STATUS = { researching: "Researching", "saving resources": "Saving research funds", "capital isolated": "Capital isolated", complete: "Research complete", paused: "Preparing", "government in exile": "Government in exile" };
 const esc = (value: unknown) => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]!));
 
-export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: SimClock): { update: () => void; openDiplomacy: () => void; openFactions: () => void; setEmbedded: (host: HTMLElement | null) => void; close: () => void } {
+export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: SimClock): { update: () => void; openDiplomacy: () => void; openFactions: () => void; openNegotiations: () => void; setEmbedded: (host: HTMLElement | null) => void; close: () => void } {
   const wrapper = document.createElement("div"); wrapper.className = "society-ui";
   const branchOptions = FAMILY_RESEARCH_BRANCHES.Infantry.map((branch) => `<option value="${branch}">${BRANCH_NAMES[branch]}</option>`).join("");
   const familyOptions = EQUIPMENT_FAMILIES.map((family) => `<option value="${family}">${EQUIPMENT_FAMILY_NAMES[family]}</option>`).join("");
@@ -82,11 +82,11 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       <section data-pane="food" hidden><div data-food-ui></div></section>
       <section data-pane="treasury" hidden><div data-treasury-ui></div></section>
       <section data-pane="research" hidden>
-        <p class="society-note">One national research budget is shared by all equipment programs. Choose a program, set its priority, and select the improvement to emphasize. Pausing a program preserves its progress.</p>
+        <p class="society-note">研究予算は全装備で共通です。装備の優先度と、強化したい性能を選んでください。研究を一時停止しても進捗は残ります。</p>
         <div class="research-programs" data-view="research-programs" aria-label="Equipment research programs"></div>
-        <div class="society-selectors"><label>Equipment program<select data-control="research-family" aria-label="Equipment research program">${familyOptions}</select></label>
-        <label>Program priority<select data-control="research-priority" aria-label="Equipment research priority"><option value="auto">Automatic: national personality</option><option value="paused">Paused</option><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option></select></label></div>
-        <div class="society-selectors"><label>Research focus<select data-control="focus" aria-label="Research focus"><option value="auto">Automatic: personality and circumstances</option>${branchOptions}</select></label><label>National research budget<select data-control="investment" aria-label="Research budget"><option value="economy">Economy (0.5×)</option><option value="balanced">Balanced (1×)</option><option value="ambitious">Ambitious (1.5×)</option></select></label></div>
+        <div class="society-selectors"><label>装備計画<select data-control="research-family" aria-label="Equipment research program">${familyOptions}</select></label>
+        <label>優先度<select data-control="research-priority" aria-label="Equipment research priority"><option value="auto">自動</option><option value="paused">停止</option><option value="low">低</option><option value="normal">通常</option><option value="high">高</option></select></label></div>
+        <div class="society-selectors"><label>重点分野<select data-control="focus" aria-label="Research focus"><option value="auto">自動</option>${branchOptions}</select></label><label>研究予算<select data-control="investment" aria-label="Research budget"><option value="economy">節約（0.5倍）</option><option value="balanced">標準（1倍）</option><option value="ambitious">重点投資（1.5倍）</option></select></label></div>
         <p class="society-note" data-view="research-status"></p><p class="society-note" data-view="prototype-materials"></p><div data-view="research"></div>
         <p class="society-note" data-view="program-description"></p><h2 data-view="design-title">Latest domestic design</h2><div class="society-design" data-view="design"></div><p class="society-note">Firepower, protection, speed and payload have cost, fuel, weight or reliability penalties. Efficiency research offsets them. New units receive their own family’s design; existing units refit gradually at supplied facilities.</p>
         <div class="society-actions"><button type="button" data-action="refit">Refit up to 2 units in this program</button></div>
@@ -222,7 +222,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       ...prototypeMaterials.map(([resource, rate]) => `${rate} ${RESOURCE_NAMES[resource]} (${(nation?.resources[resource] ?? 0).toFixed(1)} in stock)`)].join(" · "));
     if (researchOptionFamily !== family) {
       const options = FAMILY_RESEARCH_BRANCHES[family].map((branch) => `<option value="${branch}">${BRANCH_NAMES[branch]}</option>`).join("");
-      control("focus").innerHTML = `<option value="auto">Automatic: personality and circumstances</option>${options}`;
+      control("focus").innerHTML = `<option value="auto">自動</option>${options}`;
       control("license").innerHTML = options; researchOptionFamily = family;
     }
     if (document.activeElement !== control("focus")) control("focus").value = portfolio.focus;
@@ -292,7 +292,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       if (target.dataset.control === "focus") portfolio.focus = target.value as ResearchPortfolio["focus"];
       else if (target.dataset.control === "research-priority") portfolio.priority = target.value as ResearchPriority;
       else getResearchPortfolio(world, getActor()).investment = target.value as ResearchPortfolio["investment"];
-      feedback.textContent = "Research policy updated for the next evaluation. Existing progress is preserved.";
+      feedback.textContent = "研究方針を変更しました。次の更新から適用されます。";
     } else if (target.dataset.control === "nation") {
       selectMapNation(world, nationSelect.value as NationId);
       if (nationSelect.value === partnerSelect.value) partnerSelect.value = world.nations.find((nation) => isNationActive(nation) && nation.id !== nationSelect.value)?.id ?? "";
@@ -386,5 +386,13 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       wrapper.querySelector("[data-action=toggle]")!.setAttribute("aria-expanded", "false");
     }
   };
-  return { update: () => update(), openDiplomacy: () => openPane("diplomacy"), openFactions: () => openPane("factions"), setEmbedded, close: () => setVisible(false) };
+  const openNegotiations = () => {
+    openPane("diplomacy");
+    const negotiation = panel.querySelector<HTMLDetailsElement>("[data-peace-panel]");
+    if (negotiation) {
+      negotiation.open = true;
+      negotiation.scrollIntoView({ block: "start" });
+    }
+  };
+  return { update: () => update(), openNegotiations, openDiplomacy: () => openPane("diplomacy"), openFactions: () => openPane("factions"), setEmbedded, close: () => setVisible(false) };
 }

@@ -22,9 +22,9 @@ import { getWarNegotiation, getWarAdvantage, getWarTrend, isFightOnGovernment, g
 const esc = (value: unknown) => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]!));
 export function attachPeaceControls(root: HTMLElement, world: WorldState, selected: () => NationId, partner: () => NationId,
   feedback: (message: string) => void): { update: () => void } {
-  root.innerHTML = `<details open data-peace-panel><summary>War negotiations</summary><p class="society-note" data-peace-view="outlook"></p>
+  root.innerHTML = `<details open data-peace-panel><summary>講和交渉</summary><p class="society-note" data-peace-view="outlook"></p>
     <p class="society-note" data-peace-view="deliveries"></p><div data-peace-view="subject"></div><div class="peace-offers" data-peace-view="offers"></div><div data-peace-editor>
-    <label><input type="checkbox" data-peace-control="automatic" checked> Automatically revise and accept peace conditions</label>
+    <label><input type="checkbox" data-peace-control="automatic" checked> 講和条件の更新・受諾をAIに任せる</label>
     <p class="society-note">Both governments maintain standing terms from the start of war. Battle losses, occupation, fatigue and domestic unrest change willingness to accept. Publishing your own terms switches this government's negotiations to manual control.</p>
     <div class="society-selectors"><label>Demand provinces<select multiple size="4" data-peace-control="demand" aria-label="Peace demanded provinces"></select></label><label>Offer provinces<select multiple size="4" data-peace-control="offer" aria-label="Peace offered provinces"></select></label></div>
     <div class="society-selectors"><label>Demand weapons<input type="number" min="0" max="100" step="1" value="0" data-peace-control="demand-weapons" aria-label="Peace demanded weapons"></label><label>Offer weapons<input type="number" min="0" max="100" step="1" value="0" data-peace-control="offer-weapons" aria-label="Peace offered weapons"></label></div>
@@ -35,7 +35,7 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     <p class="society-note" data-peace-view="puppet"></p>
     <p class="society-note" data-peace-view="governance"></p>
     <label>Truce duration<select data-peace-control="truce" aria-label="Peace truce duration"><option value="300">5 minutes</option><option value="600">10 minutes</option><option value="900">15 minutes</option></select></label>
-    <p class="society-note" data-peace-view="preview"></p><div class="society-actions"><button type="button" data-peace-action="propose">Publish peace conditions</button><button type="button" data-peace-action="accept">Accept opponent's terms</button><button type="button" data-peace-action="map">Preview selected provinces</button></div>
+    <p class="society-note" data-peace-view="preview"></p><div class="society-actions"><button type="button" data-peace-action="propose">講和条件を提示</button><button type="button" data-peace-action="accept">相手の条件を受諾</button><button type="button" data-peace-action="map">対象州を地図で確認</button></div>
     <p class="society-note">Select provinces on either side with Ctrl / Command. Ceded territory must connect to existing territory or form a complete island. Ordinary cessions preserve remaining borders. Use partition terms to found a second government. Both signatories retain territory. Third-party occupations require a separate settlement. Resources and land change only when an offer is accepted; unrelated wars continue.</p></div></details>`;
   const control = (name: string) => root.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-peace-control="${name}"]`)!;
   const view = (name: string) => root.querySelector<HTMLElement>(`[data-peace-view="${name}"]`)!;

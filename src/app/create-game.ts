@@ -88,7 +88,7 @@ export function createGame(root: HTMLElement, setup: { world?: WorldState; pause
   const playerMap = attachPlayerMap(renderer, world);
   let selectedDistrict: MesoRegionId | null = null;
   const mapControls = attachMapControls(root, renderer, world, frontDebugOverlay, societyPanel, (id) => { selectedDistrict = id; });
-  const updatePlayerControls = attachPlayerControls(root, world, () => selectedDistrict, societyPanel.setEmbedded, societyPanel.openDiplomacy);
+  const updatePlayerControls = attachPlayerControls(root, world, () => selectedDistrict, societyPanel.setEmbedded, societyPanel.openNegotiations);
   playerMap.update();
   let lastOccupationVersion = world.occupation.version;
   let lastTerritoryVersion = world.territoryVersion;
