@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSocietyWorld } from "../helpers/society-world";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 import { declareWar, findWar } from "../../src/sim/war-state";
 import { getWarNegotiation, whitePeaceTerms, proposePeaceTerms, assessPeaceOffer, acceptPeaceOffer, updateWarNegotiations, getWarAdvantage, getPeaceUrgency, getPeaceTermsIssue } from "../../src/sim/war-negotiations";
 import { getDomesticUnrest } from "../../src/sim/domestic-unrest";
@@ -9,7 +9,7 @@ import { getUnitCombatStrength } from "../../src/sim/unit-strength";
 import { getRelation } from "../../src/sim/diplomacy";
 import { transferTerritories } from "../../src/sim/territory-transfer";
 function scene() {
-  const world = createSocietyWorld(), [a, b, c] = world.nations;
+  const world = createFixedSocietyWorld(), [a, b, c] = world.nations;
   const strength = (id: typeof a.id) => world.units.filter((unit) => unit.nationId === id).reduce((sum, unit) => sum + getUnitCombatStrength(unit), 0);
   const ratio = strength(a.id) / strength(b.id); for (const unit of world.units) if (unit.nationId === b.id) unit.manpower *= ratio;
   a.resources.weapons = b.resources.weapons = 100;

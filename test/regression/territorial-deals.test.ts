@@ -1,27 +1,19 @@
-import { getPeaceBorderIssue, selectPeaceDistricts } from "../../src/sim/peace-borders";
+import { getPeaceBorderIssue } from "../../src/sim/peace-borders";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSocietyWorld } from "../helpers/society-world";
+import { createFixedSocietyWorld, fixedSocietyDistrict } from "../helpers/fixed-society-world";
 import { proposeTerritorialExchange, respondToTerritorialOffer, updateTerritorialDeals, willAcceptTerritorialOffer } from "../../src/sim/territorial-deals";
 import { getDiplomacyState, getRelation } from "../../src/sim/diplomacy";
-import { getAdjacentNationPairs, getOwnerByMesoId } from "../../src/sim/world-cache";
+import { getOwnerByMesoId } from "../../src/sim/world-cache";
 import { transferTerritories } from "../../src/sim/territory-transfer";
 
 function scene() {
-  const world = createSocietyWorld();
-  const owners = getOwnerByMesoId(world);
-  for (const [a, b] of getAdjacentNationPairs(world)) {
-    const parcels = (id: typeof a) => [...owners].filter(([region, owner]) =>
-      owner === id && region !== world.nations.find((nation) => nation.id === id)!.capitalMesoId).map(([region]) => region);
-    const offered = selectPeaceDistricts(world, a, b, parcels(a), 1);
-    const requested = selectPeaceDistricts(world, b, a, parcels(b), 1);
-    if (!offered.length || !requested.length || getPeaceBorderIssue(world, [
-      { from: a, to: b, regionIds: offered }, { from: b, to: a, regionIds: requested },
-    ])) continue;
-    getDiplomacyState(world).influenceByNationId.set(a, 100);
-    return { world, a, b, offered, requested };
-  }
-  throw new Error("No pair has mutually transferable border districts.");
+  const world = createFixedSocietyWorld();
+  const [a, b] = world.nations.map(({ id }) => id);
+  const offered = [fixedSocietyDistrict(4, 1)]; // A's northern border district.
+  const requested = [fixedSocietyDistrict(5, 3)]; // B's southern border district.
+  getDiplomacyState(world).influenceByNationId.set(a, 100);
+  return { world, a, b, offered, requested };
 }
 
 test("exchanges wait for the recipient and atomically settle only the offered parcels", () => {

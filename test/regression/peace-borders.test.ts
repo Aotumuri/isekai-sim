@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { updateSurrender } from "../../src/sim/surrender";
 import test from "node:test";
-import { createSocietyWorld } from "../helpers/society-world";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 import { createMesoRegionId } from "../../src/worldgen/meso-region";
 import { createMacroRegionId } from "../../src/worldgen/macro-region";
 import { getPeaceBorderIssue, selectPeaceDistricts, selectPeaceProvinces } from "../../src/sim/peace-borders";
@@ -11,7 +11,7 @@ import { getOwnerByMesoId } from "../../src/sim/world-cache";
 
 // Explicit graphs keep coastlines, narrow corridors and existing enclaves deterministic.
 function scene(ownership: string, edges: number[][]) {
-  const world = createSocietyWorld(), [a, b, c] = world.nations;
+  const world = createFixedSocietyWorld(), [a, b, c] = world.nations;
   const id = createMesoRegionId, template = world.mesoRegions[0];
   world.mesoRegions = [...ownership].map((_, index) => ({ ...template, id: id(index), type: "land" as const,
     resource: index === 2 ? "steel" as const : null, building: null,

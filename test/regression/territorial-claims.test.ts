@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSocietyWorld } from "../helpers/society-world";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 import { getForeignClaims, getTerritorialClaim, getTerritorialClaims, updateTerritorialClaims } from "../../src/sim/territorial-claims";
 import { getRelation } from "../../src/sim/diplomacy";
 import { updateCivilWar } from "../../src/sim/civil-war";
@@ -10,7 +10,7 @@ import { declareWar } from "../../src/sim/war-state";
 import { withMutedSimulationLogs } from "../helpers/muted-logs";
 
 test("territorial tenure increases attachment and survives loss; resource claims have independent value", () => {
-  const world = createSocietyWorld(), [a, b] = world.nations;
+  const world = createFixedSocietyWorld(), [a, b] = world.nations;
   const macro = world.macroRegions.find((item) => item.nationId === a.id)!;
   const id = macro.mesoRegionIds[0], before = getTerritorialClaim(world, a.id, id);
   world.time.slowTick += 500; updateTerritorialClaims(world);
@@ -26,7 +26,7 @@ test("territorial tenure increases attachment and survives loss; resource claims
 });
 
 test("unilateral seizures and new occupations damage relations once, while agreed cessions do not", () => {
-  const world = createSocietyWorld(), [a, b] = world.nations;
+  const world = createFixedSocietyWorld(), [a, b] = world.nations;
   const macro = world.macroRegions.find((item) => item.nationId === a.id)!;
   const relation = getRelation(world, a.id, b.id), initial = relation.opinion;
   world.occupation.mesoById.set(macro.mesoRegionIds[0], b.id);
@@ -41,7 +41,7 @@ test("unilateral seizures and new occupations damage relations once, while agree
 
 
 test("revolutionary governments inherit past claims and tenure in their new territory", () => {
-  const world = createSocietyWorld();
+  const world = createFixedSocietyWorld();
   const parent = world.nations.find((nation) => {
     const provinces = world.macroRegions.filter((macro) => macro.nationId === nation.id);
     return provinces.length > 1 && world.mesoRegions.some((region) =>

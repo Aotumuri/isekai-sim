@@ -1,7 +1,7 @@
 import { selectPeaceDistricts } from "../../src/sim/peace-borders";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSocietyWorld } from "../helpers/society-world";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 import { getTerritorialClaims } from "../../src/sim/territorial-claims";
 import { getDiplomacyState, getRelation } from "../../src/sim/diplomacy";
 import { betrayTerritorialSettlement, getNationalMilitaryStrength, openDiplomaticCrisis, respondToCrisis, startDiplomaticWar, updateDiplomaticCrises } from "../../src/sim/diplomatic-crises";
@@ -10,7 +10,7 @@ import { updateSupplyAssessment } from "../../src/sim/supply-assessment";
 import { updateStrategicThreatObservation } from "../../src/sim/strategic-threat-observation";
 
 function scene() {
-  const world = createSocietyWorld(); updateSupplyAssessment(world); updateStrategicThreatObservation(world);
+  const world = createFixedSocietyWorld(); updateSupplyAssessment(world); updateStrategicThreatObservation(world);
   const candidates = world.strategicThreatObservation.exposures.filter((item) => item.landAdjacent)
     .flatMap(({ observerNationId: a, threatNationId: b }) => {
       const parcels = [...getOwnerByMesoId(world)].filter(([id, owner]) =>

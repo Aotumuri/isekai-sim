@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSocietyWorld } from "../helpers/society-world";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 import { splitProvince, transferTerritories } from "../../src/sim/territory-transfer";
 import { getOwnerByMesoId } from "../../src/sim/world-cache";
 import { getTerritorialClaims } from "../../src/sim/territorial-claims";
 
 test("partial cessions partition provinces and keep ownership, capitals, armies and caches coherent", () => {
-  const world = createSocietyWorld(), [a, b] = world.nations;
+  const world = createFixedSocietyWorld(), [a, b] = world.nations;
   const id = a.capitalMesoId, owners = new Map(getOwnerByMesoId(world));
   const unit = world.units.find((item) => item.nationId === a.id && item.domain === "land")!;
   unit.regionId = id; unit.moveToId = id;
@@ -24,7 +24,7 @@ test("partial cessions partition provinces and keep ownership, capitals, armies 
 });
 
 test("territorial exchanges are atomic and reject duplicate, foreign, sea and last-territory cessions", () => {
-  const world = createSocietyWorld(), [a, b] = world.nations;
+  const world = createFixedSocietyWorld(), [a, b] = world.nations;
   const aIds = [...getOwnerByMesoId(world)].filter(([, owner]) => owner === a.id).map(([id]) => id);
   const bId = b.capitalMesoId, before = new Map(getOwnerByMesoId(world));
   assert.equal(transferTerritories(world, [{ from: a.id, to: b.id, regionIds: [aIds[0]] }, { from: b.id, to: a.id, regionIds: [aIds[0]] }]), false);
@@ -35,7 +35,7 @@ test("territorial exchanges are atomic and reject duplicate, foreign, sea and la
 });
 
 test("administrative division creates a province without changing national territory", () => {
-  const world = createSocietyWorld(), macro = world.macroRegions.find((item) => item.mesoRegionIds.length > 1)!;
+  const world = createFixedSocietyWorld(), macro = world.macroRegions.find((item) => item.mesoRegionIds.length > 1)!;
   const owners = new Map(getOwnerByMesoId(world)), count = world.macroRegions.length;
   assert(splitProvince(world, macro.nationId, macro.id, [macro.mesoRegionIds[0]]));
   assert.equal(world.macroRegions.length, count + 1); assert.deepEqual(getOwnerByMesoId(world), owners);
@@ -43,7 +43,7 @@ test("administrative division creates a province without changing national terri
 });
 
 test("capital swaps preserve one correct capital marker per nation without resetting bystander losses", () => {
-  const world = createSocietyWorld(), [a, b, c] = world.nations;
+  const world = createFixedSocietyWorld(), [a, b, c] = world.nations;
   c.initialCityCount = 99;
   assert(transferTerritories(world, [{ from: a.id, to: b.id, regionIds: [a.capitalMesoId] }, { from: b.id, to: a.id, regionIds: [b.capitalMesoId] }]));
   const owners = getOwnerByMesoId(world);
