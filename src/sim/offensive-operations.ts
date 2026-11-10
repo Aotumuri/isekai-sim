@@ -548,10 +548,6 @@ export function updateOffensiveOperations(world: WorldState): void {
     }
   }
   for (const [nationId, plans] of plansByNation) {
-    if (getCapitalDefenseAssessment(world, nationId)?.threatLevel === "critical" &&
-      !plans.some((plan) => !!getSupplyReliefPlanForFront(world, nationId, plan.frontId))) {
-      continue;
-    }
     const current = state.operationsByNationId.get(nationId) ?? [];
     if (current.length >= settings.maxActivePerNation) {
       continue;
@@ -559,6 +555,8 @@ export function updateOffensiveOperations(world: WorldState): void {
     const candidates = plans
       .filter((plan) => isOperationPlanEligible(world, nationId, plan))
       .sort((a, b) =>
+        Number(!!getSupplyReliefPlanForFront(world, nationId, b.frontId)) -
+          Number(!!getSupplyReliefPlanForFront(world, nationId, a.frontId)) ||
         bestSupplyCutoffScore(world, nationId, b.frontId) -
           bestSupplyCutoffScore(world, nationId, a.frontId) ||
         bestPocketClosureScore(world, nationId, b.frontId) -
@@ -3722,6 +3720,7 @@ function isOperationPlanEligible(
   plan: NationFrontPlan,
 ): boolean {
   if (getSupplyReliefPlanForFront(world, nationId, plan.frontId)) return true;
+  if (getCapitalDefenseAssessment(world, nationId)?.threatLevel === "critical") return false;
   if (plan.posture === "attack") return true;
   const closure = bestPocketClosure(world, nationId, plan.frontId);
   if (closure?.tacticallyFeasible &&
