@@ -1,3 +1,4 @@
+import { attachPlayerControls } from "./player-controls";
 import { attachMapControls } from "./map-controls";
 import { attachPlayerMap } from "../render/player-map";
 import { attachSocietyPanel } from "./society-panel";
@@ -85,6 +86,7 @@ export function createGame(root: HTMLElement, setup: { world?: WorldState; pause
   const frontDebugOverlay = attachFrontDebugOverlay(renderer, world);
   const playerMap = attachPlayerMap(renderer, world);
   const mapControls = attachMapControls(root, renderer, world, frontDebugOverlay, societyPanel);
+  const updatePlayerControls = attachPlayerControls(root, world);
   playerMap.update();
   let lastOccupationVersion = world.occupation.version;
   let lastTerritoryVersion = world.territoryVersion;
@@ -133,6 +135,7 @@ export function createGame(root: HTMLElement, setup: { world?: WorldState; pause
     }
     timeHud.update(world.time, clock);
     mapControls.update();
+    updatePlayerControls();
     playerMap.update();
     societyPanel.update();
     nationInfoBar.update();

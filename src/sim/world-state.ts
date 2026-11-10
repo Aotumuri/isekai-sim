@@ -1,3 +1,4 @@
+import type { PlayerNation } from "./player-nation";
 import type { ResourceReparationTreaty } from "./resource-reparations";
 import type { PeaceConference } from "./peace-conference";
 import type { NationId } from "../worldgen/nation";
@@ -61,6 +62,7 @@ import type { WarIntentState } from "./war-intent";
 import type { CommonThreatCoalitionState } from "./common-threat-coalitions";
 
 export interface WorldState {
+  playerNation?: PlayerNation;
   domesticUnrest?: DomesticUnrestState;
   peaceConferences?: PeaceConference[];
   nextPeaceConferenceId?: number;

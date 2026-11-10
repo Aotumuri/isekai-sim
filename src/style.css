@@ -179,3 +179,7 @@ canvas {
 .peace-offers > :only-child { grid-column: 1 / -1; }
 
 .peace-assessment { grid-column: 1 / -1; }
+
+.map-controls.player-controls { top: auto; right: 12px; bottom: 58px; width: min(350px, calc(100vw - 24px)); max-height: 48dvh; overflow: auto; }
+.player-controls summary { cursor: pointer; }
+.player-controls select { max-width: 100%; }
