@@ -63,3 +63,30 @@ test("joint-only faction members can withdraw and sign separately", () => {
   assert(acceptPeaceOffer(world, b.id, c.id));
   assert(findWar(world.wars, a.id, c.id));
 });
+
+test("signed resource reparations transfer available stock once per interval and expire with the truce", async () => {
+  const { REPARATION_INTERVAL, updateResourceReparations } = await import("../../src/sim/resource-reparations");
+  const { world, c, b } = scene();
+  const terms = { ...whitePeaceTerms(), resourceReparation: { resource: "fuel" as const, amount: 5 } };
+  c.resources.fuel = 0;
+  b.resources.fuel = 7;
+  assert(!proposePeaceTerms(world, c.id, b.id, { ...terms, resourceReparation: { resource: "fuel", amount: 11 } }));
+  assert(proposePeaceTerms(world, c.id, b.id, terms));
+  assert(acceptPeaceOffer(world, b.id, c.id));
+  const signedAt = world.time.slowTick;
+  assert.equal(c.resources.fuel, 0);
+  world.time.slowTick = signedAt + REPARATION_INTERVAL;
+  updateResourceReparations(world);
+  updateResourceReparations(world);
+  assert.equal(c.resources.fuel, 5);
+  assert.equal(b.resources.fuel, 2);
+  world.time.slowTick += REPARATION_INTERVAL;
+  updateResourceReparations(world);
+  assert.equal(c.resources.fuel, 7);
+  assert.equal(b.resources.fuel, 0);
+  b.resources.fuel = 10;
+  world.time.slowTick = signedAt + terms.truceSeconds;
+  updateResourceReparations(world);
+  assert.equal(b.resources.fuel, 10);
+  assert.equal(world.resourceReparations?.length, 0);
+});

@@ -1,3 +1,4 @@
+import { isValidResourceReparation, REPARATION_INTERVAL, REPARATION_RESOURCES, type ResourceReparation } from "./resource-reparations";
 import { foodReserveSeconds } from "./food-supply";
 import { getNationalTerritorialValue, getTerritorialValue } from "./territorial-value";
 import { getSeparatePeaceIssue } from "./separate-peace";
@@ -28,6 +29,7 @@ import { concludePeace, getWarFatigue, warFatigueKey } from "./diplomatic-peace"
 export interface PeaceTerms {
   demandedRegionIds: MesoRegionId[]; offeredRegionIds: MesoRegionId[];
   demandedWeapons: number; offeredWeapons: number; truceSeconds: number;
+  resourceReparation?: ResourceReparation;
   puppetTarget?: boolean;
   partition?: PuppetPartition;
   localSubject?: boolean;
@@ -88,6 +90,9 @@ export function getPeaceTermsIssue(world: WorldState, proposer: NationId, target
   if (!Array.isArray(terms.demandedRegionIds) || !Array.isArray(terms.offeredRegionIds)) return "Select valid territories.";
   if (![terms.demandedWeapons, terms.offeredWeapons].every((amount) => Number.isInteger(amount) && amount >= 0 && amount <= 100) ||
     (terms.demandedWeapons > 0 && terms.offeredWeapons > 0) || !Number.isInteger(terms.truceSeconds) || terms.truceSeconds < 180 || terms.truceSeconds > 900) return "Check reparations and the truce duration.";
+  if (terms.resourceReparation !== undefined && !isValidResourceReparation(terms.resourceReparation)) {
+    return "Select a resource and demand between 1 and 10 units per delivery.";
+  }
   if (terms.puppetTarget || terms.partition) {
     if (terms.offeredRegionIds.length) return "A puppet settlement cannot grant provinces to the defeated government.";
     const targetCapital = world.nations.find((nation) => nation.id === target)?.capitalMesoId;
@@ -104,6 +109,8 @@ export function getPeaceTermsIssue(world: WorldState, proposer: NationId, target
   const a = world.nations.find((nation) => nation.id === proposer && nation.macroRegionIds.length);
   const b = world.nations.find((nation) => nation.id === target && nation.macroRegionIds.length);
   if (!a || !b) return "Both governments need territory to sign this settlement.";
+  if (terms.resourceReparation && (a.resources[terms.resourceReparation.resource] === undefined ||
+    b.resources[terms.resourceReparation.resource] === undefined)) return "This resource is unavailable in this world.";
   if (a.resources.weapons < terms.offeredWeapons || b.resources.weapons < terms.demandedWeapons) return "The paying country cannot afford the proposed reparations.";
   const legs = legsFor(proposer, target, terms);
   if (terms.localSubject) {
@@ -163,6 +170,7 @@ function reviseTerms(world: WorldState, negotiation: WarNegotiation, proposer: N
     offeredWeapons: Math.min(current.offeredWeapons, Math.floor(country.resources.weapons)) };
 
   if (wantsCompromise) {
+    if (terms.resourceReparation) return { ...terms, resourceReparation: undefined };
     if (terms.partition) return { ...terms, partition: undefined };
     if (terms.puppetTarget) return { ...terms, puppetTarget: false };
     if (terms.localSubject) return { ...terms, localSubject: false };
@@ -203,6 +211,11 @@ function reviseTerms(world: WorldState, negotiation: WarNegotiation, proposer: N
       const escalation = { ...terms, demandedRegionIds: demands, localSubject };
       if (!getPeaceTermsIssue(world, proposer, target, escalation)) return escalation;
     }
+  }
+  if (advantage > 0.3 && !terms.resourceReparation && !terms.offeredWeapons && !terms.offeredRegionIds.length) {
+    const resource = REPARATION_RESOURCES.find((key) =>
+      (country.resources[key] ?? Infinity) < 12 && (opponent.resources[key] ?? 0) >= 20);
+    if (resource) return { ...terms, resourceReparation: { resource, amount: 3 } };
   }
   return terms;
 }
@@ -260,7 +273,9 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
     getTerritorialValue(world, recipient, securedDemands) * 0.35) / totalValue * 100 +
     (terms.demandedRegionIds.includes(nation.capitalMesoId) ? 25 : 0);
   const landBenefit = getTerritorialValue(world, recipient, terms.offeredRegionIds) / totalValue * 80;
-  const paymentCost = terms.demandedWeapons / Math.max(10, nation.resources.weapons) * 25;
+  const reparation = terms.resourceReparation;
+  const resourceCost = reparation ? reparation.amount * 2 + (terms.truceSeconds / REPARATION_INTERVAL - 1) * 0.4 : 0;
+  const paymentCost = terms.demandedWeapons / Math.max(10, nation.resources.weapons) * 25 + resourceCost;
   const paymentBenefit = Math.min(18, terms.offeredWeapons * 0.5);
   const disposition = character.doctrine === "merchant" || character.doctrine === "isolationist" ? 12 : character.doctrine === "pragmatist" ? 8 : character.cooperation * 7;
   const resolve = 45 + (isFightOnGovernment(world, recipient) ? 35 : character.aggression * 8) + Math.max(0, advantage) * 25;
@@ -288,6 +303,7 @@ export function proposePeaceTerms(world: WorldState, proposer: NationId, target:
   const negotiation = getWarNegotiation(world, findWar(world.wars, proposer, target)!);
   const old = negotiation.offers.get(proposer)!;
   negotiation.offers.set(proposer, { proposerId: proposer, terms: { ...terms, demandedRegionIds: [...terms.demandedRegionIds], offeredRegionIds: [...terms.offeredRegionIds],
+    ...(terms.resourceReparation ? { resourceReparation: { ...terms.resourceReparation } } : {}),
     ...(terms.partition ? { partition: { ...terms.partition, districtIds: [...terms.partition.districtIds] } } : {}) }, revisedAtSlowTick: world.time.slowTick, revision: old.revision + 1, source: "manual" });
   negotiation.automatic.set(proposer, false);
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [proposer, target], message: `${getNationName(world, proposer)} proposed peace to ${getNationName(world, target)}: ${terms.puppetTarget ? "puppet government, " : ""}${terms.demandedRegionIds.length} districts demanded, ${terms.offeredRegionIds.length} offered, ${terms.demandedWeapons || -terms.offeredWeapons} weapons reparations.` });
@@ -315,6 +331,10 @@ export function acceptPeaceOffer(world: WorldState, recipient: NationId, propose
   const relation = getRelation(world, proposer, recipient);
   const truce = relation.treaties.find((treaty) => treaty.type === "truce")!; truce.expiresAtSlowTick = world.time.slowTick + terms.truceSeconds;
   relation.cooldownUntilSlowTick = truce.expiresAtSlowTick;
+  if (terms.resourceReparation) {
+    (world.resourceReparations ??= []).push({ ...terms.resourceReparation, payerId: recipient, recipientId: proposer,
+      nextPaymentAt: world.time.slowTick + REPARATION_INTERVAL, expiresAt: truce.expiresAtSlowTick });
+  }
   if (!localPlan) recordAnnexation(world, proposer, terms.demandedRegionIds);
   recordAnnexation(world, recipient, terms.offeredRegionIds);
   if (terms.puppetTarget || terms.partition) installSubjectGovernment(world, proposer, recipient);

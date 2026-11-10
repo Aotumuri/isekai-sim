@@ -1,3 +1,4 @@
+import type { ResourceReparationTreaty } from "./resource-reparations";
 import type { PeaceConference } from "./peace-conference";
 import type { NationId } from "../worldgen/nation";
 import type { AgriculturalLand } from "../worldgen/agricultural-land";
@@ -64,6 +65,7 @@ export interface WorldState {
   peaceConferences?: PeaceConference[];
   nextPeaceConferenceId?: number;
   warNegotiations?: WarNegotiationState;
+  resourceReparations?: ResourceReparationTreaty[];
   exileGovernments?: ExileGovernmentState;
   militaryAccess?: MilitaryAccessState;
   volunteers?: VolunteerState;

@@ -1,3 +1,4 @@
+import { updateResourceReparations } from "./resource-reparations";
 import { updateCrisisDeployments } from "./crisis-deployment";
 import { updateForcedDisplacement } from "./forced-displacement";
 import { updateReligiousPersecution } from "./religious-persecution";
@@ -230,6 +231,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateAnnexations(world);
   updateTerritorialGovernance(world);
   updateProduction(world);
+  updateResourceReparations(world);
   updateSubjectAutonomy(world);
   updateDemobilization(world);
   updateResearch(world);
