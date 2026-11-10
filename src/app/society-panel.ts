@@ -42,7 +42,7 @@ const RESOURCE_NAMES: Record<TradeResource, string> = { ...STRATEGIC_RESOURCE_NA
 const RESEARCH_STATUS = { researching: "Researching", "saving resources": "Saving research funds", "capital isolated": "Capital isolated", complete: "Research complete", paused: "Preparing", "government in exile": "Government in exile" };
 const esc = (value: unknown) => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]!));
 
-export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: SimClock): { update: () => void; openDiplomacy: () => void; openFactions: () => void; openResearch: () => void; close: () => void } {
+export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: SimClock): { update: () => void; openDiplomacy: () => void; openFactions: () => void; setEmbedded: (host: HTMLElement | null) => void; close: () => void } {
   const wrapper = document.createElement("div"); wrapper.className = "society-ui";
   const branchOptions = FAMILY_RESEARCH_BRANCHES.Infantry.map((branch) => `<option value="${branch}">${BRANCH_NAMES[branch]}</option>`).join("");
   const familyOptions = EQUIPMENT_FAMILIES.map((family) => `<option value="${family}">${EQUIPMENT_FAMILY_NAMES[family]}</option>`).join("");
@@ -65,7 +65,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       <div class="society-country" data-view="country"></div><div data-exile-ui></div>
       <nav class="society-tabs" aria-label="Information views"><button type="button" data-tab="diplomacy" aria-pressed="true">Diplomacy</button><button type="button" data-tab="politics" aria-pressed="false">Politics</button><button type="button" data-tab="territory" aria-pressed="false">Territories</button><button type="button" data-tab="military" aria-pressed="false">Military</button><button type="button" data-tab="food" aria-pressed="false">Food</button><button type="button" data-tab="treasury" aria-pressed="false">Treasury</button><button type="button" data-tab="research" aria-pressed="false">Research</button><button type="button" data-tab="factions" aria-pressed="false">Factions</button><button type="button" data-tab="history" aria-pressed="false">World history</button></nav>
       <p class="society-feedback" role="status" aria-live="polite">Nations act autonomously. Select a nation to guide its policies and diplomacy.</p>
-      <section data-pane="diplomacy">
+      <section data-pane="diplomacy"><p class="society-map-prompt">地図で外交相手を選んでください。</p>
         <div data-view="relation"></div><div data-view="truce-extension"></div>
         <div class="society-actions"><button type="button" data-action="improve" title="10 influence. Opinion +10, trust +3, tension -8.">Send envoy · 10</button><button type="button" data-action="pact" title="Requires opinion 20, trust 30 and influence 12.">Non-aggression · 12</button><button type="button" data-action="trade-pact" title="Requires opinion 10, trust 30 and influence 8.">Trade pact · 8</button><button type="button" data-action="alliance" title="Requires opinion 55, trust 55 and influence 20.">Defensive alliance · 20</button></div>
         <label>Aid equipment<select data-control="aid-family" aria-label="Aid equipment">${familyOptions}</select></label><div class="society-actions"><button type="button" data-action="aid" title="Send equipment for the selected weapon family and retain a reserve of 30. Requires friendly relations and an open route.">Send 20 weapons</button><button type="button" data-action="peace" title="Propose status-quo terms. Acceptance depends on war outlook, personality and domestic stability.">Propose white peace</button><button type="button" data-action="crisis" class="society-danger" title="12 influence. Treaties, strategic access and military strength constrain ultimatums.">Ultimatum · 12</button></div>
@@ -131,7 +131,9 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
   let researchOptionFamily = "";
   let lastPaused: boolean | undefined;
   let lastSelected: NationId | null = null, lastTarget: NationId | null = null;
+  let embeddedHost: HTMLElement | null = null;
   const setVisible = (next: boolean) => {
+    if (embeddedHost) return;
     visible = next; panel.hidden = !next;
     if (!next) territories.clearPreview();
     wrapper.querySelector("[data-action=toggle]")!.setAttribute("aria-expanded", String(next));
@@ -146,7 +148,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       pause.innerHTML = `${clock.paused ? "Resume" : "Pause"} <kbd>P</kbd>`;
       pause.setAttribute("aria-label", clock.paused ? "Resume" : "Pause");
     }
-    if (!visible || (!force && performance.now() - lastRender < 750)) return;
+    if ((!visible && !embeddedHost) || (!force && performance.now() - lastRender < 750)) return;
     lastRender = performance.now();
     const active = world.nations.filter((nation) => isNationPresent(world, nation)), ids = active.map((nation) => `${n(nation.id)}:${nation.id}:${world.exileGovernments?.byNationId.get(nation.id)?.status ?? "home"}`).join("|");
     if (ids !== cachedNationIds) {
@@ -165,10 +167,13 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     if (actor !== lastSelected && active.some((nation) => nation.id === actor)) {
       nationSelect.value = actor!; lastSelected = actor;
     }
-    if (map.targetNationId !== lastTarget && active.some((nation) => nation.id === map.targetNationId)) {
+    if (embeddedHost) {
+      partnerSelect.value = map.targetNationId ?? "";
+    } else if (map.targetNationId !== lastTarget && active.some((nation) => nation.id === map.targetNationId)) {
       partnerSelect.value = map.targetNationId!; lastTarget = map.targetNationId;
     }
-    if (nationSelect.value === partnerSelect.value) partnerSelect.value = active.find((nation) => nation.id !== nationSelect.value)?.id ?? "";
+    if (!embeddedHost && nationSelect.value === partnerSelect.value) partnerSelect.value = active.find((nation) => nation.id !== nationSelect.value)?.id ?? "";
+    if (!partnerSelect.value) partnerSelect.value = nationSelect.value;
     const a = getActor(), b = partnerSelect.value as NationId;
     const nation = active.find((item) => item.id === a);
     if (!nation) { setText("country", "No active nations remain."); return; }
@@ -184,6 +189,8 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     const treaties = relation?.treaties.filter((treaty) => treaty.expiresAtSlowTick > world.time.slowTick) ?? [];
     const outrage = Math.round(getPublicOutrage(world, a, b));
     const partnerOutrage = Math.round(getPublicOutrage(world, b, a));
+    const diplomacyPane = wrapper.querySelector<HTMLElement>('[data-pane="diplomacy"]')!;
+    diplomacyPane.classList.toggle("society-no-partner", !!embeddedHost && a === b);
     view("relation").innerHTML = `<h2>${n(b)} — relations</h2><p class="society-note">Ideologies: ${esc(getNationIdeology(world, a).name)} ↔ ${esc(getNationIdeology(world, b).name)} · ${ideologyAffinityLabel(getIdeologicalAffinity(world, a, b))}</p>${findWar(world.wars, a, b) ? '<p class="society-note">At war</p>' : ""}${relation ? `<div class="society-metrics"><span>Opinion <b>${Math.round(relation.opinion)}</b></span><span>Trust <b>${Math.round(relation.trust)}</b></span><span>Tension <b>${Math.round(relation.tension)}</b></span></div><p class="society-note">${treaties.map((treaty) => `${TREATY_NAMES[treaty.type]} (${treaty.expiresAtSlowTick - world.time.slowTick}s remaining)`).join(" / ") || "No treaties"}</p>` : '<p class="society-note">No diplomatic relation history yet.</p>'}`;
     if (outrage || partnerOutrage) view("relation").insertAdjacentHTML("beforeend",
       `<p class="society-note">Public outrage over persecution · ${n(a)} ${outrage}/100 · ${n(b)} ${partnerOutrage}/100</p>`);
@@ -307,7 +314,12 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     const action = button.dataset.action;
     if (action === "toggle" || action === "close") { setVisible(action === "toggle" ? !visible : false); return; }
     if (action === "pause") { clock.paused = !clock.paused; update(true); return; }
-    if (action === "partner") { partnerSelect.value = button.dataset.partner!; update(true); return; }
+    if (action === "partner") {
+      const partner = button.dataset.partner as NationId;
+      if (embeddedHost) selectMapNation(world, partner);
+      else partnerSelect.value = partner;
+      update(true); return;
+    }
     const a = getActor(), b = partnerSelect.value as NationId;
     let success = false;
     if (action === "improve") success = improveRelations(world, a, b);
@@ -337,7 +349,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     update(true);
   });
   window.addEventListener("keydown", (event) => {
-    if (event.code === "Escape" && visible) { setVisible(false); return; }
+    if (event.code === "Escape" && visible && !embeddedHost) { setVisible(false); return; }
     if (event.repeat || (event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.closest("input,select,textarea,button")))) return;
     if (event.code === "KeyI") { event.preventDefault(); setVisible(!visible); }
     if (event.code === "KeyP") { event.preventDefault(); clock.paused = !clock.paused; update(true); }
@@ -349,5 +361,30 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     for (const tab of wrapper.querySelectorAll<HTMLElement>("[data-tab]")) tab.setAttribute("aria-pressed", String(tab.dataset.tab === name));
     update(true);
   };
-  return { update: () => update(), openDiplomacy: () => openPane("diplomacy"), openFactions: () => openPane("factions"), openResearch: () => openPane("research"), close: () => setVisible(false) };
+  const tabNames: Record<string, string> = {
+    diplomacy: "外交・講和", politics: "政治", territory: "領土", military: "軍備",
+    food: "食料", treasury: "財政", research: "研究", factions: "陣営", history: "履歴",
+  };
+  const tabButtons = [...wrapper.querySelectorAll<HTMLButtonElement>("[data-tab]")];
+  const originalTabNames = tabButtons.map((button) => button.textContent);
+  const setEmbedded = (host: HTMLElement | null) => {
+    if (embeddedHost === host) return;
+    embeddedHost = host;
+    tabButtons.forEach((button, index) => {
+      button.textContent = host ? tabNames[button.dataset.tab!] : originalTabNames[index];
+    });
+    panel.classList.toggle("society-embedded", !!host);
+    wrapper.classList.toggle("society-docked", !!host);
+    (host ?? root).append(wrapper);
+    visible = false;
+    panel.hidden = !host;
+    if (host) {
+      feedback.textContent = "";
+      openPane("research");
+    } else {
+      territories.clearPreview();
+      wrapper.querySelector("[data-action=toggle]")!.setAttribute("aria-expanded", "false");
+    }
+  };
+  return { update: () => update(), openDiplomacy: () => openPane("diplomacy"), openFactions: () => openPane("factions"), setEmbedded, close: () => setVisible(false) };
 }

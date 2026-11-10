@@ -9,30 +9,50 @@ import type { WorldState } from "../sim/world-state";
 import { getMapView, selectMapNation } from "../render/map-view-state";
 
 export function attachPlayerControls(
-  root: HTMLElement, world: WorldState, getDestination: () => MesoRegionId | null, openResearch: () => void,
+  root: HTMLElement, world: WorldState, getDestination: () => MesoRegionId | null, setGovernmentHost: (host: HTMLElement | null) => void,
 ): () => void {
   const panel = document.createElement("aside");
   panel.className = "map-controls player-controls";
   panel.setAttribute("aria-label", "国家情報");
   panel.innerHTML = `<header><small></small><h2></h2><p data-overview></p></header>
     <button type="button" data-enter>この国を操作する</button>
-    <div data-command hidden>
-      <nav aria-label="国家操作">
-        <button type="button" data-government>国家運営・研究</button>
+    <div data-command data-current-tab="orders" hidden>
+      <div class="player-toolbar">
+        <label><input type="checkbox" data-automatic> 内政・外交をAIに任せる</label>
         <button type="button" data-leave>観戦に戻る</button>
+      </div>
+      <nav aria-label="国家操作">
+        <button type="button" data-player-tab="orders" aria-pressed="true">外交・軍事</button>
+        <button type="button" data-player-tab="government" aria-pressed="false">内政・研究</button>
       </nav>
+      <div data-orders-pane></div>
     </div>`;
   root.append(panel);
   const command = panel.querySelector<HTMLElement>("[data-command]")!;
-  const updateDiplomacy = attachPlayerDiplomacyControls(command, world);
-  const updateMilitary = attachPlayerMilitaryControls(command, world, getDestination);
-  const updateLandings = attachPlayerLandingControls(command, world, getDestination);
+  const orders = panel.querySelector<HTMLElement>("[data-orders-pane]")!;
+  const automatic = panel.querySelector<HTMLInputElement>("[data-automatic]")!;
+  const tabs = [...panel.querySelectorAll<HTMLButtonElement>("[data-player-tab]")];
+  const selectTab = (id: string) => {
+    orders.hidden = id !== "orders";
+    command.dataset.currentTab = id;
+    panel.scrollTop = 0;
+    for (const tab of tabs) tab.setAttribute("aria-pressed", String(tab.dataset.playerTab === id));
+  };
+  for (const tab of tabs) tab.onclick = () => selectTab(tab.dataset.playerTab!);
+  automatic.onchange = () => {
+    const player = getPlayerNation(world);
+    if (player) player.automaticGovernment = automatic.checked;
+  };
+  const updateDiplomacy = attachPlayerDiplomacyControls(orders, world);
+  const updateMilitary = attachPlayerMilitaryControls(orders, world, getDestination);
+  const updateLandings = attachPlayerLandingControls(orders, world, getDestination);
   const heading = panel.querySelector("h2")!;
   const label = panel.querySelector("small")!;
   const overview = panel.querySelector<HTMLElement>("[data-overview]")!;
   const enter = panel.querySelector<HTMLButtonElement>("[data-enter]")!;
   const update = () => {
     const player = getPlayerNation(world);
+    setGovernmentHost(player ? command : null);
     const id = player?.nationId ?? getMapView(world).selectedNationId;
     const nation = world.nations.find((entry) => entry.id === id);
     panel.hidden = !nation;
@@ -47,18 +67,19 @@ export function attachPlayerControls(
     enter.hidden = !!player || !isNationActive(nation);
     command.hidden = !player;
     if (player) {
+      automatic.checked = player.automaticGovernment;
       updateDiplomacy();
       updateMilitary();
       updateLandings();
     }
   };
-  panel.querySelector<HTMLButtonElement>("[data-government]")!.onclick = openResearch;
   enter.onclick = () => {
     const id = getMapView(world).selectedNationId;
     if (id && enterPlayerNation(world, id)) {
       getMapView(world).targetNationId = null;
       selectMapNation(world, id);
-      command.querySelector("details")!.open = true;
+      selectTab("orders");
+      orders.querySelector("details")!.open = true;
     }
     update();
   };

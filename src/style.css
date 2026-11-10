@@ -198,3 +198,22 @@ canvas {
 @media(max-width:720px) {
   .map-controls.player-controls { top: auto; bottom: 58px; max-height: 40dvh; }
 }
+
+.map-controls.player-controls:has([data-command]:not([hidden])) { width: min(365px, calc(100vw - 24px)); }
+.player-controls .player-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.player-controls .player-toolbar label { margin: 0; font-size: 12px; }
+.player-controls nav[aria-label="国家操作"] { display: grid; grid-template-columns: 1fr 1fr; }
+.player-controls nav[aria-label="国家操作"] button { padding: 8px; }
+.society-docked .society-launch [data-action=toggle] { display: none; }
+.society-embedded.society-panel { position: static; width: auto; max-height: none; padding: 0; margin-top: 12px; background: transparent; border: 0; box-shadow: none; overflow: visible; }
+.society-embedded > header, .society-embedded > .society-settings, .society-embedded > .society-selectors, .society-embedded > .society-country { display: none; }
+.society-embedded .society-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.society-embedded .society-tabs button { min-width: 0; padding: 6px 3px; overflow-wrap: anywhere; }
+.society-map-prompt { display: none; }
+.society-no-partner > :not(.society-map-prompt) { display: none !important; }
+.society-no-partner > .society-map-prompt { display: block; }
+[data-current-tab="orders"] .society-embedded { display: none; }
+.player-controls .society-feedback:empty { display: none; }
+.player-controls .society-research-row { grid-template-columns: minmax(0, 1.2fr) 34px minmax(0, 1fr) 32px; gap: 5px; }
+.player-controls .society-research-row progress { width: 100%; min-width: 0; }
+.player-controls .society-selectors > label { min-width: 0; }
