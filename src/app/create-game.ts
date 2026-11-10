@@ -1,7 +1,7 @@
 import { attachMapControls } from "./map-controls";
 import { attachPlayerMap } from "../render/player-map";
 import { attachSocietyPanel } from "./society-panel";
-import { createDefaultWorldConfig, createWorldConfig } from "../data/world-config";
+import { createDefaultWorldConfig, createWorldConfig, type WorldMapPreset } from "../data/world-config";
 import { drawCityCapitalIcons } from "../render/draw/city-capital-icons";
 import { drawMesoBorders } from "../render/draw/meso-borders";
 import { drawMicroRegions } from "../render/draw/micro-regions";
@@ -24,10 +24,10 @@ import type { WorldState } from "../sim/world-state";
 
 const MAX_UNIT_ANIMATION_SPEED = 4;
 
-export function createGame(root: HTMLElement, setup: { world?: WorldState; paused?: boolean } = {}): void {
+export function createGame(root: HTMLElement, setup: { world?: WorldState; paused?: boolean; preset?: WorldMapPreset } = {}): void {
   const config = setup.world
     ? createWorldConfig(setup.world.width, setup.world.height)
-    : createDefaultWorldConfig();
+    : createDefaultWorldConfig(setup.preset);
   if (setup.world?.worldSeed !== undefined) config.seed = setup.world.worldSeed;
   console.log("World generation seed:", config.seed);
   const renderer = createRenderer(root);

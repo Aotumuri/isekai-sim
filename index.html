@@ -6,7 +6,22 @@
     <title>Isekai Sim</title>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <main class="map-start">
+        <h1>Isekai Sim</h1>
+        <p>Choose the scale of your new map.</p>
+        <form method="get">
+          <button name="map" value="japan-scale">
+            <strong>Japan scale</strong>
+            <span>A region about the size of Japan, with varied coastlines and terrain.</span>
+          </button>
+          <button name="map" value="world-map">
+            <strong>World scale</strong>
+            <span>Continents, ocean basins and long mountain belts.</span>
+          </button>
+        </form>
+      </main>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

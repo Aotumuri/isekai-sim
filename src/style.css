@@ -21,6 +21,40 @@ body {
   min-height: 100vh;
 }
 
+.map-start {
+  width: min(42rem, calc(100% - 2rem));
+  margin-inline: auto;
+  padding-block: min(18vh, 8rem) 2rem;
+}
+
+.map-start form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 0.75rem;
+}
+
+.map-start button {
+  display: grid;
+  gap: 0.4rem;
+  padding: 1rem;
+  border: 1px solid #3a506d;
+  border-radius: 8px;
+  background: #17283c;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.map-start button:is(:hover, :focus-visible) {
+  border-color: #93c5fd;
+  background: #263f5e;
+}
+
+.map-start button span {
+  color: #b7c4d5;
+}
+
 canvas {
   display: block;
 }

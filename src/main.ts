@@ -6,4 +6,8 @@ if (!appRoot) {
   throw new Error("Missing #app root element");
 }
 
-createGame(appRoot);
+const preset = new URLSearchParams(window.location.search).get("map");
+if (preset === "japan-scale" || preset === "world-map") {
+  appRoot.replaceChildren();
+  createGame(appRoot, { preset });
+}
