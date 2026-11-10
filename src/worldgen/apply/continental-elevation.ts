@@ -78,7 +78,7 @@ export function applyContinentalElevation(
     if (ridge - edgeFade > -0.22) region.seaRidge = clamp(1 + (ridge - edgeFade) / 0.22, 0, 1);
     const coastline = Math.max(interior + coastalWeight * layout.coastReliefScale * coastalNoise, ridge) - edgeFade;
     const relief = worldMap
-      ? sampleContinentalRelief(coastline, inlandX, inlandY, mountainPhase, coastalNoise)
+      ? sampleContinentalRelief(coastline, inlandX, inlandY, mountainPhase, coastalNoise, config.seed)
       : Math.min(coastline, layout.seaCeiling(x, y)) * (0.40 + 0.56 * ridges + 0.14 * hills);
     region.elevation = clamp(config.elevationSeaLevel + relief, config.elevationRange.min, config.elevationRange.max);
   }

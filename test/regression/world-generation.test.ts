@@ -170,19 +170,13 @@ test("world map island arcs have independent peaks away from their ridge centerl
   }
 });
 
-test("continental relief gives an inland basin a low floor and a broad elevated rim", () => {
-  const relief = (x: number, y: number) => sampleContinentalRelief(0.35, x, y, 0, 0);
+test("continental uplift forms an inland belt above the stable lowlands", () => {
+  const relief = (x: number, y: number) => sampleContinentalRelief(0.35, x, y, 0, 0, 17);
   assert.ok(sampleContinentalRelief(-0.10, 0, 0, 0, 0) < 0);
-  assert.ok(sampleContinentalRelief(0.04, 0, 0, 0, 0) < 0.035);
-  const basinX = 0.19 * Math.sin(1);
-  const floor = relief(basinX, 0.44);
-  assert.ok(floor < 0.07);
-  assert.ok(Math.abs(relief(basinX + 0.10, 0.44) - floor) < 0.015);
-  for (const [x, y] of [[basinX - 0.43, 0.44], [basinX + 0.43, 0.44],
-    [basinX, 0.15], [basinX, 0.74]] as const) {
-    assert.ok(relief(x, y) > floor + 0.13);
+  assert.ok(sampleContinentalRelief(0.01, 0, 0, 0, 0) < 0.035);
+  for (const x of [-0.2, 0, 0.2]) {
+    assert.ok(relief(x, 0) > relief(x, -0.65) + 0.06);
   }
-  for (const x of [-0.5, 0, 0.5]) assert.ok(relief(x, -0.45) < 0.07);
 });
 
 test("the default world map moves its largest continent between seeds", () => {

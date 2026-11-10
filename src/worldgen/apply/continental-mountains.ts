@@ -1,14 +1,5 @@
 import { clamp } from "../../utils/math";
-
-function sampleContinentalMountains(x: number, y: number, phase: number, noise: number): number {
-  const along = x * Math.cos(phase) + y * Math.sin(phase);
-  const across = y * Math.cos(phase) - x * Math.sin(phase);
-  const offset = 0.45 * Math.sin(2 * phase);
-  const bend = offset + 0.23 * Math.sin(4 * along + phase);
-  const spine = Math.exp(-18 * (across - bend + 0.55 * noise) ** 2 - 1.7 * (along - 0.23) ** 2);
-  const branch = Math.exp(-27 * (across + 0.72 * along - 0.25 + noise) ** 2 - 5 * (along + 0.30) ** 2);
-  return clamp(Math.max(spine, 0.72 * branch) * (0.85 + noise), 0, 1);
-}
+import { sampleCoastRelief } from "./coast-relief";
 
 export function sampleContinentalRelief(
   coastline: number,
@@ -16,34 +7,23 @@ export function sampleContinentalRelief(
   y: number,
   phase: number,
   noise: number,
+  seed = 0,
 ): number {
   if (coastline <= 0) return coastline * 0.72;
 
   const along = x * Math.cos(phase) + y * Math.sin(phase);
   const across = y * Math.cos(phase) - x * Math.sin(phase);
-  const front = -0.17 + 0.16 * Math.sin(3.5 * along + phase) + 0.30 * noise;
-  const plateau = smoothRange(front - 0.09, front + 0.17, across);
-  const coastalSlope = smoothRange(0, 0.26, coastline);
-
-  // A broad depression inside the upland, with an irregular rim and a flat floor.
-  const basinX = along - 0.19 * Math.sin(phase + 1);
-  const basinY = across - (0.38 + 0.06 * Math.cos(phase));
-  const basinWidth = 0.32 + 0.06 * Math.sin(phase);
-  const basinLength = 0.22 + 0.05 * Math.sin(2 * phase);
-  const basinDistance = Math.hypot(
-    (basinX + 0.22 * basinY) / basinWidth,
-    (basinY + 0.075 * Math.sin(9 * basinX + phase)) / basinLength,
-  );
-  const basinDepth = smoothRange(-0.35, 0.65, Math.cos(phase));
-  const basinRim = 1 - basinDepth * (1 - smoothRange(0.51, 1.28, basinDistance + 0.72 * noise));
-  const lowland = 0.043 + 0.012 * noise;
-  const upland = 0.25 + 0.035 * noise;
-  const mountains = 0.19 * sampleContinentalMountains(x, y, phase, noise);
-  const interior = lowland + plateau * basinRim * (upland - lowland + mountains);
-  return coastalSlope * interior;
-}
-
-function smoothRange(min: number, max: number, value: number): number {
-  const t = clamp((value - min) / (max - min), 0, 1);
-  return t * t * (3 - 2 * t);
+  const deformation = sampleCoastRelief(along * 0.32 + phase, across * 0.28, seed ^ 0x74ac6d31);
+  // A collision zone thickens the crust over a broad belt, with a narrower
+  // mountain front on one side. The rest of the continent rises much less.
+  const boundary = 0.21 * Math.sin(phase + 1.8 * along) + 0.55 * deformation;
+  const offset = across - boundary;
+  const convergence = clamp(0.61 + 0.27 * Math.sin(2.6 * along + phase) + deformation, 0.15, 1);
+  const belt = Math.exp(-8 * (offset - 0.18) ** 2);
+  const front = Math.exp(-59 * (offset + 0.12 + 0.24 * noise) ** 2);
+  const ridge = front * (0.64 + 0.36 * Math.sin(6 * along + 8 * deformation) ** 2);
+  const stableCrust = 0.055 + 0.04 * deformation;
+  const uplift = convergence * (0.24 * belt + 0.26 * ridge);
+  const shelf = 1 - Math.exp(-9 * coastline);
+  return shelf * (stableCrust + uplift + 0.06 * noise);
 }
