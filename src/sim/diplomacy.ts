@@ -1,3 +1,4 @@
+import { getManualGovernmentId } from "./player-nation";
 import { areSubjectPartners, getSubjectOverlord } from "./subject-governments";
 import { getIdeologicalAffinity } from "./ideology-relations";
 import { getPublicOutrage } from "./persecution-reaction";
@@ -243,6 +244,8 @@ export function updateDiplomaticRelations(world: WorldState): void {
     relation.tension = clamp(relation.tension + (first.aggression + second.aggression - 0.9) * 2 -
       (relation.opinion > 20 ? 1.5 : 0) + relation.grievance * 0.03 + distrust * 0.35, 0, 100);
     if (relation.crisis) continue;
+    const player = getManualGovernmentId(world);
+    if (a === player || b === player) continue;
     if (relation.opinion >= 55 && relation.trust >= 55) proposeTreaty(world, a, b, "alliance");
     else if (cooperation > 0.6 && relation.opinion >= 20) proposeTreaty(world, a, b, "non-aggression");
     if (world.settings?.tradeEnabled && relation.opinion >= 10) proposeTreaty(world, a, b, "trade");

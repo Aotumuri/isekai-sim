@@ -6,6 +6,7 @@ import type { WorldState } from "./world-state";
 
 export interface PlayerNation {
   nationId: NationId;
+  automaticGovernment: boolean;
   navalOrders: Map<UnitId, MesoRegionId>;
   landOrders: Map<UnitId, MesoRegionId>;
   commandRevision: number;
@@ -23,7 +24,8 @@ export function getPlayerNation(world: WorldState): PlayerNation | undefined {
 
 export function enterPlayerNation(world: WorldState, nationId: NationId): boolean {
   if (!world.nations.some((nation) => nation.id === nationId && isNationActive(nation))) return false;
-  world.playerNation = { nationId, commandMode: "automatic", landOrders: new Map(), navalOrders: new Map(), commandRevision: 0, landingPlanIds: new Set() };
+  world.playerNation = { nationId, automaticGovernment: false, commandMode: "manual", landOrders: new Map(), navalOrders: new Map(), commandRevision: 0, landingPlanIds: new Set() };
+  for (const conference of world.peaceConferences ?? []) conference.approvals.delete(nationId);
   return true;
 }
 
@@ -34,4 +36,9 @@ export function leavePlayerNation(world: WorldState): void {
 export function getManualPlayerNationId(world: WorldState): NationId | undefined {
   const player = getPlayerNation(world);
   return player?.commandMode === "manual" ? player.nationId : undefined;
+}
+
+export function getManualGovernmentId(world: WorldState): NationId | undefined {
+  const player = getPlayerNation(world);
+  return player && !player.automaticGovernment ? player.nationId : undefined;
 }

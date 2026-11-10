@@ -1,3 +1,4 @@
+import { getManualGovernmentId } from "./player-nation";
 import { relieveUnrestAfterPeace } from "./domestic-unrest";
 import { proposePeaceTerms, whitePeaceTerms, assessPeaceOffer, acceptPeaceOffer, updateWarNegotiations } from "./war-negotiations";
 import type { NationId } from "../worldgen/nation";
@@ -70,7 +71,7 @@ export function concludePeace(world: WorldState, a: NationId, b: NationId, reaso
 
 export function offerPeace(world: WorldState, proposerId: NationId, targetId: NationId): boolean {
   if (!proposePeaceTerms(world, proposerId, targetId, whitePeaceTerms())) return false;
-  if (assessPeaceOffer(world, targetId, proposerId, whitePeaceTerms()).accepts)
+  if (targetId !== getManualGovernmentId(world) && assessPeaceOffer(world, targetId, proposerId, whitePeaceTerms()).accepts)
     acceptPeaceOffer(world, targetId, proposerId);
   return true;
 }
@@ -112,6 +113,8 @@ export function updateDiplomaticPeace(world: WorldState): void {
   updateWarNegotiations(world);
   if (!diplomacyEnabled) return;
   for (const relation of state.relations.values()) {
+    const player = getManualGovernmentId(world);
+    if (player === relation.nationAId || player === relation.nationBId) continue;
     if (!relation.crisis || world.time.slowTick - relation.crisis.openedAtSlowTick < 10) continue;
     const mediator = world.nations.filter(isNationActive).find((nation) => nation.id !== relation.nationAId &&
       nation.id !== relation.nationBId && getNationCharacter(world, nation.id).cooperation >= 0.8 &&

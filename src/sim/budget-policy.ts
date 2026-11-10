@@ -1,3 +1,4 @@
+import { getManualGovernmentId } from "./player-nation";
 import { getDomesticUnrest } from "./domestic-unrest";
 import { militaryFundingCost } from "./military-funding";
 import { isNationActive } from "./nation-active";
@@ -10,7 +11,7 @@ export function updateBudgetPolicies(world: WorldState): void {
   const belligerents = new Set(world.wars.flatMap((war) => [war.nationAId, war.nationBId]));
   for (const nation of world.nations) {
     const treasury = nation.treasury;
-    if (!treasury?.automaticBudget || !isNationActive(nation)) continue;
+    if (nation.id === getManualGovernmentId(world) || !treasury?.automaticBudget || !isNationActive(nation)) continue;
     const atWar = belligerents.has(nation.id);
     const pressure = getDomesticUnrest(world, nation.id).pressure;
     const militaryCost = militaryFundingCost(treasury);

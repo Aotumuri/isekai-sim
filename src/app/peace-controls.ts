@@ -1,3 +1,4 @@
+import { getManualGovernmentId } from "../sim/player-nation";
 import { REPARATION_INTERVAL, REPARATION_RESOURCES, type ResourceReparation } from "../sim/resource-reparations";
 import { getSeparatePeaceIssue } from "../sim/separate-peace";
 import { estimateAnnexationResistance } from "../sim/annexation";
@@ -79,7 +80,7 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     ? ` · ${offer.terms.resourceReparation.amount} ${esc(offer.terms.resourceReparation.resource)} every ${REPARATION_INTERVAL}s during the truce` : ""}</p><p>Offers: ${describe(offer.terms.offeredRegionIds)} · ${offer.terms.offeredWeapons} weapons</p>${offer.terms.partition ? `<p><strong>Two puppet governments</strong> · New capital at ${esc(districtName(offer.terms.partition.capitalId))} · ${offer.terms.partition.districtIds.length} districts in the new state</p>` : offer.terms.puppetTarget ? "<p><strong>Install a puppet government in the opposing country</strong></p>" : offer.terms.localSubject ? "<p><strong>Establish a local subject in the demanded provinces</strong></p>" : ""}<small>Truce ${offer.terms.truceSeconds / 60} min · ${offer.source === "opening" ? "Opening terms" : offer.source === "manual" ? "Manually proposed" : "Revised by government"}</small></article>`;
   const update = () => {
     const a = selected(), b = partner(), war = findWar(world.wars, a, b);
-    const enabled = getWarDeclarationMode(world) === "diplomacy" && !!war;
+    const enabled = !!war && (war.cause === "player-declaration" || getWarDeclarationMode(world) === "diplomacy");
     editor.hidden = !enabled;
     const delivery = (world.resourceReparations ?? []).find((term) =>
       (term.payerId === a && term.recipientId === b) || (term.payerId === b && term.recipientId === a));
@@ -114,7 +115,9 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     view("outlook").textContent = `War outlook: ${position}, ${direction}${window} · Domestic unrest ${Math.round(unrest.pressure)}/100 · War fatigue ${Math.round(getWarFatigue(world, a, b))}/100 · Battle casualties ${Math.round(getWarCasualties(war, a)).toLocaleString()}. ${isFightOnGovernment(world, a) ? "Government favors fighting on despite unrest." : "Government weighs compromise against domestic danger."}`;
     const incoming = assessPeaceOffer(world, a, b, opponent.terms);
     view("offers").innerHTML = summary(own) + summary(opponent) + `<p class="society-note peace-assessment">Your government’s assessment of their terms: ${esc(incoming.reason)}</p>`;
-    (control("automatic") as HTMLInputElement).checked = negotiation.automatic.get(a) ?? true;
+    const automatic = control("automatic") as HTMLInputElement;
+    automatic.disabled = getManualGovernmentId(world) === a;
+    automatic.checked = !automatic.disabled && (negotiation.automatic.get(a) ?? true);
     const next = `${negotiation.key}:${a}:${world.territoryVersion}`;
     if (next !== key) {
       parcels.clear();
@@ -180,7 +183,7 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
   root.addEventListener("change", (event) => {
     const input = event.target as HTMLInputElement;
     if (input.dataset.peaceControl === "automatic") {
-      const war = findWar(world.wars, selected(), partner()); if (war) getWarNegotiation(world, war).automatic.set(selected(), input.checked);
+      const war = findWar(world.wars, selected(), partner()); if (war && getManualGovernmentId(world) !== selected()) getWarNegotiation(world, war).automatic.set(selected(), input.checked);
     } else dirty = true;
     update();
   });

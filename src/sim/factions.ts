@@ -1,3 +1,4 @@
+import { getManualGovernmentId } from "./player-nation";
 import { getSubjectOverlord } from "./subject-governments";
 import { setPoliticalMandate } from "./politics";
 import { getIdeologicalAffinity } from "./ideology-relations";
@@ -229,6 +230,7 @@ function callMembers(world: WorldState, war: WarState, principal: NationId, enem
     const key = `${war.id}|${war.startedAtFastTick}|${member}|${defensive ? "defense" : "offense"}`;
     const alreadyFighting = !!findWar(world.wars, member, enemy);
     if (state.handledCalls.has(key) && !alreadyFighting) continue;
+    if (member === getManualGovernmentId(world)) continue;
     const accepts = obligation === "mandatory" || voluntaryCallAccepted(world, member, enemy, defensive);
     if (!state.handledCalls.has(key)) {
       state.handledCalls.add(key);

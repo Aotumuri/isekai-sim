@@ -1,3 +1,4 @@
+import { getManualGovernmentId } from "./player-nation";
 import type { NationId } from "../worldgen/nation";
 import type { WorldState } from "./world-state";
 import { getRelation, hasTreaty, isDiplomaticallyProtected, spendInfluence } from "./diplomacy";
@@ -76,7 +77,7 @@ export function updateAlliedWarRequests(world: WorldState): void {
     else if (!war || war.id !== request.rootWarId || war.startedAtFastTick !== request.rootStartedAt) request.status = "stale";
     else if (findWar(world.wars, request.allyId, request.enemyId) && !findWar(world.wars, request.callerId, request.allyId)) request.status = "accepted";
     else if (!eligible(world, request.callerId, request.allyId, request.enemyId)) request.status = "stale";
-    else if (now - request.createdAtSlowTick >= 10) respondToAlliedWarRequest(world, request.allyId, request.id, willAcceptAlliedWarRequest(world, request));
+    else if (request.allyId !== getManualGovernmentId(world) && now - request.createdAtSlowTick >= 10) respondToAlliedWarRequest(world, request.allyId, request.id, willAcceptAlliedWarRequest(world, request));
   }
   if (now - state.lastAISlowTick < 30) return;
   state.lastAISlowTick = now;

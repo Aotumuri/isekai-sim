@@ -1,3 +1,4 @@
+import { getManualGovernmentId } from "./player-nation";
 import type { NationId } from "../worldgen/nation";
 import { hasTreaty } from "./diplomacy";
 import { concludePeace, warFatigueKey } from "./diplomatic-peace";
@@ -93,7 +94,7 @@ export function updatePeaceConferences(world: WorldState): void {
     const issue = conferenceIssue(world, conference);
     if (issue) { finishConference(world, conference, issue); continue; }
     for (const id of conference.participants) {
-      if (conference.approvals.has(id)) continue;
+      if (id === getManualGovernmentId(world) || conference.approvals.has(id)) continue;
       const accepts = conference.wars.filter(({ a, b }) => a === id || b === id).every(({ a, b }) => {
         const opponent = a === id ? b : a;
         const war = findWar(world.wars, id, opponent)!;

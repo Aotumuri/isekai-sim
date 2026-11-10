@@ -1,3 +1,4 @@
+import { getManualGovernmentId } from "./player-nation";
 import { culturalDistance } from "./annexation";
 import { getRelation, hasTreaty } from "./diplomacy";
 import { startDiplomaticWar } from "./diplomatic-crises";
@@ -53,6 +54,6 @@ export function updateSubjectAutonomy(world: WorldState): void {
     if (!releaseSubjectGovernment(world, overlord.id, subject.id)) continue;
     recordSimulationEvent(world, { category: "politics", nationIds: [subject.id, overlord.id],
       message: `${getNationName(world, subject.id)} broke from ${getNationName(world, overlord.id)} and declared independence.` });
-    if (power >= 0.6) startDiplomaticWar(world, subject.id, overlord.id);
+    if (power >= 0.6 && subject.id !== getManualGovernmentId(world)) startDiplomaticWar(world, subject.id, overlord.id);
   }
 }

@@ -1,4 +1,4 @@
-import { getPlayerNation } from "./player-nation";
+import { getManualGovernmentId, getPlayerNation } from "./player-nation";
 import { getCrisisDeploymentReadiness } from "./crisis-deployment";
 import { getNationalTerritorialValue, getTerritorialValue } from "./territorial-value";
 import { hasWarApproach } from "./maritime-war-readiness";
@@ -188,7 +188,7 @@ function createDiplomaticWar(world: WorldState, aggressorId: NationId, targetId:
 
 export function updateDiplomaticCrises(world: WorldState): void {
   if (getWarDeclarationMode(world) !== "diplomacy") return;
-  const playerId = getPlayerNation(world)?.nationId;
+  const playerId = getManualGovernmentId(world);
   const state = getDiplomacyState(world), now = world.time.slowTick;
   if (now - state.lastCrisisSlowTick < 10) return;
   state.lastCrisisSlowTick = now;
@@ -256,14 +256,14 @@ export function updateDiplomaticCrises(world: WorldState): void {
     if (war.cause === "subject-uprising") continue;
     const defender = world.nations.find((nation) => nation.id === war.defenderId);
     const overlord = getSubjectOverlord(world, war.defenderId);
-    if (overlord && defender?.subjectGovernment && war.startedAtFastTick >= defender.subjectGovernment.establishedAtFastTick &&
+    if (overlord && overlord !== playerId && defender?.subjectGovernment && war.startedAtFastTick >= defender.subjectGovernment.establishedAtFastTick &&
       startDiplomaticWar(world, overlord, war.aggressorId, "defensive-alliance")) state.defensiveInterventions += 1;
   }
   // Allies defend the directly attacked state; defensive calls do not recurse.
   for (const war of [...world.wars]) {
     if (war.cause === "allied-request" || war.cause === "defensive-alliance" || war.cause === "faction-obligation" || war.cause === "subject-uprising") continue;
     for (const ally of world.nations.filter(isNationActive)) {
-      if (ally.id === war.aggressorId || ally.id === war.defenderId || areFactionPartners(world, ally.id, war.defenderId) ||
+      if (ally.id === playerId || ally.id === war.aggressorId || ally.id === war.defenderId || areFactionPartners(world, ally.id, war.defenderId) ||
         findWar(world.wars, ally.id, war.aggressorId)) continue;
       const treaty = hasTreaty(world, ally.id, war.defenderId, "alliance");
       const pact = getDefensePact(world, ally.id, war.defenderId)?.against === war.aggressorId;

@@ -1,3 +1,4 @@
+import { getManualGovernmentId } from "./player-nation";
 import { isValidResourceReparation, REPARATION_INTERVAL, REPARATION_RESOURCES, type ResourceReparation } from "./resource-reparations";
 import { foodReserveSeconds } from "./food-supply";
 import { getNationalTerritorialValue, getTerritorialValue } from "./territorial-value";
@@ -388,12 +389,13 @@ export function updateWarNegotiations(world: WorldState): void {
   for (const war of wars) getWarNegotiation(world, war);
   if (world.time.slowTick - state.lastAISlowTick < 10) return;
   state.lastAISlowTick = world.time.slowTick;
+  const player = getManualGovernmentId(world);
   for (const war of [...wars]) {
     if (hasConferenceWar(world, war)) continue;
     const negotiation = getWarNegotiation(world, war);
     sampleWarOutlook(world, negotiation);
     for (const [proposer, target] of [[negotiation.a, negotiation.b], [negotiation.b, negotiation.a]]) {
-      if (negotiation.automatic.get(proposer) && world.time.slowTick - (negotiation.lastRevisionSlowTick.get(proposer) ?? 0) >= 30) {
+      if (proposer !== player && negotiation.automatic.get(proposer) && world.time.slowTick - (negotiation.lastRevisionSlowTick.get(proposer) ?? 0) >= 30) {
         const old = negotiation.offers.get(proposer)!;
         const revised = reviseTerms(world, negotiation, proposer, target);
         const terms = getPeaceTermsIssue(world, proposer, target, revised) ? whitePeaceTerms() : revised;
@@ -408,12 +410,12 @@ export function updateWarNegotiations(world: WorldState): void {
     let settled = false;
     for (const [recipient, proposer] of [[negotiation.a, negotiation.b], [negotiation.b, negotiation.a]]) {
       const offer = negotiation.offers.get(proposer)!;
-      if (!negotiation.automatic.get(recipient) || world.time.slowTick - offer.revisedAtSlowTick < 10) continue;
+      if (recipient === player || (proposer === player && offer.source !== "manual") || !negotiation.automatic.get(recipient) || world.time.slowTick - offer.revisedAtSlowTick < 10) continue;
       if (assessPeaceOffer(world, recipient, proposer, offer.terms).accepts && acceptPeaceOffer(world, recipient, proposer)) {
         settled = true;
         break;
       }
     }
-    if (!settled && world.time.fastTick - war.startedAtFastTick >= 900) tryMutualCompromise(world, negotiation);
+    if (!settled && negotiation.a !== player && negotiation.b !== player && world.time.fastTick - war.startedAtFastTick >= 900) tryMutualCompromise(world, negotiation);
   }
 }

@@ -1,4 +1,4 @@
-import { getPlayerNation } from "./player-nation";
+import { getManualGovernmentId } from "./player-nation";
 import { assessMaritimeWarReadiness } from "./maritime-war-readiness";
 import { getWarDeclarationMode } from "./simulation-settings";
 import { WORLD_BALANCE } from "../data/balance";
@@ -27,7 +27,7 @@ export function updateWarDeclarations(world: WorldState): void {
   const settings = WORLD_BALANCE.war.declare;
   const range = settings.slowTickRange;
   if (range.min <= 0 || range.max <= 0) return;
-  const playerId = getPlayerNation(world)?.nationId;
+  const playerId = getManualGovernmentId(world);
   const ready = new Set<NationId>();
   for (const nation of world.nations) {
     if (nation.id !== playerId && isNationActive(nation) && world.time.slowTick >= nation.nextWarDeclarationTick) {

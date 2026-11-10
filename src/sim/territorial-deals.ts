@@ -1,3 +1,4 @@
+import { getManualGovernmentId } from "./player-nation";
 import { getPeaceBorderIssue } from "./peace-borders";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
@@ -100,7 +101,7 @@ export function updateTerritorialDeals(world: WorldState): void {
     if (now >= offer.expiresAtSlowTick) offer.status = "expired";
     else if (findWar(world.wars, offer.proposerId, offer.targetId) || getRelation(world, offer.proposerId, offer.targetId).crisis ||
       !canSettleOffer(world, offer)) offer.status = "stale";
-    else if (now - offer.createdAtSlowTick >= 10) respondToTerritorialOffer(world, offer.targetId, offer.id, willAcceptTerritorialOffer(world, offer));
+    else if (offer.targetId !== getManualGovernmentId(world) && now - offer.createdAtSlowTick >= 10) respondToTerritorialOffer(world, offer.targetId, offer.id, willAcceptTerritorialOffer(world, offer));
   }
   if (now - state.lastAISlowTick < 60) return;
   state.lastAISlowTick = now;
