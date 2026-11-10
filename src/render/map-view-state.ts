@@ -1,3 +1,4 @@
+import { getPlayerNation } from "../sim/player-nation";
 import type { PopulationDimension } from "../sim/regional-population";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
@@ -15,13 +16,27 @@ export function getMapView(world: WorldState): MapViewState {
 }
 export function setMapMode(world: WorldState, mode: MapMode): boolean {
   const view = getMapView(world);
-  if ((mode === "diplomacy" || mode === "claims") && !view.selectedNationId) return false;
-  if (mode === "diplomacy") { view.diplomaticFocusId = view.selectedNationId; view.targetNationId = null; }
+  const playerId = getPlayerNation(world)?.nationId;
+  if (mode === "claims" && !view.selectedNationId) return false;
+  if (mode === "diplomacy") {
+    const focus = playerId ?? view.selectedNationId;
+    if (!focus) return false;
+    view.diplomaticFocusId = focus;
+    view.targetNationId = view.selectedNationId !== focus ? view.selectedNationId : null;
+  }
   if (mode === "claims" && view.mode !== "claims") view.claimsReturnMode = view.mode;
   view.mode = mode; view.revision += 1; return true;
 }
 export function selectMapNation(world: WorldState, nationId: NationId | null): void {
   const view = getMapView(world);
+  const playerId = getPlayerNation(world)?.nationId;
+  if (playerId && view.mode === "diplomacy") {
+    view.selectedNationId = playerId;
+    view.diplomaticFocusId = playerId;
+    view.targetNationId = nationId !== playerId ? nationId : null;
+    view.revision += 1;
+    return;
+  }
   const previousFocus = view.diplomaticFocusId;
   view.selectedNationId = nationId;
   view.diplomaticFocusId = nationId;

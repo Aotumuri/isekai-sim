@@ -1,3 +1,4 @@
+import { getPlayerNation } from "../sim/player-nation";
 import { getPrototypeMaterialRates } from "../sim/research-materials";
 import { STRATEGIC_RESOURCE_NAMES, STRATEGIC_RESOURCES } from "../data/strategic-resources";
 import { getCrisisDeploymentReadiness } from "../sim/crisis-deployment";
@@ -108,23 +109,24 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
   const view = (name: string) => wrapper.querySelector<HTMLElement>(`[data-view="${name}"]`)!;
   const control = (name: string) => wrapper.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-control="${name}"]`)!;
   const nationSelect = control("nation") as HTMLSelectElement, partnerSelect = control("partner") as HTMLSelectElement;
+  const getActor = () => getPlayerNation(world)?.nationId ?? nationSelect.value as NationId;
   (control("import") as HTMLSelectElement).value = "weapons";
   const feedback = wrapper.querySelector<HTMLElement>(".society-feedback")!;
-  const exileControls = attachExileControls(wrapper.querySelector<HTMLElement>("[data-exile-ui]")!, world, () => nationSelect.value as NationId, (id) => { selectMapNation(world, id); nationSelect.value = id; update(true); });
+  const exileControls = attachExileControls(wrapper.querySelector<HTMLElement>("[data-exile-ui]")!, world, getActor, (id) => { selectMapNation(world, id); nationSelect.value = id; update(true); });
   const politics = attachPoliticsControls(wrapper.querySelector<HTMLElement>("[data-politics-ui]")!, world,
-    () => nationSelect.value as NationId, () => partnerSelect.value as NationId,
+    getActor, () => partnerSelect.value as NationId,
     (message) => { feedback.textContent = message; update(true); });
   const food = attachFoodControls(wrapper.querySelector<HTMLElement>("[data-food-ui]")!, world,
-    () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; });
+    getActor, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; });
   const treasury = attachTreasuryControls(wrapper.querySelector<HTMLElement>("[data-treasury-ui]")!, world,
-    () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; });
+    getActor, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; });
   const conference = attachPeaceConferenceControls(wrapper.querySelector<HTMLElement>("[data-peace-conference-ui]")!, world,
-    () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; });
-  const peaceControls = attachPeaceControls(wrapper.querySelector<HTMLElement>("[data-peace-ui]")!, world, () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
-  const factions = attachFactionControls(wrapper.querySelector<HTMLElement>("[data-faction-ui]")!, world, () => nationSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
-  const territories = attachTerritoryControls(wrapper.querySelector<HTMLElement>("[data-territory-ui]")!, world, () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
-  const mobilizationControls = attachMobilizationControls(wrapper.querySelector<HTMLElement>("[data-mobilization-ui]")!, world, () => nationSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
-  const militaryCooperation = attachMilitaryCooperationControls(wrapper.querySelector<HTMLElement>("[data-military-cooperation-ui]")!, world, () => nationSelect.value as NationId, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
+    getActor, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; });
+  const peaceControls = attachPeaceControls(wrapper.querySelector<HTMLElement>("[data-peace-ui]")!, world, getActor, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
+  const factions = attachFactionControls(wrapper.querySelector<HTMLElement>("[data-faction-ui]")!, world, getActor, (message) => { feedback.textContent = message; update(true); });
+  const territories = attachTerritoryControls(wrapper.querySelector<HTMLElement>("[data-territory-ui]")!, world, getActor, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
+  const mobilizationControls = attachMobilizationControls(wrapper.querySelector<HTMLElement>("[data-mobilization-ui]")!, world, getActor, (message) => { feedback.textContent = message; update(true); });
+  const militaryCooperation = attachMilitaryCooperationControls(wrapper.querySelector<HTMLElement>("[data-military-cooperation-ui]")!, world, getActor, () => partnerSelect.value as NationId, (message) => { feedback.textContent = message; update(true); });
   let visible = false, lastRender = -Infinity, cachedNationIds = "";
   let researchOptionFamily = "";
   let lastPaused: boolean | undefined;
@@ -156,7 +158,10 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       cachedNationIds = ids;
     }
     const map = getMapView(world);
-    const actor = map.mode === "diplomacy" ? map.diplomaticFocusId : map.selectedNationId;
+    const playerId = getPlayerNation(world)?.nationId;
+    const actor = playerId ?? (map.mode === "diplomacy" ? map.diplomaticFocusId : map.selectedNationId);
+    nationSelect.disabled = !!playerId;
+    if (playerId) nationSelect.value = playerId;
     if (actor !== lastSelected && active.some((nation) => nation.id === actor)) {
       nationSelect.value = actor!; lastSelected = actor;
     }
@@ -164,7 +169,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       partnerSelect.value = map.targetNationId!; lastTarget = map.targetNationId;
     }
     if (nationSelect.value === partnerSelect.value) partnerSelect.value = active.find((nation) => nation.id !== nationSelect.value)?.id ?? "";
-    const a = nationSelect.value as NationId, b = partnerSelect.value as NationId;
+    const a = getActor(), b = partnerSelect.value as NationId;
     const nation = active.find((item) => item.id === a);
     if (!nation) { setText("country", "No active nations remain."); return; }
     const settings = world.settings ?? createSimulationSettings({ diplomacyEnabled: false });
@@ -276,10 +281,10 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
       world.settings[target.dataset.setting as keyof typeof world.settings] = target.checked;
       feedback.textContent = "Settings updated. Existing wars continue; shipments are checked on the next evaluation.";
     } else if (["focus", "investment", "research-priority"].includes(target.dataset.control ?? "")) {
-      const portfolio = getResearchPortfolio(world, nationSelect.value as NationId, control("research-family").value as EquipmentFamily);
+      const portfolio = getResearchPortfolio(world, getActor(), control("research-family").value as EquipmentFamily);
       if (target.dataset.control === "focus") portfolio.focus = target.value as ResearchPortfolio["focus"];
       else if (target.dataset.control === "research-priority") portfolio.priority = target.value as ResearchPriority;
-      else getResearchPortfolio(world, nationSelect.value as NationId).investment = target.value as ResearchPortfolio["investment"];
+      else getResearchPortfolio(world, getActor()).investment = target.value as ResearchPortfolio["investment"];
       feedback.textContent = "Research policy updated for the next evaluation. Existing progress is preserved.";
     } else if (target.dataset.control === "nation") {
       selectMapNation(world, nationSelect.value as NationId);
@@ -303,7 +308,7 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     if (action === "toggle" || action === "close") { setVisible(action === "toggle" ? !visible : false); return; }
     if (action === "pause") { clock.paused = !clock.paused; update(true); return; }
     if (action === "partner") { partnerSelect.value = button.dataset.partner!; update(true); return; }
-    const a = nationSelect.value as NationId, b = partnerSelect.value as NationId;
+    const a = getActor(), b = partnerSelect.value as NationId;
     let success = false;
     if (action === "improve") success = improveRelations(world, a, b);
     else if (action === "pact") success = proposeTreaty(world, a, b, "non-aggression");
