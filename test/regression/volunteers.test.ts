@@ -1,10 +1,11 @@
+import { POPULATION_DIMENSIONS } from "../../src/sim/regional-population";
 import { connectedRegionGroups } from "../../src/sim/peace-borders";
 import { updateProduction } from "../../src/sim/production";
 import { getMilitaryAccessState } from "../../src/sim/military-access";
 import { updateCivilWar } from "../../src/sim/civil-war";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSocietyWorld } from "../helpers/society-world";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 import { getRelation, getDiplomacyState } from "../../src/sim/diplomacy";
 import { getAdjacentNationPairs, getNeighborsById, getOwnerByMesoId } from "../../src/sim/world-cache";
 import { findTradeRoute } from "../../src/sim/international-trade";
@@ -16,7 +17,7 @@ import { sendVolunteers, updateVolunteers, recallVolunteers } from "../../src/si
 import { allFieldUnits, getMobilization, updateMobilization } from "../../src/sim/mobilization";
 
 function scene() {
-  const world = createSocietyWorld(); updateSupplyAssessment(world);
+  const world = createFixedSocietyWorld(); updateSupplyAssessment(world);
   const [a, b] = getAdjacentNationPairs(world).find(([a, b]) => !!findTradeRoute(world, a, b))!;
   const donor = world.nations.find((nation) => nation.id === a)!, host = world.nations.find((nation) => nation.id === b)!;
   const enemy = world.nations.find((nation) => nation.id !== a && nation.id !== b)!;
@@ -94,6 +95,14 @@ test("foreign volunteers retain their mission allegiance when a recipient provin
   for (const region of world.mesoRegions) if (hostRegions.has(region.id) && region.id !== host.capitalMesoId) region.building = null;
   world.mesoRegions.find((region) => region.id === target)!.building = "city";
   const volunteer = world.units.find((unit) => unit.volunteerMissionId === mission.id)!; volunteer.regionId = target;
+  // Equal shares isolate the city-led uprising from demographic revolution origins.
+  const capitalPopulation = world.regionalPopulations!.get(originalCapital)!;
+  for (const id of hostRegions) {
+    const population = world.regionalPopulations!.get(id)!;
+    for (const dimension of POPULATION_DIMENSIONS) {
+      population[dimension] = capitalPopulation[dimension].map((group) => group * population.size / capitalPopulation.size);
+    }
+  }
   host.warCooperation = 0; const before = world.nations.length;
   updateCivilWar(world); world.time.slowTick += 300; updateCivilWar(world);
   assert.equal(world.nations.length, before + 1);
