@@ -1,3 +1,4 @@
+import { issuePlayerNavalOrder } from "../sim/player-naval-orders";
 import { clearPlayerLandOrders, issuePlayerLandOrder, setPlayerCommandMode } from "../sim/player-land-orders";
 import { getPlayerNation } from "../sim/player-nation";
 import type { WorldState } from "../sim/world-state";
@@ -37,9 +38,13 @@ export function attachPlayerMilitaryControls(
   section.querySelector<HTMLButtonElement>("[data-move]")!.onclick = () => {
     const player = getPlayerNation(world);
     const target = getDestination();
-    const selected = world.units.find(({ id }) => id === unit.value)?.id;
-    const order = player?.commandMode === "assisted" ? count.valueAsNumber : selected;
-    const issued = target && order !== undefined ? issuePlayerLandOrder(world, target, order) : 0;
+    const selected = world.units.find(({ id }) => id === unit.value);
+    const order = player?.commandMode === "assisted" ? count.valueAsNumber : selected?.id;
+    const issued = target && order !== undefined
+      ? player?.commandMode === "manual" && selected?.domain === "naval"
+        ? Number(issuePlayerNavalOrder(world, selected.id, target))
+        : issuePlayerLandOrder(world, target, order)
+      : 0;
     result.textContent = issued ? `${issued} 部隊に命令しました。` : "地域または移動可能な部隊を選んでください。";
   };
   section.querySelector<HTMLButtonElement>("[data-clear]")!.onclick = () => {
@@ -61,7 +66,7 @@ export function attachPlayerMilitaryControls(
     const target = getDestination();
     destination.textContent = target ? `選択地域 ${target}` : "目的地を地図で選んでください。";
     if (player.commandMode !== "manual") return;
-    const units = world.units.filter((item) => item.nationId === player.nationId && item.domain === "land");
+    const units = world.units.filter((item) => item.nationId === player.nationId);
     const key = units.map((item) => `${item.id}:${item.regionId}`).join(",");
     if (key === roster) return;
     const previous = unit.value;

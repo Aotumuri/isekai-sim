@@ -1,3 +1,4 @@
+import { getManualPlayerNationId } from "./player-nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { getMoveMsPerRegion } from "./movement";
@@ -214,11 +215,13 @@ export function assessMaritimeInterdiction(world: WorldState, links: MaritimeSup
 
 /** Raid-only movement toward the assigned route. No fallback roaming is permitted. */
 export function updateMaritimeInterdictionMovement(world: WorldState, dtMs: number): void {
+  const manualNation = getManualPlayerNationId(world);
   const state = world.supplyAssessment.maritimeInterdiction;
   if (state.assignments.length === 0) return;
   const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
   const neighborsById = getNeighborsById(world);
   for (const assignment of state.assignments) {
+    if (assignment.attackerNationId === manualNation) continue;
     const unit = unitById.get(assignment.combatShipId);
     if (!isOperationalCombatShip(unit, assignment.attackerNationId)) continue;
     const strategicMission = world.supplyAssessment.navalStrategy.missionByShipId.get(unit.id);

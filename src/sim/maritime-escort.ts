@@ -1,3 +1,4 @@
+import { getManualPlayerNationId } from "./player-nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { getMoveMsPerRegion } from "./movement";
@@ -150,8 +151,9 @@ export function updateMaritimeEscortAssignments(
   }
   const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
   const demands = state.demands;
+  const manualNation = getManualPlayerNationId(world);
   const combatShips = world.units
-    .filter((unit) => isOperationalCombatShip(unit))
+    .filter((unit) => unit.nationId !== manualNation && isOperationalCombatShip(unit))
     .sort((a, b) => compareIds(a.id, b.id));
   const combatShipsByNation = new Map<NationId, UnitState[]>();
   const combatShipsByRegion = new Map<MesoRegionId, UnitState[]>();
@@ -225,12 +227,14 @@ export function updateMaritimeEscortDemands(world: WorldState, links: MaritimeSu
 
 /** Escort-only movement. It never chooses roaming or offensive naval targets. */
 export function updateMaritimeEscortMovement(world: WorldState, dtMs: number): void {
+  const manualNation = getManualPlayerNationId(world);
   const state = world.supplyAssessment.maritimeEscorts;
   if (state.assignments.length === 0) return;
   const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
   const neighborsById = getNeighborsById(world);
   let protectionDirty = false;
   for (const assignment of state.assignments) {
+    if (assignment.nationId === manualNation) continue;
     const unit = unitById.get(assignment.combatShipId);
     if (!isOperationalCombatShip(unit, assignment.nationId) || assignment.status === "escorting") continue;
     const transport = getAssignedTransport(world, assignment.maritimeLinkId);

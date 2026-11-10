@@ -1,3 +1,4 @@
+import { getManualPlayerNationId } from "./player-nation";
 import { canReachCoast, getCoastalSeaRegions, getCoastalSupportTargets } from "./coastal-support";
 import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegionId } from "../worldgen/meso-region";
@@ -173,8 +174,10 @@ export function updateNavalStrategy(world: WorldState): void {
   const startedAt = world.instrumentation ? performance.now() : 0;
   const previousByKey = new Map(state.missions.map((mission) => [missionKey(mission), mission]));
   const previousByShip = state.missionByShipId;
+  const manualNation = getManualPlayerNationId(world);
   const shipsByNation = new Map<NationId, UnitState[]>();
   for (const ship of world.units.filter(isLiveCombatShip).sort(compareUnits)) {
+    if (ship.nationId === manualNation) continue;
     const ships = shipsByNation.get(ship.nationId);
     if (ships) ships.push(ship); else shipsByNation.set(ship.nationId, [ship]);
   }
@@ -583,12 +586,14 @@ function isSuppliedPort(world: WorldState, nationId: NationId, regionId: MesoReg
 
 /** Positions interception, shore support and reserve missions. */
 export function updateNavalStrategyMovement(world: WorldState, dtMs: number): void {
+  const manualNation = getManualPlayerNationId(world);
   const state = world.supplyAssessment.navalStrategy;
   if (!state.missions.some((mission) => mission.type === "INTERCEPT" || mission.type === "RESERVE" || mission.type === "SUPPORT")) return;
   const startedAt = world.instrumentation ? performance.now() : 0;
   const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
   const neighbors = getNeighborsById(world);
   for (const mission of state.missions) {
+    if (mission.nationId === manualNation) continue;
     if (mission.type !== "INTERCEPT" && mission.type !== "RESERVE" && mission.type !== "SUPPORT") continue;
     const liveTarget = mission.targetShipId ? unitById.get(mission.targetShipId)?.regionId : undefined;
     // Do not sail toward the last known position of a sunk invasion transport.

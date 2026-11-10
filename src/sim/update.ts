@@ -1,3 +1,4 @@
+import { updatePlayerNavalOrders } from "./player-naval-orders";
 import { updateResourceReparations } from "./resource-reparations";
 import { updateCrisisDeployments } from "./crisis-deployment";
 import { updateForcedDisplacement } from "./forced-displacement";
@@ -157,6 +158,7 @@ export function stepFastTick(world: WorldState, dtMs: number): void {
   updateConvoyMovement(world, dtMs);
   updateMaritimeInterdictionMovement(world, dtMs);
   updateNavalStrategyMovement(world, dtMs);
+  updatePlayerNavalOrders(world, dtMs);
   recordMaritimeInterdictionCombat(world);
   startedAt = instrumentation ? performance.now() : 0;
   updateBattles(world);

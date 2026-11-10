@@ -1,3 +1,4 @@
+import { getManualPlayerNationId } from "./player-nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import { getMoveMsPerRegion } from "./movement";
 import type { MaritimeSupplyLink } from "./maritime-supply";
@@ -228,6 +229,7 @@ export function removeAmphibiousConvoy(world: WorldState, convoyId: string): voi
 
 /** Moves a transport leader and its formed escorts as one logistics-only formation. */
 export function updateConvoyMovement(world: WorldState, dtMs: number): void {
+  const manualNation = getManualPlayerNationId(world);
   const system = world.supplyAssessment.convoys;
   if (system.convoys.length === 0) return;
   system.version += 1;
@@ -237,6 +239,11 @@ export function updateConvoyMovement(world: WorldState, dtMs: number): void {
 
   for (const convoy of system.convoys) {
     const transport = convoy.transportId ? unitById.get(convoy.transportId) : undefined;
+    if (manualNation && convoy.mission !== "amphibious" && (transport?.nationId === manualNation ||
+      convoy.escortIds.some((id) => unitById.get(id)?.nationId === manualNation))) {
+      convoy.state = "suspended";
+      continue;
+    }
     if (!isOperationalTransport(transport) || convoy.route.waypointIds.length < 2) {
       convoy.state = "suspended";
       continue;
