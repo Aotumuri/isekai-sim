@@ -1,3 +1,5 @@
+import { getUnitCombatStrength } from "../../src/sim/unit-strength";
+import type { FrontId } from "../../src/sim/land-fronts";
 import { enterPlayerNation } from "../../src/sim/player-nation";
 import { setPlayerCommandMode } from "../../src/sim/player-land-orders";
 import { formatCoastalSupportStatus, formatNavalUnitStatus, summarizeNavy } from "../../src/render/naval-status";
@@ -420,6 +422,26 @@ function createAmphibiousVoyageWorld() {
   }];
   return { world, infantry, escort };
 }
+
+test("an amphibious plan waits rather than stripping a land front below its required strength", () => {
+  const { world, infantry } = createAmphibiousVoyageWorld();
+  const frontId = "protected-front" as FrontId;
+  const strength = getUnitCombatStrength(infantry);
+  const front = { nationId: NATION_A, frontId, unitIds: [infantry.id], allocatedStrength: strength,
+    desiredStrength: strength, deficit: 0, surplus: 0, priority: 100, posture: "hold" as const };
+  world.frontAllocations.allocationsByNationId.set(NATION_A, [front]);
+  world.frontAllocations.frontIdByUnitId.set(infantry.id, frontId);
+
+  updateAmphibiousPlanning(world);
+  assert.equal(world.amphibiousOperations.operations.length, 0);
+  assert.equal(world.frontAllocations.frontIdByUnitId.get(infantry.id), frontId);
+
+  const replacement = createUnitForType(createUnitId(world.unitIdCounter++), NATION_A, id("port-a"), "Infantry");
+  world.units.push(replacement);
+  updateAmphibiousPlanning(world);
+  assert.deepEqual(world.amphibiousOperations.operations[0]?.assignedUnitIds, [replacement.id]);
+  assert.equal(world.frontAllocations.frontIdByUnitId.get(infantry.id), frontId);
+});
 
 test("an island war bootstraps amphibious capability from zero through naval production", () => {
   const world = createMaritimeWorld(true, 0);

@@ -1,3 +1,4 @@
+import { getExpeditionCandidates } from "./amphibious-front-priority";
 import { getPlayerNation } from "./player-nation";
 import { getMoveTicksPerRegion } from "./movement";
 import { getDesignTransportCapacity, getFleetTransportCapacity, planTransportLoading } from "./unit-capabilities";
@@ -541,7 +542,7 @@ export function updateAmphibiousPlanning(world: WorldState): void {
       updatePlayerLanding(world, demand);
       continue;
     }
-    if (demand.nationId === playerCommands) {
+    if (demand.nationId === playerCommands || getCapitalDefenseAssessment(world, demand.nationId)?.threatLevel === "critical") {
       expireCapabilityDemand(world, demand);
       continue;
     }
@@ -604,7 +605,8 @@ export function updateAmphibiousPlanning(world: WorldState): void {
     activeNations.add(demand.nationId);
   }
   for (const nation of [...world.nations].sort((a, b) => compareIds(a.id, b.id))) {
-    if (nation.id === playerCommands || activeNations.has(nation.id)) continue;
+    if (nation.id === playerCommands || activeNations.has(nation.id) ||
+      getCapitalDefenseAssessment(world, nation.id)?.threatLevel === "critical") continue;
     const ownPorts = (portsByNation.get(nation.id) ?? []).filter((id) => isEffectivelyControlledPort(world, nation.id, id));
     if (ownPorts.length === 0) continue;
     const enemies = [...(warAdjacency.get(nation.id) ?? [])].sort(compareIds);
@@ -2279,14 +2281,15 @@ function selectLandingForce(
     const units = candidates.slice(0, demand.playerPlan.unitCount);
     return { units, strength: units.reduce((sum, unit) => sum + getUnitCombatStrength(unit), 0) };
   }
-  const preferred = assembleLandingForce(candidates, requiredLandingStrength);
+  const expeditionCandidates = getExpeditionCandidates(world, nationId, candidates);
+  const preferred = assembleLandingForce(expeditionCandidates, requiredLandingStrength);
   const capacity = leasedCapacity || getFleetTransportCapacity(
     findAvailableTransports(world, nationId, departurePortId));
   if (capacity <= 0 || preferred.units.length <= capacity) return preferred;
 
   // Concentrate stronger units when doing so makes the assault fit the fleet.
   const concentrated = assembleLandingForce(
-    candidates.sort(compareLandingUnits).slice(0, capacity), requiredLandingStrength);
+    expeditionCandidates.sort(compareLandingUnits).slice(0, capacity), requiredLandingStrength);
   return concentrated.strength >= requiredLandingStrength ? concentrated : preferred;
 }
 
