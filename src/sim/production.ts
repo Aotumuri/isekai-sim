@@ -1,3 +1,4 @@
+import { getOperatingOccupiedDeposits } from "./occupied-deposits";
 import { isStrategicResource, STRATEGIC_RESOURCES, type StrategicResource } from "../data/strategic-resources";
 import { isMilitaryFunded } from "./military-funding";
 import { annexedOutputFactor } from "./annexation";
@@ -678,6 +679,7 @@ function collectResourceOutputs(
     return created;
   };
 
+  const occupiedDeposits = getOperatingOccupiedDeposits(world);
   for (const meso of mesoRegions) {
     if (meso.type === "sea") {
       continue;
@@ -688,6 +690,10 @@ function collectResourceOutputs(
     }
     const occupier = occupationByMesoId.get(meso.id);
     if (occupier && occupier !== owner) {
+      if (occupiedDeposits.has(meso.id) && isStrategicResource(meso.resource)) {
+        const output = ensureOutput(occupier);
+        output[meso.resource] = (output[meso.resource] ?? 0) + 1;
+      }
       continue;
     }
 

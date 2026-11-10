@@ -42,6 +42,15 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
   let key = "", revision = -1, dirty = false;
   const parcels = new Map<string, MesoRegionId[]>();
   const values = (name: string) => [...(control(name) as HTMLSelectElement).selectedOptions].flatMap((option) => parcels.get(option.value) ?? []);
+  const describeDeposits = (ids: MesoRegionId[]) => {
+    const regions = getMesoById(world);
+    const counts = new Map<string, number>();
+    for (const id of ids) {
+      const resource = regions.get(id)?.resource;
+      if (resource) counts.set(resource, (counts.get(resource) ?? 0) + 1);
+    }
+    return [...counts].map(([resource, count]) => `${count} ${resource}`).join(", ");
+  };
   const describe = (ids: MesoRegionId[]) => {
     const owner = getOwnerByMesoId(world).get(ids[0]);
     const provinces = owner ? getWholeProvinces(world, owner, ids) : null;
@@ -116,7 +125,8 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
         for (const macro of world.macroRegions.filter((item) => item.nationId === id && item.mesoRegionIds.length)) {
           parcels.set(macro.id, macro.mesoRegionIds);
           const capital = macro.mesoRegionIds.some((regionId) => regions.get(regionId)?.building === "capital");
-          output.push(`<option value="${esc(macro.id)}">Province ${esc(macro.id.replace("macro-", ""))} · ${macro.mesoRegionIds.length} districts${capital ? " · Capital" : ""}</option>`);
+          const deposits = describeDeposits(macro.mesoRegionIds);
+          output.push(`<option value="${esc(macro.id)}">Province ${esc(macro.id.replace("macro-", ""))} · ${macro.mesoRegionIds.length} districts${capital ? " · Capital" : ""}${deposits ? ` · ${esc(deposits)}` : ""}</option>`);
           if (!macro.mesoRegionIds.every((regionId) => current.has(regionId))) {
             for (const regionId of macro.mesoRegionIds.filter((item) => current.has(item))) {
               parcels.set(regionId, [regionId]);
@@ -151,12 +161,12 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     const regions = getMesoById(world);
     const districts = terms.demandedRegionIds;
     const ports = districts.filter((id) => regions.get(id)?.building === "port").length;
-    const deposits = districts.filter((id) => regions.get(id)?.resource).length;
+    const deposits = describeDeposits(districts);
     const losses = districts.map((id) => estimateAnnexationResistance(world, a, id));
     const average = losses.reduce((sum, value) => sum + value, 0) / Math.max(1, losses.length);
     view("governance").textContent = [
       districts.length ? terms.localSubject ? "The selected provinces form a new subject. The defeated government keeps its independence." :
-        `Annexation: ${ports} ports, ${deposits} deposits, ${Math.round(average * 100)}% average initial output loss across selected districts. Garrisoning speeds integration.` : "",
+        `Annexation: ${ports} ports, ${deposits || "no deposits"}, ${Math.round(average * 100)}% average initial output loss across selected districts. Garrisoning speeds integration. During war, supplied troops stationed on captured copper, rubber or tungsten deposits recover half their normal output.` : "",
       terms.partition?.districtIds.length ? `New puppet: ${terms.partition.districtIds.length} districts around ${districtName(terms.partition.capitalId)}.` : "",
       terms.puppetTarget ? "Subjects without domestic steel or fuel may need aid. Large subjects can seek independence when the overlord is weak." : "",
     ].filter(Boolean).join(" ");

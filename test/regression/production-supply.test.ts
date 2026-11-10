@@ -283,3 +283,36 @@ function unitsAt(world: WorldState, regionName: string): number {
 function id(name: string): MesoRegionId {
   return name as MesoRegionId;
 }
+
+test("occupied deposits yield half output only while a supplied garrison holds them", async () => {
+  const { createUnitForType } = await import("../../src/sim/create-units");
+  const { createUnitId } = await import("../../src/sim/unit");
+  const { declareWar } = await import("../../src/sim/war-state");
+  const world = createProductionWorld({ connectedA: true });
+  const [occupier] = world.nations;
+  const deposit = world.mesoRegions[1]!;
+  const ownerId = "nation-b" as NationId;
+  const provinceId = createMacroRegionId(1);
+  world.nations.push({ ...occupier, id: ownerId, macroRegionIds: [provinceId], capitalMesoId: deposit.id,
+    resources: createNationResources(), nextUnitProductionTick: Infinity });
+  world.macroRegions[0]!.mesoRegionIds = world.macroRegions[0]!.mesoRegionIds.filter((regionId) => regionId !== deposit.id);
+  world.macroRegions.push({ id: provinceId, nationId: ownerId, isCore: true, mesoRegionIds: [deposit.id] });
+  deposit.resource = "copper";
+  declareWar(world.wars, occupier.id, ownerId, 0);
+  world.occupation.mesoById.set(deposit.id, occupier.id);
+  world.occupation.version++;
+  world.units.push(createUnitForType(createUnitId(world.unitIdCounter++), occupier.id, deposit.id, "Infantry"));
+
+  runProductionEvaluation(world);
+  assert.equal(occupier.resourceFlow.income.copper, 1);
+  assert.equal(world.nations[1]!.resources.copper, 0);
+
+  setConnection(world, "city-a", false);
+  runProductionEvaluation(world);
+  assert.equal(occupier.resourceFlow.income.copper ?? 0, 0);
+
+  world.occupation.mesoById.delete(deposit.id);
+  world.occupation.version++;
+  runProductionEvaluation(world);
+  assert.equal(world.nations[1]!.resourceFlow.income.copper, 2);
+});
