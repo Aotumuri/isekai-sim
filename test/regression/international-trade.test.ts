@@ -5,10 +5,10 @@ import { findTradeRoute, getInternationalTradeState, proposeResourceTrade, updat
 import { getAdjacentNationPairs } from "../../src/sim/world-cache";
 import { updateSupplyAssessment } from "../../src/sim/supply-assessment";
 import { declareWar } from "../../src/sim/war-state";
-import { createSocietyWorld } from "../helpers/society-world";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 
 function tradingWorld() {
-  const world = createSocietyWorld(); updateSupplyAssessment(world);
+  const world = createFixedSocietyWorld(); updateSupplyAssessment(world);
   const pair = getAdjacentNationPairs(world).find(([a, b]) => findTradeRoute(world, a, b));
   assert(pair);
   const a = world.nations.find((nation) => nation.id === pair[0])!, b = world.nations.find((nation) => nation.id === pair[1])!;
@@ -70,7 +70,7 @@ test("maritime trade pays charter fuel and returns cargo when a third-party navy
   const { createWorldCache } = await import("../../src/sim/world-cache");
   const { createUnitForType } = await import("../../src/sim/create-units");
   const { createUnitId } = await import("../../src/sim/unit");
-  const world = createSocietyWorld(), [a, b, c] = world.nations.slice(0, 3);
+  const world = createFixedSocietyWorld(), [a, b, c] = world.nations.slice(0, 3);
   assert(a && b && c);
   const ids = [a.capitalMesoId, b.capitalMesoId, c.capitalMesoId];
   const sea = "trade-sea" as typeof a.capitalMesoId;
