@@ -9,7 +9,7 @@ import type { WorldConfig } from "../data/world-config";
 import { WORLD_BALANCE } from "../data/balance";
 import { SeededRng } from "../utils/seeded-rng";
 import { applyContinentalElevation } from "../worldgen/apply/continental-elevation";
-import { applyJapanScaleElevation } from "../worldgen/apply/japan-scale-elevation";
+import { applyRegionalElevation } from "../worldgen/apply/regional-elevation";
 import { applyDrainageRivers } from "../worldgen/apply/drainage-rivers";
 import { applyElevation } from "../worldgen/apply/elevation";
 import { applyRivers } from "../worldgen/apply/rivers";
@@ -67,7 +67,7 @@ export function createWorld(config: WorldConfig): WorldState {
   const microRegionEdges = createMicroRegionEdges(microRegions);
   const historical = WORLD_BALANCE.mapGenerator === "historical";
   if (historical) {
-    if (config.continentalLayout === "japan-scale") applyJapanScaleElevation(microRegions, config);
+    if (config.continentalLayout === "japan-scale") applyRegionalElevation(microRegions, config);
     else applyContinentalElevation(microRegions, config, rng);
     applySeaLevel(microRegions, config);
     applyDrainageRivers(microRegions, microRegionEdges, config);

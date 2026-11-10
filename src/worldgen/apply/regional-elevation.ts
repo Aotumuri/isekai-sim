@@ -4,8 +4,8 @@ import { SeededRng } from "../../utils/seeded-rng";
 import type { MicroRegion } from "../micro-region";
 import { sampleCoastRelief } from "./coast-relief";
 
-export function applyJapanScaleElevation(regions: MicroRegion[], config: WorldConfig): void {
-  const sample = createIslandArcRelief(config.seed);
+export function applyRegionalElevation(regions: MicroRegion[], config: WorldConfig): void {
+  const sample = createRegionalRelief(config.seed);
   for (const region of regions) {
     const x = region.site.x / config.width;
     const y = region.site.y / config.height;
@@ -14,7 +14,36 @@ export function applyJapanScaleElevation(regions: MicroRegion[], config: WorldCo
   }
 }
 
-export function createIslandArcRelief(seed: number): (x: number, y: number) => number {
+export function createRegionalRelief(seed: number): (x: number, y: number) => number {
+  const rng = new SeededRng(seed ^ 0x3ce94a8f);
+  const geography = rng.nextFloat();
+  if (geography < 0.34) return createIslandArcRelief(seed);
+
+  const faceEast = rng.nextFloat() < 0.5;
+  const faceNorth = rng.nextFloat() < 0.5;
+  const phase = rng.range(0, Math.PI * 2);
+  const coastPosition = geography > 0.82 ? rng.range(0.10, 0.26) : rng.range(0.34, 0.66);
+  const coastalTilt = rng.range(-0.29, 0.29);
+  const mountainWidth = rng.range(0.09, 0.29);
+  const mountainOffset = rng.range(0.13, 0.34);
+  const mountainStrength = rng.range(0.10, 0.39);
+  return (u, v) => {
+    const x = faceEast ? 1 - u : u;
+    const y = faceNorth ? 1 - v : v;
+    const coastNoise = sampleCoastRelief(x * 1.15, y * 1.25, seed);
+    const shoreline = coastPosition + coastalTilt * (y - 0.5)
+      + 0.12 * Math.sin(5.8 * y + phase) + 0.26 * coastNoise;
+    const inland = x - shoreline;
+    if (inland <= 0) return inland * 0.60;
+    const deformation = sampleCoastRelief(x * 1.55, y * 1.55, seed ^ 0x771a9823);
+    const boundary = inland - mountainOffset + 0.13 * Math.sin(7 * y + phase) + 0.43 * deformation;
+    const uplift = mountainStrength * Math.exp(-((boundary / mountainWidth) ** 2));
+    const foothills = 0.07 + 0.14 * deformation + 0.08 * coastNoise;
+    return (1 - Math.exp(-13 * inland)) * (foothills + uplift);
+  };
+}
+
+function createIslandArcRelief(seed: number): (x: number, y: number) => number {
   const rng = new SeededRng(seed ^ 0x86b5419d);
   const bend = rng.range(0.12, 0.26);
   const tilt = rng.range(0.20, 0.48);

@@ -222,21 +222,21 @@ test("the default world map moves its largest continent between seeds", () => {
   assert.ok(mapsWithSubmergedRidges >= 5);
 });
 
-test("Japan scale produces an elongated mountainous archipelago", () => {
+test("Japan scale can generate either a mainland region or islands", () => {
   const config = createDefaultWorldConfig("japan-scale");
-  let mapsWithMajorStraits = 0;
-  for (const seed of [2, 17, 76]) {
-    const world = createWorld({ ...config, seed, microRegionCount: 12_000 });
+  const generate = (seed: number) => createWorld({ ...config, seed, microRegionCount: 12_000 });
+  for (const seed of [2, 17]) {
+    const world = generate(seed);
     const land = world.microRegions.filter((region) => !region.isSea);
-    const remaining = new Map(land.map((region) => [region.id, region]));
-    const islands = [...remaining.values()].flatMap((region) =>
-      remaining.has(region.id) ? [collectConnectedRegions(region, remaining)] : []);
-    const majorIslands = islands.filter((island) => island.length > world.microRegions.length * 0.008);
-    if (majorIslands.length >= 2) mapsWithMajorStraits++;
-    assert.ok(land.length > 1000 && land.length < 3700, `seed ${seed}`);
-    assert.ok(land.some((region) => region.elevation > config.elevationSeaLevel + 0.23));
+    assert.ok(land.length > world.microRegions.length * 0.34, `seed ${seed}`);
+    assert.ok(land.some(({ site }) => Math.min(site.x, config.width - site.x) < config.width * 0.02));
+    assert.ok(world.microRegionEdges.some(({ hasRiver }) => hasRiver));
   }
-  assert.ok(mapsWithMajorStraits >= 2);
+  const islands = generate(76);
+  const land = islands.microRegions.filter((region) => !region.isSea);
+  assert.ok(land.length > 1000 && land.length < 3700);
+  assert.ok(land.every(({ site }) => Math.min(site.x, config.width - site.x) > config.width * 0.02));
+  assert.ok(land.some((region) => region.elevation > config.elevationSeaLevel + 0.23));
 });
 
 test("terrain-driven frontiers can follow a river away from the midpoint", () => {
