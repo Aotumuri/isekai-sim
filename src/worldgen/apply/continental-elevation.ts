@@ -37,18 +37,24 @@ export function applyContinentalElevation(
       x = localX * cosine - localY * sine + 0.5;
       y = localX * sine + localY * cosine + 0.5;
     }
+    // Regional crustal deformation shifts coastlines and relief together.
+    const warpedX = worldMap ? x + 0.16 * sampleCoastRelief(x * 0.63, y * 0.63, config.seed ^ 0x4e630a5d) : x;
+    const warpedY = worldMap ? y + 0.16 * sampleCoastRelief(x * 0.63, y * 0.63, config.seed ^ 0x1c3786e5) : y;
     let interior = -Infinity;
     let inlandX = 0, inlandY = 0, mountainPhase = 0;
     for (const continent of landforms) {
-      const offsetX = x - continent.x, offsetY = y - continent.y;
+      const offsetX = warpedX - continent.x, offsetY = warpedY - continent.y;
       const dx = (offsetX * continent.cosine + offsetY * continent.sine) / continent.rx;
       const dy = (offsetY * continent.cosine - offsetX * continent.sine) / continent.ry;
       let distance = Math.hypot(dx, dy);
       if (continent.coastPhase !== undefined) {
         const angle = Math.atan2(dy, dx), phase = continent.coastPhase;
         // The outline itself forms bays and peninsulas before finer coastline noise is added.
-        const shape = 0.24 * Math.cos(3 * angle + phase) +
-          0.15 * Math.sin(5 * angle - 2 * phase) + 0.08 * Math.cos(8 * angle + phase);
+        const shape = worldMap
+          ? 0.20 * Math.sin(2 * angle - phase) + 0.14 * Math.cos(3 * angle + phase)
+            + 0.10 * Math.sin(5 * angle + 2 * phase)
+          : 0.24 * Math.cos(3 * angle + phase) +
+            0.15 * Math.sin(5 * angle - 2 * phase) + 0.08 * Math.cos(8 * angle + phase);
         // Favor deep bays over outward growth so nearby continents stay separated.
         const radius = 1 + shape * (0.72 - shape);
         distance /= radius;
@@ -73,7 +79,7 @@ export function applyContinentalElevation(
     const coastalNoise = sampleCoastRelief(x, y, config.seed);
     let ridge = -Infinity;
     for (const arc of islandArcs) {
-      ridge = Math.max(ridge, sampleIslandArc(arc, x, y) + 0.24 * coastalNoise);
+      ridge = Math.max(ridge, sampleIslandArc(arc, warpedX, warpedY) + 0.24 * coastalNoise);
     }
     if (ridge - edgeFade > -0.22) region.seaRidge = clamp(1 + (ridge - edgeFade) / 0.22, 0, 1);
     const coastline = Math.max(interior + coastalWeight * layout.coastReliefScale * coastalNoise, ridge) - edgeFade;
