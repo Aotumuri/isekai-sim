@@ -1,3 +1,5 @@
+import { updateWarCampaigns } from "../../src/sim/war-campaign/update";
+import { createSimulationSettings } from "../../src/sim/simulation-settings";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { WORLD_BALANCE } from "../../src/data/balance";
@@ -4570,3 +4572,61 @@ function id(value: string): MesoRegionId {
 function ids(...values: string[]): MesoRegionId[] {
   return values.map(id).sort();
 }
+
+// These exercise the real operation lifecycle, including posture bypasses.
+function settleCampaign(world: WorldState): void {
+  world.settings = createSimulationSettings({ warCampaignEnabled: true, diplomacyEnabled: true });
+  world.wars[0]!.isTest = false;
+  updateWarCampaigns(world);
+  const campaign = world.warCampaigns!.byNationId.get(NATION_A)!;
+  campaign.mode = "consolidate";
+  campaign.constraints.objectivesSecured = true;
+}
+
+test("settlement intent prevents a dedicated pocket operation from bypassing hold posture", () => {
+  const control = createPocketClosureWorld();
+  updateBattlefieldTopology(control);
+  for (const assessment of control.battlefieldTopology.assessments) {
+    for (const opportunity of assessment.pocketClosureOpportunities) opportunity.score = 100;
+  }
+  planFor(control, NATION_A).posture = "hold";
+  updateOffensiveOperations(control);
+  assert(onlyOperation(control, NATION_A).pocketClosureObjective);
+  const world = createPocketClosureWorld();
+  updateBattlefieldTopology(world);
+  for (const assessment of world.battlefieldTopology.assessments) {
+    for (const opportunity of assessment.pocketClosureOpportunities) opportunity.score = 100;
+  }
+  settleCampaign(world);
+  planFor(world, NATION_A).posture = "hold";
+  updateOffensiveOperations(world);
+  assert.equal(getOffensiveOperations(world).filter((item) => item.nationId === NATION_A).length, 0);
+});
+
+test("settlement cancels preparation with an explicit reason and releases its lease", () => {
+  const world = createOperationWorld();
+  updateFrontlineCoverage(world);
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  assert.equal(operation.phase, "preparing");
+  settleCampaign(world);
+  updateOffensiveOperations(world);
+  assert.equal(operation.phase, "recovering");
+  assert.equal(operation.completionReason, "campaign-settlement");
+  assert.notEqual(operation.preparationLeaseEndedAtTick, null);
+  const version = world.frontPlans.version;
+  updateNationFrontPlans(world);
+  assert.equal(planFor(world, NATION_A).posture, "hold");
+  assert.ok(world.frontPlans.version > version);
+});
+
+test("settlement preserves an achieved attack as success without starting exploitation", () => {
+  const { world, operation } = prepareStrategicExploitationWorld();
+  assert.equal(operation.phase, "attacking");
+  settleCampaign(world);
+  updateOffensiveOperations(world);
+  assert.equal(operation.phase, "recovering");
+  assert.equal(operation.completionReason, "primary-target-occupied");
+  assert.equal(operation.outcome, "success");
+  assert.equal(operation.exploitationStartedAtTick, null);
+});

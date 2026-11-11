@@ -2,6 +2,9 @@ import type { NationId } from "../../worldgen/nation";
 import type { WorldState } from "../world-state";
 import type { PeaceTerms } from "../war-negotiations";
 import { getOwnerByMesoId } from "../world-cache";
+import { getWarDeclarationMode } from "../simulation-settings";
+import { findWar } from "../war-state";
+import { campaignCostLimitReached } from "./policy";
 import { getWarCampaign } from "./state";
 
 /** Evaluate the post-settlement goal, not temporary occupation or demands. */
@@ -17,4 +20,14 @@ export function campaignPeaceValue(
     (owners.get(id) === recipient || terms.offeredRegionIds.includes(id)));
   const exitPressure = campaign.mode === "seek-peace" ? 12 : 0;
   return exitPressure + (secured ? 12 : 0);
+}
+
+/** A capital emergency may override posture without resetting the exit budget.
+ * Test/legacy wars retain their military exit because negotiation is unavailable. */
+export function campaignPrefersSettlement(world: WorldState, nationId: NationId, opponentId: NationId): boolean {
+  const campaign = getWarCampaign(world, nationId);
+  if (!campaign || getWarDeclarationMode(world) !== "diplomacy") return false;
+  const war = findWar(world.wars, nationId, opponentId);
+  return !!war && !war.isTest && (campaign.mode === "consolidate" || campaign.mode === "seek-peace" ||
+    campaign.constraints.objectivesSecured || campaignCostLimitReached(campaign.constraints));
 }

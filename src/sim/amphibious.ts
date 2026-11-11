@@ -1,3 +1,4 @@
+import { campaignPrefersSettlement } from "./war-campaign/peace-guidance";
 import { getExpeditionCandidates } from "./amphibious-front-priority";
 import { getCampaignObjectives } from "./campaign-objectives";
 import { getPlayerNation } from "./player-nation";
@@ -27,7 +28,7 @@ const PREPARATION_TIMEOUT_TICKS = 2400;
 const PREFLIGHT_RETRY_DELAY_TICKS = 60;
 
 export type AmphibiousPhase = "preparing" | "embarking" | "escort-wait" | "transporting" | "landed" | "cancelled";
-export type AmphibiousCancellationReason = "transport-lost" | "transport-capacity" | "escort-lost" | "convoy-lost" | "assets-not-assembled" | "departure-port-lost" | "target-invalid" | "route-invalid" | "war-ended" | "force-lost" | "preparation-timeout" | "strategic-capital-critical";
+export type AmphibiousCancellationReason = "campaign-settlement" | "transport-lost" | "transport-capacity" | "escort-lost" | "convoy-lost" | "assets-not-assembled" | "departure-port-lost" | "target-invalid" | "route-invalid" | "war-ended" | "force-lost" | "preparation-timeout" | "strategic-capital-critical";
 export type AmphibiousValidationPhase = "planning" | "assembly" | "ready" | "voyage" | "landing";
 export type AmphibiousValidationOwner = "strategic-planning" | "fleet-assembly" | "operation-readiness" | "convoy" | "landing";
 export type AmphibiousLaunchRejectionReason = "insufficient-strategic-window" | "positioning-unreachable";
@@ -569,6 +570,10 @@ export function updateAmphibiousPlanning(world: WorldState): void {
       activeNations.add(demand.nationId);
       continue;
     }
+    if (campaignPrefersSettlement(world, demand.nationId, demand.enemyNationId)) {
+      expireCapabilityDemand(world, demand);
+      continue;
+    }
     const ownPorts = (portsByNation.get(demand.nationId) ?? [])
       .filter((id) => isEffectivelyControlledPort(world, demand.nationId, id));
     const enemyPorts = (portsByNation.get(demand.enemyNationId) ?? [])
@@ -615,6 +620,7 @@ export function updateAmphibiousPlanning(world: WorldState): void {
     const enemies = [...(warAdjacency.get(nation.id) ?? [])].sort(compareIds);
     let best: LandingCandidate | null = null;
     for (const enemyId of enemies) {
+      if (campaignPrefersSettlement(world, nation.id, enemyId)) continue;
       const enemyPorts = (portsByNation.get(enemyId) ?? []).filter((id) => isValidTargetPort(world, nation.id, enemyId, id));
       if (enemyPorts.length === 0 || !isStrategicOpportunity(world, nation.id, enemyId)) continue;
       const candidate = chooseCandidate(world, nation.id, enemyId, ownPorts, enemyPorts, recentRejections);
@@ -666,6 +672,12 @@ export function updateAmphibiousOperations(world: WorldState): void {
     const validation = getAmphibiousOperationValidation(world, operation, unitById);
     if (validation.failures.length > 0) {
       cancelOperation(world, operation, validation.failures[0]!, validation.phase, unitById);
+      continue;
+    }
+    const demand = world.amphibiousOperations.capabilityDemands.find((item) => item.id === operation.capabilityDemandId);
+    if (operation.phase !== "transporting" && operation.kind === "landing" && !demand?.playerPlan &&
+      campaignPrefersSettlement(world, operation.nationId, operation.enemyNationId)) {
+      cancelOperation(world, operation, "campaign-settlement", validation.phase, unitById, true);
       continue;
     }
     const force = operation.assignedUnitIds.map((id) => unitById.get(id)).filter((u): u is UnitState => !!u);

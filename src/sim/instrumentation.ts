@@ -216,6 +216,7 @@ export type SimulationCounterName =
   | "offensiveOperation.exploitationStop.local-strength-disadvantage"
   | "offensiveOperation.exploitationStop.enemy-reserve-arrival"
   | "offensiveOperation.exploitationStop.retreat-started"
+  | "offensiveOperation.exploitationStop.campaign-settlement"
   | "offensiveOperation.exploitationStop.capital-emergency"
   | "offensiveOperation.exploitationStop.front-disappeared"
   | "offensiveOperation.exploitationStop.timeout"

@@ -1,4 +1,5 @@
-import { campaignPeaceValue } from "./war-campaign/peace-guidance";
+import { getCampaignObjectives } from "./campaign-objectives";
+import { campaignPeaceValue, campaignPrefersSettlement } from "./war-campaign/peace-guidance";
 import { getManualGovernmentId } from "./player-nation";
 import { isValidResourceReparation, REPARATION_INTERVAL, REPARATION_RESOURCES, type ResourceReparation } from "./resource-reparations";
 import { foodReserveSeconds } from "./food-supply";
@@ -168,7 +169,8 @@ function reviseTerms(world: WorldState, negotiation: WarNegotiation, proposer: N
   const advantage = getWarAdvantage(world, proposer, target);
   const urgency = getPeaceUrgency(world, proposer);
   const exitValue = assessPeaceOffer(world, proposer, target, whitePeaceTerms()).score;
-  const wantsCompromise = exitValue > -18 || urgency >= 0.5 || getWarTrend(negotiation, proposer) < -0.16;
+  const settling = campaignPrefersSettlement(world, proposer, target);
+  const wantsCompromise = settling || exitValue > -18 || urgency >= 0.5 || getWarTrend(negotiation, proposer) < -0.16;
   const terms = { ...current, demandedWeapons: Math.min(current.demandedWeapons, Math.floor(opponent.resources.weapons)),
     offeredWeapons: Math.min(current.offeredWeapons, Math.floor(country.resources.weapons)) };
 
@@ -180,7 +182,13 @@ function reviseTerms(world: WorldState, negotiation: WarNegotiation, proposer: N
     if (terms.demandedRegionIds.length) {
       const provinces = getWholeProvinces(world, target, terms.demandedRegionIds);
       const parcels = provinces?.map(({ mesoRegionIds }) => mesoRegionIds) ?? terms.demandedRegionIds.map((id) => [id]);
-      parcels.sort((a, b) => getTerritorialValue(world, target, b) - getTerritorialValue(world, target, a));
+      const goals = new Set(settling ? getCampaignObjectives(world, proposer, target) : []);
+      const isGoal = (parcel: MesoRegionId[]) => parcel.some((id) => goals.has(id));
+      parcels.sort((a, b) => Number(isGoal(a)) - Number(isGoal(b)) ||
+        getTerritorialValue(world, target, b) - getTerritorialValue(world, target, a));
+      if (settling && parcels.every(isGoal) && terms.demandedWeapons > 0) {
+        return { ...terms, demandedWeapons: Math.max(0, terms.demandedWeapons - 15) };
+      }
       for (const parcel of parcels) {
         const removed = new Set(parcel);
         const reduced = { ...terms, demandedRegionIds: terms.demandedRegionIds.filter((id) => !removed.has(id)) };

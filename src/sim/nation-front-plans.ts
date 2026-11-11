@@ -61,6 +61,7 @@ export type NationSectorPlan = NationFrontPlan;
 
 export interface NationFrontPlanState {
   campaignVersion?: number;
+  campaignOperationVersion?: number;
   plans: NationFrontPlan[];
   plansByNationId: Map<NationId, NationFrontPlan[]>;
   plansByFrontNation: Map<string, NationFrontPlan>;
@@ -91,6 +92,7 @@ export function updateNationFrontPlans(world: WorldState): void {
   if (
     state.physicalFrontVersion === world.landFronts.version &&
     state.campaignVersion === (world.warCampaigns?.version ?? 0) &&
+    state.campaignOperationVersion === (world.warCampaigns ? world.offensiveOperations.version : 0) &&
     state.physicalFrontMetricsVersion === world.landFronts.metricsVersion &&
     state.capitalDefenseVersion === world.capitalDefense.version &&
     state.supplyDefenseVersion === world.supplyDefense.version
@@ -133,6 +135,7 @@ export function updateNationFrontPlans(world: WorldState): void {
   }
   state.physicalFrontVersion = world.landFronts.version;
   state.campaignVersion = world.warCampaigns?.version ?? 0;
+  state.campaignOperationVersion = world.warCampaigns ? world.offensiveOperations.version : 0;
   state.physicalFrontMetricsVersion = world.landFronts.metricsVersion;
   state.capitalDefenseVersion = world.capitalDefense.version;
   state.supplyDefenseVersion = world.supplyDefense.version;

@@ -1,3 +1,4 @@
+import { updateWarCampaigns } from "../../src/sim/war-campaign/update";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
@@ -98,4 +99,31 @@ test("a changed offer cannot silently replace the conditions displayed by the ac
   assert(proposePeaceTerms(world, a.id, b.id, { ...whitePeaceTerms(), demandedWeapons: 40 }));
   assert(!acceptPeaceOffer(world, b.id, a.id, displayedRevision));
   assert.equal(a.resources.weapons, 100); assert.equal(b.resources.weapons, 100); assert(findWar(world.wars, a.id, b.id));
+});
+
+test("campaign settlement concedes weapons before its military goal and preserves manual offers", () => {
+  const { world, a, b, negotiation, parcel } = scene();
+  const goal = parcel(b.id);
+  world.settings!.warCampaignEnabled = true;
+  updateWarCampaigns(world);
+  const campaign = world.warCampaigns!.byNationId.get(a.id)!;
+  campaign.mode = "consolidate";
+  campaign.objectives.find((item) => item.opponentId === b.id)!.regionIds = [goal];
+  const terms = { ...whitePeaceTerms(), demandedRegionIds: [goal], demandedWeapons: 50 };
+  assert.equal(getPeaceTermsIssue(world, a.id, b.id, terms), null);
+  negotiation.offers.get(a.id)!.terms = terms;
+  negotiation.offers.get(b.id)!.revisedAtSlowTick = 30;
+  negotiation.automatic.set(b.id, false);
+  world.time.slowTick = 30;
+  world.time.fastTick = 300;
+  updateWarNegotiations(world);
+  const revised = negotiation.offers.get(a.id)!.terms;
+  assert.deepEqual(revised.demandedRegionIds, [goal]);
+  assert.equal(revised.demandedWeapons, 35);
+  assert(proposePeaceTerms(world, a.id, b.id, terms));
+  world.time.slowTick = 60;
+  world.time.fastTick = 600;
+  updateWarNegotiations(world);
+  assert.deepEqual(negotiation.offers.get(a.id)!.terms, terms);
+  assert.equal(negotiation.offers.get(a.id)!.source, "manual");
 });

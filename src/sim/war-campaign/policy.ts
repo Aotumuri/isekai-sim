@@ -26,9 +26,13 @@ export function requiresCampaignReview(
     current.objectivesSecured !== previous.objectivesSecured;
 }
 
+export function campaignCostLimitReached(input: CampaignConstraints): boolean {
+  return input.casualtyFraction >= input.costTolerance || input.foodSeconds < 45;
+}
+
 export function evaluateCampaignPolicy(input: CampaignConstraints): CampaignDecision {
   if (input.capitalCritical) return { mode: "defend", reason: "capital-emergency" };
-  if (input.casualtyFraction >= input.costTolerance || input.foodSeconds < 45) {
+  if (campaignCostLimitReached(input)) {
     return { mode: "seek-peace", reason: input.foodSeconds < 45 ? "food-runway" : "cost-limit" };
   }
   if (input.objectivesSecured) return { mode: "consolidate", reason: "objectives-secured" };

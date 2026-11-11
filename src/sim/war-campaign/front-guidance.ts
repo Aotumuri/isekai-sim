@@ -5,6 +5,8 @@ import { getFrontSide, getOpposingFrontSide } from "../land-fronts";
 import { getWarDeclarationMode } from "../simulation-settings";
 import { findWar } from "../war-state";
 import { getOffensiveOperationForFront } from "../offensive-operations";
+import { campaignPrefersSettlement } from "./peace-guidance";
+import { campaignCostLimitReached } from "./policy";
 import { getWarCampaign } from "./state";
 
 /** Strategic intent changes discretionary effort, never the safety floor. */
@@ -13,9 +15,10 @@ export function applyCampaignFrontGuidance(world: WorldState, plan: NationFrontP
   const front = world.landFronts.operationalSectorsById.get(plan.frontId);
   if (!campaign || !front) return plan;
   const enemy = getOpposingFrontSide(front, plan.nationId);
+  const settling = !!enemy && campaignPrefersSettlement(world, plan.nationId, enemy.nationId);
   const emergency = plan.reasonFlags.some((reason) =>
     reason === "capital-threatened" || reason === "major-force-supply-risk" ||
-    reason === "supply-corridor" || reason === "bridgehead-campaign");
+    reason === "supply-corridor" || reason === "bridgehead-campaign" && !settling);
   if (emergency || plan.posture === "retreat") return plan;
   const primary = enemy?.nationId === campaign.primaryOpponentId;
   const friendly = getFrontSide(front, plan.nationId);
@@ -30,8 +33,9 @@ export function applyCampaignFrontGuidance(world: WorldState, plan: NationFrontP
     !campaign.constraints.replacementConstrained;
   const committed = getOffensiveOperationForFront(world, front.id, plan.nationId);
   const preserveCommitment = committed && committed.phase !== "recovering" &&
-    !campaign.constraints.capitalCritical && campaign.mode !== "seek-peace";
-  const attackAllowed = preserveCommitment || primary &&
+    !campaign.constraints.capitalCritical && campaign.mode !== "seek-peace" &&
+    (!settling || committed.phase === "attacking" && !campaignCostLimitReached(campaign.constraints));
+  const attackAllowed = preserveCommitment || !settling && primary &&
     (campaign.mode === "limited-offensive" || militaryResolution || defensiveOpportunity);
   return {
     ...plan,
