@@ -192,3 +192,38 @@ above that restriction. A foreign offensive commitment cannot silently defeat a
 new defense decision. Dedicated tests check both the prohibition and legitimate
 homeland counterattack. Cost-ledger changes are deferred to a separate iteration
 so this experiment can identify the effect of the execution contract alone.
+
+### R2.3 result: action distinction verified, quality still not adopted
+
+Source `3f82faf`, five families × 20 development seeds, 100 completed episodes.
+The diagnostic option probe now distinguishes offense/defense in four of 16
+pairs; the other 12 appropriately include situations where the tactical layer
+cannot safely attack, sea access is absent, or emergency protection dominates.
+This verifies an execution distinction, not better strategy. Relative to R1,
+active-war attacker survival increases 3 pp (95% paired interval −4 to +10 pp),
+while stalemate attacker target retention falls 15 pp (−30 to 0 pp). Relative to
+Legacy, that stalemate decline is 20 pp (−40 to −5 pp), a material failure.
+Stalemate transfers increase to 136.7 versus Legacy 75.4 and R1 88.4. R2.3
+therefore fails standalone adoption. Its clearer execution contract is retained
+only in the next opt-in prototype to test whether a coherent cost signal changes
+the decisions it executes; it is not enabled by default.
+
+Independent read-only cost audit: 16 diagnostic episodes per arm, 1,000 ticks,
+all start fingerprints equal across Legacy/R1/R2.3. Snapshot units and cargo
+after repositioning and after battle, excluding slow-tick demobilization. In R1,
+opening-war aggressors average 27,452 unavailable manpower across their episode
+versus 187.9 direct war damage; defenders average 26,021 versus 164.0. These are
+separate opposing roles, not an aggregate quality score. Organization-collapse
+removals explain why direct damage alone is an inadequate national cost budget.
+The independent observer also covers amphibious loss in that fast-tick interval;
+production spending is reported separately and excludes recovery, trade and aid.
+
+## R2.4: observed national force costs (pending)
+
+Add an opt-in ledger for actual direct damage and remaining manpower/equipment
+removed with a defeated formation, including embarked cargo. Record observations
+without changing damage, organization, removal, income, production cost or peace
+rules. Normalize the budget by manpower committed at campaign opening and retain
+costs through continuous concurrent wars, clearing the ledger once the nation is
+at peace. Compare the ledger against the independent observer; disclose missing
+loss paths instead of claiming complete coverage. No new final seeds are used.
