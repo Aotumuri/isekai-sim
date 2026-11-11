@@ -1,4 +1,5 @@
 import { isAmphibiousOwnedUnit } from "../amphibious";
+import { retainedRetargetProgress, type MovementLeg } from "./movement-continuity";
 import { getPlayerNation, type PlayerNation } from "../player-nation";
 import { isPlayerDirectedLandUnit } from "../player-land-orders";
 import { applyCrisisDeployments } from "../crisis-deployment";
@@ -175,6 +176,12 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
   const mesoById = getMesoById(world);
   const neighborsById = getNeighborsById(world);
   const ownerByMesoId = getOwnerByMesoId(world);
+  const previousLegs = shouldReassign && world.settings?.warCampaignEnabled
+    ? new Map(landUnits.filter((unit) => unit.moveToId && unit.moveProgressMs > 0 &&
+      !(player && isPlayerDirectedLandUnit(player, unit)) && !isAmphibiousOwnedUnit(world, unit.id))
+      .map((unit) => [unit.id, { regionId: unit.regionId, moveTargetId: unit.moveTargetId,
+        moveFromId: unit.moveFromId, moveToId: unit.moveToId, moveProgressMs: unit.moveProgressMs }]))
+    : undefined;
 
   if (warsChanged) {
     runtime.warAdjacency = buildWarAdjacency(world.wars);
@@ -259,6 +266,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
       isBlockedByEnemy,
       group.controlledOnly ?? false,
       instrumentation,
+      previousLegs,
     );
     if (group.units === directed && player) {
       for (const unit of directed) {
@@ -1218,6 +1226,7 @@ function progressNationUnits(
   isBlockedByEnemy: (toId: MesoRegionId) => boolean,
   controlledOnly: boolean,
   instrumentation?: SimulationInstrumentation,
+  previousLegs?: Map<UnitState["id"], MovementLeg>,
 ): boolean {
   let orderInvalidated = false;
   for (const unit of orderedUnits) {
@@ -1261,6 +1270,7 @@ function progressNationUnits(
               pathMode: useWarPath ? "war" : "owned",
               sharedPathFields,
             },
+        previousLegs?.get(unit.id),
       ) || orderInvalidated;
   }
   return orderInvalidated;
@@ -1273,6 +1283,7 @@ function moveUnitTowardTarget(
   isAllowed: (id: MesoRegionId) => boolean,
   isBlockedByEnemy: (toId: MesoRegionId) => boolean,
   pathContext?: SharedPathContext,
+  previousLeg?: MovementLeg,
 ): boolean {
   if (!unit.moveTargetId || unit.regionId === unit.moveTargetId) {
     unit.moveFromId = null;
@@ -1299,6 +1310,11 @@ function moveUnitTowardTarget(
   }
 
   const moveMsPerRegion = getMoveMsPerRegion(unit);
+  const progress = retainedRetargetProgress(unit, previousLeg, dtMs);
+  if (progress > unit.moveProgressMs) {
+    pathContext?.instrumentation?.incrementCounter("movement.retainedRetargetProgressMs", progress - unit.moveProgressMs);
+    unit.moveProgressMs = progress;
+  }
   while (unit.moveProgressMs >= moveMsPerRegion) {
     const nextId = unit.moveToId ?? unit.regionId;
     unit.moveProgressMs -= moveMsPerRegion;
