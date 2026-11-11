@@ -9,9 +9,11 @@ import { allFieldUnits } from "../mobilization";
 import { getUnitCombatStrength } from "../unit-strength";
 import { getWarCasualties } from "../war-state";
 import type { WorldState } from "../world-state";
-import { evaluateCampaignPolicy, type CampaignConstraints } from "./policy";
+import { evaluateCampaignPolicy, requiresCampaignReview, type CampaignConstraints } from "./policy";
+import { getOpposingFrontSide } from "../land-fronts";
 import { type CampaignObjective, type WarCampaign, type WarCampaignState } from "./state";
 import { buildCampaignObjectives } from "./objectives";
+import { recordCompletedCampaignGoals } from "./lifecycle";
 
 /** One campaign per nation spanning every current opponent; no direct orders. */
 export function updateWarCampaigns(world: WorldState): void {
@@ -19,7 +21,8 @@ export function updateWarCampaigns(world: WorldState): void {
     delete world.warCampaigns;
     return;
   }
-  const state: WarCampaignState = world.warCampaigns ??= { byNationId: new Map(), version: 0, events: [] };
+  const state: WarCampaignState = world.warCampaigns ??= { byNationId: new Map(), version: 0, events: [], goalHistory: [] };
+  recordCompletedCampaignGoals(world, state);
   const strengths = new Map<NationId, number>();
   for (const unit of allFieldUnits(world)) {
     if (unit.domain === "land") strengths.set(unit.nationId,
@@ -39,13 +42,14 @@ export function updateWarCampaigns(world: WorldState): void {
     const topologyChanged = !previous || previous.objectives.map((goal) => goal.warKey).sort().join("|") !==
       objectives.map((goal) => goal.warKey).sort().join("|");
     const emergency = constraints.capitalCritical || constraints.foodSeconds < 45;
-    const reassess = topologyChanged || emergency || world.time.fastTick - previous!.adoptedAtTick >= 80;
+    const reassess = requiresCampaignReview(constraints, previous?.constraints,
+      world.time.fastTick - (previous?.adoptedAtTick ?? world.time.fastTick), topologyChanged);
     const primary = reassess
-      ? selectPrimaryOpponent(objectives, previous?.primaryOpponentId, strengths)
+      ? selectPrimaryOpponent(world, nation.id, objectives, previous?.primaryOpponentId, strengths)
       : previous!.primaryOpponentId;
     const mode = reassess ? decision.mode : previous!.mode;
     const changed = !previous || previous.mode !== mode || previous.primaryOpponentId !== primary || topologyChanged ||
-      emergency && previous.reason !== decision.reason;
+      reassess && emergency && previous.reason !== decision.reason;
     const campaign: WarCampaign = {
       nationId: nation.id, objectives, constraints, mode, primaryOpponentId: primary,
       adoptedAtTick: changed ? world.time.fastTick : previous!.adoptedAtTick,
@@ -66,8 +70,13 @@ export function updateWarCampaigns(world: WorldState): void {
 }
 
 function selectPrimaryOpponent(
-  goals: CampaignObjective[], previous: NationId | null | undefined, strengths: Map<NationId, number>,
+  world: WorldState, nationId: NationId, goals: CampaignObjective[],
+  previous: NationId | null | undefined, strengths: Map<NationId, number>,
 ): NationId | null {
+  const capital = getCapitalDefenseAssessment(world, nationId);
+  const threatened = capital?.primaryFrontId && world.landFronts.operationalSectorsById.get(capital.primaryFrontId);
+  const urgentOpponent = threatened && getOpposingFrontSide(threatened, nationId)?.nationId;
+  if (capital?.threatLevel === "critical" && urgentOpponent && goals.some((goal) => goal.opponentId === urgentOpponent)) return urgentOpponent;
   const candidates = goals.filter((goal) => !goal.achieved);
   const ranked = (candidates.length ? candidates : goals).map((goal) => goal.opponentId)
     .sort((a, b) => (strengths.get(a) ?? 0) - (strengths.get(b) ?? 0) || a.localeCompare(b));

@@ -15,6 +15,17 @@ export interface CampaignDecision {
   reason: string;
 }
 
+export function requiresCampaignReview(
+  current: CampaignConstraints, previous: CampaignConstraints | undefined,
+  ageTicks: number, membershipChanged: boolean,
+): boolean {
+  if (!previous || membershipChanged || ageTicks >= 80) return true;
+  return current.capitalCritical && !previous.capitalCritical ||
+    current.foodSeconds < 45 && previous.foodSeconds >= 45 ||
+    current.casualtyFraction >= current.costTolerance && previous.casualtyFraction < previous.costTolerance ||
+    current.objectivesSecured !== previous.objectivesSecured;
+}
+
 export function evaluateCampaignPolicy(input: CampaignConstraints): CampaignDecision {
   if (input.capitalCritical) return { mode: "defend", reason: "capital-emergency" };
   if (input.casualtyFraction >= input.costTolerance || input.foodSeconds < 45) {

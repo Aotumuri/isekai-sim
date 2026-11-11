@@ -8,6 +8,7 @@ export interface CampaignObjective {
   warKey: string;
   opponentId: NationId;
   kind: "limited-occupation" | "preserve-sovereignty";
+  rationale?: string;
   regionIds: MesoRegionId[];
   openingStrength: number;
   achieved: boolean;
@@ -24,6 +25,10 @@ export interface WarCampaign {
   constraints: CampaignConstraints;
 }
 export interface WarCampaignState {
+  goalHistory: {
+    nationId: NationId; opponentId: NationId; warKey: string; endedAtTick: number;
+    outcome: "secured" | "unmet" | "nation-eliminated"; reason: string;
+  }[];
   forceBudget?: CampaignForceBudget;
   byNationId: Map<NationId, WarCampaign>;
   version: number;

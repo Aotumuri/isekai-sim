@@ -1346,6 +1346,7 @@ export function formatStrategicThreatSummary(world: WorldState): string {
     `Land Units ${diagnostics.currentLandUnits} | Land Capacity ${WORLD_BALANCE.production.maxLandUnits}/nation`,
     `Naval Units ${diagnostics.currentNavalUnits} | Naval Capacity ${WORLD_BALANCE.production.maxNavalUnits}/nation`,
   ];
+  lines.push(...formatCampaignDebugLines(world));
   if (world.strategicThreatObservation.observations.length > 0) {
     lines.push("", "STRATEGIC THREAT");
   }
@@ -1365,7 +1366,6 @@ export function formatStrategicThreatSummary(world: WorldState): string {
     lines.push(`${intent.aggressorId} → ${intent.targetNationId} ${intent.route} | ${intent.score.toFixed(0)} | O +${intent.opportunity.toFixed(0)} T +${intent.threatResponse.toFixed(0)} V +${intent.strategicValue.toFixed(0)} C -${intent.expectedCost.toFixed(0)} K -${intent.existingCommitment.toFixed(0)} X -${intent.externalExposure.toFixed(0)}`);
     lines.push(`  ${intent.dominantReason} | ${intent.declared ? "DECLARE" : `reject: ${intent.rejectedReasons.join(", ")}`}`);
   }
-  lines.push(...formatCampaignDebugLines(world));
   return lines.join("\n");
 }
 

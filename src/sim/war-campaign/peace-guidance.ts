@@ -15,7 +15,6 @@ export function campaignPeaceValue(
   const secured = goal.regionIds.length > 0 && goal.regionIds.every((id) =>
     !terms.demandedRegionIds.includes(id) &&
     (owners.get(id) === recipient || terms.offeredRegionIds.includes(id)));
-  const recognizedObjective = goal.kind === "limited-occupation" && secured;
   const exitPressure = campaign.mode === "seek-peace" ? 12 : 0;
-  return exitPressure + (recognizedObjective ? 12 : 0);
+  return exitPressure + (secured ? 12 : 0);
 }

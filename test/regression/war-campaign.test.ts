@@ -4,7 +4,7 @@ import { createScenarioWorld } from "../scenarios";
 import { updateLandFronts } from "../../src/sim/land-fronts";
 import { getCampaignObjectives } from "../../src/sim/campaign-objectives";
 import { updateWarCampaigns } from "../../src/sim/war-campaign/update";
-import { evaluateCampaignPolicy, type CampaignConstraints } from "../../src/sim/war-campaign/policy";
+import { evaluateCampaignPolicy, requiresCampaignReview, type CampaignConstraints } from "../../src/sim/war-campaign/policy";
 import { getWarCampaign, formatWarCampaignSummary } from "../../src/sim/war-campaign/state";
 import { updateNationFrontPlans } from "../../src/sim/nation-front-plans";
 import { applyCampaignFrontGuidance } from "../../src/sim/war-campaign/front-guidance";
@@ -26,6 +26,16 @@ const affordable: CampaignConstraints = {
   foodSeconds: Infinity, replacementConstrained: false,
   capitalCritical: false, objectivesSecured: false, aggression: 0.6,
 };
+
+test("an ongoing emergency does not continuously bypass campaign commitment", () => {
+  const crisis = { ...affordable, foodSeconds: 10 };
+  assert.equal(requiresCampaignReview(crisis, affordable, 1, false), true);
+  assert.equal(requiresCampaignReview(crisis, crisis, 1, false), false);
+  assert.equal(requiresCampaignReview(crisis, crisis, 80, false), true);
+  assert.equal(requiresCampaignReview({ ...crisis, capitalCritical: true }, crisis, 1, false), true);
+  assert.equal(requiresCampaignReview({ ...crisis, objectivesSecured: true }, crisis, 1, false), true);
+  assert.equal(requiresCampaignReview({ ...affordable, casualtyFraction: 2 }, affordable, 1, false), true);
+});
 
 test("campaign policy is deterministic and emergency defense precedes peace pressure", () => {
   assert.deepEqual(evaluateCampaignPolicy(affordable), evaluateCampaignPolicy(affordable));
@@ -69,9 +79,30 @@ test("campaign state clears after peace, extinction, and feature disable", () =>
   world.wars = [];
   updateWarCampaigns(world);
   assert.equal(world.warCampaigns!.byNationId.size, 0);
+  assert.ok(world.warCampaigns!.goalHistory.length > 0);
+  assert.ok(world.warCampaigns!.goalHistory.length <= 100);
+  assert.ok(world.warCampaigns!.goalHistory.every((result) => result.reason.length > 0));
   world.settings!.warCampaignEnabled = false;
   updateWarCampaigns(world);
   assert.equal(world.warCampaigns, undefined);
+});
+
+test("finished war goals are archived once and retained history remains bounded", () => {
+  const world = campaignWorld();
+  const original = world.wars[0];
+  for (let index = 0; index < 110; index += 1) {
+    world.time.fastTick = index * 100 + 1;
+    world.wars = [{ ...original, startedAtFastTick: world.time.fastTick }];
+    updateWarCampaigns(world);
+    world.wars = [];
+    updateWarCampaigns(world);
+    const historyLength = world.warCampaigns!.goalHistory.length;
+    updateWarCampaigns(world);
+    assert.equal(world.warCampaigns!.goalHistory.length, historyLength);
+    assert.equal(world.warCampaigns!.byNationId.size, 0);
+  }
+  assert.equal(world.warCampaigns!.goalHistory.length, 100);
+  assert.ok(world.warCampaigns!.events.length <= 200);
 });
 
 test("identical campaign worlds produce identical plans without consuming randomness", () => {
@@ -140,4 +171,16 @@ test("peace guidance values recognition after settlement rather than temporary o
   assert.equal(campaignPeaceValue(world, war.aggressorId, war.defenderId, recognition), 24);
   world.settings!.warCampaignEnabled = false;
   assert.equal(campaignPeaceValue(world, war.aggressorId, war.defenderId, recognition), 0);
+});
+
+test("a defender values peace that preserves its homeland without demanding conquests", () => {
+  const world = campaignWorld();
+  updateWarCampaigns(world);
+  const war = world.wars[0];
+  const defender = getWarCampaign(world, war.defenderId)!;
+  defender.mode = "defend";
+  assert.equal(campaignPeaceValue(world, war.defenderId, war.aggressorId, whitePeaceTerms()), 12);
+  const home = defender.objectives.find((goal) => goal.opponentId === war.aggressorId)!.regionIds[0];
+  assert.equal(campaignPeaceValue(world, war.defenderId, war.aggressorId,
+    { ...whitePeaceTerms(), demandedRegionIds: [home] }), 0);
 });

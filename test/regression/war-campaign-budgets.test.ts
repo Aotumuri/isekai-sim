@@ -12,6 +12,7 @@ import { getUnitCombatStrength } from "../../src/sim/unit-strength";
 import { updateSupplyAssessment } from "../../src/sim/supply-assessment";
 import { enterPlayerNation } from "../../src/sim/player-nation";
 import { formatCampaignDebugLines } from "../../src/render/war-campaign-debug-summary";
+import { updateAmphibiousPlanning } from "../../src/sim/amphibious";
 
 const options = { seed: 822_748_319_788, width: 640, height: 360, quick: true };
 
@@ -32,6 +33,7 @@ test("successive national withdrawals cannot spend the same front surplus twice"
   const total = units.reduce((sum, unit) => sum + getUnitCombatStrength(unit), 0);
   const floor = total - getUnitCombatStrength(units[0]);
   assert.equal(claimCampaignFrontExtraction(world, units[0], floor), true);
+  assert.equal(claimCampaignFrontExtraction(world, units[0], floor), true);
   assert.equal(claimCampaignFrontExtraction(world, units[1], floor), false);
   world.time.slowTick += 1;
   assert.equal(claimCampaignFrontExtraction(world, units[0], floor), true);
@@ -40,6 +42,18 @@ test("successive national withdrawals cannot spend the same front surplus twice"
   assert.equal(claimCampaignFrontExtraction(world, units[1], 0), false);
   world.settings!.warCampaignEnabled = false;
   assert.equal(claimCampaignFrontExtraction(world, units[1], total * 2), true);
+});
+
+test("reserve and recovery withdrawal cannot take a leased amphibious force", () => {
+  const world = createScenarioWorld("two-island-amphibious", options);
+  world.settings!.warCampaignEnabled = true;
+  updateWarCampaigns(world);
+  updateSupplyAssessment(world);
+  updateAmphibiousPlanning(world);
+  const unit = world.units.find((item) => item.domain === "land" && world.amphibiousOperations.capabilityDemandByUnitId.has(item.id));
+  assert.ok(unit);
+  assert.equal(world.frontAllocations.frontIdByUnitId.get(unit.id), undefined);
+  assert.equal(claimCampaignFrontExtraction(world, unit, 0), false);
 });
 
 test("production reserves only feasible committed recovery and does not spend or create resources", () => {
