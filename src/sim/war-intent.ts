@@ -9,6 +9,7 @@ export type WarIntentReason =
   | "balance-of-power"
   | "weakened-enemy";
 export type WarIntentRejectionReason =
+  | "campaign-unaffordable"
   | "external-threat"
   | "common-threat-coalition"
   | "overextended"

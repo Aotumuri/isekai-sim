@@ -1,3 +1,4 @@
+import { assessCampaignOpening } from "./war-campaign/opening-intent";
 import { getManualGovernmentId } from "./player-nation";
 import { assessMaritimeWarReadiness } from "./maritime-war-readiness";
 import { getWarDeclarationMode } from "./simulation-settings";
@@ -64,6 +65,7 @@ export function updateWarDeclarations(world: WorldState): void {
     const war = declareWar(world.wars, intent.aggressorId, intent.targetNationId,
       world.time.fastTick);
     if (!war) continue;
+    if (world.settings?.warCampaignEnabled) war.campaignIntent = assessCampaignOpening(world, intent.aggressorId, intent.targetNationId);
     intent.declared = true;
     declarationsThisTick += 1;
     let enemies = warAdjacency.get(intent.aggressorId);
@@ -127,6 +129,8 @@ export function assessWarIntent(world: WorldState, candidate: WarIntentCandidate
   let expectedCost = clamp(Math.max(0, 1.15 - strengthRatio) * 38 +
     Math.max(0, target.power.score - attacker.power.score) * 0.16, 0, 48);
   const rejection = new Set<WarIntentRejectionReason>();
+  if (world.settings?.warCampaignEnabled &&
+    !assessCampaignOpening(world, candidate.aggressorId, candidate.targetNationId).feasible) rejection.add("campaign-unaffordable");
   if (attackerLand < settings.minimumLandStrength || strengthRatio < 0.55) {
     rejection.add("insufficient-strength");
   }
@@ -170,7 +174,7 @@ export function assessWarIntent(world: WorldState, candidate: WarIntentCandidate
   const score = opportunity + threatResponse + strategicValue - expectedCost -
     existingCommitment - externalExposure;
   const hardRejected = rejection.has("maritime-infeasible") ||
-    rejection.has("capital-emergency") || rejection.has("insufficient-strength");
+    rejection.has("capital-emergency") || rejection.has("insufficient-strength") || rejection.has("campaign-unaffordable");
   // Maritime readiness already pays a substantial transport, escort, and
   // distance premium, so its confidence threshold can be slightly lower.
   const threshold = settings.intentThreshold - (candidate.route === "maritime" ? 10 : 0);

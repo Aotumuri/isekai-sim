@@ -865,7 +865,9 @@ function chooseCandidate(world: WorldState, nationId: NationId, enemyId: NationI
     .flatMap((operation) => [operation.primaryTargetRegionId, ...operation.supportingTargetRegionIds]);
   if (world.settings?.warCampaignEnabled) friendlyObjectives.push(...getCampaignObjectives(world, nationId, enemyId));
   const candidates: LandingCandidate[] = [];
-  for (const destination of [...destinations].sort(compareIds).slice(0, 8)) {
+  for (const destination of [...destinations].sort((a, b) =>
+    Number(!!world.settings?.warCampaignEnabled && friendlyObjectives.includes(b)) -
+      Number(!!world.settings?.warCampaignEnabled && friendlyObjectives.includes(a)) || compareIds(a, b)).slice(0, 8)) {
     const estimate = estimateAssaultStrength(world, enemyId, destination, enemyUnits,
       averageRegionSpan, activeEnemyOperationUnits);
     const neighboringIds = neighborsById.get(destination) ?? [];

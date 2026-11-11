@@ -1,5 +1,6 @@
 import { getCampaignDeadline } from "./campaign-deadline";
 import { getCampaignObjectives } from "./campaign-objectives";
+import { campaignOperationRank } from "./war-campaign/operation-guidance";
 import { getMoveTicksPerRegion } from "./movement";
 import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
@@ -557,6 +558,7 @@ export function updateOffensiveOperations(world: WorldState): void {
       .sort((a, b) =>
         Number(!!getSupplyReliefPlanForFront(world, nationId, b.frontId)) -
           Number(!!getSupplyReliefPlanForFront(world, nationId, a.frontId)) ||
+        campaignOperationRank(world, nationId, b) - campaignOperationRank(world, nationId, a) ||
         bestSupplyCutoffScore(world, nationId, b.frontId) -
           bestSupplyCutoffScore(world, nationId, a.frontId) ||
         bestPocketClosureScore(world, nationId, b.frontId) -

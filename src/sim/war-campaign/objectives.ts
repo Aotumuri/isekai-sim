@@ -3,6 +3,7 @@ import type { WorldState } from "../world-state";
 import type { WarState } from "../war-state";
 import { getOwnerByMesoId } from "../world-cache";
 import { campaignWarKey, type CampaignObjective, type WarCampaign } from "./state";
+import { assessCampaignOpening } from "./opening-intent";
 
 export function buildCampaignObjectives(
   world: WorldState, nationId: NationId, wars: WarState[],
@@ -13,19 +14,21 @@ export function buildCampaignObjectives(
     const opponentId = war.nationAId === nationId ? war.nationBId : war.nationAId;
     const warKey = campaignWarKey(war.nationAId, war.nationBId, war.startedAtFastTick);
     const old = previous?.objectives.find((goal) => goal.warKey === warKey);
-    const kind = war.aggressorId === nationId ? "limited-occupation" : "preserve-sovereignty";
-    // Snapshot an opening objective, never the current negotiating demand.
-    const target = world.landFronts.operationalSectors
-      .filter((front) => [front.nationAId, front.nationBId].includes(nationId) &&
-        [front.nationAId, front.nationBId].includes(opponentId))
-      .flatMap((front) => (front.nationAId === opponentId ? front.sideA : front.sideB).borderRegionIds)
-      .filter((id) => owners.get(id) === opponentId).sort()[0];
+    const offensivePurpose = war.aggressorId === nationId;
+    // Compute once; neither opening intent nor a live negotiating offer may
+    // replace an adopted objective after the campaign has started.
+    const opening = !old && offensivePurpose
+      ? war.campaignIntent ?? assessCampaignOpening(world, nationId, opponentId, war.ultimatumRegionIds)
+      : undefined;
+    const kind = old?.kind ?? (offensivePurpose && opening?.objectiveRegionIds.length
+      ? "limited-occupation" : "preserve-sovereignty");
     const regionIds = old?.regionIds ?? (kind === "limited-occupation"
-      ? [...(war.ultimatumRegionIds?.length ? war.ultimatumRegionIds : target ? [target] : [world.nations.find((item) => item.id === opponentId)!.capitalMesoId])]
+      ? [...(opening?.objectiveRegionIds ?? [])]
       : world.mesoRegions.filter((region) => owners.get(region.id) === nationId).map((region) => region.id));
     const achieved = regionIds.length > 0 && regionIds.every((id) =>
       (world.occupation.mesoById.get(id) ?? owners.get(id)) === nationId);
     return { warKey, opponentId, kind: old?.kind ?? kind, regionIds,
+      rationale: old?.rationale ?? (opening?.rationale === "no-access" ? "no-access-defense" : opening?.rationale) ?? "preserve-sovereignty",
       openingStrength: old?.openingStrength ?? strength, achieved };
   });
 }
