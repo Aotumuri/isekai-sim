@@ -33,6 +33,7 @@ export function forecastCampaignOpportunities(
   strengths: Map<NationId, number>, observation: CampaignObservation,
 ): CampaignOpportunity[] {
   const own = Math.max(1, strengths.get(nation.id) ?? 0);
+  const investment = Math.max(1, ...goals.map((goal) => goal.openingManpower ?? goal.openingStrength));
   const infantry = WORLD_BALANCE.unit.types.Infantry;
   const strengthPerWeapon = infantry.manpower / Math.max(1, infantry.weaponCost ?? 1);
   const totalValue = getNationalTerritorialValue(world, nation.id);
@@ -77,7 +78,7 @@ export function forecastCampaignOpportunities(
       opposition: strengths.get(goal.opponentId) ?? 0, arrivalSeconds: arrival,
       objectiveValue: Math.max(0, politicalValue - securedValue), securedValue,
       homelandAtRisk: atRisk, lossFractionPerSecond: observation.lossRate,
-      replacementFraction: Math.min(nation.resources.manpower, nation.resources.weapons * strengthPerWeapon) / own,
+      replacementFraction: Math.min(nation.resources.manpower, nation.resources.weapons * strengthPerWeapon) / investment,
       peaceProbability, settlementValue: settlingGain, militaryGoalHeld: goal.achieved,
       uncertainty: available > 0 ? 0.25 : 0.75,
       committedFraction: units.filter((u) => u.moveToId || world.offensiveOperations.operationIdByUnitId.has(u.id))

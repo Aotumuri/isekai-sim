@@ -8,7 +8,7 @@ import { buildPoliticalObjective } from "./political-objectives";
 
 export function buildCampaignObjectives(
   world: WorldState, nationId: NationId, wars: WarState[],
-  strength: number, previous: WarCampaign | undefined,
+  strength: number, previous: WarCampaign | undefined, manpower = strength,
 ): CampaignObjective[] {
   const owners = getOwnerByMesoId(world);
   return wars.map((war) => {
@@ -31,6 +31,7 @@ export function buildCampaignObjectives(
     return { warKey, opponentId, kind: old?.kind ?? kind, regionIds,
       rationale: old?.rationale ?? (opening?.rationale === "no-access" ? "no-access-defense" : opening?.rationale) ?? "preserve-sovereignty",
       openingStrength: old?.openingStrength ?? strength, achieved,
+      openingManpower: old?.openingManpower ?? manpower,
       political: old?.political ?? buildPoliticalObjective(world, nationId, opponentId, regionIds, kind === "limited-occupation") };
   });
 }

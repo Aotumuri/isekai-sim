@@ -6,6 +6,7 @@ import type { CampaignForceBudget } from "./force-budget";
 import type { PoliticalObjective } from "./political-objectives";
 import type { CampaignAlternative } from "./alternatives";
 import type { CampaignObservation } from "./forecast";
+import type { CampaignBattleCosts } from "./battle-costs";
 
 export interface CampaignObjective {
   warKey: string;
@@ -14,6 +15,7 @@ export interface CampaignObjective {
   rationale?: string;
   regionIds: MesoRegionId[];
   openingStrength: number;
+  openingManpower?: number;
   achieved: boolean;
   political?: PoliticalObjective;
 }
@@ -31,6 +33,7 @@ export interface WarCampaign {
   observation?: CampaignObservation;
 }
 export interface WarCampaignState {
+  battleCosts?: CampaignBattleCosts;
   goalHistory: {
     nationId: NationId; opponentId: NationId; warKey: string; endedAtTick: number;
     outcome: "secured" | "unmet" | "nation-eliminated"; reason: string;
@@ -39,6 +42,9 @@ export interface WarCampaignState {
   byNationId: Map<NationId, WarCampaign>;
   version: number;
   events: { nationId: NationId; tick: number; mode: CampaignMode; reason: string; revision: number }[];
+}
+export function createWarCampaignState(): WarCampaignState {
+  return { byNationId: new Map(), version: 0, events: [], goalHistory: [], battleCosts: new Map() };
 }
 export function getWarCampaign(world: WorldState, nationId: NationId): WarCampaign | undefined {
   return world.settings?.warCampaignEnabled ? world.warCampaigns?.byNationId.get(nationId) : undefined;

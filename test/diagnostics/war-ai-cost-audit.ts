@@ -40,13 +40,28 @@ try {
         resources: world.nations.map((n) => [n.id, n.resources]),
       })).digest("hex");
       const loss = createFieldLossObserver();
+      const ledgerTotals = new Map<string, { direct: number; removed: number; weapons: number }>();
+      const ledgerSamples = new Map<string, { entry: object; direct: number; removed: number; weapons: number }>();
       const spending = new Map<string, { weapons: number; manpower: number; fuel: number; lastTick: number; burdenSeconds: number }>();
       let lastSlowTick = world.time.slowTick;
       class AuditMetrics extends BenchmarkMetrics {
         recordDuration(name: string, ms: number) {
           super.recordDuration(name, ms);
           if (name === "repositionUnits") loss.before(world);
-          if (name === "battle.update") loss.after(world);
+          if (name === "battle.update") {
+            loss.after(world);
+            for (const [id, entry] of world.warCampaigns?.battleCosts ?? []) {
+              const old = ledgerSamples.get(id);
+              const same = old?.entry === entry;
+              const total = ledgerTotals.get(id) ?? { direct: 0, removed: 0, weapons: 0 };
+              total.direct += entry.directManpowerDamage - (same ? old!.direct : 0);
+              total.removed += entry.removedManpower - (same ? old!.removed : 0);
+              total.weapons += entry.removedWeaponEquivalent - (same ? old!.weapons : 0);
+              ledgerTotals.set(id, total);
+              ledgerSamples.set(id, { entry, direct: entry.directManpowerDamage,
+                removed: entry.removedManpower, weapons: entry.removedWeaponEquivalent });
+            }
+          }
         }
       }
       runSimulation(world, { ticks, metrics: new AuditMetrics(), observe(current: WorldState) {
@@ -69,6 +84,7 @@ try {
       const totalDirectWarCasualties = Object.fromEntries(world.nations.map((nation) => [nation.id,
         [...seenWars].reduce((sum, war) => sum + getWarCasualties(war, nation.id), 0)]));
       results.push({ seed, scenario, startFingerprint, costs: loss.result(), totalDirectWarCasualties,
+        campaignLedger: Object.fromEntries(ledgerTotals),
         spending: Object.fromEntries(spending),
         openingWarSides: openingWars.flatMap((war) => [war.nationAId, war.nationBId].map((nationId) => ({
           nationId, aggressor: nationId === war.aggressorId,

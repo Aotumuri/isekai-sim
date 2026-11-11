@@ -11,11 +11,12 @@ import { getWarCasualties } from "../war-state";
 import type { WorldState } from "../world-state";
 import { evaluateCampaignPolicy, requiresCampaignReview, type CampaignConstraints } from "./policy";
 import { getOpposingFrontSide } from "../land-fronts";
-import { type CampaignObjective, type WarCampaign, type WarCampaignState } from "./state";
+import { createWarCampaignState, type CampaignObjective, type WarCampaign, type WarCampaignState } from "./state";
 import { buildCampaignObjectives } from "./objectives";
 import { recordCompletedCampaignGoals } from "./lifecycle";
 import { observeCampaignCost, forecastCampaignOpportunities } from "./forecast";
 import { evaluateCampaignAlternatives } from "./alternatives";
+import { unavailableManpower } from "./battle-costs";
 
 /** One campaign per nation spanning every current opponent; no direct orders. */
 export function updateWarCampaigns(world: WorldState): void {
@@ -23,10 +24,12 @@ export function updateWarCampaigns(world: WorldState): void {
     delete world.warCampaigns;
     return;
   }
-  const state: WarCampaignState = world.warCampaigns ??= { byNationId: new Map(), version: 0, events: [], goalHistory: [] };
+  const state: WarCampaignState = world.warCampaigns ??= createWarCampaignState();
   recordCompletedCampaignGoals(world, state);
   const strengths = new Map<NationId, number>();
+  const manpower = new Map<NationId, number>();
   for (const unit of allFieldUnits(world)) {
+    manpower.set(unit.nationId, (manpower.get(unit.nationId) ?? 0) + Math.max(0, unit.manpower));
     if (unit.domain === "land") strengths.set(unit.nationId,
       (strengths.get(unit.nationId) ?? 0) + getUnitCombatStrength(unit));
   }
@@ -38,7 +41,8 @@ export function updateWarCampaigns(world: WorldState): void {
       active.has(war.nationAId) && active.has(war.nationBId));
     if (!wars.length) continue;
     const previous = state.byNationId.get(nation.id);
-    const objectives = buildCampaignObjectives(world, nation.id, wars, strengths.get(nation.id) ?? 0, previous);
+    const objectives = buildCampaignObjectives(world, nation.id, wars, strengths.get(nation.id) ?? 0, previous,
+      (manpower.get(nation.id) ?? 0) + unavailableManpower(state.battleCosts?.get(nation.id)));
     const constraints = assessCampaignConstraints(world, nation, wars, objectives, strengths);
     const observation = observeCampaignCost(world, constraints.casualtyFraction, previous);
     const alternatives = evaluateCampaignAlternatives(
@@ -77,6 +81,7 @@ export function updateWarCampaigns(world: WorldState): void {
   }
   if (state.byNationId.size !== next.size) state.version += 1;
   state.byNationId = next;
+  for (const id of state.battleCosts?.keys() ?? []) if (!next.has(id)) state.battleCosts!.delete(id);
   if (state.events.length > 200) state.events.splice(0, state.events.length - 200);
 }
 
@@ -104,10 +109,12 @@ function assessCampaignConstraints(
     const enemyStrength = [...new Set(objectives.map((goal) => goal.opponentId))]
       .reduce((sum, id) => sum + (strengths.get(id) ?? 0), 0);
     const character = getNationCharacter(world, nation.id);
+    const battleCost = world.warCampaigns?.battleCosts?.get(nation.id);
     return {
       strengthRatio: (strengths.get(nation.id) ?? 0) / Math.max(1, enemyStrength),
-      casualtyFraction: wars.reduce((sum, war) => sum + getWarCasualties(war, nation.id), 0) /
-        Math.max(1, ...objectives.map((goal) => goal.openingStrength)),
+      casualtyFraction: (Math.max(battleCost?.directManpowerDamage ?? 0,
+        wars.reduce((sum, war) => sum + getWarCasualties(war, nation.id), 0)) + (battleCost?.removedManpower ?? 0)) /
+        Math.max(1, ...objectives.map((goal) => goal.openingManpower ?? goal.openingStrength)),
       costTolerance: 0.5 + character.aggression,
       foodSeconds: nation.food ? foodReserveSeconds(nation.food) : Infinity,
       replacementConstrained: nation.resources.weapons <= 0 && nation.resources.manpower <= 0,
