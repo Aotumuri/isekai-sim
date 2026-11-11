@@ -1,0 +1,5222 @@
+{
+  "summary": [
+    {
+      "revision": "394d4bdd756b29da9eda82cba3dda6ffb31710f1",
+      "ticks": 3200,
+      "fullSystems": false,
+      "failures": [],
+      "scenarios": {
+        "active-war": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 610.9489520000006,
+            "median": 593.0488125000047,
+            "min": 388.05458299999736,
+            "max": 1103.6780829999998,
+            "p95": 776.1988750000019
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 770.4071000000001,
+            "median": 746.9324999999999,
+            "min": 441.103,
+            "max": 1828.431,
+            "p95": 939.904
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 95.55223236083984,
+            "median": 95.4007682800293,
+            "min": 63.849334716796875,
+            "max": 137.00591278076172,
+            "p95": 136.94348907470703
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 20.1,
+            "median": 17.5,
+            "min": 5,
+            "max": 46,
+            "p95": 39
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 10.2,
+            "median": 9.5,
+            "min": 4,
+            "max": 18,
+            "p95": 16
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 7.7,
+            "median": 6,
+            "min": 0,
+            "max": 22,
+            "p95": 16
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 2.1,
+            "median": 1,
+            "min": 0,
+            "max": 11,
+            "p95": 7
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 4.55,
+            "median": 4.5,
+            "min": 2,
+            "max": 9,
+            "p95": 8
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.1,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 31.45,
+            "median": 23.5,
+            "min": 0,
+            "max": 157,
+            "p95": 76
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 442.75,
+            "median": 424.5,
+            "min": 86,
+            "max": 884,
+            "p95": 850
+          }
+        },
+        "long-frontline": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 817.1053686500002,
+            "median": 773.1362079999963,
+            "min": 650.6279170000053,
+            "max": 1375.965624999997,
+            "p95": 1059.154042
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 941.0768000000002,
+            "median": 878.518,
+            "min": 727.254,
+            "max": 1575.038,
+            "p95": 1517.496
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 95.57741622924804,
+            "median": 93.7853889465332,
+            "min": 49.59600067138672,
+            "max": 158.21310424804688,
+            "p95": 138.3472137451172
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 3.95,
+            "median": 4,
+            "min": 0,
+            "max": 8,
+            "p95": 6
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 1.8,
+            "median": 2,
+            "min": 0,
+            "max": 3,
+            "p95": 3
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 1.85,
+            "median": 2,
+            "min": 0,
+            "max": 5,
+            "p95": 3
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 0.3,
+            "median": 0,
+            "min": 0,
+            "max": 3,
+            "p95": 1
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 1.3,
+            "median": 1.5,
+            "min": 0,
+            "max": 3,
+            "p95": 2
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.05,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 0
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 13.3,
+            "median": 17,
+            "min": 0,
+            "max": 26,
+            "p95": 21
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 70.6,
+            "median": 60,
+            "min": 0,
+            "max": 139,
+            "p95": 131
+          }
+        },
+        "stalemate-breaker": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 508.49121875000037,
+            "median": 523.8087919999998,
+            "min": 355.8806670000049,
+            "max": 590.6111669999955,
+            "p95": 587.3916659999959
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 606.9878000000001,
+            "median": 606.4295,
+            "min": 448.115,
+            "max": 770.6659999999999,
+            "p95": 716.8459999999999
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 92.37468681335449,
+            "median": 79.45576095581055,
+            "min": 48.61198425292969,
+            "max": 187.41805267333984,
+            "p95": 150.28543090820312
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 6.15,
+            "median": 5,
+            "min": 0,
+            "max": 15,
+            "p95": 14
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 1.95,
+            "median": 2,
+            "min": 0,
+            "max": 4,
+            "p95": 4
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 2.6,
+            "median": 3,
+            "min": 0,
+            "max": 6,
+            "p95": 5
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 1.6,
+            "median": 0.5,
+            "min": 0,
+            "max": 8,
+            "p95": 7
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 0.8,
+            "median": 1,
+            "min": 0,
+            "max": 2,
+            "p95": 1
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.1,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 29,
+            "median": 18.5,
+            "min": 0,
+            "max": 99,
+            "p95": 79
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 65.45,
+            "median": 66,
+            "min": 0,
+            "max": 127,
+            "p95": 120
+          }
+        },
+        "collapse-advance": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 360.65208335000113,
+            "median": 358.97856299999876,
+            "min": 288.1666250000053,
+            "max": 592.2782080000015,
+            "p95": 413.93229199999996
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 451.5903,
+            "median": 442.62199999999996,
+            "min": 319.609,
+            "max": 765.707,
+            "p95": 563.4590000000001
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 97.25546684265137,
+            "median": 100.4030647277832,
+            "min": 45.44952392578125,
+            "max": 183.85581970214844,
+            "p95": 143.7734146118164
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 1.35,
+            "median": 1,
+            "min": 0,
+            "max": 5,
+            "p95": 2
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 1.05,
+            "median": 1,
+            "min": 0,
+            "max": 3,
+            "p95": 2
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 0.2,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 0.1,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 0.85,
+            "median": 1,
+            "min": 0,
+            "max": 2,
+            "p95": 2
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 2.25,
+            "median": 0,
+            "min": 0,
+            "max": 26,
+            "p95": 19
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 15.95,
+            "median": 7,
+            "min": 0,
+            "max": 90,
+            "p95": 45
+          }
+        },
+        "capital-threat": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 492.39958960000024,
+            "median": 503.8946665000003,
+            "min": 383.6728750000002,
+            "max": 576.3816250000018,
+            "p95": 547.1489999999976
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 581.5532999999999,
+            "median": 591.0945,
+            "min": 424.074,
+            "max": 741.324,
+            "p95": 702.818
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 101.59992218017578,
+            "median": 97.45352172851562,
+            "min": 47.533599853515625,
+            "max": 163.11669158935547,
+            "p95": 156.13504028320312
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 3.15,
+            "median": 3,
+            "min": 1,
+            "max": 7,
+            "p95": 6
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 1.65,
+            "median": 1,
+            "min": 0,
+            "max": 4,
+            "p95": 3
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 1.35,
+            "median": 1,
+            "min": 0,
+            "max": 4,
+            "p95": 3
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 0.15,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 1.75,
+            "median": 2,
+            "min": 1,
+            "max": 2,
+            "p95": 2
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 8.9,
+            "median": 5,
+            "min": 0,
+            "max": 22,
+            "p95": 22
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 28.5,
+            "median": 24.5,
+            "min": 4,
+            "max": 67,
+            "p95": 57
+          }
+        },
+        "retreat-heavy": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 560.7613333499992,
+            "median": 540.7529585000002,
+            "min": 465.6125420000026,
+            "max": 738.1287909999955,
+            "p95": 709.8385410000046
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 678.98775,
+            "median": 648.0645,
+            "min": 512.913,
+            "max": 914.861,
+            "p95": 884.221
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 96.42504806518555,
+            "median": 99.16239547729492,
+            "min": 57.12889862060547,
+            "max": 155.15007781982422,
+            "p95": 125.84358978271484
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 12.55,
+            "median": 12,
+            "min": 4,
+            "max": 23,
+            "p95": 20
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 7.35,
+            "median": 6.5,
+            "min": 3,
+            "max": 13,
+            "p95": 11
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 4.85,
+            "median": 5,
+            "min": 1,
+            "max": 10,
+            "p95": 10
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 0.35,
+            "median": 0,
+            "min": 0,
+            "max": 4,
+            "p95": 1
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 4.6,
+            "median": 4.5,
+            "min": 1,
+            "max": 8,
+            "p95": 7
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 9.45,
+            "median": 6.5,
+            "min": 0,
+            "max": 44,
+            "p95": 20
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 345.1,
+            "median": 331.5,
+            "min": 40,
+            "max": 696,
+            "p95": 683
+          }
+        },
+        "reorganization-heavy": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 604.9830687999989,
+            "median": 610.1663750000007,
+            "min": 389.1391660000081,
+            "max": 924.7403330000088,
+            "p95": 729.1620419999817
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 747.3906499999999,
+            "median": 757.835,
+            "min": 448.799,
+            "max": 1100.44,
+            "p95": 948.4639999999999
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 94.55787506103516,
+            "median": 85.76146697998047,
+            "min": 53.961021423339844,
+            "max": 171.9039077758789,
+            "p95": 148.11380767822266
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 21.3,
+            "median": 20,
+            "min": 6,
+            "max": 37,
+            "p95": 32
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 11.05,
+            "median": 11.5,
+            "min": 5,
+            "max": 16,
+            "p95": 16
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 8.25,
+            "median": 8.5,
+            "min": 1,
+            "max": 18,
+            "p95": 14
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 2,
+            "median": 1,
+            "min": 0,
+            "max": 7,
+            "p95": 7
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 5.3,
+            "median": 5,
+            "min": 2,
+            "max": 10,
+            "p95": 7
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.05,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 0
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 22.25,
+            "median": 18,
+            "min": 6,
+            "max": 54,
+            "p95": 45
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 401.25,
+            "median": 433.5,
+            "min": 95,
+            "max": 668,
+            "p95": 638
+          }
+        },
+        "two-island-amphibious": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 550.1831749999989,
+            "median": 530.8731460000035,
+            "min": 269.9327080000003,
+            "max": 1129.512541,
+            "p95": 778.7671659999996
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 666.6498499999999,
+            "median": 638.74,
+            "min": 299.49199999999996,
+            "max": 1237.757,
+            "p95": 1059.8339999999998
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 99.28551177978515,
+            "median": 98.21440124511719,
+            "min": 49.643455505371094,
+            "max": 192.58352661132812,
+            "p95": 149.5027618408203
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 5.8,
+            "median": 5.5,
+            "min": 0,
+            "max": 13,
+            "p95": 11
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 2.25,
+            "median": 1.5,
+            "min": 0,
+            "max": 8,
+            "p95": 6
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 3.35,
+            "median": 3,
+            "min": 0,
+            "max": 8,
+            "p95": 7
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 0.2,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 0.45,
+            "median": 0,
+            "min": 0,
+            "max": 2,
+            "p95": 2
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.65,
+            "median": 1,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 10.75,
+            "median": 6.5,
+            "min": 0,
+            "max": 45,
+            "p95": 26
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 54.7,
+            "median": 48.5,
+            "min": 0,
+            "max": 177,
+            "p95": 121
+          }
+        },
+        "late-game": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 1036.5974769499994,
+            "median": 903.543145499998,
+            "min": 559.8775410000017,
+            "max": 2927.629832999999,
+            "p95": 1687.7218329999887
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 1271.85925,
+            "median": 1154.616,
+            "min": 616.586,
+            "max": 3114.666,
+            "p95": 2082.442
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 104.1251609802246,
+            "median": 96.86629867553711,
+            "min": 63.41400146484375,
+            "max": 176.8132781982422,
+            "p95": 163.99799346923828
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 28.45,
+            "median": 29.5,
+            "min": 12,
+            "max": 41,
+            "p95": 41
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 12.45,
+            "median": 12.5,
+            "min": 1,
+            "max": 19,
+            "p95": 19
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 12.55,
+            "median": 13,
+            "min": 6,
+            "max": 20,
+            "p95": 17
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 3.4,
+            "median": 2,
+            "min": 0,
+            "max": 11,
+            "p95": 10
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 4.85,
+            "median": 5,
+            "min": 0,
+            "max": 8,
+            "p95": 8
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.75,
+            "median": 0,
+            "min": 0,
+            "max": 9,
+            "p95": 5
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 40.3,
+            "median": 32.5,
+            "min": 11,
+            "max": 84,
+            "p95": 73
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 956.15,
+            "median": 1002.5,
+            "min": 320,
+            "max": 1445,
+            "p95": 1296
+          }
+        },
+        "base-world": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 547.8942103999987,
+            "median": 523.5121875000004,
+            "min": 382.55133300000307,
+            "max": 813.5959160000057,
+            "p95": 788.5699170000007
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 696.5699999999999,
+            "median": 655.4580000000001,
+            "min": 506.825,
+            "max": 1086.131,
+            "p95": 1069.962
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 99.66002311706544,
+            "median": 91.89375686645508,
+            "min": 52.18037414550781,
+            "max": 173.22528076171875,
+            "p95": 153.95005798339844
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 17.7,
+            "median": 17.5,
+            "min": 5,
+            "max": 30,
+            "p95": 29
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 9.75,
+            "median": 9.5,
+            "min": 4,
+            "max": 17,
+            "p95": 15
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 7.2,
+            "median": 7,
+            "min": 1,
+            "max": 16,
+            "p95": 14
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 0.75,
+            "median": 1,
+            "min": 0,
+            "max": 2,
+            "p95": 2
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 5.35,
+            "median": 5.5,
+            "min": 3,
+            "max": 9,
+            "p95": 8
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 15.35,
+            "median": 14.5,
+            "min": 0,
+            "max": 63,
+            "p95": 41
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 347.35,
+            "median": 327.5,
+            "min": 47,
+            "max": 763,
+            "p95": 713
+          }
+        }
+      }
+    },
+    {
+      "revision": "340f7784fbc15c51c779f6f2192cf1e6282261e9",
+      "ticks": 3200,
+      "fullSystems": false,
+      "failures": [],
+      "scenarios": {
+        "active-war": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 712.3253811999998,
+            "median": 690.0161664999978,
+            "min": 453.40720899999724,
+            "max": 1307.5219159999979,
+            "p95": 1042.6045419999973
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 865.4789499999999,
+            "median": 848.453,
+            "min": 472.671,
+            "max": 1601.464,
+            "p95": 1399.4769999999999
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 184.4449676513672,
+            "median": 158.97509765625,
+            "min": 83.0314712524414,
+            "max": 383.1555633544922,
+            "p95": 360.12145233154297
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 18.95,
+            "median": 17,
+            "min": 6,
+            "max": 46,
+            "p95": 34
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 8.95,
+            "median": 8,
+            "min": 3,
+            "max": 17,
+            "p95": 16
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 7.65,
+            "median": 6,
+            "min": 1,
+            "max": 24,
+            "p95": 20
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 2.35,
+            "median": 1,
+            "min": 0,
+            "max": 11,
+            "p95": 8
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 3.85,
+            "median": 3,
+            "min": 1,
+            "max": 9,
+            "p95": 8
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 1,
+            "median": 0.5,
+            "min": 0,
+            "max": 6,
+            "p95": 3
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 32.7,
+            "median": 21.5,
+            "min": 0,
+            "max": 199,
+            "p95": 53
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 500.15,
+            "median": 437,
+            "min": 83,
+            "max": 1171,
+            "p95": 892
+          }
+        },
+        "long-frontline": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 850.5796228000006,
+            "median": 790.5061455000005,
+            "min": 695.3369579999999,
+            "max": 1342.7292920000036,
+            "p95": 1301.6992080000055
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 940.7940500000001,
+            "median": 893.5065000000001,
+            "min": 709.004,
+            "max": 1709.3600000000001,
+            "p95": 1390.813
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 188.3135528564453,
+            "median": 164.55359268188477,
+            "min": 100.5171890258789,
+            "max": 330.8559341430664,
+            "p95": 320.88318634033203
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 4.35,
+            "median": 4,
+            "min": 0,
+            "max": 11,
+            "p95": 9
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 2,
+            "median": 2,
+            "min": 0,
+            "max": 6,
+            "p95": 4
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 2,
+            "median": 1.5,
+            "min": 0,
+            "max": 6,
+            "p95": 5
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 0.35,
+            "median": 0,
+            "min": 0,
+            "max": 3,
+            "p95": 3
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 0.95,
+            "median": 1,
+            "min": 0,
+            "max": 2,
+            "p95": 2
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.15,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 14.5,
+            "median": 16.5,
+            "min": 0,
+            "max": 48,
+            "p95": 20
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 76.3,
+            "median": 56.5,
+            "min": 0,
+            "max": 165,
+            "p95": 158
+          }
+        },
+        "stalemate-breaker": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 499.6189832499987,
+            "median": 488.846375000001,
+            "min": 404.919624999995,
+            "max": 650.0376669999969,
+            "p95": 612.5664590000015
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 581.1994,
+            "median": 552.9645,
+            "min": 432.72,
+            "max": 746.629,
+            "p95": 699.27
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 164.00351791381837,
+            "median": 139.28223037719727,
+            "min": 82.84476470947266,
+            "max": 292.9883728027344,
+            "p95": 281.67515563964844
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 5.75,
+            "median": 5,
+            "min": 0,
+            "max": 14,
+            "p95": 13
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 1.9,
+            "median": 2,
+            "min": 0,
+            "max": 4,
+            "p95": 4
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 2.35,
+            "median": 2,
+            "min": 0,
+            "max": 6,
+            "p95": 5
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 1.5,
+            "median": 0.5,
+            "min": 0,
+            "max": 7,
+            "p95": 6
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 0.9,
+            "median": 1,
+            "min": 0,
+            "max": 2,
+            "p95": 2
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.1,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 26.9,
+            "median": 18,
+            "min": 0,
+            "max": 99,
+            "p95": 79
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 66.95,
+            "median": 55,
+            "min": 0,
+            "max": 176,
+            "p95": 131
+          }
+        },
+        "collapse-advance": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 376.9472124000005,
+            "median": 332.050895999997,
+            "min": 272.04670800000895,
+            "max": 639.3347079999949,
+            "p95": 606.6970419999998
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 436.50885,
+            "median": 373.7605,
+            "min": 277.79,
+            "max": 811.678,
+            "p95": 768.5400000000001
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 176.61581153869628,
+            "median": 150.83945083618164,
+            "min": 100.01280975341797,
+            "max": 321.9097213745117,
+            "p95": 305.3137969970703
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 1.35,
+            "median": 1,
+            "min": 0,
+            "max": 5,
+            "p95": 3
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 1.05,
+            "median": 1,
+            "min": 0,
+            "max": 3,
+            "p95": 2
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 0.2,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 0.1,
+            "median": 0,
+            "min": 0,
+            "max": 2,
+            "p95": 0
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 0.7,
+            "median": 0.5,
+            "min": 0,
+            "max": 2,
+            "p95": 2
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.1,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 0.75,
+            "median": 0,
+            "min": 0,
+            "max": 7,
+            "p95": 6
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 14.65,
+            "median": 7,
+            "min": 0,
+            "max": 63,
+            "p95": 49
+          }
+        },
+        "capital-threat": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 503.8512353499997,
+            "median": 474.58606199999485,
+            "min": 370.5369170000049,
+            "max": 727.0976669999945,
+            "p95": 673.4943329999805
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 562.9261999999999,
+            "median": 521.2085,
+            "min": 395.935,
+            "max": 749.592,
+            "p95": 740.229
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 197.963126373291,
+            "median": 169.6158447265625,
+            "min": 92.295166015625,
+            "max": 346.2240219116211,
+            "p95": 343.0259246826172
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 3.35,
+            "median": 3,
+            "min": 1,
+            "max": 8,
+            "p95": 8
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 1.8,
+            "median": 1.5,
+            "min": 0,
+            "max": 4,
+            "p95": 4
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 1.4,
+            "median": 1,
+            "min": 0,
+            "max": 5,
+            "p95": 5
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 0.15,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 1.5,
+            "median": 2,
+            "min": 0,
+            "max": 2,
+            "p95": 2
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.1,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 8.85,
+            "median": 5,
+            "min": 0,
+            "max": 27,
+            "p95": 22
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 40,
+            "median": 31.5,
+            "min": 4,
+            "max": 152,
+            "p95": 89
+          }
+        },
+        "retreat-heavy": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 699.2294521499996,
+            "median": 647.3356459999995,
+            "min": 475.10908400000335,
+            "max": 1076.11437499999,
+            "p95": 962.0247500000114
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 828.9387999999999,
+            "median": 825.1275,
+            "min": 541.874,
+            "max": 1396.193,
+            "p95": 1123.017
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 181.6510772705078,
+            "median": 148.96780395507812,
+            "min": 86.43400573730469,
+            "max": 374.1523132324219,
+            "p95": 336.40039825439453
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 11.5,
+            "median": 9,
+            "min": 4,
+            "max": 25,
+            "p95": 24
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 6.4,
+            "median": 5.5,
+            "min": 3,
+            "max": 14,
+            "p95": 12
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 4.55,
+            "median": 3.5,
+            "min": 0,
+            "max": 11,
+            "p95": 9
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 0.5,
+            "median": 0,
+            "min": 0,
+            "max": 3,
+            "p95": 2
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 3.85,
+            "median": 4,
+            "min": 0,
+            "max": 7,
+            "p95": 7
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.45,
+            "median": 0,
+            "min": 0,
+            "max": 2,
+            "p95": 1
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 12,
+            "median": 8.5,
+            "min": 0,
+            "max": 39,
+            "p95": 38
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 370.95,
+            "median": 350.5,
+            "min": 54,
+            "max": 840,
+            "p95": 725
+          }
+        },
+        "reorganization-heavy": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 635.767487499999,
+            "median": 622.5183750000033,
+            "min": 392.30783299999894,
+            "max": 906.2025829999984,
+            "p95": 811.1870419999996
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 761.5121999999999,
+            "median": 725.747,
+            "min": 414.34,
+            "max": 1242.82,
+            "p95": 1098.434
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 175.32553749084474,
+            "median": 139.40522003173828,
+            "min": 94.20069885253906,
+            "max": 349.9537811279297,
+            "p95": 290.00341033935547
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 16.85,
+            "median": 17,
+            "min": 8,
+            "max": 31,
+            "p95": 28
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 9,
+            "median": 8,
+            "min": 4,
+            "max": 14,
+            "p95": 13
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 6.35,
+            "median": 6,
+            "min": 1,
+            "max": 17,
+            "p95": 13
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 1.5,
+            "median": 0,
+            "min": 0,
+            "max": 7,
+            "p95": 6
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 4.85,
+            "median": 5,
+            "min": 1,
+            "max": 9,
+            "p95": 8
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.6,
+            "median": 0,
+            "min": 0,
+            "max": 3,
+            "p95": 3
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 22.8,
+            "median": 18.5,
+            "min": 2,
+            "max": 54,
+            "p95": 47
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 443.5,
+            "median": 413.5,
+            "min": 108,
+            "max": 964,
+            "p95": 957
+          }
+        },
+        "two-island-amphibious": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 510.45426445000084,
+            "median": 465.1052289999898,
+            "min": 356.00708300000406,
+            "max": 1087.040915999998,
+            "p95": 697.3522919999959
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 617.4338500000001,
+            "median": 577.0935,
+            "min": 422.11899999999997,
+            "max": 1196.78,
+            "p95": 830.0179999999999
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 176.29673080444337,
+            "median": 149.43333053588867,
+            "min": 71.25423431396484,
+            "max": 360.38819885253906,
+            "p95": 319.66919708251953
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 5.2,
+            "median": 5,
+            "min": 0,
+            "max": 12,
+            "p95": 11
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 2.1,
+            "median": 2,
+            "min": 0,
+            "max": 7,
+            "p95": 6
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 2.9,
+            "median": 3,
+            "min": 0,
+            "max": 8,
+            "p95": 7
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 0.15,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 0.45,
+            "median": 0,
+            "min": 0,
+            "max": 2,
+            "p95": 2
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.7,
+            "median": 1,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 9,
+            "median": 5.5,
+            "min": 0,
+            "max": 44,
+            "p95": 17
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 59.5,
+            "median": 37.5,
+            "min": 0,
+            "max": 191,
+            "p95": 159
+          }
+        },
+        "late-game": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 1121.6905790999995,
+            "median": 1052.9928540000033,
+            "min": 633.0685000000012,
+            "max": 3119.9919999999984,
+            "p95": 1440.8982079999987
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 1311.9359500000003,
+            "median": 1257.305,
+            "min": 698.17,
+            "max": 3179.5330000000004,
+            "p95": 1590.827
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 188.89908447265626,
+            "median": 162.1158447265625,
+            "min": 92.80166625976562,
+            "max": 368.18907165527344,
+            "p95": 331.4937744140625
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 26.1,
+            "median": 24.5,
+            "min": 12,
+            "max": 53,
+            "p95": 39
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 10,
+            "median": 10,
+            "min": 5,
+            "max": 17,
+            "p95": 15
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 12.6,
+            "median": 12,
+            "min": 5,
+            "max": 29,
+            "p95": 23
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 3.2,
+            "median": 2,
+            "min": 0,
+            "max": 8,
+            "p95": 7
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 4.5,
+            "median": 4,
+            "min": 2,
+            "max": 8,
+            "p95": 7
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 1.3,
+            "median": 1,
+            "min": 0,
+            "max": 8,
+            "p95": 3
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 35.25,
+            "median": 28,
+            "min": 18,
+            "max": 90,
+            "p95": 70
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 985.85,
+            "median": 997,
+            "min": 327,
+            "max": 1637,
+            "p95": 1515
+          }
+        },
+        "base-world": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 636.5616147000013,
+            "median": 617.0912085000018,
+            "min": 437.0387919999921,
+            "max": 888.6494170000005,
+            "p95": 830.231832999998
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 778.6995999999999,
+            "median": 738.3715,
+            "min": 504.887,
+            "max": 1190.8039999999999,
+            "p95": 1042.3210000000001
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 185.9370346069336,
+            "median": 154.56016159057617,
+            "min": 100.59170532226562,
+            "max": 334.11217498779297,
+            "p95": 330.64160919189453
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 16.1,
+            "median": 15,
+            "min": 4,
+            "max": 38,
+            "p95": 30
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 7.5,
+            "median": 7.5,
+            "min": 1,
+            "max": 14,
+            "p95": 12
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 7.2,
+            "median": 8,
+            "min": 0,
+            "max": 21,
+            "p95": 11
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 1.35,
+            "median": 0,
+            "min": 0,
+            "max": 10,
+            "p95": 6
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 4.15,
+            "median": 4,
+            "min": 1,
+            "max": 8,
+            "p95": 8
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.65,
+            "median": 0,
+            "min": 0,
+            "max": 4,
+            "p95": 3
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 20.95,
+            "median": 16,
+            "min": 0,
+            "max": 125,
+            "p95": 49
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 414.05,
+            "median": 408.5,
+            "min": 49,
+            "max": 739,
+            "p95": 695
+          }
+        }
+      }
+    }
+  ],
+  "pairedDeltas": [
+    {
+      "scenario": "active-war",
+      "seed": 822748319780,
+      "deltas": {
+        "wallClockMs": -165.5519999999998,
+        "cpuMs": -226.9670000000001,
+        "heapMiB": 2.4605865478515625,
+        "operationsCreated": -15,
+        "operationsCompleted": -2,
+        "operationsCancelled": -8,
+        "operationsFailed": -5,
+        "capitalFalls": 2,
+        "warsRemaining": -1,
+        "stalemateMaximumDuration": -20,
+        "frontlineAssignmentSwitches": -370
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319780,
+      "deltas": {
+        "wallClockMs": 43.94116600000007,
+        "cpuMs": 134.32200000000012,
+        "heapMiB": -21.427108764648438,
+        "operationsCreated": -1,
+        "operationsCompleted": 2,
+        "operationsCancelled": -2,
+        "operationsFailed": -1,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -1,
+        "frontlineAssignmentSwitches": 27
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319780,
+      "deltas": {
+        "wallClockMs": -31.678208000000268,
+        "cpuMs": -74.99899999999991,
+        "heapMiB": -18.795860290527344,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319780,
+      "deltas": {
+        "wallClockMs": 157.66437399999995,
+        "cpuMs": 248.21899999999994,
+        "heapMiB": 29.91565704345703,
+        "operationsCreated": -2,
+        "operationsCompleted": -1,
+        "operationsCancelled": 0,
+        "operationsFailed": -1,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -19,
+        "frontlineAssignmentSwitches": -27
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319780,
+      "deltas": {
+        "wallClockMs": 31.721958000000086,
+        "cpuMs": 41.88599999999997,
+        "heapMiB": 36.58137512207031,
+        "operationsCreated": -1,
+        "operationsCompleted": 0,
+        "operationsCancelled": -1,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 2,
+        "frontlineAssignmentSwitches": -2
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319780,
+      "deltas": {
+        "wallClockMs": -10.501291999999921,
+        "cpuMs": 16.947000000000003,
+        "heapMiB": 28.713157653808594,
+        "operationsCreated": -4,
+        "operationsCompleted": -3,
+        "operationsCancelled": 0,
+        "operationsFailed": -1,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 2,
+        "frontlineAssignmentSwitches": -97
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319780,
+      "deltas": {
+        "wallClockMs": 143.16662499999893,
+        "cpuMs": 313.0189999999999,
+        "heapMiB": 7.9491424560546875,
+        "operationsCreated": 2,
+        "operationsCompleted": 1,
+        "operationsCancelled": 1,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 126
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319780,
+      "deltas": {
+        "wallClockMs": -391.36545699999897,
+        "cpuMs": -471.38099999999986,
+        "heapMiB": -48.64952850341797,
+        "operationsCreated": -3,
+        "operationsCompleted": -2,
+        "operationsCancelled": -1,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 3
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319780,
+      "deltas": {
+        "wallClockMs": 226.31833300000017,
+        "cpuMs": 134.41599999999994,
+        "heapMiB": 71.42656707763672,
+        "operationsCreated": -7,
+        "operationsCompleted": 0,
+        "operationsCancelled": -6,
+        "operationsFailed": -1,
+        "capitalFalls": -2,
+        "warsRemaining": 2,
+        "stalemateMaximumDuration": 5,
+        "frontlineAssignmentSwitches": -45
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319780,
+      "deltas": {
+        "wallClockMs": -34.89087500000096,
+        "cpuMs": -86.58299999999997,
+        "heapMiB": 95.3603286743164,
+        "operationsCreated": -6,
+        "operationsCompleted": -6,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 4,
+        "frontlineAssignmentSwitches": 26
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319781,
+      "deltas": {
+        "wallClockMs": 15.70866599999863,
+        "cpuMs": -26.958999999999946,
+        "heapMiB": 103.12763977050781,
+        "operationsCreated": -5,
+        "operationsCompleted": -3,
+        "operationsCancelled": 0,
+        "operationsFailed": -2,
+        "capitalFalls": 1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -23,
+        "frontlineAssignmentSwitches": -44
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319781,
+      "deltas": {
+        "wallClockMs": 11.502207999999882,
+        "cpuMs": -38.21899999999994,
+        "heapMiB": 103.59918212890625,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319781,
+      "deltas": {
+        "wallClockMs": 15.151124999998501,
+        "cpuMs": 34.90599999999995,
+        "heapMiB": 105.53845977783203,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319781,
+      "deltas": {
+        "wallClockMs": 8.070416000000478,
+        "cpuMs": 10.706000000000017,
+        "heapMiB": 112.70535278320312,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319781,
+      "deltas": {
+        "wallClockMs": -8.540917000000263,
+        "cpuMs": -59.16300000000001,
+        "heapMiB": 114.7760009765625,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319781,
+      "deltas": {
+        "wallClockMs": 12.012582999999722,
+        "cpuMs": 195.06000000000006,
+        "heapMiB": 85.38215637207031,
+        "operationsCreated": 1,
+        "operationsCompleted": 0,
+        "operationsCancelled": 1,
+        "operationsFailed": 0,
+        "capitalFalls": 6,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -70
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319781,
+      "deltas": {
+        "wallClockMs": -61.53674900000078,
+        "cpuMs": -139.7510000000001,
+        "heapMiB": 120.98519897460938,
+        "operationsCreated": -6,
+        "operationsCompleted": 4,
+        "operationsCancelled": -8,
+        "operationsFailed": -2,
+        "capitalFalls": 2,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 6,
+        "frontlineAssignmentSwitches": -188
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319781,
+      "deltas": {
+        "wallClockMs": 49.989416999998866,
+        "cpuMs": 102.07900000000006,
+        "heapMiB": 49.51448059082031,
+        "operationsCreated": 2,
+        "operationsCompleted": 1,
+        "operationsCancelled": 1,
+        "operationsFailed": 0,
+        "capitalFalls": -1,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": -2,
+        "frontlineAssignmentSwitches": 26
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319781,
+      "deltas": {
+        "wallClockMs": -60.67133300000023,
+        "cpuMs": -133.14200000000028,
+        "heapMiB": 82.10448455810547,
+        "operationsCreated": -13,
+        "operationsCompleted": -7,
+        "operationsCancelled": -5,
+        "operationsFailed": -1,
+        "capitalFalls": 0,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": -43,
+        "frontlineAssignmentSwitches": -157
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319781,
+      "deltas": {
+        "wallClockMs": 60.17437500000051,
+        "cpuMs": 105.87300000000005,
+        "heapMiB": 111.4991455078125,
+        "operationsCreated": -3,
+        "operationsCompleted": -2,
+        "operationsCancelled": -1,
+        "operationsFailed": 0,
+        "capitalFalls": -2,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 61
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319782,
+      "deltas": {
+        "wallClockMs": -90.81508300000132,
+        "cpuMs": -159.90600000000006,
+        "heapMiB": 180.3824005126953,
+        "operationsCreated": -15,
+        "operationsCompleted": -5,
+        "operationsCancelled": -8,
+        "operationsFailed": -2,
+        "capitalFalls": 1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -10,
+        "frontlineAssignmentSwitches": -121
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319782,
+      "deltas": {
+        "wallClockMs": -44.06420799999978,
+        "cpuMs": -82.04700000000014,
+        "heapMiB": 178.85736083984375,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 3
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319782,
+      "deltas": {
+        "wallClockMs": 0.17945899999904213,
+        "cpuMs": -31.434999999999945,
+        "heapMiB": -32.153114318847656,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319782,
+      "deltas": {
+        "wallClockMs": 14.418833999998242,
+        "cpuMs": 2.8330000000000837,
+        "heapMiB": -29.648330688476562,
+        "operationsCreated": 1,
+        "operationsCompleted": 1,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -17,
+        "frontlineAssignmentSwitches": 13
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319782,
+      "deltas": {
+        "wallClockMs": 63.80591600000116,
+        "cpuMs": 153.92199999999997,
+        "heapMiB": 1.5943984985351562,
+        "operationsCreated": 5,
+        "operationsCompleted": 1,
+        "operationsCancelled": 3,
+        "operationsFailed": 1,
+        "capitalFalls": -2,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": -3,
+        "frontlineAssignmentSwitches": 65
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319782,
+      "deltas": {
+        "wallClockMs": 348.0190829999992,
+        "cpuMs": 449.36199999999997,
+        "heapMiB": 69.73600769042969,
+        "operationsCreated": 11,
+        "operationsCompleted": 6,
+        "operationsCancelled": 2,
+        "operationsFailed": 2,
+        "capitalFalls": -1,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 17,
+        "frontlineAssignmentSwitches": 577
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319782,
+      "deltas": {
+        "wallClockMs": -15.26787499999773,
+        "cpuMs": 11.92999999999995,
+        "heapMiB": 49.37896728515625,
+        "operationsCreated": -9,
+        "operationsCompleted": -7,
+        "operationsCancelled": -3,
+        "operationsFailed": 1,
+        "capitalFalls": 1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 23,
+        "frontlineAssignmentSwitches": -65
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319782,
+      "deltas": {
+        "wallClockMs": 139.19087500000023,
+        "cpuMs": 251.07299999999998,
+        "heapMiB": 8.525070190429688,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 1,
+        "operationsFailed": -1,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -11,
+        "frontlineAssignmentSwitches": 36
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319782,
+      "deltas": {
+        "wallClockMs": -9.267416999999114,
+        "cpuMs": -11.688999999999965,
+        "heapMiB": 6.076347351074219,
+        "operationsCreated": -12,
+        "operationsCompleted": -9,
+        "operationsCancelled": 2,
+        "operationsFailed": -5,
+        "capitalFalls": 1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -34,
+        "frontlineAssignmentSwitches": 9
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319782,
+      "deltas": {
+        "wallClockMs": 300.43083299999853,
+        "cpuMs": 379.37200000000007,
+        "heapMiB": -71.38046264648438,
+        "operationsCreated": 9,
+        "operationsCompleted": -3,
+        "operationsCancelled": 3,
+        "operationsFailed": 9,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 29,
+        "frontlineAssignmentSwitches": 223
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319783,
+      "deltas": {
+        "wallClockMs": 31.883375999997952,
+        "cpuMs": 212.7979999999999,
+        "heapMiB": -22.53143310546875,
+        "operationsCreated": 4,
+        "operationsCompleted": -3,
+        "operationsCancelled": 1,
+        "operationsFailed": 6,
+        "capitalFalls": -2,
+        "warsRemaining": 2,
+        "stalemateMaximumDuration": 42,
+        "frontlineAssignmentSwitches": -115
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319783,
+      "deltas": {
+        "wallClockMs": 19.9755830000031,
+        "cpuMs": -14.91199999999992,
+        "heapMiB": -16.191558837890625,
+        "operationsCreated": -1,
+        "operationsCompleted": -2,
+        "operationsCancelled": 4,
+        "operationsFailed": -3,
+        "capitalFalls": 1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -15,
+        "frontlineAssignmentSwitches": -1
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319783,
+      "deltas": {
+        "wallClockMs": 30.565083999998024,
+        "cpuMs": 44.31299999999999,
+        "heapMiB": -46.86437225341797,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319783,
+      "deltas": {
+        "wallClockMs": 105.91783300000316,
+        "cpuMs": 140.075,
+        "heapMiB": -27.94744110107422,
+        "operationsCreated": 3,
+        "operationsCompleted": 0,
+        "operationsCancelled": 1,
+        "operationsFailed": 2,
+        "capitalFalls": -1,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 6,
+        "frontlineAssignmentSwitches": 25
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319783,
+      "deltas": {
+        "wallClockMs": 12.222125000000233,
+        "cpuMs": 32.78800000000001,
+        "heapMiB": 7.9783782958984375,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319783,
+      "deltas": {
+        "wallClockMs": 146.24583299999722,
+        "cpuMs": 178.51099999999997,
+        "heapMiB": -14.033767700195312,
+        "operationsCreated": -1,
+        "operationsCompleted": -2,
+        "operationsCancelled": 1,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -5,
+        "frontlineAssignmentSwitches": 215
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319783,
+      "deltas": {
+        "wallClockMs": 185.55541599999924,
+        "cpuMs": 328.615,
+        "heapMiB": -31.003204345703125,
+        "operationsCreated": -18,
+        "operationsCompleted": -12,
+        "operationsCancelled": -11,
+        "operationsFailed": 5,
+        "capitalFalls": -4,
+        "warsRemaining": 3,
+        "stalemateMaximumDuration": 20,
+        "frontlineAssignmentSwitches": -222
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319783,
+      "deltas": {
+        "wallClockMs": -42.47162500000195,
+        "cpuMs": -40.97700000000009,
+        "heapMiB": 12.613578796386719,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319783,
+      "deltas": {
+        "wallClockMs": 180.71554099999776,
+        "cpuMs": 81.04199999999992,
+        "heapMiB": 12.610649108886719,
+        "operationsCreated": 3,
+        "operationsCompleted": -7,
+        "operationsCancelled": 3,
+        "operationsFailed": 7,
+        "capitalFalls": -3,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 15,
+        "frontlineAssignmentSwitches": -21
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319783,
+      "deltas": {
+        "wallClockMs": 216.29824999999983,
+        "cpuMs": 341.756,
+        "heapMiB": 13.357460021972656,
+        "operationsCreated": -7,
+        "operationsCompleted": -2,
+        "operationsCancelled": -4,
+        "operationsFailed": -1,
+        "capitalFalls": 1,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 1,
+        "frontlineAssignmentSwitches": 172
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319784,
+      "deltas": {
+        "wallClockMs": 536.9389579999952,
+        "cpuMs": 620.064,
+        "heapMiB": -22.413475036621094,
+        "operationsCreated": 20,
+        "operationsCompleted": 8,
+        "operationsCancelled": 6,
+        "operationsFailed": 6,
+        "capitalFalls": -5,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 15,
+        "frontlineAssignmentSwitches": 811
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319784,
+      "deltas": {
+        "wallClockMs": 69.50604299999759,
+        "cpuMs": 130.26199999999994,
+        "heapMiB": -20.188156127929688,
+        "operationsCreated": 2,
+        "operationsCompleted": 0,
+        "operationsCancelled": 2,
+        "operationsFailed": 0,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 1,
+        "frontlineAssignmentSwitches": 25
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319784,
+      "deltas": {
+        "wallClockMs": 22.117332999998325,
+        "cpuMs": 55.059999999999945,
+        "heapMiB": -49.0638427734375,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319784,
+      "deltas": {
+        "wallClockMs": 42.729998999999225,
+        "cpuMs": 126.32099999999997,
+        "heapMiB": 54.56328582763672,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319784,
+      "deltas": {
+        "wallClockMs": 8.08229100000608,
+        "cpuMs": -26.186999999999898,
+        "heapMiB": -2.1941070556640625,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -2
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319784,
+      "deltas": {
+        "wallClockMs": -103.60433299999931,
+        "cpuMs": -208.30100000000004,
+        "heapMiB": -13.013473510742188,
+        "operationsCreated": -2,
+        "operationsCompleted": -1,
+        "operationsCancelled": 0,
+        "operationsFailed": -1,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 14
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319784,
+      "deltas": {
+        "wallClockMs": 138.68937500000175,
+        "cpuMs": 64.779,
+        "heapMiB": 69.54756164550781,
+        "operationsCreated": -5,
+        "operationsCompleted": -3,
+        "operationsCancelled": -2,
+        "operationsFailed": 0,
+        "capitalFalls": -4,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -45
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319784,
+      "deltas": {
+        "wallClockMs": -150.93291600000157,
+        "cpuMs": -189.947,
+        "heapMiB": 21.61077880859375,
+        "operationsCreated": 1,
+        "operationsCompleted": 1,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 2,
+        "warsRemaining": -1,
+        "stalemateMaximumDuration": 5,
+        "frontlineAssignmentSwitches": 29
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319784,
+      "deltas": {
+        "wallClockMs": 82.99225100000331,
+        "cpuMs": -18.22499999999991,
+        "heapMiB": 6.313270568847656,
+        "operationsCreated": -3,
+        "operationsCompleted": 5,
+        "operationsCancelled": -7,
+        "operationsFailed": -1,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -32,
+        "frontlineAssignmentSwitches": -64
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319784,
+      "deltas": {
+        "wallClockMs": 21.88408399999753,
+        "cpuMs": -82.4129999999999,
+        "heapMiB": 55.733184814453125,
+        "operationsCreated": -3,
+        "operationsCompleted": -2,
+        "operationsCancelled": 0,
+        "operationsFailed": -1,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -5,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319785,
+      "deltas": {
+        "wallClockMs": 154.3912499999933,
+        "cpuMs": 178.394,
+        "heapMiB": 20.99602508544922,
+        "operationsCreated": 6,
+        "operationsCompleted": 2,
+        "operationsCancelled": 6,
+        "operationsFailed": -2,
+        "capitalFalls": 2,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": -21,
+        "frontlineAssignmentSwitches": 302
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319785,
+      "deltas": {
+        "wallClockMs": 33.59408299999632,
+        "cpuMs": 41.692999999999984,
+        "heapMiB": 65.01656341552734,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -1,
+        "frontlineAssignmentSwitches": -35
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319785,
+      "deltas": {
+        "wallClockMs": 17.17962499999703,
+        "cpuMs": 55.38599999999997,
+        "heapMiB": 98.15747833251953,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319785,
+      "deltas": {
+        "wallClockMs": 13.941791999997804,
+        "cpuMs": 7.353999999999985,
+        "heapMiB": 63.37828826904297,
+        "operationsCreated": 1,
+        "operationsCompleted": 1,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -17
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319785,
+      "deltas": {
+        "wallClockMs": 31.186791999993147,
+        "cpuMs": 34.918000000000006,
+        "heapMiB": 107.52604675292969,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319785,
+      "deltas": {
+        "wallClockMs": -127.55195699999604,
+        "cpuMs": -116.44400000000007,
+        "heapMiB": 131.57470703125,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": -1,
+        "operationsFailed": 1,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 32,
+        "frontlineAssignmentSwitches": -236
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319785,
+      "deltas": {
+        "wallClockMs": 177.76120799999626,
+        "cpuMs": 257.25800000000015,
+        "heapMiB": 174.66648864746094,
+        "operationsCreated": -1,
+        "operationsCompleted": -5,
+        "operationsCancelled": 7,
+        "operationsFailed": -3,
+        "capitalFalls": 4,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -5,
+        "frontlineAssignmentSwitches": 289
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319785,
+      "deltas": {
+        "wallClockMs": -2.3394180000032065,
+        "cpuMs": -18.15900000000005,
+        "heapMiB": 123.6375503540039,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319785,
+      "deltas": {
+        "wallClockMs": 349.59233400000085,
+        "cpuMs": 423.03999999999996,
+        "heapMiB": 139.32718658447266,
+        "operationsCreated": -6,
+        "operationsCompleted": -4,
+        "operationsCancelled": 0,
+        "operationsFailed": -2,
+        "capitalFalls": -4,
+        "warsRemaining": 8,
+        "stalemateMaximumDuration": -3,
+        "frontlineAssignmentSwitches": -213
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319785,
+      "deltas": {
+        "wallClockMs": 276.73791699999856,
+        "cpuMs": 492.38199999999995,
+        "heapMiB": 223.64608001708984,
+        "operationsCreated": -6,
+        "operationsCompleted": -3,
+        "operationsCancelled": -4,
+        "operationsFailed": 1,
+        "capitalFalls": -4,
+        "warsRemaining": 4,
+        "stalemateMaximumDuration": 8,
+        "frontlineAssignmentSwitches": 115
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319786,
+      "deltas": {
+        "wallClockMs": -58.5089169999992,
+        "cpuMs": 104.83800000000008,
+        "heapMiB": -4.6827545166015625,
+        "operationsCreated": -29,
+        "operationsCompleted": -4,
+        "operationsCancelled": -17,
+        "operationsFailed": -6,
+        "capitalFalls": 3,
+        "warsRemaining": -1,
+        "stalemateMaximumDuration": 20,
+        "frontlineAssignmentSwitches": -288
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319786,
+      "deltas": {
+        "wallClockMs": 118.4082919999928,
+        "cpuMs": 120.20899999999995,
+        "heapMiB": -3.057373046875,
+        "operationsCreated": -1,
+        "operationsCompleted": 0,
+        "operationsCancelled": -1,
+        "operationsFailed": 0,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 32
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319786,
+      "deltas": {
+        "wallClockMs": 30.98845799999981,
+        "cpuMs": 92.793,
+        "heapMiB": -10.404945373535156,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319786,
+      "deltas": {
+        "wallClockMs": 15.639290999999503,
+        "cpuMs": -86.61100000000005,
+        "heapMiB": -50.146087646484375,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319786,
+      "deltas": {
+        "wallClockMs": 9.648167000006652,
+        "cpuMs": 44.989999999999895,
+        "heapMiB": -16.603065490722656,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319786,
+      "deltas": {
+        "wallClockMs": -38.86012499999924,
+        "cpuMs": -57.153999999999996,
+        "heapMiB": 17.889205932617188,
+        "operationsCreated": -3,
+        "operationsCompleted": 0,
+        "operationsCancelled": -3,
+        "operationsFailed": 0,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 2,
+        "frontlineAssignmentSwitches": -114
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319786,
+      "deltas": {
+        "wallClockMs": 37.634750000004715,
+        "cpuMs": 85.928,
+        "heapMiB": 8.619400024414062,
+        "operationsCreated": -1,
+        "operationsCompleted": 2,
+        "operationsCancelled": -3,
+        "operationsFailed": 0,
+        "capitalFalls": -2,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 7,
+        "frontlineAssignmentSwitches": 103
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319786,
+      "deltas": {
+        "wallClockMs": -184.89379200000258,
+        "cpuMs": -148.01300000000015,
+        "heapMiB": 41.91057586669922,
+        "operationsCreated": -4,
+        "operationsCompleted": -2,
+        "operationsCancelled": -2,
+        "operationsFailed": 0,
+        "capitalFalls": 1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -11,
+        "frontlineAssignmentSwitches": 8
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319786,
+      "deltas": {
+        "wallClockMs": 168.44204100000206,
+        "cpuMs": 214.34299999999996,
+        "heapMiB": 26.34442138671875,
+        "operationsCreated": 7,
+        "operationsCompleted": 2,
+        "operationsCancelled": 4,
+        "operationsFailed": 1,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 1,
+        "frontlineAssignmentSwitches": 355
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319786,
+      "deltas": {
+        "wallClockMs": 302.08275100000174,
+        "cpuMs": 292.403,
+        "heapMiB": 74.271240234375,
+        "operationsCreated": -7,
+        "operationsCompleted": -3,
+        "operationsCancelled": -4,
+        "operationsFailed": -1,
+        "capitalFalls": -5,
+        "warsRemaining": 3,
+        "stalemateMaximumDuration": 62,
+        "frontlineAssignmentSwitches": 29
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319787,
+      "deltas": {
+        "wallClockMs": 46.598040999997465,
+        "cpuMs": 69.48599999999999,
+        "heapMiB": 157.04317474365234,
+        "operationsCreated": 2,
+        "operationsCompleted": -1,
+        "operationsCancelled": 3,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 2,
+        "frontlineAssignmentSwitches": 48
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319787,
+      "deltas": {
+        "wallClockMs": -2.49570799999492,
+        "cpuMs": -6.153999999999996,
+        "heapMiB": 211.8891372680664,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319787,
+      "deltas": {
+        "wallClockMs": -9.362042000000656,
+        "cpuMs": -39.242999999999995,
+        "heapMiB": 229.45834350585938,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319787,
+      "deltas": {
+        "wallClockMs": -4.87604100000317,
+        "cpuMs": -60.543000000000006,
+        "heapMiB": 201.83487701416016,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319787,
+      "deltas": {
+        "wallClockMs": 62.2053339999984,
+        "cpuMs": -11.170000000000073,
+        "heapMiB": 263.0188446044922,
+        "operationsCreated": 3,
+        "operationsCompleted": 3,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 10,
+        "frontlineAssignmentSwitches": 48
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319787,
+      "deltas": {
+        "wallClockMs": 9.496542000000773,
+        "cpuMs": 77.24099999999999,
+        "heapMiB": 33.25074768066406,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 12
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319787,
+      "deltas": {
+        "wallClockMs": -57.24229199999536,
+        "cpuMs": -57.275999999999954,
+        "heapMiB": 98.92692565917969,
+        "operationsCreated": -7,
+        "operationsCompleted": -2,
+        "operationsCancelled": -3,
+        "operationsFailed": -2,
+        "capitalFalls": 2,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -1,
+        "frontlineAssignmentSwitches": 72
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319787,
+      "deltas": {
+        "wallClockMs": 11.541915999994671,
+        "cpuMs": -34.27299999999991,
+        "heapMiB": 48.98223114013672,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319787,
+      "deltas": {
+        "wallClockMs": 333.3478329999998,
+        "cpuMs": 423.1610000000003,
+        "heapMiB": -9.676132202148438,
+        "operationsCreated": -2,
+        "operationsCompleted": -3,
+        "operationsCancelled": -1,
+        "operationsFailed": 1,
+        "capitalFalls": 0,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": -3,
+        "frontlineAssignmentSwitches": 272
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319787,
+      "deltas": {
+        "wallClockMs": 88.60983300000225,
+        "cpuMs": -17.644000000000005,
+        "heapMiB": 51.03533935546875,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 9,
+        "frontlineAssignmentSwitches": 207
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319788,
+      "deltas": {
+        "wallClockMs": 65.35262599999987,
+        "cpuMs": 31.567999999999984,
+        "heapMiB": 102.18350219726562,
+        "operationsCreated": -2,
+        "operationsCompleted": 0,
+        "operationsCancelled": -2,
+        "operationsFailed": 0,
+        "capitalFalls": -2,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 5
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319788,
+      "deltas": {
+        "wallClockMs": 98.61608299999352,
+        "cpuMs": 37.25300000000004,
+        "heapMiB": 137.3464126586914,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 1
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319788,
+      "deltas": {
+        "wallClockMs": 49.03895799999009,
+        "cpuMs": 97.24099999999999,
+        "heapMiB": 122.44605255126953,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319788,
+      "deltas": {
+        "wallClockMs": 15.59074999999575,
+        "cpuMs": -11.795000000000016,
+        "heapMiB": 190.67041015625,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 1,
+        "operationsFailed": -1,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319788,
+      "deltas": {
+        "wallClockMs": 4.311792000000423,
+        "cpuMs": -20.662999999999954,
+        "heapMiB": 175.33826446533203,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319788,
+      "deltas": {
+        "wallClockMs": 341.1628750000091,
+        "cpuMs": 316.076,
+        "heapMiB": 205.76409149169922,
+        "operationsCreated": -8,
+        "operationsCompleted": -7,
+        "operationsCancelled": -1,
+        "operationsFailed": 0,
+        "capitalFalls": -3,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": -17,
+        "frontlineAssignmentSwitches": -163
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319788,
+      "deltas": {
+        "wallClockMs": -12.75566699999763,
+        "cpuMs": -48.007000000000005,
+        "heapMiB": 160.35572814941406,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -6
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319788,
+      "deltas": {
+        "wallClockMs": -179.03987600000255,
+        "cpuMs": -150.28099999999995,
+        "heapMiB": 244.19464111328125,
+        "operationsCreated": -8,
+        "operationsCompleted": -5,
+        "operationsCancelled": -3,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -17,
+        "frontlineAssignmentSwitches": -40
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319788,
+      "deltas": {
+        "wallClockMs": 100.45154299999558,
+        "cpuMs": 81.58399999999995,
+        "heapMiB": 224.3327407836914,
+        "operationsCreated": 1,
+        "operationsCompleted": 0,
+        "operationsCancelled": 2,
+        "operationsFailed": -1,
+        "capitalFalls": -2,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 5,
+        "frontlineAssignmentSwitches": -5
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319788,
+      "deltas": {
+        "wallClockMs": 54.48745899998903,
+        "cpuMs": 24.649000000000058,
+        "heapMiB": 37.09263610839844,
+        "operationsCreated": -1,
+        "operationsCompleted": -2,
+        "operationsCancelled": 3,
+        "operationsFailed": -2,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -4,
+        "frontlineAssignmentSwitches": -7
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319789,
+      "deltas": {
+        "wallClockMs": 19.162291999993613,
+        "cpuMs": 8.92100000000005,
+        "heapMiB": 74.52188873291016,
+        "operationsCreated": 1,
+        "operationsCompleted": 0,
+        "operationsCancelled": 1,
+        "operationsFailed": 0,
+        "capitalFalls": -3,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -3
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319789,
+      "deltas": {
+        "wallClockMs": 80.31579199999396,
+        "cpuMs": 66.84199999999998,
+        "heapMiB": 82.22642517089844,
+        "operationsCreated": 2,
+        "operationsCompleted": 3,
+        "operationsCancelled": -1,
+        "operationsFailed": 0,
+        "capitalFalls": -2,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 10
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319789,
+      "deltas": {
+        "wallClockMs": -4.645958000000974,
+        "cpuMs": -28.090000000000032,
+        "heapMiB": 100.80229949951172,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319789,
+      "deltas": {
+        "wallClockMs": -61.715416999999434,
+        "cpuMs": -199.91999999999996,
+        "heapMiB": 95.11884307861328,
+        "operationsCreated": -1,
+        "operationsCompleted": 0,
+        "operationsCancelled": -1,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319789,
+      "deltas": {
+        "wallClockMs": -38.09945900000457,
+        "cpuMs": -115.99099999999999,
+        "heapMiB": 128.97471618652344,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319789,
+      "deltas": {
+        "wallClockMs": -29.843292000012298,
+        "cpuMs": -64.32899999999995,
+        "heapMiB": 166.58836364746094,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": -2,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 14
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319789,
+      "deltas": {
+        "wallClockMs": -35.654959000006784,
+        "cpuMs": -181.02499999999998,
+        "heapMiB": 222.27088928222656,
+        "operationsCreated": 3,
+        "operationsCompleted": 2,
+        "operationsCancelled": 1,
+        "operationsFailed": 0,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -5,
+        "frontlineAssignmentSwitches": 102
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319789,
+      "deltas": {
+        "wallClockMs": -48.01433299999917,
+        "cpuMs": -80.04400000000004,
+        "heapMiB": 194.68348693847656,
+        "operationsCreated": 2,
+        "operationsCompleted": 4,
+        "operationsCancelled": -2,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -5
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319789,
+      "deltas": {
+        "wallClockMs": 192.36216699999932,
+        "cpuMs": 64.86700000000019,
+        "heapMiB": 229.6301040649414,
+        "operationsCreated": -3,
+        "operationsCompleted": -3,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 2,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 7
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319789,
+      "deltas": {
+        "wallClockMs": -27.40033399999811,
+        "cpuMs": -90.81400000000002,
+        "heapMiB": 242.3195571899414,
+        "operationsCreated": 0,
+        "operationsCompleted": 1,
+        "operationsCancelled": -1,
+        "operationsFailed": 0,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 2
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319790,
+      "deltas": {
+        "wallClockMs": 91.04291699999885,
+        "cpuMs": 53.55200000000002,
+        "heapMiB": 288.3923797607422,
+        "operationsCreated": 4,
+        "operationsCompleted": 1,
+        "operationsCancelled": 3,
+        "operationsFailed": 0,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 180
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319790,
+      "deltas": {
+        "wallClockMs": -29.363666999997804,
+        "cpuMs": -88.543,
+        "heapMiB": 249.68073272705078,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319790,
+      "deltas": {
+        "wallClockMs": -2.224625000002561,
+        "cpuMs": 76.95799999999997,
+        "heapMiB": 29.228378295898438,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319790,
+      "deltas": {
+        "wallClockMs": -16.57112499998766,
+        "cpuMs": -57.447,
+        "heapMiB": 12.041389465332031,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 5
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319790,
+      "deltas": {
+        "wallClockMs": -16.649416999993264,
+        "cpuMs": -12.699000000000012,
+        "heapMiB": 128.607177734375,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319790,
+      "deltas": {
+        "wallClockMs": 580.383582999988,
+        "cpuMs": 815.441,
+        "heapMiB": 22.025794982910156,
+        "operationsCreated": -2,
+        "operationsCompleted": -2,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": -4,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": -1,
+        "frontlineAssignmentSwitches": -32
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319790,
+      "deltas": {
+        "wallClockMs": 151.45500000000175,
+        "cpuMs": 227.34000000000003,
+        "heapMiB": 8.824203491210938,
+        "operationsCreated": 1,
+        "operationsCompleted": -3,
+        "operationsCancelled": 2,
+        "operationsFailed": 2,
+        "capitalFalls": -2,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 2,
+        "frontlineAssignmentSwitches": 262
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319790,
+      "deltas": {
+        "wallClockMs": -33.49995800000033,
+        "cpuMs": -64.03499999999997,
+        "heapMiB": 6.842521667480469,
+        "operationsCreated": -1,
+        "operationsCompleted": 0,
+        "operationsCancelled": -1,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -14
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319790,
+      "deltas": {
+        "wallClockMs": -51.92012599999725,
+        "cpuMs": 72.231,
+        "heapMiB": 38.990997314453125,
+        "operationsCreated": 1,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 1,
+        "capitalFalls": -2,
+        "warsRemaining": 2,
+        "stalemateMaximumDuration": -2,
+        "frontlineAssignmentSwitches": 181
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319790,
+      "deltas": {
+        "wallClockMs": -19.63399999999092,
+        "cpuMs": 1.6479999999999109,
+        "heapMiB": 55.32520294189453,
+        "operationsCreated": 1,
+        "operationsCompleted": -1,
+        "operationsCancelled": 2,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 10
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319791,
+      "deltas": {
+        "wallClockMs": 146.87112499999057,
+        "cpuMs": 187.596,
+        "heapMiB": 73.68161010742188,
+        "operationsCreated": 7,
+        "operationsCompleted": 2,
+        "operationsCancelled": 6,
+        "operationsFailed": -1,
+        "capitalFalls": -3,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 1,
+        "frontlineAssignmentSwitches": 168
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319791,
+      "deltas": {
+        "wallClockMs": 53.6212089999899,
+        "cpuMs": 14.327999999999975,
+        "heapMiB": 92.24900817871094,
+        "operationsCreated": 6,
+        "operationsCompleted": 4,
+        "operationsCancelled": -1,
+        "operationsFailed": 3,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -1,
+        "frontlineAssignmentSwitches": 26
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319791,
+      "deltas": {
+        "wallClockMs": -48.16287499999453,
+        "cpuMs": -138.00600000000009,
+        "heapMiB": 28.720108032226562,
+        "operationsCreated": -2,
+        "operationsCompleted": -1,
+        "operationsCancelled": -1,
+        "operationsFailed": 0,
+        "capitalFalls": 1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -7
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319791,
+      "deltas": {
+        "wallClockMs": -29.858958000011626,
+        "cpuMs": -67.14499999999998,
+        "heapMiB": 85.26469421386719,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 1
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319791,
+      "deltas": {
+        "wallClockMs": -50.417998999982956,
+        "cpuMs": -129.64399999999995,
+        "heapMiB": 62.72315979003906,
+        "operationsCreated": 1,
+        "operationsCompleted": 0,
+        "operationsCancelled": 1,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 12,
+        "frontlineAssignmentSwitches": -3
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319791,
+      "deltas": {
+        "wallClockMs": 231.79216700000688,
+        "cpuMs": 201.1339999999999,
+        "heapMiB": 49.93505859375,
+        "operationsCreated": -7,
+        "operationsCompleted": -2,
+        "operationsCancelled": -5,
+        "operationsFailed": 0,
+        "capitalFalls": -2,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 12
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319791,
+      "deltas": {
+        "wallClockMs": 55.77208400001109,
+        "cpuMs": 86.18799999999999,
+        "heapMiB": 41.6029052734375,
+        "operationsCreated": 3,
+        "operationsCompleted": -2,
+        "operationsCancelled": 4,
+        "operationsFailed": 1,
+        "capitalFalls": 1,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 20,
+        "frontlineAssignmentSwitches": 506
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319791,
+      "deltas": {
+        "wallClockMs": 10.406542000011541,
+        "cpuMs": 55.132000000000176,
+        "heapMiB": 88.95856475830078,
+        "operationsCreated": -5,
+        "operationsCompleted": 0,
+        "operationsCancelled": -5,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 17
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319791,
+      "deltas": {
+        "wallClockMs": 165.01949999999488,
+        "cpuMs": 93.75400000000013,
+        "heapMiB": 40.51654815673828,
+        "operationsCreated": 17,
+        "operationsCompleted": -4,
+        "operationsCancelled": 15,
+        "operationsFailed": 4,
+        "capitalFalls": -3,
+        "warsRemaining": 3,
+        "stalemateMaximumDuration": 5,
+        "frontlineAssignmentSwitches": 394
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319791,
+      "deltas": {
+        "wallClockMs": -26.95974999999453,
+        "cpuMs": -76.55200000000002,
+        "heapMiB": 83.67765808105469,
+        "operationsCreated": -4,
+        "operationsCompleted": -6,
+        "operationsCancelled": 1,
+        "operationsFailed": 1,
+        "capitalFalls": 2,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -8,
+        "frontlineAssignmentSwitches": 19
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319792,
+      "deltas": {
+        "wallClockMs": 190.3869999999879,
+        "cpuMs": 105.09500000000003,
+        "heapMiB": 145.46237182617188,
+        "operationsCreated": 11,
+        "operationsCompleted": 4,
+        "operationsCancelled": 3,
+        "operationsFailed": 4,
+        "capitalFalls": -3,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 18,
+        "frontlineAssignmentSwitches": 380
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319792,
+      "deltas": {
+        "wallClockMs": 395.1390420000098,
+        "cpuMs": 302.8370000000002,
+        "heapMiB": 167.65686798095703,
+        "operationsCreated": -2,
+        "operationsCompleted": -2,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": -1,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": -1,
+        "frontlineAssignmentSwitches": -11
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319792,
+      "deltas": {
+        "wallClockMs": -62.63887599999725,
+        "cpuMs": -173.65199999999993,
+        "heapMiB": 171.4569091796875,
+        "operationsCreated": 1,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 1,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 20
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319792,
+      "deltas": {
+        "wallClockMs": 265.7938749999885,
+        "cpuMs": 242.837,
+        "heapMiB": 129.7828369140625,
+        "operationsCreated": -1,
+        "operationsCompleted": -1,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -19
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319792,
+      "deltas": {
+        "wallClockMs": -34.63379300000088,
+        "cpuMs": -99.21900000000005,
+        "heapMiB": 225.9686737060547,
+        "operationsCreated": 1,
+        "operationsCompleted": 0,
+        "operationsCancelled": 1,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 7
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319792,
+      "deltas": {
+        "wallClockMs": -21.362999999997555,
+        "cpuMs": -48.388000000000034,
+        "heapMiB": 235.4194107055664,
+        "operationsCreated": 3,
+        "operationsCompleted": 0,
+        "operationsCancelled": 3,
+        "operationsFailed": 0,
+        "capitalFalls": -3,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 13,
+        "frontlineAssignmentSwitches": -26
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319792,
+      "deltas": {
+        "wallClockMs": 103.91937500001222,
+        "cpuMs": 52.08600000000001,
+        "heapMiB": 269.86436462402344,
+        "operationsCreated": 5,
+        "operationsCompleted": 5,
+        "operationsCancelled": -2,
+        "operationsFailed": 2,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 288
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319792,
+      "deltas": {
+        "wallClockMs": 179.64737500000047,
+        "cpuMs": 117.65500000000009,
+        "heapMiB": 276.2151184082031,
+        "operationsCreated": 4,
+        "operationsCompleted": 3,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -9,
+        "frontlineAssignmentSwitches": 50
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319792,
+      "deltas": {
+        "wallClockMs": 341.06662500000675,
+        "cpuMs": 261.29200000000003,
+        "heapMiB": 290.7437438964844,
+        "operationsCreated": -2,
+        "operationsCompleted": -5,
+        "operationsCancelled": 1,
+        "operationsFailed": 2,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 79,
+        "frontlineAssignmentSwitches": 187
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319792,
+      "deltas": {
+        "wallClockMs": -84.89929200000188,
+        "cpuMs": -123.67600000000004,
+        "heapMiB": 58.713645935058594,
+        "operationsCreated": -11,
+        "operationsCompleted": -3,
+        "operationsCancelled": -7,
+        "operationsFailed": -1,
+        "capitalFalls": -2,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": -8,
+        "frontlineAssignmentSwitches": -201
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319793,
+      "deltas": {
+        "wallClockMs": 54.49212500000431,
+        "cpuMs": -43.083000000000084,
+        "heapMiB": 42.36737823486328,
+        "operationsCreated": 1,
+        "operationsCompleted": -1,
+        "operationsCancelled": 4,
+        "operationsFailed": -2,
+        "capitalFalls": 2,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 2,
+        "frontlineAssignmentSwitches": 359
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319793,
+      "deltas": {
+        "wallClockMs": 170.29237499999,
+        "cpuMs": 252.22299999999996,
+        "heapMiB": 81.48748779296875,
+        "operationsCreated": -1,
+        "operationsCompleted": -2,
+        "operationsCancelled": 1,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 14,
+        "frontlineAssignmentSwitches": 6
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319793,
+      "deltas": {
+        "wallClockMs": -64.00858300000255,
+        "cpuMs": -133.108,
+        "heapMiB": 72.51411437988281,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319793,
+      "deltas": {
+        "wallClockMs": -2.101290999984485,
+        "cpuMs": -7.027000000000044,
+        "heapMiB": 80.27942657470703,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319793,
+      "deltas": {
+        "wallClockMs": 57.756584000002476,
+        "cpuMs": 47.990999999999985,
+        "heapMiB": 30.106582641601562,
+        "operationsCreated": -2,
+        "operationsCompleted": -1,
+        "operationsCancelled": -1,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319793,
+      "deltas": {
+        "wallClockMs": 271.6649170000019,
+        "cpuMs": 253.12,
+        "heapMiB": 39.60772705078125,
+        "operationsCreated": -1,
+        "operationsCompleted": 2,
+        "operationsCancelled": -3,
+        "operationsFailed": 0,
+        "capitalFalls": 2,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -8,
+        "frontlineAssignmentSwitches": 120
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319793,
+      "deltas": {
+        "wallClockMs": 75.48300099998596,
+        "cpuMs": 2.725999999999999,
+        "heapMiB": 20.01068878173828,
+        "operationsCreated": 1,
+        "operationsCompleted": -1,
+        "operationsCancelled": 2,
+        "operationsFailed": 0,
+        "capitalFalls": 1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 173
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319793,
+      "deltas": {
+        "wallClockMs": 66.49587400000019,
+        "cpuMs": 117.43600000000004,
+        "heapMiB": -28.917373657226562,
+        "operationsCreated": 0,
+        "operationsCompleted": -1,
+        "operationsCancelled": 1,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -1,
+        "frontlineAssignmentSwitches": 14
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319793,
+      "deltas": {
+        "wallClockMs": 261.9020829999936,
+        "cpuMs": 311.422,
+        "heapMiB": 37.16825866699219,
+        "operationsCreated": 3,
+        "operationsCompleted": 0,
+        "operationsCancelled": 2,
+        "operationsFailed": 1,
+        "capitalFalls": 2,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -3,
+        "frontlineAssignmentSwitches": 164
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319793,
+      "deltas": {
+        "wallClockMs": 75.94312500001979,
+        "cpuMs": 117.62199999999996,
+        "heapMiB": 102.7608413696289,
+        "operationsCreated": 4,
+        "operationsCompleted": 3,
+        "operationsCancelled": 3,
+        "operationsFailed": -2,
+        "capitalFalls": 2,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 10,
+        "frontlineAssignmentSwitches": 305
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319794,
+      "deltas": {
+        "wallClockMs": 157.1208750000078,
+        "cpuMs": 267.12300000000005,
+        "heapMiB": 52.12824249267578,
+        "operationsCreated": 1,
+        "operationsCompleted": -1,
+        "operationsCancelled": 0,
+        "operationsFailed": 2,
+        "capitalFalls": 0,
+        "warsRemaining": 2,
+        "stalemateMaximumDuration": -16,
+        "frontlineAssignmentSwitches": 23
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319794,
+      "deltas": {
+        "wallClockMs": -25.819750999988173,
+        "cpuMs": -66.346,
+        "heapMiB": 33.972320556640625,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319794,
+      "deltas": {
+        "wallClockMs": -0.8251250000030268,
+        "cpuMs": 10.130999999999972,
+        "heapMiB": 34.235206604003906,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319794,
+      "deltas": {
+        "wallClockMs": -16.767084000006435,
+        "cpuMs": -63.197,
+        "heapMiB": 78.74179077148438,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319794,
+      "deltas": {
+        "wallClockMs": -17.797458000000915,
+        "cpuMs": -50.60699999999997,
+        "heapMiB": 121.73828887939453,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -1
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319794,
+      "deltas": {
+        "wallClockMs": 8.552665999988676,
+        "cpuMs": 102.19099999999992,
+        "heapMiB": 58.372230529785156,
+        "operationsCreated": 1,
+        "operationsCompleted": 0,
+        "operationsCancelled": 1,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 20
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319794,
+      "deltas": {
+        "wallClockMs": 9.299333999995724,
+        "cpuMs": -31.10699999999997,
+        "heapMiB": 43.81459045410156,
+        "operationsCreated": 1,
+        "operationsCompleted": 1,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 28
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319794,
+      "deltas": {
+        "wallClockMs": -0.6328339999890886,
+        "cpuMs": 38.89499999999998,
+        "heapMiB": 38.036102294921875,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319794,
+      "deltas": {
+        "wallClockMs": -726.5763739999966,
+        "cpuMs": -1000.392,
+        "heapMiB": 87.74821472167969,
+        "operationsCreated": 12,
+        "operationsCompleted": 9,
+        "operationsCancelled": 2,
+        "operationsFailed": 1,
+        "capitalFalls": 7,
+        "warsRemaining": -8,
+        "stalemateMaximumDuration": -35,
+        "frontlineAssignmentSwitches": 64
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319794,
+      "deltas": {
+        "wallClockMs": 272.6709169999958,
+        "cpuMs": 182.51599999999996,
+        "heapMiB": 24.86540985107422,
+        "operationsCreated": -5,
+        "operationsCompleted": -5,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": -4,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 65
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319795,
+      "deltas": {
+        "wallClockMs": 249.40808300000208,
+        "cpuMs": 263.79700000000014,
+        "heapMiB": 54.04827117919922,
+        "operationsCreated": -15,
+        "operationsCompleted": -11,
+        "operationsCancelled": -4,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 3,
+        "stalemateMaximumDuration": 5,
+        "frontlineAssignmentSwitches": -320
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319795,
+      "deltas": {
+        "wallClockMs": -33.236332999993465,
+        "cpuMs": -140.3660000000002,
+        "heapMiB": 34.43321228027344,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319795,
+      "deltas": {
+        "wallClockMs": -29.476334000006318,
+        "cpuMs": -62.277999999999906,
+        "heapMiB": 97.77146911621094,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319795,
+      "deltas": {
+        "wallClockMs": -29.85216799999762,
+        "cpuMs": -58.09200000000004,
+        "heapMiB": 133.5986328125,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319795,
+      "deltas": {
+        "wallClockMs": -83.87283300000126,
+        "cpuMs": -228.43099999999998,
+        "heapMiB": 172.34102630615234,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319795,
+      "deltas": {
+        "wallClockMs": 166.05620899998758,
+        "cpuMs": -11.19399999999996,
+        "heapMiB": 180.3355484008789,
+        "operationsCreated": -9,
+        "operationsCompleted": -6,
+        "operationsCancelled": -4,
+        "operationsFailed": 1,
+        "capitalFalls": -1,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 5,
+        "frontlineAssignmentSwitches": -207
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319795,
+      "deltas": {
+        "wallClockMs": 163.6571249999979,
+        "cpuMs": 36.343000000000075,
+        "heapMiB": 203.8161849975586,
+        "operationsCreated": -9,
+        "operationsCompleted": -4,
+        "operationsCancelled": -4,
+        "operationsFailed": -1,
+        "capitalFalls": -2,
+        "warsRemaining": 3,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -80
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319795,
+      "deltas": {
+        "wallClockMs": -39.424582999999984,
+        "cpuMs": -114.49899999999997,
+        "heapMiB": 237.75619506835938,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319795,
+      "deltas": {
+        "wallClockMs": 16.224792000008165,
+        "cpuMs": -114.41600000000005,
+        "heapMiB": 204.80228424072266,
+        "operationsCreated": 7,
+        "operationsCompleted": -1,
+        "operationsCancelled": 4,
+        "operationsFailed": 3,
+        "capitalFalls": -1,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 2,
+        "frontlineAssignmentSwitches": 50
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319795,
+      "deltas": {
+        "wallClockMs": 101.9462499999936,
+        "cpuMs": 113.721,
+        "heapMiB": 240.9779815673828,
+        "operationsCreated": 13,
+        "operationsCompleted": 1,
+        "operationsCancelled": 7,
+        "operationsFailed": 5,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 12,
+        "frontlineAssignmentSwitches": 214
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319796,
+      "deltas": {
+        "wallClockMs": 612.8707909999939,
+        "cpuMs": 554.4699999999999,
+        "heapMiB": 276.3865737915039,
+        "operationsCreated": -9,
+        "operationsCompleted": -7,
+        "operationsCancelled": -1,
+        "operationsFailed": -1,
+        "capitalFalls": -4,
+        "warsRemaining": 6,
+        "stalemateMaximumDuration": -4,
+        "frontlineAssignmentSwitches": 232
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319796,
+      "deltas": {
+        "wallClockMs": -10.019417000003159,
+        "cpuMs": -10.673999999999864,
+        "heapMiB": 37.21013641357422,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319796,
+      "deltas": {
+        "wallClockMs": 62.64600100000098,
+        "cpuMs": 14.402000000000044,
+        "heapMiB": 75.57545471191406,
+        "operationsCreated": -4,
+        "operationsCompleted": 0,
+        "operationsCancelled": -2,
+        "operationsFailed": -2,
+        "capitalFalls": 1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -8,
+        "frontlineAssignmentSwitches": 56
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319796,
+      "deltas": {
+        "wallClockMs": 26.013957999981358,
+        "cpuMs": -78.07400000000001,
+        "heapMiB": 103.83039093017578,
+        "operationsCreated": 0,
+        "operationsCompleted": 1,
+        "operationsCancelled": -1,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 4
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319796,
+      "deltas": {
+        "wallClockMs": 136.72208299997146,
+        "cpuMs": 150.22799999999995,
+        "heapMiB": 40.843040466308594,
+        "operationsCreated": -2,
+        "operationsCompleted": -1,
+        "operationsCancelled": 0,
+        "operationsFailed": -1,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -22,
+        "frontlineAssignmentSwitches": 42
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319796,
+      "deltas": {
+        "wallClockMs": 141.23224999998638,
+        "cpuMs": 174.81000000000006,
+        "heapMiB": 51.788597106933594,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": -1,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": -4,
+        "frontlineAssignmentSwitches": 362
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319796,
+      "deltas": {
+        "wallClockMs": -157.06062500002736,
+        "cpuMs": -233.3270000000001,
+        "heapMiB": 25.005828857421875,
+        "operationsCreated": -7,
+        "operationsCompleted": 0,
+        "operationsCancelled": -3,
+        "operationsFailed": -4,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -15,
+        "frontlineAssignmentSwitches": 159
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319796,
+      "deltas": {
+        "wallClockMs": -18.719249999980093,
+        "cpuMs": -141.44600000000003,
+        "heapMiB": 111.09283447265625,
+        "operationsCreated": 1,
+        "operationsCompleted": 0,
+        "operationsCancelled": 1,
+        "operationsFailed": 0,
+        "capitalFalls": -1,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 11,
+        "frontlineAssignmentSwitches": -27
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319796,
+      "deltas": {
+        "wallClockMs": 419.72954200000095,
+        "cpuMs": 369.3580000000002,
+        "heapMiB": 162.83267211914062,
+        "operationsCreated": -6,
+        "operationsCompleted": -7,
+        "operationsCancelled": 3,
+        "operationsFailed": -2,
+        "capitalFalls": -6,
+        "warsRemaining": 2,
+        "stalemateMaximumDuration": -8,
+        "frontlineAssignmentSwitches": -94
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319796,
+      "deltas": {
+        "wallClockMs": 63.03708400001051,
+        "cpuMs": -3.5590000000000828,
+        "heapMiB": 164.5958709716797,
+        "operationsCreated": 4,
+        "operationsCompleted": -1,
+        "operationsCancelled": 4,
+        "operationsFailed": 1,
+        "capitalFalls": -2,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -1,
+        "frontlineAssignmentSwitches": 279
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319797,
+      "deltas": {
+        "wallClockMs": -177.1640819999884,
+        "cpuMs": -278.69899999999996,
+        "heapMiB": 133.97579956054688,
+        "operationsCreated": 18,
+        "operationsCompleted": 0,
+        "operationsCancelled": 13,
+        "operationsFailed": 5,
+        "capitalFalls": 0,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 8,
+        "frontlineAssignmentSwitches": -125
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319797,
+      "deltas": {
+        "wallClockMs": -10.649791999996523,
+        "cpuMs": -50.87300000000005,
+        "heapMiB": 265.84461212158203,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319797,
+      "deltas": {
+        "wallClockMs": -8.005084000018542,
+        "cpuMs": -54.261000000000024,
+        "heapMiB": 239.38159942626953,
+        "operationsCreated": -3,
+        "operationsCompleted": 0,
+        "operationsCancelled": -2,
+        "operationsFailed": -1,
+        "capitalFalls": 1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -34,
+        "frontlineAssignmentSwitches": -43
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319797,
+      "deltas": {
+        "wallClockMs": -68.2542919999978,
+        "cpuMs": -194.839,
+        "heapMiB": 263.35335540771484,
+        "operationsCreated": -1,
+        "operationsCompleted": -1,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -11
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319797,
+      "deltas": {
+        "wallClockMs": 183.60670899998513,
+        "cpuMs": 91.36800000000005,
+        "heapMiB": 259.6100387573242,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": -1,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 85
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319797,
+      "deltas": {
+        "wallClockMs": 390.40158300002804,
+        "cpuMs": 306.655,
+        "heapMiB": 281.77720642089844,
+        "operationsCreated": -8,
+        "operationsCompleted": -5,
+        "operationsCancelled": -3,
+        "operationsFailed": 0,
+        "capitalFalls": -2,
+        "warsRemaining": 2,
+        "stalemateMaximumDuration": 7,
+        "frontlineAssignmentSwitches": -109
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319797,
+      "deltas": {
+        "wallClockMs": -20.419376000005286,
+        "cpuMs": -111.16399999999999,
+        "heapMiB": 74.47006225585938,
+        "operationsCreated": -10,
+        "operationsCompleted": -6,
+        "operationsCancelled": -3,
+        "operationsFailed": -1,
+        "capitalFalls": -1,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -143
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319797,
+      "deltas": {
+        "wallClockMs": -47.98695900001621,
+        "cpuMs": -68.4849999999999,
+        "heapMiB": 52.736236572265625,
+        "operationsCreated": -1,
+        "operationsCompleted": -3,
+        "operationsCancelled": 2,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -2
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319797,
+      "deltas": {
+        "wallClockMs": -37.26537599999574,
+        "cpuMs": -153.37300000000005,
+        "heapMiB": -5.123374938964844,
+        "operationsCreated": -18,
+        "operationsCompleted": -9,
+        "operationsCancelled": -9,
+        "operationsFailed": 0,
+        "capitalFalls": 1,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": -15,
+        "frontlineAssignmentSwitches": -114
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319797,
+      "deltas": {
+        "wallClockMs": -274.87354099999357,
+        "cpuMs": -464.37300000000005,
+        "heapMiB": 0.47049713134765625,
+        "operationsCreated": -8,
+        "operationsCompleted": -3,
+        "operationsCancelled": -5,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": -20,
+        "frontlineAssignmentSwitches": -128
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319798,
+      "deltas": {
+        "wallClockMs": 185.22866599999543,
+        "cpuMs": 145.92100000000005,
+        "heapMiB": 47.35973358154297,
+        "operationsCreated": 0,
+        "operationsCompleted": -2,
+        "operationsCancelled": 1,
+        "operationsFailed": 1,
+        "capitalFalls": -2,
+        "warsRemaining": 2,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 130
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319798,
+      "deltas": {
+        "wallClockMs": -199.58287499997823,
+        "cpuMs": -347.92499999999995,
+        "heapMiB": 89.9948959350586,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319798,
+      "deltas": {
+        "wallClockMs": -63.00529299999471,
+        "cpuMs": -120.04200000000003,
+        "heapMiB": 109.27386474609375,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319798,
+      "deltas": {
+        "wallClockMs": -43.90333200000168,
+        "cpuMs": -62.488999999999976,
+        "heapMiB": 35.466796875,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319798,
+      "deltas": {
+        "wallClockMs": -72.87750100000994,
+        "cpuMs": -143.33400000000006,
+        "heapMiB": 39.107940673828125,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319798,
+      "deltas": {
+        "wallClockMs": 324.9977920000092,
+        "cpuMs": 308.18600000000004,
+        "heapMiB": 27.758453369140625,
+        "operationsCreated": -4,
+        "operationsCompleted": -6,
+        "operationsCancelled": 3,
+        "operationsFailed": -1,
+        "capitalFalls": -3,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": -6,
+        "frontlineAssignmentSwitches": -81
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319798,
+      "deltas": {
+        "wallClockMs": -102.12304199999198,
+        "cpuMs": -103.38499999999999,
+        "heapMiB": -15.219596862792969,
+        "operationsCreated": -3,
+        "operationsCompleted": -2,
+        "operationsCancelled": 0,
+        "operationsFailed": -1,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -25
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319798,
+      "deltas": {
+        "wallClockMs": -69.04104299997562,
+        "cpuMs": -138.11699999999996,
+        "heapMiB": 44.675331115722656,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319798,
+      "deltas": {
+        "wallClockMs": -545.8100410000188,
+        "cpuMs": -651.079,
+        "heapMiB": 43.70860290527344,
+        "operationsCreated": -8,
+        "operationsCompleted": 0,
+        "operationsCancelled": -1,
+        "operationsFailed": -6,
+        "capitalFalls": 5,
+        "warsRemaining": -4,
+        "stalemateMaximumDuration": 8,
+        "frontlineAssignmentSwitches": -139
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319798,
+      "deltas": {
+        "wallClockMs": 377.74295800000255,
+        "cpuMs": 438.58299999999997,
+        "heapMiB": 67.5047607421875,
+        "operationsCreated": -4,
+        "operationsCompleted": -2,
+        "operationsCancelled": -1,
+        "operationsFailed": -1,
+        "capitalFalls": -7,
+        "warsRemaining": 3,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -42
+      }
+    },
+    {
+      "scenario": "active-war",
+      "seed": 822748319799,
+      "deltas": {
+        "wallClockMs": -37.88812499998312,
+        "cpuMs": -166.5719999999999,
+        "heapMiB": 72.96479034423828,
+        "operationsCreated": -8,
+        "operationsCompleted": -2,
+        "operationsCancelled": -8,
+        "operationsFailed": 2,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 6,
+        "frontlineAssignmentSwitches": -104
+      }
+    },
+    {
+      "scenario": "long-frontline",
+      "seed": 822748319799,
+      "deltas": {
+        "wallClockMs": -70.19504200000665,
+        "cpuMs": -259.56500000000005,
+        "heapMiB": 84.12257385253906,
+        "operationsCreated": 4,
+        "operationsCompleted": 1,
+        "operationsCancelled": 1,
+        "operationsFailed": 2,
+        "capitalFalls": -2,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 28,
+        "frontlineAssignmentSwitches": 31
+      }
+    },
+    {
+      "scenario": "stalemate-breaker",
+      "seed": 822748319799,
+      "deltas": {
+        "wallClockMs": -81.27774999999383,
+        "cpuMs": -141.84399999999994,
+        "heapMiB": 75.29901885986328,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": -1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 4
+      }
+    },
+    {
+      "scenario": "collapse-advance",
+      "seed": 822748319799,
+      "deltas": {
+        "wallClockMs": -65.97883299998648,
+        "cpuMs": -132.79500000000002,
+        "heapMiB": 24.402725219726562,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0
+      }
+    },
+    {
+      "scenario": "capital-threat",
+      "seed": 822748319799,
+      "deltas": {
+        "wallClockMs": -49.34745899998234,
+        "cpuMs": -73.52499999999992,
+        "heapMiB": 29.22730255126953,
+        "operationsCreated": -1,
+        "operationsCompleted": 1,
+        "operationsCancelled": -2,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -9
+      }
+    },
+    {
+      "scenario": "retreat-heavy",
+      "seed": 822748319799,
+      "deltas": {
+        "wallClockMs": 129.06829200001084,
+        "cpuMs": 110.09699999999998,
+        "heapMiB": 45.64936065673828,
+        "operationsCreated": 12,
+        "operationsCompleted": 7,
+        "operationsCancelled": 3,
+        "operationsFailed": 2,
+        "capitalFalls": 1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 14,
+        "frontlineAssignmentSwitches": 306
+      }
+    },
+    {
+      "scenario": "reorganization-heavy",
+      "seed": 822748319799,
+      "deltas": {
+        "wallClockMs": -164.64433399998234,
+        "cpuMs": -278.73900000000003,
+        "heapMiB": 61.4669189453125,
+        "operationsCreated": -29,
+        "operationsCompleted": -9,
+        "operationsCancelled": -13,
+        "operationsFailed": -7,
+        "capitalFalls": -3,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": -41,
+        "frontlineAssignmentSwitches": -489
+      }
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "seed": 822748319799,
+      "deltas": {
+        "wallClockMs": -43.488165999995545,
+        "cpuMs": -6.932999999999993,
+        "heapMiB": 15.805984497070312,
+        "operationsCreated": 0,
+        "operationsCompleted": 1,
+        "operationsCancelled": -1,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 1
+      }
+    },
+    {
+      "scenario": "late-game",
+      "seed": 822748319799,
+      "deltas": {
+        "wallClockMs": 295.20812500000466,
+        "cpuMs": 353.34000000000015,
+        "heapMiB": 5.600883483886719,
+        "operationsCreated": -18,
+        "operationsCompleted": -6,
+        "operationsCancelled": -8,
+        "operationsFailed": -6,
+        "capitalFalls": -1,
+        "warsRemaining": 1,
+        "stalemateMaximumDuration": -43,
+        "frontlineAssignmentSwitches": -237
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319799,
+      "deltas": {
+        "wallClockMs": 29.96004200002062,
+        "cpuMs": 97.68100000000004,
+        "heapMiB": 93.71385192871094,
+        "operationsCreated": 2,
+        "operationsCompleted": -6,
+        "operationsCancelled": 4,
+        "operationsFailed": 4,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 23,
+        "frontlineAssignmentSwitches": -15
+      }
+    }
+  ]
+}

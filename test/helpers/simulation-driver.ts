@@ -5,6 +5,7 @@ import { BenchmarkMetrics } from "../benchmark/metrics";
 import type { BenchmarkMode } from "../benchmark/types";
 
 export interface SimulationDriverOptions {
+  observe?: (world: WorldState) => void;
   ticks: number;
   mode?: BenchmarkMode;
   speed?: number;
@@ -38,10 +39,11 @@ export function runSimulation(
   let frameCount = 0;
 
   world.instrumentation = metrics;
+  options.observe?.(world);
   const startedAt = performance.now();
   metrics.measure("simulation.total", () => {
     if (mode === "throughput") {
-      runThroughputTicks(world, ticks);
+      runThroughputTicks(world, ticks, options.observe);
       return;
     }
     frameCount = runFrameLoop(world, ticks, speed, frameDeltaMs, metrics);
@@ -66,13 +68,14 @@ export function runSimulation(
   };
 }
 
-function runThroughputTicks(world: WorldState, ticks: number): void {
+function runThroughputTicks(world: WorldState, ticks: number, observe?: (world: WorldState) => void): void {
   for (let i = 0; i < ticks; i += 1) {
     stepFastTick(world, FAST_TICK_MS);
     const dueSlowTicks = Math.floor(world.time.elapsedMs / SLOW_TICK_MS);
     while (world.time.slowTick < dueSlowTicks) {
       stepSlowTick(world, SLOW_TICK_MS);
     }
+    observe?.(world);
   }
 }
 

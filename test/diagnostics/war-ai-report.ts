@@ -8,6 +8,7 @@ interface Matrix {
   partition: string;
   seedCount: number;
   fullSystems?: boolean;
+  observeWarOutcomes?: boolean;
   results: BenchmarkResult[];
   failures: unknown[];
 }
@@ -20,7 +21,8 @@ const matrices = await Promise.all(paths.map(async (path) => {
 if (matrices.length === 2) {
   const [a, b] = matrices;
   if (a.ticks !== b.ticks || a.partition !== b.partition ||
-    a.seedCount !== b.seedCount || !!a.fullSystems !== !!b.fullSystems) {
+    a.seedCount !== b.seedCount || !!a.fullSystems !== !!b.fullSystems ||
+    !!a.observeWarOutcomes !== !!b.observeWarOutcomes) {
     throw new Error("Cannot compare incompatible experiments");
   }
   const keys = (matrix: Matrix) => matrix.results.map((row) => `${row.scenario}:${row.seed}`).sort().join("|");
@@ -39,6 +41,19 @@ const metrics: [string, (row: BenchmarkResult) => number][] = [
   ["stalemateMaximumDuration", (row) => row.endWorld.stalemateMaximumDuration],
   ["frontlineAssignmentSwitches", (row) => row.endWorld.frontlineAssignmentSwitches],
 ];
+if (matrices.every((matrix) => matrix.observeWarOutcomes)) {
+  const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+  metrics.push(
+    ["aggressorObjectiveHeldRate", (row) => average(row.warOutcomes!.wars.filter((war) => war.aggressor).map((war) => Number(war.objectiveHeld)))],
+    ["defenderTerritoryHeldRate", (row) => average(row.warOutcomes!.wars.filter((war) => !war.aggressor).map((war) => Number(war.objectiveHeld)))],
+    ["nationSurvivalRate", (row) => average(row.warOutcomes!.wars.map((war) => Number(war.survived)))],
+    ["meanCasualties", (row) => average(row.warOutcomes!.wars.map((war) => war.casualties))],
+    ["meanEndedWarTicks", (row) => average(row.warOutcomes!.wars.filter((war) => war.endedAtTick !== null).map((war) => war.endedAtTick! - war.startedAtTick))],
+    ["unfinishedWarSides", (row) => row.warOutcomes!.wars.filter((war) => war.endedAtTick === null).length],
+    ["activeWarTicks", (row) => row.warOutcomes!.activeWarTicks],
+    ["campaignChanges", (row) => row.warOutcomes!.campaignChanges],
+  );
+}
 function distribution(values: number[]) {
   values.sort((a, b) => a - b);
   const n = values.length;

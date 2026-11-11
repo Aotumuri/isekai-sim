@@ -1,4 +1,5 @@
 import type { WorldConfig } from "../../src/data/world-config";
+import type { WarOutcomeReport } from "./war-outcome-observer";
 
 export const BENCHMARK_SCENARIOS = [
   "base-world",
@@ -21,6 +22,7 @@ export type BenchmarkScenarioName = (typeof BENCHMARK_SCENARIOS)[number];
 export type BenchmarkMode = "throughput" | "frame-loop";
 
 export interface BenchmarkOptions {
+  observeWarOutcomes?: boolean;
   config?: Partial<WorldConfig>;
   scenario: BenchmarkScenarioName;
   seed: number;
@@ -643,6 +645,7 @@ export interface WorldSummary {
 }
 
 export interface BenchmarkResult {
+  warOutcomes?: WarOutcomeReport;
   schemaVersion: 1;
   generatedAt: string;
   scenario: BenchmarkScenarioName;
