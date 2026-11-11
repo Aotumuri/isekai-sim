@@ -5,6 +5,7 @@ import { gzipSync, gunzipSync } from "node:zlib";
 import { runBenchmark } from "../benchmark/benchmark-runner";
 import type { BenchmarkResult, BenchmarkScenarioName } from "../benchmark/types";
 import { BENCHMARK_SCENARIOS } from "../benchmark/types";
+import { WAR_OUTCOME_SCHEMA } from "../benchmark/war-outcome-observer";
 
 // Incremental output allows long experiments to resume without rerunning rows.
 // Never compare different horizons, world sizes, or combat rules as an AI A/B.
@@ -52,6 +53,7 @@ interface Experiment {
   fullSystems: boolean;
   campaignEnabled?: boolean;
   observeWarOutcomes?: boolean;
+  observationSchema?: number;
   normalWars?: boolean;
   scenarios: BenchmarkScenarioName[];
   results: BenchmarkResult[];
@@ -61,6 +63,7 @@ let experiment: Experiment = {
   revision, partition, ticks, seedStart, seedCount: count, scenarios, fullSystems, campaignEnabled, observeWarOutcomes, normalWars,
   results: [], failures: [],
 };
+if (observeWarOutcomes) experiment.observationSchema = WAR_OUTCOME_SCHEMA;
 try {
   const bytes = await readFile(output);
   const saved = JSON.parse((output.endsWith(".gz") ? gunzipSync(bytes) : bytes).toString("utf8")) as Experiment;
@@ -70,6 +73,7 @@ try {
   if ((saved.fullSystems ?? false) !== fullSystems) throw new Error("Output has incompatible systems");
   if (!!saved.campaignEnabled !== campaignEnabled) throw new Error("Output has incompatible campaign setting");
   if (!!saved.observeWarOutcomes !== observeWarOutcomes) throw new Error("Output has incompatible observation setting");
+  if (observeWarOutcomes && (saved.observationSchema ?? 1) !== WAR_OUTCOME_SCHEMA) throw new Error("Output has incompatible observation schema");
   if (!!saved.normalWars !== normalWars) throw new Error("Output has incompatible war rules");
   if (saved.scenarios.join(",") !== scenarios.join(",")) throw new Error("Output has incompatible scenarios");
   experiment = saved;

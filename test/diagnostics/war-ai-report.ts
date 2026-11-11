@@ -42,6 +42,7 @@ const metrics: [string, (row: BenchmarkResult) => number][] = [
   ["warsRemaining", (row) => row.endWorld.wars],
   ["stalemateMaximumDuration", (row) => row.endWorld.stalemateMaximumDuration],
   ["frontlineAssignmentSwitches", (row) => row.endWorld.frontlineAssignmentSwitches],
+  ["frontTransfers", (row) => row.counters["landFront.allocationFrontTransfers"] ?? 0],
 ];
 if (matrices.every((matrix) => matrix.observeWarOutcomes)) {
   const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
@@ -63,6 +64,16 @@ if (matrices.every((matrix) => matrix.observeWarOutcomes)) {
     ["activeWarTicks", (row) => row.warOutcomes!.activeWarTicks],
     ["campaignChanges", (row) => row.warOutcomes!.campaignChanges],
   );
+  if (matrices.every((matrix) => matrix.results.every((row) => row.warOutcomes!.schemaVersion >= 2))) {
+    metrics.push(
+      ["openingNetStrategicValueRate", (row) => average(openingWars(row).map((war) =>
+        (war.opponentTerritorySecuredValue - war.homelandLostValue) / Math.max(1, war.openingTerritorialValue)))],
+      ["openingTerritorialGains", (row) => average(openingWars(row).map((war) => war.opponentTerritorySecuredValue))],
+      ["openingTerritorialLosses", (row) => average(openingWars(row).map((war) => war.homelandLostValue))],
+      ["operationsCancelledPosture", (row) => row.warOutcomes!.operationEndReasons["cancelled:posture-changed"] ?? 0],
+      ["operationsCancelledAllocation", (row) => row.warOutcomes!.operationEndReasons["cancelled:allocation-lost"] ?? 0],
+    );
+  }
 }
 function distribution(values: number[]) {
   values.sort((a, b) => a - b);

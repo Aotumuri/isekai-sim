@@ -8,7 +8,10 @@ import type { BenchmarkOptions } from "../benchmark/types";
 test("war outcome observer retains opening targets and records terminal wars", () => {
   const world = createScenarioWorld("active-war", { seed: 822_748_319_788, quick: true, width: 640, height: 360 });
   const observer = createWarOutcomeObserver();
+  const populationBefore = world.regionalPopulations;
   observer.observe(world);
+  assert.equal(world.regionalPopulations, populationBefore);
+  assert.ok(observer.result().wars.every((war) => war.openingTerritorialValue > 0));
   const goals = observer.result().wars.map((outcome) => [...outcome.objectiveIds]);
   assert.equal(goals.length, world.wars.length * 2);
   world.wars[0].ultimatumRegionIds = [world.nations[0].capitalMesoId];
