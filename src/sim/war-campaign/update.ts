@@ -5,6 +5,7 @@ import { getCapitalDefenseAssessment } from "../capital-defense";
 import { foodReserveSeconds } from "../food-supply";
 import { getNationCharacter } from "../nation-character";
 import { isNationActive } from "../nation-active";
+import { allFieldUnits } from "../mobilization";
 import { getUnitCombatStrength } from "../unit-strength";
 import { getWarCasualties } from "../war-state";
 import type { WorldState } from "../world-state";
@@ -20,7 +21,7 @@ export function updateWarCampaigns(world: WorldState): void {
   }
   const state: WarCampaignState = world.warCampaigns ??= { byNationId: new Map(), version: 0, events: [] };
   const strengths = new Map<NationId, number>();
-  for (const unit of world.units) {
+  for (const unit of allFieldUnits(world)) {
     if (unit.domain === "land") strengths.set(unit.nationId,
       (strengths.get(unit.nationId) ?? 0) + getUnitCombatStrength(unit));
   }
@@ -43,12 +44,14 @@ export function updateWarCampaigns(world: WorldState): void {
       ? selectPrimaryOpponent(objectives, previous?.primaryOpponentId, strengths)
       : previous!.primaryOpponentId;
     const mode = reassess ? decision.mode : previous!.mode;
-    const changed = !previous || previous.mode !== mode || previous.primaryOpponentId !== primary || topologyChanged;
+    const changed = !previous || previous.mode !== mode || previous.primaryOpponentId !== primary || topologyChanged ||
+      emergency && previous.reason !== decision.reason;
     const campaign: WarCampaign = {
       nationId: nation.id, objectives, constraints, mode, primaryOpponentId: primary,
       adoptedAtTick: changed ? world.time.fastTick : previous!.adoptedAtTick,
       evaluatedAtTick: world.time.fastTick, revision: (previous?.revision ?? 0) + Number(changed),
-      reason: changed ? topologyChanged ? "war-membership-changed" : decision.reason : previous!.reason,
+      reason: changed ? topologyChanged ? "war-membership-changed" : previous?.primaryOpponentId !== primary
+        ? "priority-opponent-changed" : decision.reason : previous!.reason,
     };
     if (changed) {
       state.version += 1;

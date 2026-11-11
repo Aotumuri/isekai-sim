@@ -31,6 +31,7 @@ const partition = option("--partition", "development");
 const fullSystems = args.includes("--full-systems");
 const campaignEnabled = args.includes("--campaign");
 const observeWarOutcomes = args.includes("--observe-wars");
+const normalWars = args.includes("--normal-wars");
 if (!["development", "holdout"].includes(partition)) throw new Error("Invalid partition");
 const seedStart = partition === "development" ? 822_748_319_780 : 922_748_319_780;
 const output = resolve(option("--output", `diagnostics/war-ai-${partition}.json`));
@@ -46,12 +47,13 @@ interface Experiment {
   fullSystems: boolean;
   campaignEnabled?: boolean;
   observeWarOutcomes?: boolean;
+  normalWars?: boolean;
   scenarios: BenchmarkScenarioName[];
   results: BenchmarkResult[];
   failures: { scenario: string; seed: number; error: string }[];
 }
 let experiment: Experiment = {
-  revision, partition, ticks, seedStart, seedCount: count, scenarios, fullSystems, campaignEnabled, observeWarOutcomes,
+  revision, partition, ticks, seedStart, seedCount: count, scenarios, fullSystems, campaignEnabled, observeWarOutcomes, normalWars,
   results: [], failures: [],
 };
 try {
@@ -63,6 +65,7 @@ try {
   if ((saved.fullSystems ?? false) !== fullSystems) throw new Error("Output has incompatible systems");
   if (!!saved.campaignEnabled !== campaignEnabled) throw new Error("Output has incompatible campaign setting");
   if (!!saved.observeWarOutcomes !== observeWarOutcomes) throw new Error("Output has incompatible observation setting");
+  if (!!saved.normalWars !== normalWars) throw new Error("Output has incompatible war rules");
   experiment = saved;
 } catch (error) {
   if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -75,6 +78,7 @@ for (let index = 0; index < count; index += 1) {
     try {
       const result = runBenchmark({
         observeWarOutcomes,
+        normalWars,
         config: { systems: {
           mobilizationEnabled: fullSystems, diplomacyEnabled: fullSystems, researchEnabled: fullSystems,
           armsAidEnabled: fullSystems, tradeEnabled: fullSystems, warCampaignEnabled: campaignEnabled,

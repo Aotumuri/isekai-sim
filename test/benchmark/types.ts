@@ -22,6 +22,7 @@ export type BenchmarkScenarioName = (typeof BENCHMARK_SCENARIOS)[number];
 export type BenchmarkMode = "throughput" | "frame-loop";
 
 export interface BenchmarkOptions {
+  normalWars?: boolean;
   observeWarOutcomes?: boolean;
   config?: Partial<WorldConfig>;
   scenario: BenchmarkScenarioName;

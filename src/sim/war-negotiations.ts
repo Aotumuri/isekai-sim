@@ -1,3 +1,4 @@
+import { campaignPeaceValue } from "./war-campaign/peace-guidance";
 import { getManualGovernmentId } from "./player-nation";
 import { isValidResourceReparation, REPARATION_INTERVAL, REPARATION_RESOURCES, type ResourceReparation } from "./resource-reparations";
 import { foodReserveSeconds } from "./food-supply";
@@ -288,7 +289,7 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
   const sacrificeCost = Math.max(0, politicalInvestment - recognition) * (1 - Math.min(0.85, urgency));
   // A longer truce secures the rear while forces move to other theaters.
   const truceValue = (terms.truceSeconds - 300) / 100 * (1 + competingWars / 12);
-  const score = pressure + disposition + landBenefit + paymentBenefit + truceValue - landCost - paymentCost - resolve - sacrificeCost - (terms.partition ? 38 : terms.puppetTarget ? 25 : terms.localSubject ? 8 : 0);
+  const score = pressure + disposition + landBenefit + paymentBenefit + truceValue + campaignPeaceValue(world, recipient, proposer, terms) - landCost - paymentCost - resolve - sacrificeCost - (terms.partition ? 38 : terms.puppetTarget ? 25 : terms.localSubject ? 8 : 0);
   const exchangedBlows = casualties + getWarCasualties(war, proposer) > 0 ||
     occupationRatio(world, proposer, recipient) + occupationRatio(world, recipient, proposer) > 0;
   const matureEnough = ageSeconds >= 90 || (ageSeconds >= 30 && (exchangedBlows || urgency >= 0.8));

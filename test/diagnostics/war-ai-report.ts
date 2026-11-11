@@ -9,6 +9,7 @@ interface Matrix {
   seedCount: number;
   fullSystems?: boolean;
   observeWarOutcomes?: boolean;
+  normalWars?: boolean;
   results: BenchmarkResult[];
   failures: unknown[];
 }
@@ -25,6 +26,7 @@ if (matrices.length === 2) {
     !!a.observeWarOutcomes !== !!b.observeWarOutcomes) {
     throw new Error("Cannot compare incompatible experiments");
   }
+  if (!!a.normalWars !== !!b.normalWars) throw new Error("Cannot compare different war rules");
   const keys = (matrix: Matrix) => matrix.results.map((row) => `${row.scenario}:${row.seed}`).sort().join("|");
   if (keys(a) !== keys(b)) throw new Error("A/B requires identical completed scenario/seed pairs");
 }

@@ -120,9 +120,6 @@ export function updateNationFrontPlans(world: WorldState): void {
       ),
     );
   }
-  for (let index = 0; index < plans.length; index += 1) {
-    plans[index] = applyCampaignFrontGuidance(world, plans[index]);
-  }
   plans.sort(comparePlans);
 
   const decisionsChanged = !plansHaveSameDecisions(state.plans, plans);
@@ -328,7 +325,7 @@ function evaluateNationFrontPlan(
   if (bridgehead && !reasonFlags.includes("bridgehead-campaign")) {
     reasonFlags.push("bridgehead-campaign");
   }
-  return {
+  const result: NationFrontPlan = {
     frontId: front.id,
     physicalFrontId: front.physicalFrontId,
     nationId,
@@ -347,6 +344,12 @@ function evaluateNationFrontPlan(
     reasonFlags,
     evaluatedAtTick: currentTick,
   };
+  const guided = applyCampaignFrontGuidance(world, result);
+  if (guided.posture !== result.posture) {
+    guided.desiredStrength = Math.max(supplyRequired, bridgehead?.desiredStrength ?? 0,
+      calculateDesiredStrength(friendly, enemy, guided.posture, capitalDefense, front.id, isCapitalDefenseFront));
+  }
+  return guided;
 }
 
 function getBridgeheadFrontPriority(

@@ -9,6 +9,7 @@ export function runBenchmark(options: BenchmarkOptions): BenchmarkResult {
   console.info = () => undefined;
   try {
     const world = createScenarioWorld(options.scenario, options);
+    if (options.normalWars) world.wars.forEach((war) => { war.isTest = false; });
     const startWorld = summarizeWorld(world);
     const cpuStart = process.cpuUsage();
     if (options.observeWarOutcomes && options.mode !== "throughput") throw new Error("War observer requires throughput mode");

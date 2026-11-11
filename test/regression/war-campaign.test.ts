@@ -8,6 +8,9 @@ import { evaluateCampaignPolicy, type CampaignConstraints } from "../../src/sim/
 import { getWarCampaign, formatWarCampaignSummary } from "../../src/sim/war-campaign/state";
 import { updateNationFrontPlans } from "../../src/sim/nation-front-plans";
 import { applyCampaignFrontGuidance } from "../../src/sim/war-campaign/front-guidance";
+import { campaignPeaceValue } from "../../src/sim/war-campaign/peace-guidance";
+import { whitePeaceTerms } from "../../src/sim/war-negotiations";
+import { getOpposingFrontSide } from "../../src/sim/land-fronts";
 
 function campaignWorld() {
   const world = createScenarioWorld("active-war", {
@@ -94,6 +97,7 @@ test("campaign front guidance preserves retreat and emergency defense without is
   assert.ok(plan);
   const campaign = getWarCampaign(world, plan.nationId)!;
   campaign.mode = "defend";
+  campaign.constraints.replacementConstrained = true;
   const attack = { ...plan, posture: "attack" as const, reasonFlags: [] };
   assert.equal(applyCampaignFrontGuidance(world, attack).posture, "hold");
   const retreat = { ...attack, posture: "retreat" as const };
@@ -102,4 +106,38 @@ test("campaign front guidance preserves retreat and emergency defense without is
   assert.equal(applyCampaignFrontGuidance(world, emergency), emergency);
   assert.equal(applyCampaignFrontGuidance(world, attack).desiredStrength, attack.desiredStrength);
   assert.deepEqual(world.units.map((unit) => [unit.id, unit.moveTargetId]), orders);
+});
+
+test("a limited goal cannot strand a test war without a legal negotiated exit", () => {
+  const world = campaignWorld();
+  updateWarCampaigns(world);
+  updateNationFrontPlans(world);
+  const plan = world.frontPlans.plans[0];
+  const campaign = getWarCampaign(world, plan.nationId)!;
+  campaign.mode = "consolidate";
+  const sector = world.landFronts.operationalSectorsById.get(plan.frontId)!;
+  campaign.primaryOpponentId = getOpposingFrontSide(sector, plan.nationId)!.nationId;
+  const attack = { ...plan, posture: "attack" as const, reasonFlags: [] };
+  assert.equal(applyCampaignFrontGuidance(world, attack).posture, "attack");
+  world.wars.forEach((war) => war.isTest = false);
+  world.settings!.diplomacyEnabled = true;
+  assert.equal(applyCampaignFrontGuidance(world, attack).posture, "hold");
+});
+
+test("peace guidance values recognition after settlement rather than temporary occupation", () => {
+  const world = campaignWorld();
+  updateWarCampaigns(world);
+  const war = world.wars[0];
+  const campaign = getWarCampaign(world, war.aggressorId)!;
+  const goal = campaign.objectives.find((item) => item.opponentId === war.defenderId)!;
+  assert.ok(goal.regionIds.length);
+  campaign.mode = "consolidate";
+  goal.regionIds.forEach((id) => world.occupation.mesoById.set(id, campaign.nationId));
+  assert.equal(campaignPeaceValue(world, war.aggressorId, war.defenderId, whitePeaceTerms()), 0);
+  const recognition = { ...whitePeaceTerms(), offeredRegionIds: [...goal.regionIds] };
+  assert.equal(campaignPeaceValue(world, war.aggressorId, war.defenderId, recognition), 12);
+  campaign.mode = "seek-peace";
+  assert.equal(campaignPeaceValue(world, war.aggressorId, war.defenderId, recognition), 24);
+  world.settings!.warCampaignEnabled = false;
+  assert.equal(campaignPeaceValue(world, war.aggressorId, war.defenderId, recognition), 0);
 });
