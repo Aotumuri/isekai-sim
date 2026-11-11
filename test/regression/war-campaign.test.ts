@@ -146,6 +146,7 @@ test("a limited goal cannot strand a test war without a legal negotiated exit", 
   const plan = world.frontPlans.plans[0];
   const campaign = getWarCampaign(world, plan.nationId)!;
   campaign.mode = "consolidate";
+  campaign.settlementReadyOpponentIds = campaign.objectives.map((goal) => goal.opponentId);
   const sector = world.landFronts.operationalSectorsById.get(plan.frontId)!;
   campaign.primaryOpponentId = getOpposingFrontSide(sector, plan.nationId)!.nationId;
   const attack = { ...plan, posture: "attack" as const, reasonFlags: [] };

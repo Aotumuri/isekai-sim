@@ -6,7 +6,7 @@ import { getFrontSide, getOpposingFrontSide } from "../land-fronts";
 import { getWarDeclarationMode } from "../simulation-settings";
 import { findWar } from "../war-state";
 import { getOffensiveOperationForFront } from "../offensive-operations";
-import { campaignPrefersSettlement } from "./peace-guidance";
+import { campaignShouldStandDown } from "./peace-guidance";
 import { campaignCostLimitReached } from "./policy";
 import { getWarCampaign } from "./state";
 import { getOwnerByMesoId } from "../world-cache";
@@ -17,7 +17,9 @@ export function applyCampaignFrontGuidance(world: WorldState, plan: NationFrontP
   const front = world.landFronts.operationalSectorsById.get(plan.frontId);
   if (!campaign || !front) return plan;
   const enemy = getOpposingFrontSide(front, plan.nationId);
-  const settling = !!enemy && campaignPrefersSettlement(world, plan.nationId, enemy.nationId);
+  const settling = !!enemy && campaignShouldStandDown(world, plan.nationId, enemy.nationId);
+  const mode = !settling && (campaign.mode === "seek-peace" || campaign.mode === "consolidate")
+    ? campaign.militaryMode ?? "defend" : campaign.mode;
   const emergency = plan.reasonFlags.some((reason) =>
     reason === "capital-threatened" || reason === "major-force-supply-risk" ||
     reason === "supply-corridor" || reason === "bridgehead-campaign" && !settling);
@@ -35,16 +37,16 @@ export function applyCampaignFrontGuidance(world: WorldState, plan: NationFrontP
   const owners = getOwnerByMesoId(world);
   const homelandRecovery = !!enemy?.borderRegionIds.some((id) => owners.get(id) === plan.nationId &&
     world.occupation.mesoById.get(id) === enemy.nationId);
-  const defensiveOpportunity = campaign.mode === "defend" && homelandRecovery && friendly && enemy &&
+  const defensiveOpportunity = mode === "defend" && homelandRecovery && friendly && enemy &&
     friendly.strength >= enemy.strength * WORLD_BALANCE.war.landFront.plan.attackContinueRatio &&
     !campaign.constraints.replacementConstrained;
   const committed = getOffensiveOperationForFront(world, front.id, plan.nationId);
   const preserveCommitment = committed && committed.phase !== "recovering" &&
-    (campaign.mode !== "defend" || homelandRecovery) &&
-    !campaign.constraints.capitalCritical && campaign.mode !== "seek-peace" &&
+    (mode !== "defend" || homelandRecovery) &&
+    !campaign.constraints.capitalCritical && mode !== "seek-peace" &&
     (!settling || committed.phase === "attacking" && !campaignCostLimitReached(campaign.constraints));
   const attackAllowed = preserveCommitment || !settling && primary &&
-    (campaign.mode === "limited-offensive" || militaryResolution || defensiveOpportunity);
+    (mode === "limited-offensive" || militaryResolution || defensiveOpportunity);
   return {
     ...plan,
     posture: plan.posture === "attack" && !attackAllowed ? "hold" : plan.posture,

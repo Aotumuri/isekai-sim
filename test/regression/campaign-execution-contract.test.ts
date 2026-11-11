@@ -6,6 +6,7 @@ import { applyCampaignFrontGuidance } from "../../src/sim/war-campaign/front-gui
 import { getFrontSide, getOpposingFrontSide, updateLandFronts } from "../../src/sim/land-fronts";
 import { getOwnerByMesoId } from "../../src/sim/world-cache";
 import type { NationFrontPlan } from "../../src/sim/nation-front-plans";
+import { campaignPrefersSettlement, campaignShouldStandDown } from "../../src/sim/war-campaign/peace-guidance";
 
 function fixture() {
   const world = createScenarioWorld("matched-war", { seed: 1022748319780, quick: true, width: 640, height: 360 });
@@ -46,4 +47,26 @@ test("defense permits a sufficiently supported counterattack to recover occupied
   campaign.mode = "defend";
   assert.equal(applyCampaignFrontGuidance(world, { ...plan, frontId: front.id,
     physicalFrontId: front.physicalFrontId }).posture, "attack");
+});
+
+test("negotiation intent alone cannot suspend the military fallback before an agreement is available", () => {
+  const { world, campaign, plan } = fixture();
+  world.settings!.diplomacyEnabled = true;
+  world.wars.forEach((war) => { war.isTest = false; });
+  world.time.fastTick = 400;
+  campaign.mode = "seek-peace";
+  campaign.militaryMode = "limited-offensive";
+  campaign.settlementReadyOpponentIds = [];
+  campaign.constraints.casualtyFraction = 0;
+  campaign.constraints.foodSeconds = Infinity;
+  const enemy = campaign.primaryOpponentId!;
+  assert.equal(campaignPrefersSettlement(world, plan.nationId, enemy), true);
+  assert.equal(campaignShouldStandDown(world, plan.nationId, enemy), false);
+  assert.equal(applyCampaignFrontGuidance(world, plan).posture, "attack");
+  campaign.settlementReadyOpponentIds = [enemy];
+  assert.equal(campaignShouldStandDown(world, plan.nationId, enemy), true);
+  assert.equal(applyCampaignFrontGuidance(world, plan).posture, "hold");
+  campaign.settlementReadyOpponentIds = [];
+  campaign.constraints.foodSeconds = 10;
+  assert.equal(campaignShouldStandDown(world, plan.nationId, enemy), true);
 });

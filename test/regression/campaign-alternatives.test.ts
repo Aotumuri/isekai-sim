@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { evaluateCampaignAlternatives, type CampaignOpportunity } from "../../src/sim/war-campaign/alternatives";
+import { evaluateCampaignAlternatives, selectCampaignMilitaryEffort, type CampaignOpportunity } from "../../src/sim/war-campaign/alternatives";
 const opportunity = {
   opponentId: "enemy", availableStrength: 2000, opposition: 1000, arrivalSeconds: 1,
   objectiveValue: 0.3, securedValue: 0, homelandAtRisk: 0, lossFractionPerSecond: 0,
@@ -32,4 +32,14 @@ test("travel and committed force impose a finite, evidence-dependent change cost
   assert.ok(options.find((o) => o.mode === "limited-offensive")!.changeCost > 0);
   assert.equal(options.find((o) => o.mode === "defend")!.changeCost, 0);
   assert.equal(options[0].mode, "limited-offensive");
+});
+
+test("seeking an agreement retains a military fallback and does not charge for changing a nonexistent military order", () => {
+  const input = { ...opportunity, arrivalSeconds: 10, committedFraction: 1, peaceProbability: 0.2, settlementValue: 0.2 };
+  const options = evaluateCampaignAlternatives([input], 0.6,
+    { mode: "seek-peace", militaryMode: "limited-offensive", primaryOpponentId: input.opponentId });
+  assert.equal(options.find((o) => o.mode === "limited-offensive")!.changeCost, 0);
+  assert.equal(options.find((o) => o.mode === "seek-peace")!.changeCost, 0);
+  assert.equal(selectCampaignMilitaryEffort(options, "seek-peace", false).mode, "limited-offensive");
+  assert.equal(selectCampaignMilitaryEffort(options, "seek-peace", true).mode, "defend");
 });

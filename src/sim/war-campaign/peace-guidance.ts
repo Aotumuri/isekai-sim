@@ -37,3 +37,12 @@ export function campaignPrefersSettlement(world: WorldState, nationId: NationId,
   return hasMinimumPeaceAge(world.time.fastTick, war.startedAtFastTick) &&
     campaign.mode === "consolidate";
 }
+
+/** Execution stands down for an available agreement or an exhausted budget,
+ * while diplomacy may seek a settlement much earlier. */
+export function campaignShouldStandDown(world: WorldState, nationId: NationId, opponentId: NationId): boolean {
+  if (!campaignPrefersSettlement(world, nationId, opponentId)) return false;
+  const campaign = getWarCampaign(world, nationId)!;
+  return campaignCostLimitReached(campaign.constraints) ||
+    campaign.settlementReadyOpponentIds === undefined || campaign.settlementReadyOpponentIds.includes(opponentId);
+}

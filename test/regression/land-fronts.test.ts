@@ -4588,11 +4588,12 @@ function settleCampaign(world: WorldState): void {
   updateWarCampaigns(world);
   const campaign = world.warCampaigns!.byNationId.get(NATION_A)!;
   campaign.mode = "consolidate";
+  campaign.settlementReadyOpponentIds = campaign.objectives.map((goal) => goal.opponentId);
   campaign.constraints.objectivesSecured = true;
   world.time.fastTick = Math.max(world.time.fastTick, 300);
 }
 
-test("settlement intent prevents a dedicated pocket operation from bypassing hold posture", () => {
+test("an available settlement prevents a dedicated pocket operation from bypassing hold posture", () => {
   const control = createPocketClosureWorld();
   updateBattlefieldTopology(control);
   for (const assessment of control.battlefieldTopology.assessments) {
@@ -4662,6 +4663,7 @@ test("consolidation retains a military exit before peace can mature and invalida
   updateWarCampaigns(world);
   const campaign = world.warCampaigns!.byNationId.get(NATION_A)!;
   campaign.mode = "consolidate";
+  campaign.settlementReadyOpponentIds = campaign.objectives.map((goal) => goal.opponentId);
   campaign.constraints.objectivesSecured = true;
   updateNationFrontPlans(world);
   assert.equal(planFor(world, NATION_A).posture, "attack");

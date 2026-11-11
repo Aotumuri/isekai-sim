@@ -1,4 +1,4 @@
-import { campaignPrefersSettlement } from "./war-campaign/peace-guidance";
+import { campaignShouldStandDown } from "./war-campaign/peace-guidance";
 import { getExpeditionCandidates } from "./amphibious-front-priority";
 import { getCampaignObjectives } from "./campaign-objectives";
 import { getPlayerNation } from "./player-nation";
@@ -570,7 +570,7 @@ export function updateAmphibiousPlanning(world: WorldState): void {
       activeNations.add(demand.nationId);
       continue;
     }
-    if (campaignPrefersSettlement(world, demand.nationId, demand.enemyNationId)) {
+    if (campaignShouldStandDown(world, demand.nationId, demand.enemyNationId)) {
       expireCapabilityDemand(world, demand);
       continue;
     }
@@ -620,7 +620,7 @@ export function updateAmphibiousPlanning(world: WorldState): void {
     const enemies = [...(warAdjacency.get(nation.id) ?? [])].sort(compareIds);
     let best: LandingCandidate | null = null;
     for (const enemyId of enemies) {
-      if (campaignPrefersSettlement(world, nation.id, enemyId)) continue;
+      if (campaignShouldStandDown(world, nation.id, enemyId)) continue;
       const enemyPorts = (portsByNation.get(enemyId) ?? []).filter((id) => isValidTargetPort(world, nation.id, enemyId, id));
       if (enemyPorts.length === 0 || !isStrategicOpportunity(world, nation.id, enemyId)) continue;
       const candidate = chooseCandidate(world, nation.id, enemyId, ownPorts, enemyPorts, recentRejections);
@@ -676,7 +676,7 @@ export function updateAmphibiousOperations(world: WorldState): void {
     }
     const demand = world.amphibiousOperations.capabilityDemands.find((item) => item.id === operation.capabilityDemandId);
     if (operation.phase !== "transporting" && operation.kind === "landing" && !demand?.playerPlan &&
-      campaignPrefersSettlement(world, operation.nationId, operation.enemyNationId)) {
+      campaignShouldStandDown(world, operation.nationId, operation.enemyNationId)) {
       cancelOperation(world, operation, "campaign-settlement", validation.phase, unitById, true);
       continue;
     }

@@ -15,6 +15,7 @@ import { hasMinimumPeaceAge } from "../peace-maturity";
 import { campaignWarKey } from "./state";
 import { isPoliticalGoalSecured } from "./political-objectives";
 import { WORLD_BALANCE } from "../../data/balance";
+import { hasReadyCampaignSettlement } from "./settlement-readiness";
 
 export interface CampaignObservation { tick: number; casualtyFraction: number; lossRate: number }
 
@@ -81,7 +82,8 @@ export function forecastCampaignOpportunities(
       objectiveValue: Math.max(0, politicalValue - securedValue), securedValue,
       homelandAtRisk: atRisk, lossFractionPerSecond: observation.lossRate,
       replacementFraction: Math.min(nation.resources.manpower, nation.resources.weapons * strengthPerWeapon) / investment,
-      peaceProbability, settlementValue: settlingGain, militaryGoalHeld: goal.achieved,
+      peaceProbability, settlementReady: hasReadyCampaignSettlement(world, war, negotiation),
+      settlementValue: settlingGain, militaryGoalHeld: goal.achieved,
       uncertainty: available > 0 ? 0.25 : 0.75,
       committedFraction: units.filter((u) => u.moveToId || world.offensiveOperations.operationIdByUnitId.has(u.id))
         .reduce((sum, u) => sum + getUnitCombatStrength(u), 0) / own };

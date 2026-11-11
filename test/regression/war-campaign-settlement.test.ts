@@ -26,6 +26,7 @@ function settle(world: WorldState, nationId: NationId) {
   updateWarCampaigns(world);
   const campaign = world.warCampaigns!.byNationId.get(nationId)!;
   campaign.mode = "consolidate";
+  campaign.settlementReadyOpponentIds = campaign.objectives.map((goal) => goal.opponentId);
   campaign.constraints.objectivesSecured = true;
   world.time.fastTick = Math.max(world.time.fastTick, 300);
   return campaign;

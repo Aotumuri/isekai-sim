@@ -2,6 +2,7 @@ import type { WorldState } from "../world-state";
 import { isNationActive } from "../nation-active";
 import { campaignWarKey, type WarCampaignState } from "./state";
 import { isPoliticalGoalSecured } from "./political-objectives";
+import { campaignCostLimitReached } from "./policy";
 
 /** Retain bounded terminal evidence, never active orders after a war ends. */
 export function recordCompletedCampaignGoals(world: WorldState, state: WarCampaignState): void {
@@ -17,7 +18,7 @@ export function recordCompletedCampaignGoals(world: WorldState, state: WarCampai
         warKey: goal.warKey, endedAtTick: world.time.fastTick,
         outcome: !survived ? "nation-eliminated" : secured ? "secured" : "unmet",
         reason: !survived ? "nation-eliminated" : secured ? "objectives-secured" :
-          plan.mode === "seek-peace" ? "cost-limited-exit" : "war-ended-with-unmet-objectives",
+          campaignCostLimitReached(plan.constraints) ? "cost-limited-exit" : "war-ended-with-unmet-objectives",
       });
       state.version += 1;
     }

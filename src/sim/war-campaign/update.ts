@@ -9,13 +9,13 @@ import { allFieldUnits } from "../mobilization";
 import { getUnitCombatStrength } from "../unit-strength";
 import { getWarCasualties } from "../war-state";
 import type { WorldState } from "../world-state";
-import { evaluateCampaignPolicy, requiresCampaignReview, type CampaignConstraints } from "./policy";
+import { campaignCostLimitReached, evaluateCampaignPolicy, requiresCampaignReview, type CampaignConstraints } from "./policy";
 import { getOpposingFrontSide } from "../land-fronts";
 import { createWarCampaignState, type CampaignObjective, type WarCampaign, type WarCampaignState } from "./state";
 import { buildCampaignObjectives } from "./objectives";
 import { recordCompletedCampaignGoals } from "./lifecycle";
 import { observeCampaignCost, forecastCampaignOpportunities } from "./forecast";
-import { evaluateCampaignAlternatives } from "./alternatives";
+import { evaluateCampaignAlternatives, hasClearCampaignImprovement, selectCampaignMilitaryEffort } from "./alternatives";
 import { unavailableManpower } from "./battle-costs";
 
 /** One campaign per nation spanning every current opponent; no direct orders. */
@@ -45,32 +45,42 @@ export function updateWarCampaigns(world: WorldState): void {
       (manpower.get(nation.id) ?? 0) + unavailableManpower(state.battleCosts?.get(nation.id)));
     const constraints = assessCampaignConstraints(world, nation, wars, objectives, strengths);
     const observation = observeCampaignCost(world, constraints.casualtyFraction, previous);
-    const alternatives = evaluateCampaignAlternatives(
-      forecastCampaignOpportunities(world, nation, wars, objectives, strengths, observation),
-      constraints.aggression, previous);
+    const opportunities = forecastCampaignOpportunities(world, nation, wars, objectives, strengths, observation);
+    const alternatives = evaluateCampaignAlternatives(opportunities, constraints.aggression, previous);
+    const settlementReadyOpponentIds = opportunities.filter((option) => option.settlementReady).map((option) => option.opponentId).sort();
     const decision = evaluateCampaignPolicy(constraints, alternatives);
     const topologyChanged = !previous || previous.objectives.map((goal) => goal.warKey).sort().join("|") !==
       objectives.map((goal) => goal.warKey).sort().join("|");
     const emergency = constraints.capitalCritical || constraints.foodSeconds < 45;
-    const current = alternatives.find((option) => option.mode === previous?.mode && option.opponentId === previous.primaryOpponentId);
-    const clearImprovement = !!current && alternatives[0].score - current.score >
-      (alternatives[0].uncertainty + current.uncertainty) * 0.25;
-    const reassess = clearImprovement || requiresCampaignReview(constraints, previous?.constraints,
+    const negotiating = previous?.mode === "seek-peace" || previous?.mode === "consolidate";
+    const current = alternatives.find((option) => option.mode === previous?.mode &&
+      (negotiating || option.opponentId === previous.primaryOpponentId));
+    const military = alternatives.filter((option) => option.mode === "defend" || option.mode === "limited-offensive");
+    const currentMilitary = military.find((option) => option.mode === previous?.militaryMode && option.opponentId === previous.primaryOpponentId);
+    const clearImprovement = hasClearCampaignImprovement(alternatives[0], current) || hasClearCampaignImprovement(military[0], currentMilitary);
+    const readinessChanged = settlementReadyOpponentIds.join("|") !== previous?.settlementReadyOpponentIds?.join("|");
+    const reassess = readinessChanged || clearImprovement || requiresCampaignReview(constraints, previous?.constraints,
       world.time.fastTick - (previous?.adoptedAtTick ?? world.time.fastTick), topologyChanged);
+    const mode = reassess ? decision.mode : previous!.mode;
+    const effort = selectCampaignMilitaryEffort(alternatives, mode, campaignCostLimitReached(constraints));
+    const militaryMode = reassess ? effort.mode : previous!.militaryMode ?? effort.mode;
     const primary = reassess
       ? constraints.capitalCritical ? selectPrimaryOpponent(world, nation.id, objectives, previous?.primaryOpponentId, strengths)
-        : alternatives[0]?.opponentId ?? null
+        : effort.opponentId
       : previous!.primaryOpponentId;
-    const mode = reassess ? decision.mode : previous!.mode;
     const changed = !previous || previous.mode !== mode || previous.primaryOpponentId !== primary || topologyChanged ||
+      previous.militaryMode !== militaryMode || readinessChanged ||
       reassess && emergency && previous.reason !== decision.reason;
     const campaign: WarCampaign = {
       nationId: nation.id, objectives, constraints, mode, primaryOpponentId: primary,
+      militaryMode, settlementReadyOpponentIds,
       alternatives, observation,
       adoptedAtTick: changed ? world.time.fastTick : previous!.adoptedAtTick,
       evaluatedAtTick: world.time.fastTick, revision: (previous?.revision ?? 0) + Number(changed),
       reason: changed ? topologyChanged ? "war-membership-changed" : previous?.primaryOpponentId !== primary
-        ? "priority-opponent-changed" : decision.reason : previous!.reason,
+        ? "priority-opponent-changed" : readinessChanged ? "agreement-availability-changed"
+        : previous?.mode === mode && previous?.militaryMode !== militaryMode ? "military-effort-changed"
+        : decision.reason : previous!.reason,
     };
     if (changed) {
       state.version += 1;

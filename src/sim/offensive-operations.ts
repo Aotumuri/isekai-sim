@@ -1,4 +1,4 @@
-import { campaignPrefersSettlement } from "./war-campaign/peace-guidance";
+import { campaignShouldStandDown } from "./war-campaign/peace-guidance";
 import { campaignCostLimitReached } from "./war-campaign/policy";
 import { getWarCampaign } from "./war-campaign/state";
 import { getCampaignDeadline } from "./campaign-deadline";
@@ -923,7 +923,7 @@ function advanceOperation(
   }
   const campaign = getWarCampaign(world, operation.nationId);
   if (!operation.supplyReliefPlanId && campaign &&
-    campaignPrefersSettlement(world, operation.nationId, operation.enemyNationId) &&
+    campaignShouldStandDown(world, operation.nationId, operation.enemyNationId) &&
     (operation.phase === "preparing" || campaign.mode === "seek-peace" || campaignCostLimitReached(campaign.constraints))) {
     finishOperation(world, operation, "cancelled", "campaign-settlement");
     return { keep: true, changed: true };
@@ -2291,7 +2291,7 @@ function tryStartExploitation(
   successReason: OffensiveOperationCompletionReason,
 ): boolean {
   if (!world.offensiveOperations.exploitationEnabled ||
-    campaignPrefersSettlement(world, operation.nationId, operation.enemyNationId)) return false;
+    campaignShouldStandDown(world, operation.nationId, operation.enemyNationId)) return false;
   if (!isRegionControlledBy(world, operation.primaryTargetRegionId, operation.nationId)) {
     return false;
   }
@@ -2410,7 +2410,7 @@ function advanceExploitation(
   if (getCapitalDefenseAssessment(world, operation.nationId)?.threatLevel === "critical") {
     return finish("capital-emergency");
   }
-  if (campaignPrefersSettlement(world, operation.nationId, operation.enemyNationId)) return finish("campaign-settlement");
+  if (campaignShouldStandDown(world, operation.nationId, operation.enemyNationId)) return finish("campaign-settlement");
   if (world.time.fastTick >= operation.expiresAtTick) return finish("timeout");
 
   let front = findExploitationFrontForTarget(world, operation, targetId);
@@ -3740,7 +3740,7 @@ function isOperationPlanEligible(
   if (getCapitalDefenseAssessment(world, nationId)?.threatLevel === "critical") return false;
   const front = world.landFronts.operationalSectorsById.get(plan.frontId);
   const enemy = front && getOpposingFrontSide(front, nationId);
-  if (enemy && campaignPrefersSettlement(world, nationId, enemy.nationId)) return false;
+  if (enemy && campaignShouldStandDown(world, nationId, enemy.nationId)) return false;
   if (plan.posture === "attack") return true;
   const closure = bestPocketClosure(world, nationId, plan.frontId);
   if (closure?.tacticallyFeasible &&

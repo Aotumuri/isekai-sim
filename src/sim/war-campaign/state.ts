@@ -23,6 +23,8 @@ export interface WarCampaign {
   nationId: NationId;
   objectives: CampaignObjective[];
   mode: CampaignMode;
+  militaryMode?: "defend" | "limited-offensive";
+  settlementReadyOpponentIds?: NationId[];
   primaryOpponentId: NationId | null;
   adoptedAtTick: number;
   evaluatedAtTick: number;

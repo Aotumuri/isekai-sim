@@ -28,13 +28,14 @@ export interface CampaignOpportunity {
   militaryGoalHeld: boolean;
   uncertainty: number;
   committedFraction: number;
+  settlementReady?: boolean;
 }
 const HORIZON_SECONDS = 30;
 const clamp = (n: number) => Math.max(0, Math.min(1, n));
 
 export function evaluateCampaignAlternatives(
   opportunities: CampaignOpportunity[], aggression: number,
-  current?: { mode: CampaignMode; primaryOpponentId: NationId | null },
+  current?: { mode: CampaignMode; primaryOpponentId: NationId | null; militaryMode?: "defend" | "limited-offensive" },
 ): CampaignAlternative[] {
   const alternatives: CampaignAlternative[] = [];
   for (const input of opportunities) {
@@ -63,10 +64,12 @@ export function evaluateCampaignAlternatives(
       uncertainty: input.uncertainty * input.settlementValue * (1 - input.peaceProbability),
     });
     for (const option of options) {
-      const changed = current && (current.mode !== option.mode || current.primaryOpponentId !== input.opponentId);
+      const military = option.mode === "defend" || option.mode === "limited-offensive";
+      const existingMode = military ? current?.militaryMode ?? current?.mode : current?.mode;
+      const changed = current && (existingMode !== option.mode || current.primaryOpponentId !== input.opponentId);
       // Real committed force and travel opportunity cost, not a fixed ban on
       // changing decisions. Strong evidence can outweigh the sunk plan.
-      const changeCost = changed ? input.committedFraction *
+      const changeCost = changed && military ? input.committedFraction *
         clamp(input.arrivalSeconds / HORIZON_SECONDS) * 0.1 : 0;
       const riskAversion = 1.5 - aggression;
       const replacementRisk = Math.max(0, loss - input.replacementFraction) *
@@ -80,4 +83,17 @@ export function evaluateCampaignAlternatives(
     Number(b.mode === current?.mode && b.opponentId === current?.primaryOpponentId) -
     Number(a.mode === current?.mode && a.opponentId === current?.primaryOpponentId) ||
     a.opponentId.localeCompare(b.opponentId) || a.mode.localeCompare(b.mode));
+}
+
+/** Negotiating does not remove the need for a military fallback. */
+export function selectCampaignMilitaryEffort(alternatives: CampaignAlternative[], mode: CampaignMode, constrained: boolean) {
+  const options = alternatives.filter((option) => option.mode === "defend" || option.mode === "limited-offensive");
+  const choice = mode === "defend" || constrained ? options.find((option) => option.mode === "defend")
+    : mode === "limited-offensive" ? options.find((option) => option.mode === "limited-offensive") : options[0];
+  return { mode: choice?.mode === "limited-offensive" ? "limited-offensive" as const : "defend" as const,
+    opponentId: choice?.opponentId ?? null };
+}
+
+export function hasClearCampaignImprovement(candidate: CampaignAlternative | undefined, current: CampaignAlternative | undefined): boolean {
+  return !!candidate && !!current && candidate.score - current.score > (candidate.uncertainty + current.uncertainty) * 0.25;
 }
