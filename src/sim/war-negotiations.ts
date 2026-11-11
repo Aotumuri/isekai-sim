@@ -1,3 +1,4 @@
+import { campaignRecognitionRegions, campaignCanHoldRecognition, reciprocalRecognitionTerms } from "./war-campaign/peace-recognition";
 import { getCampaignObjectives } from "./campaign-objectives";
 import { campaignPeaceValue, campaignPrefersSettlement } from "./war-campaign/peace-guidance";
 import { getManualGovernmentId } from "./player-nation";
@@ -174,6 +175,13 @@ function reviseTerms(world: WorldState, negotiation: WarNegotiation, proposer: N
   const terms = { ...current, demandedWeapons: Math.min(current.demandedWeapons, Math.floor(opponent.resources.weapons)),
     offeredWeapons: Math.min(current.offeredWeapons, Math.floor(country.resources.weapons)) };
 
+  const recognition = settling ? campaignRecognitionRegions(world, proposer, target) : [];
+  if (campaignCanHoldRecognition(world, proposer) && recognition.length &&
+    !recognition.every((id) => terms.demandedRegionIds.includes(id))) {
+    const recognized = { ...whitePeaceTerms(), demandedRegionIds: recognition, truceSeconds: terms.truceSeconds };
+    if (!getPeaceTermsIssue(world, proposer, target, recognized)) return recognized;
+  }
+
   if (wantsCompromise) {
     if (terms.resourceReparation) return { ...terms, resourceReparation: undefined };
     if (terms.partition) return { ...terms, partition: undefined };
@@ -190,11 +198,12 @@ function reviseTerms(world: WorldState, negotiation: WarNegotiation, proposer: N
         return { ...terms, demandedWeapons: Math.max(0, terms.demandedWeapons - 15) };
       }
       for (const parcel of parcels) {
+        if (campaignCanHoldRecognition(world, proposer) && parcel.some((id) => recognition.includes(id))) continue;
         const removed = new Set(parcel);
         const reduced = { ...terms, demandedRegionIds: terms.demandedRegionIds.filter((id) => !removed.has(id)) };
         if (!getPeaceTermsIssue(world, proposer, target, reduced)) return reduced;
       }
-      return { ...terms, demandedRegionIds: [] };
+      return campaignCanHoldRecognition(world, proposer) && recognition.length ? terms : { ...terms, demandedRegionIds: [] };
     }
     if (terms.demandedWeapons > 0) return { ...terms, demandedWeapons: Math.max(0, terms.demandedWeapons - 15) };
     if (exitValue >= 0 && (advantage < -0.15 || urgency >= 0.65)) {
@@ -361,6 +370,26 @@ export function acceptPeaceOffer(world: WorldState, recipient: NationId, propose
   if (state.settlements.length > 40) state.settlements.splice(0, state.settlements.length - 40);
   return true;
 }
+/** Prefer a mutually acceptable recognition offer over a white peace that
+ * returns the achieved goal. Never override manual policy or offer maturity. */
+function settleOrAwaitCampaignRecognition(world: WorldState, negotiation: WarNegotiation): boolean {
+  if (!negotiation.automatic.get(negotiation.a) || !negotiation.automatic.get(negotiation.b)) return false;
+  for (const [proposer, recipient] of [[negotiation.a, negotiation.b], [negotiation.b, negotiation.a]]) {
+    const ids = campaignRecognitionRegions(world, proposer, recipient);
+    const offer = negotiation.offers.get(proposer)!;
+    if (!ids.length || !ids.every((id) => offer.terms.demandedRegionIds.includes(id)) ||
+      offer.terms.puppetTarget || offer.terms.partition || offer.terms.localSubject || offer.terms.resourceReparation) continue;
+    if (!assessPeaceOffer(world, recipient, proposer, offer.terms).accepts ||
+      !assessPeaceOffer(world, proposer, recipient, reciprocalRecognitionTerms(offer.terms)).accepts) continue;
+    if (world.time.slowTick - offer.revisedAtSlowTick < 10) {
+      if (campaignCanHoldRecognition(world, proposer)) return true;
+      continue;
+    }
+    if (acceptPeaceOffer(world, recipient, proposer)) return true;
+  }
+  return false;
+}
+
 function tryMutualCompromise(world: WorldState, negotiation: WarNegotiation): boolean {
   const { a, b, automatic, offers } = negotiation;
   if (!automatic.get(a) || !automatic.get(b) || getSeparatePeaceIssue(world, a, b)) return false;
@@ -416,6 +445,7 @@ export function updateWarNegotiations(world: WorldState): void {
         }
       }
     }
+    if (negotiation.a !== player && negotiation.b !== player && settleOrAwaitCampaignRecognition(world, negotiation)) continue;
     let settled = false;
     for (const [recipient, proposer] of [[negotiation.a, negotiation.b], [negotiation.b, negotiation.a]]) {
       const offer = negotiation.offers.get(proposer)!;

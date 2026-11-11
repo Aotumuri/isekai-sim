@@ -1,3 +1,4 @@
+import { campaignRecognitionRegions } from "../../src/sim/war-campaign/peace-recognition";
 import { createScenarioWorld } from "../scenarios";
 import { semanticWorldSignature, assertWorldInvariants } from "../helpers/invariants";
 import { fixedSocietyDistrict } from "../helpers/fixed-society-world";
@@ -140,4 +141,13 @@ test("a direct land order survives enabled national planning during war", () => 
   assert.equal(world.playerNation!.landOrders.get(unit.id), target);
   assert(!world.offensiveOperations.operationIdByUnitId.has(unit.id));
   assert(!world.reorganization.planIdByUnitId.has(unit.id));
+});
+
+test("an occupied overseas port cannot bypass the existing ban on isolated concessions", () => {
+  const { world, operation } = assembledIslandWorld();
+  const campaign = settle(world, operation.nationId);
+  campaign.objectives.find((goal) => goal.opponentId === operation.enemyNationId)!.regionIds = [operation.destinationPortId];
+  world.occupation.mesoById.set(operation.destinationPortId, operation.nationId);
+  world.occupation.version++;
+  assert.deepEqual(campaignRecognitionRegions(world, operation.nationId, operation.enemyNationId), []);
 });
