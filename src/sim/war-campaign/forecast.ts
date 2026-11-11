@@ -57,9 +57,11 @@ export function forecastCampaignOpportunities(
       available = invasion.assignedStrength;
       arrival = Math.max(0, invasion.launchFeasibility.estimatedCompletionTick - world.time.fastTick) / 10;
     }
+    const victoryRegions = goal.political?.purpose === "decisive-victory"
+      ? world.mesoRegions.filter((r) => owners.get(r.id) === goal.opponentId).map((r) => r.id) : goal.regionIds;
     const politicalValue = goal.kind === "preserve-sovereignty" ? atRisk : goal.political?.purpose === "coercive-settlement"
       ? Math.min(goal.political.weaponTarget, enemy.resources.weapons) * strengthPerWeapon / own
-      : getTerritorialValue(world, nation.id, goal.regionIds) / totalValue;
+      : getTerritorialValue(world, nation.id, victoryRegions) / totalValue;
     const securedValue = goal.kind !== "preserve-sovereignty" && isPoliticalGoalSecured(world, nation.id, goal) ? politicalValue : 0;
     const negotiationAllowed = getWarDeclarationMode(world) === "diplomacy" && !war.isTest &&
       hasMinimumPeaceAge(world.time.fastTick, war.startedAtFastTick);

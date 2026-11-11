@@ -267,3 +267,15 @@ Next diagnostic hypothesis: the political-purpose adapter currently treats an
 un-cedeable capital as coercion worth only a small weapon concession. It may be
 ignoring the separate, existing military-victory path to legal ownership. Audit
 that classification and the alternative benefit estimates before changing them.
+
+## R2.5: recognize the military-victory outcome (pending)
+
+Opening audit at the actual first slow tick, 100 development episodes: 23/100
+active-war aggressor goals and 4/20 each in matched/stalemate target a capital,
+but are classified as small coercive concessions. Their opponents' remaining
+territorial value can substantially exceed that target's value. R2.5 distinguishes
+decisive military victory/recognized subjection from negotiated district cession.
+It values the existing victory path without allowing illegal capital cession or
+counting temporary occupation as final ownership. Ordinary isolated ports remain
+instrumental coercive footholds. Only the political-purpose/value adapter changes
+in this trial; the complete cost observations and execution contract remain fixed.

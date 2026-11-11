@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createScenarioWorld } from "../scenarios";
 import { updateWarCampaigns } from "../../src/sim/war-campaign/update";
-import { isPoliticalGoalSecured } from "../../src/sim/war-campaign/political-objectives";
+import { buildPoliticalObjective, isPoliticalGoalSecured } from "../../src/sim/war-campaign/political-objectives";
 import { whitePeaceTerms } from "../../src/sim/war-negotiations";
 import { forecastCampaignOpportunities, observeCampaignCost } from "../../src/sim/war-campaign/forecast";
 import { campaignRecognitionWeapons } from "../../src/sim/war-campaign/peace-recognition";
@@ -63,4 +63,22 @@ test("coercive recognition requests only the adopted affordable goal after milit
   assert.equal(campaignRecognitionWeapons(world, war.aggressorId, war.defenderId), goal.political!.weaponTarget);
   opponent.resources.weapons = 0;
   assert.equal(campaignRecognitionWeapons(world, war.aggressorId, war.defenderId), 0);
+});
+
+test("a capital military objective distinguishes decisive victory from a legal territorial concession", () => {
+  const { world, war, goal } = seaCampaign();
+  const capital = world.nations.find((n) => n.id === war.defenderId)!.capitalMesoId;
+  const political = buildPoliticalObjective(world, war.aggressorId, war.defenderId, [capital], true, "declared-territory");
+  assert.equal(political.purpose, "decisive-victory");
+  const decisive = { ...goal, regionIds: [capital], political };
+  assert.equal(isPoliticalGoalSecured(world, war.aggressorId, decisive), false);
+  world.occupation.mesoById.set(capital, war.aggressorId);
+  assert.equal(isPoliticalGoalSecured(world, war.aggressorId, decisive), false);
+  world.warNegotiations = { active: new Map(), lastAISlowTick: 0, settlements: [{
+    a: war.aggressorId, b: war.defenderId, proposerId: war.aggressorId,
+    atSlowTick: 10, terms: { ...whitePeaceTerms(), demandedWeapons: 15 },
+  }] };
+  assert.equal(isPoliticalGoalSecured(world, war.aggressorId, decisive), false);
+  world.warNegotiations.settlements[0].terms.puppetTarget = true;
+  assert.equal(isPoliticalGoalSecured(world, war.aggressorId, decisive), true);
 });

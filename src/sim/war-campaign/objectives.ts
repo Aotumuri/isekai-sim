@@ -32,6 +32,7 @@ export function buildCampaignObjectives(
       rationale: old?.rationale ?? (opening?.rationale === "no-access" ? "no-access-defense" : opening?.rationale) ?? "preserve-sovereignty",
       openingStrength: old?.openingStrength ?? strength, achieved,
       openingManpower: old?.openingManpower ?? manpower,
-      political: old?.political ?? buildPoliticalObjective(world, nationId, opponentId, regionIds, kind === "limited-occupation") };
+      political: old?.political ?? buildPoliticalObjective(world, nationId, opponentId, regionIds,
+        kind === "limited-occupation", opening?.rationale) };
   });
 }
