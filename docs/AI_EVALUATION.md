@@ -1,6 +1,6 @@
 # 戦争AIの評価記録
 
-状態：軍事基準200件を測定済み。全システム基準測定中。新旧比較・改善実証は未完了。
+状態：軍事基準200件・全システム基準200件を測定済み。試作の新旧比較中。改善実証は未完了。
 
 ## 基準
 
@@ -85,3 +85,29 @@ node --import tsx test/diagnostics/war-ai-report.ts diagnostics/war-ai-baseline-
 
 基準テスト成功を戦略品質の改善と解釈しない。現段階で改善率や
 新AIの完成を主張できる結果はない。
+
+## 持続的国家計画の試作
+
+ソース `340f778`。既定無効の `warCampaignEnabled` で国家計画を追加した。
+既存回帰＋専用テストは634 / 634成功。build、benchmark:quick も成功。
+専用テストは決定性・RNG非消費、全相手の追跡、目標保持、計画維持、
+和平・国家消滅・無効化後の削除、撤退・緊急防衛・兵力下限の維持を検証する。
+プレイヤー命令、長時間負荷、作戦や和平への統合を完全に検証するものではない。
+
+試作の軍事比較：
+
+```sh
+node --import tsx test/diagnostics/war-ai-matrix.ts --seeds 20 --ticks 3200 --campaign --output diagnostics/war-ai-prototype-development.json.gz
+node --import tsx test/diagnostics/war-ai-report.ts diagnostics/war-ai-baseline-development.json.gz diagnostics/war-ai-prototype-development.json.gz
+```
+
+部分結果では作戦完了・首都陥落・戦争残存がシナリオによって異なる方向に
+変化している。全体の中止件数減少を成功とはみなさず、目標達成・存続・
+損耗の時系列を追加した後に判断する。既定の有効化は行っていない。
+
+全システム基準は旧ソース `394d4bd` で200 / 200件成功。
+`war-ai-baseline-full-development.json.gz` と `war-ai-baseline-full-summary.json`
+に全結果と分布を保存した。base-world の10000 tick実行時間中央値は
+2252 ms、作戦作成平均9.20件、終了時残存戦争平均0.15件。
+戦争が複数発生したか、いつ終結したか、目的を達成したかは終了時件数だけでは
+判断できないため、追加観測が必要。
