@@ -46,6 +46,7 @@ function context(unit: UnitState) {
   };
 }
 let movement = new Map<string, ReturnType<typeof context>>();
+const campaignRevisions = new Map<string, number>();
 function observeMovement(current: WorldState) {
   const next = new Map<string, ReturnType<typeof context>>();
   for (const unit of current.units) {
@@ -69,6 +70,11 @@ function observeMovement(current: WorldState) {
       nation: unit.nationId, causes, before, after });
   }
   movement = next;
+  for (const campaign of current.warCampaigns?.byNationId.values() ?? []) {
+    if (campaignRevisions.get(campaign.nationId) === campaign.revision) continue;
+    campaignRevisions.set(campaign.nationId, campaign.revision);
+    events.push({ type: "campaign", tick: current.time.fastTick, campaign });
+  }
 }
 type Geometry = WorldState["frontAllocations"]["frontGeometryById"];
 let assignments = new Map<string, string>();

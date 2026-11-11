@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
+import { gzipSync } from "node:zlib";
 
 // Import the entire engine from its frozen checkout; never mix module versions.
 const args = process.argv.slice(2);
@@ -53,5 +54,7 @@ try {
   }
 } finally { console.info = original; }
 const report = { engineRoot: root, revision: execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(), results };
-await writeFile(option("--output", "diagnostics/war-ai-r2-decision-cost.json"), JSON.stringify(report, null, 2));
+const output = option("--output", "diagnostics/war-ai-r2-decision-cost.json.gz");
+const bytes = Buffer.from(JSON.stringify(report));
+await writeFile(output, output.endsWith(".gz") ? gzipSync(bytes) : bytes);
 console.log(JSON.stringify(results.map(({ scenario, seed, meanMs, ...rest }: any) => ({ scenario, seed, meanMs }))));

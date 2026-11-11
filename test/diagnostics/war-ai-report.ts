@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { gunzipSync } from "node:zlib";
 import type { BenchmarkResult } from "../benchmark/types";
+import { pairedBootstrap } from "../helpers/paired-bootstrap";
 
 interface Matrix {
   revision: string;
@@ -45,6 +46,13 @@ const metrics: [string, (row: BenchmarkResult) => number][] = [
   ["stalemateMaximumDuration", (row) => row.endWorld.stalemateMaximumDuration],
   ["frontlineAssignmentSwitches", (row) => row.endWorld.frontlineAssignmentSwitches],
   ["frontTransfers", (row) => row.counters["landFront.allocationFrontTransfers"] ?? 0],
+  ["amphibiousLandings", (row) => row.endWorld.amphibiousCompletedLandings],
+  ["amphibiousTransportLosses", (row) => row.endWorld.amphibiousTransportLosses],
+  ["recoveryManpowerConsumed", (row) => row.endWorld.reorganizationManpowerConsumed],
+  ["recoveryEquipmentConsumed", (row) => row.endWorld.reorganizationEquipmentConsumed],
+  ["productionSuccessful", (row) => row.endWorld.productionSuccessful],
+  ["finalUnits", (row) => row.endWorld.units],
+  ["strategyEvaluationMs", (row) => row.metrics["warCampaign.evaluation"]?.totalMs ?? 0],
 ];
 if (matrices.every((matrix) => matrix.observeWarOutcomes)) {
   const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
@@ -119,4 +127,11 @@ const pairedDeltas = matrices.length === 2 ? matrices[0].results.map((before) =>
     deltas: Object.fromEntries(metrics.map(([name, read]) => [name, read(after) - read(before)])),
   };
 }) : undefined;
-console.log(JSON.stringify({ summary, pairedDeltas }, null, 2));
+const pairedIntervals = pairedDeltas && Object.fromEntries(
+  [...new Set(pairedDeltas.map((row) => row.scenario))].map((scenario) => [scenario,
+    Object.fromEntries(metrics.map(([name]) => [name, pairedBootstrap(
+      pairedDeltas.filter((row) => row.scenario === scenario).map((row) => row.deltas[name]),
+    )])),
+  ]),
+);
+console.log(JSON.stringify({ summary, pairedDeltas, pairedIntervals }, null, 2));

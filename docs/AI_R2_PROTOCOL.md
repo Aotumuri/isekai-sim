@@ -129,3 +129,58 @@ production build passed. The optional whole-source `tsc` command also exposes
 existing renderer/unused-symbol errors outside this change; the repository's
 required test typecheck passes. The standard quick benchmark and long/final
 evaluations remain pending; passing unit tests does not adopt the prototype.
+
+### R2.2 development result: not adopted
+
+Source `2d0bf60`, all 13 scenarios × 20 development seeds, 10,000 ticks, 260
+completed rows, no execution failures. Relative to R1, opening attacker objective
+retention changes by −8 pp in active-war, −10 pp in stalemate and reorganization,
++5 pp in matched-war and collapse, and +10 pp in economic-constraint. Defender
+retention changes by +15 pp in stalemate, +10 pp in reorganization, −5 pp in
+matched/collapse and −15 pp in economic-constraint. These opposing interests must
+not be added into an overall improvement. Against Legacy, unequal-war attacker
+retention falls 20 pp. No final seeds have been used; quality gates remain unmet.
+Full distributions and paired seed-bootstrap intervals are archived in the two
+`war-ai-r2-2-v-*.json.gz` reports. Confidence intervals are per metric/family,
+not a correction for searching many metrics; final confirmation is still needed.
+
+Same-state timing verifies identical non-CPU worlds before replaying decisions.
+With active wars, R1 median update cost is 0.013–0.017 ms and R2.2 is
+0.214–0.356 ms. Without wars both remain approximately 0.004–0.008 ms.
+The national model itself therefore costs more, independently of the changed
+trajectory. Initial full matrix rows spend 13–78 ms per 1,000-second episode
+inside the campaign stage. End-to-end CPU is separately reported; concurrent
+diagnostics and a short normal UI check make these timings descriptive rather
+than an isolated speed benchmark.
+
+A new 30-second option probe uses four diagnostic seeds (1022748319780–783),
+four families, and the same opening with one nation's choice forced after each
+campaign evaluation, while emergency/budget overrides and other nations remain
+normal. Limited offense and defense produce identical recorded battle losses,
+strength and postures in these 16 pairs. This exposes an execution-contract
+problem: `defensiveOpportunity` permits broad attacks in defense, and commitment
+preservation can keep existing offensive plans active. Ranking nominal options
+does not prove the options cause different actions. Seek-peace is different but
+can sacrifice the military route before a settlement is actually acceptable.
+
+Further cost-model audit found that `getWarCasualties` records direct manpower
+damage. A unit removed when organization reaches zero can still have substantial
+manpower; that removal is not in the direct-damage total. This is not yet a
+measured total-loss estimate. Do not interpret the current casualty fraction as
+all unrecoverable national force. Combat rules will remain unchanged; diagnose
+and account for the missing exposure separately before tuning cost coefficients.
+
+## R2.3: executable choices and complete cost observation (pending)
+
+Next hypothesis: distinguish homeland recovery from foreign expansion in the
+execution contract; compare the continuation of a committed operation explicitly;
+observe unavailable field force in addition to direct battle damage; and reserve
+other theaters' defense before estimating an offensive option's available force.
+Use the option probe to verify action differences before another full matrix.
+
+Normal-play UI check at R2.2: generated a new Japan-scale map through the normal
+startup screen, observed time advancing, paused, selected a nation, and opened
+debug display controls. Screenshot: `diagnostics/war-ai-r2-normal-play.png`.
+This checks the normal rendering/control path with the default AI. The experiment
+still has no normal-UI opt-in control, so this is not evidence of R2 strategy in
+normal play; that remains pending.
