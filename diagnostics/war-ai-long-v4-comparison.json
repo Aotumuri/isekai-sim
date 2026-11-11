@@ -1,0 +1,614 @@
+{
+  "summary": [
+    {
+      "revision": "385f4188990068c1ceac10585f0d099061a51072",
+      "ticks": 100000,
+      "fullSystems": true,
+      "failures": [],
+      "scenarios": {
+        "base-world": {
+          "wallClockMs": {
+            "n": 3,
+            "mean": 16720.665013666665,
+            "median": 17101.296874999996,
+            "min": 15283.353041,
+            "max": 17777.345125,
+            "p95": 17777.345125
+          },
+          "cpuMs": {
+            "n": 3,
+            "mean": 18585.198333333334,
+            "median": 18430.7,
+            "min": 18320.794,
+            "max": 19004.101,
+            "p95": 19004.101
+          },
+          "heapMiB": {
+            "n": 3,
+            "mean": 155.64937337239584,
+            "median": 156.66315460205078,
+            "min": 150.9789047241211,
+            "max": 159.30606079101562,
+            "p95": 159.30606079101562
+          },
+          "operationsCreated": {
+            "n": 3,
+            "mean": 2,
+            "median": 2,
+            "min": 0,
+            "max": 4,
+            "p95": 4
+          },
+          "operationsCompleted": {
+            "n": 3,
+            "mean": 1.3333333333333333,
+            "median": 2,
+            "min": 0,
+            "max": 2,
+            "p95": 2
+          },
+          "operationsCancelled": {
+            "n": 3,
+            "mean": 0.6666666666666666,
+            "median": 0,
+            "min": 0,
+            "max": 2,
+            "p95": 2
+          },
+          "operationsFailed": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "capitalFalls": {
+            "n": 3,
+            "mean": 0.3333333333333333,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "warsRemaining": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "stalemateMaximumDuration": {
+            "n": 3,
+            "mean": 2,
+            "median": 0,
+            "min": 0,
+            "max": 6,
+            "p95": 6
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 3,
+            "mean": 30.666666666666668,
+            "median": 34,
+            "min": 0,
+            "max": 58,
+            "p95": 58
+          },
+          "frontTransfers": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "openingWarSides": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "openingAggressorObjectiveHeldRate": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "openingDefenderTerritoryHeldRate": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "openingNationSurvivalRate": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "openingMeanCasualties": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "aggressorObjectiveHeldRate": {
+            "n": 3,
+            "mean": 0.3333333333333333,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "defenderTerritoryHeldRate": {
+            "n": 3,
+            "mean": 0.3333333333333333,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "nationSurvivalRate": {
+            "n": 3,
+            "mean": 0.3333333333333333,
+            "median": 0.5,
+            "min": 0,
+            "max": 0.5,
+            "p95": 0.5
+          },
+          "meanCasualties": {
+            "n": 3,
+            "mean": 46.740703087938755,
+            "median": 21.733800373547638,
+            "min": 0,
+            "max": 118.48830889026863,
+            "p95": 118.48830889026863
+          },
+          "meanEndedWarTicks": {
+            "n": 3,
+            "mean": 162.33333333333334,
+            "median": 147,
+            "min": 0,
+            "max": 340,
+            "p95": 340
+          },
+          "unfinishedWarSides": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "activeWarTicks": {
+            "n": 3,
+            "mean": 162.33333333333334,
+            "median": 147,
+            "min": 0,
+            "max": 340,
+            "p95": 340
+          },
+          "campaignChanges": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "openingNetStrategicValueRate": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "openingTerritorialGains": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "openingTerritorialLosses": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "operationsCancelledPosture": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "operationsCancelledAllocation": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          }
+        }
+      }
+    },
+    {
+      "revision": "385f4188990068c1ceac10585f0d099061a51072",
+      "ticks": 100000,
+      "fullSystems": true,
+      "failures": [],
+      "scenarios": {
+        "base-world": {
+          "wallClockMs": {
+            "n": 3,
+            "mean": 19875.311555666663,
+            "median": 19896.9865,
+            "min": 19367.322917,
+            "max": 20361.62525,
+            "p95": 20361.62525
+          },
+          "cpuMs": {
+            "n": 3,
+            "mean": 21901.123000000003,
+            "median": 22359.546000000002,
+            "min": 20961.941000000003,
+            "max": 22381.882,
+            "p95": 22381.882
+          },
+          "heapMiB": {
+            "n": 3,
+            "mean": 129.8862762451172,
+            "median": 133.49065399169922,
+            "min": 95.2142105102539,
+            "max": 160.95396423339844,
+            "p95": 160.95396423339844
+          },
+          "operationsCreated": {
+            "n": 3,
+            "mean": 1.6666666666666667,
+            "median": 1,
+            "min": 0,
+            "max": 4,
+            "p95": 4
+          },
+          "operationsCompleted": {
+            "n": 3,
+            "mean": 1.3333333333333333,
+            "median": 1,
+            "min": 0,
+            "max": 3,
+            "p95": 3
+          },
+          "operationsCancelled": {
+            "n": 3,
+            "mean": 0.3333333333333333,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "operationsFailed": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "capitalFalls": {
+            "n": 3,
+            "mean": 0.6666666666666666,
+            "median": 1,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "warsRemaining": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "stalemateMaximumDuration": {
+            "n": 3,
+            "mean": 2,
+            "median": 0,
+            "min": 0,
+            "max": 6,
+            "p95": 6
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 3,
+            "mean": 59,
+            "median": 44,
+            "min": 0,
+            "max": 133,
+            "p95": 133
+          },
+          "frontTransfers": {
+            "n": 3,
+            "mean": 0.3333333333333333,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "openingWarSides": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "openingAggressorObjectiveHeldRate": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "openingDefenderTerritoryHeldRate": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "openingNationSurvivalRate": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "openingMeanCasualties": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "aggressorObjectiveHeldRate": {
+            "n": 3,
+            "mean": 0.16666666666666666,
+            "median": 0,
+            "min": 0,
+            "max": 0.5,
+            "p95": 0.5
+          },
+          "defenderTerritoryHeldRate": {
+            "n": 3,
+            "mean": 0.3333333333333333,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "nationSurvivalRate": {
+            "n": 3,
+            "mean": 0.3333333333333333,
+            "median": 0.5,
+            "min": 0,
+            "max": 0.5,
+            "p95": 0.5
+          },
+          "meanCasualties": {
+            "n": 3,
+            "mean": 36.78420487029206,
+            "median": 7.8779381489111415,
+            "min": 0,
+            "max": 102.47467646196503,
+            "p95": 102.47467646196503
+          },
+          "meanEndedWarTicks": {
+            "n": 3,
+            "mean": 225.66666666666666,
+            "median": 308,
+            "min": 0,
+            "max": 369,
+            "p95": 369
+          },
+          "unfinishedWarSides": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "activeWarTicks": {
+            "n": 3,
+            "mean": 290.6666666666667,
+            "median": 308,
+            "min": 0,
+            "max": 564,
+            "p95": 564
+          },
+          "campaignChanges": {
+            "n": 3,
+            "mean": 2.3333333333333335,
+            "median": 2,
+            "min": 0,
+            "max": 5,
+            "p95": 5
+          },
+          "openingNetStrategicValueRate": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "openingTerritorialGains": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "openingTerritorialLosses": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "operationsCancelledPosture": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "operationsCancelledAllocation": {
+            "n": 3,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          }
+        }
+      }
+    }
+  ],
+  "pairedDeltas": [
+    {
+      "scenario": "base-world",
+      "seed": 822748319780,
+      "deltas": {
+        "wallClockMs": 4083.969876000001,
+        "cpuMs": 4061.0879999999997,
+        "heapMiB": 1.6479034423828125,
+        "operationsCreated": -1,
+        "operationsCompleted": -1,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 1,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 99,
+        "frontTransfers": 1,
+        "openingWarSides": 0,
+        "openingAggressorObjectiveHeldRate": 0,
+        "openingDefenderTerritoryHeldRate": 0,
+        "openingNationSurvivalRate": 0,
+        "openingMeanCasualties": 0,
+        "aggressorObjectiveHeldRate": -0.5,
+        "defenderTerritoryHeldRate": 0,
+        "nationSurvivalRate": 0,
+        "meanCasualties": -13.855862224636496,
+        "meanEndedWarTicks": 222,
+        "unfinishedWarSides": 0,
+        "activeWarTicks": 417,
+        "campaignChanges": 5,
+        "openingNetStrategicValueRate": 0,
+        "openingTerritorialGains": 0,
+        "openingTerritorialLosses": 0,
+        "operationsCancelledPosture": 0,
+        "operationsCancelledAllocation": 0
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319781,
+      "deltas": {
+        "wallClockMs": 3260.3283750000046,
+        "cpuMs": 3355.4450000000033,
+        "heapMiB": -23.172500610351562,
+        "operationsCreated": 0,
+        "operationsCompleted": 1,
+        "operationsCancelled": -1,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": -14,
+        "frontTransfers": 0,
+        "openingWarSides": 0,
+        "openingAggressorObjectiveHeldRate": 0,
+        "openingDefenderTerritoryHeldRate": 0,
+        "openingNationSurvivalRate": 0,
+        "openingMeanCasualties": 0,
+        "aggressorObjectiveHeldRate": 0,
+        "defenderTerritoryHeldRate": 0,
+        "nationSurvivalRate": 0,
+        "meanCasualties": -16.013632428303595,
+        "meanEndedWarTicks": -32,
+        "unfinishedWarSides": 0,
+        "activeWarTicks": -32,
+        "campaignChanges": 2,
+        "openingNetStrategicValueRate": 0,
+        "openingTerritorialGains": 0,
+        "openingTerritorialLosses": 0,
+        "operationsCancelledPosture": 0,
+        "operationsCancelledAllocation": 0
+      }
+    },
+    {
+      "scenario": "base-world",
+      "seed": 822748319782,
+      "deltas": {
+        "wallClockMs": 2119.6413749999992,
+        "cpuMs": 2531.241000000002,
+        "heapMiB": -55.76469421386719,
+        "operationsCreated": 0,
+        "operationsCompleted": 0,
+        "operationsCancelled": 0,
+        "operationsFailed": 0,
+        "capitalFalls": 0,
+        "warsRemaining": 0,
+        "stalemateMaximumDuration": 0,
+        "frontlineAssignmentSwitches": 0,
+        "frontTransfers": 0,
+        "openingWarSides": 0,
+        "openingAggressorObjectiveHeldRate": 0,
+        "openingDefenderTerritoryHeldRate": 0,
+        "openingNationSurvivalRate": 0,
+        "openingMeanCasualties": 0,
+        "aggressorObjectiveHeldRate": 0,
+        "defenderTerritoryHeldRate": 0,
+        "nationSurvivalRate": 0,
+        "meanCasualties": 0,
+        "meanEndedWarTicks": 0,
+        "unfinishedWarSides": 0,
+        "activeWarTicks": 0,
+        "campaignChanges": 0,
+        "openingNetStrategicValueRate": 0,
+        "openingTerritorialGains": 0,
+        "openingTerritorialLosses": 0,
+        "operationsCancelledPosture": 0,
+        "operationsCancelledAllocation": 0
+      }
+    }
+  ]
+}
