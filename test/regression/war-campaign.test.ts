@@ -152,6 +152,8 @@ test("a limited goal cannot strand a test war without a legal negotiated exit", 
   assert.equal(applyCampaignFrontGuidance(world, attack).posture, "attack");
   world.wars.forEach((war) => war.isTest = false);
   world.settings!.diplomacyEnabled = true;
+  assert.equal(applyCampaignFrontGuidance(world, attack).posture, "attack");
+  world.time.fastTick = 300;
   assert.equal(applyCampaignFrontGuidance(world, attack).posture, "hold");
 });
 

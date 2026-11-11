@@ -4589,6 +4589,7 @@ function settleCampaign(world: WorldState): void {
   const campaign = world.warCampaigns!.byNationId.get(NATION_A)!;
   campaign.mode = "consolidate";
   campaign.constraints.objectivesSecured = true;
+  world.time.fastTick = Math.max(world.time.fastTick, 300);
 }
 
 test("settlement intent prevents a dedicated pocket operation from bypassing hold posture", () => {
@@ -4652,4 +4653,36 @@ test("settlement ends active exploitation while retaining the successful attack"
   assert.equal(world.offensiveOperations.exploitationStopCounts["campaign-settlement"], 1);
   assert.equal(metrics.getCounter("offensiveOperation.exploitationStop.campaign-settlement"), 1);
   assert.equal(operation.outcome, "success");
+});
+
+test("consolidation retains a military exit before peace can mature and invalidates the readiness cache", () => {
+  const world = createOperationWorld();
+  world.settings = createSimulationSettings({ warCampaignEnabled: true, diplomacyEnabled: true });
+  world.wars[0]!.isTest = false;
+  updateWarCampaigns(world);
+  const campaign = world.warCampaigns!.byNationId.get(NATION_A)!;
+  campaign.mode = "consolidate";
+  campaign.constraints.objectivesSecured = true;
+  updateNationFrontPlans(world);
+  assert.equal(planFor(world, NATION_A).posture, "attack");
+  assert(planFor(world, NATION_A).reasonFlags.includes("campaign-military-exit"));
+  const version = world.frontPlans.version;
+  world.time.fastTick = 300;
+  updateNationFrontPlans(world);
+  assert.equal(planFor(world, NATION_A).posture, "hold");
+  assert(world.frontPlans.version > version);
+});
+
+test("a binding cost limit still blocks discretionary attacks before peace can mature", () => {
+  const world = createOperationWorld();
+  world.settings = createSimulationSettings({ warCampaignEnabled: true, diplomacyEnabled: true });
+  world.wars[0]!.isTest = false;
+  updateWarCampaigns(world);
+  const campaign = world.warCampaigns!.byNationId.get(NATION_A)!;
+  campaign.mode = "consolidate";
+  campaign.constraints.objectivesSecured = true;
+  campaign.constraints.foodSeconds = 0;
+  updateNationFrontPlans(world);
+  assert.equal(planFor(world, NATION_A).posture, "hold");
+  assert(!planFor(world, NATION_A).reasonFlags.includes("campaign-military-exit"));
 });

@@ -1,3 +1,4 @@
+import { hasMinimumPeaceAge } from "../peace-maturity";
 import type { NationId } from "../../worldgen/nation";
 import type { WorldState } from "../world-state";
 import type { PeaceTerms } from "../war-negotiations";
@@ -28,6 +29,8 @@ export function campaignPrefersSettlement(world: WorldState, nationId: NationId,
   const campaign = getWarCampaign(world, nationId);
   if (!campaign || getWarDeclarationMode(world) !== "diplomacy") return false;
   const war = findWar(world.wars, nationId, opponentId);
-  return !!war && !war.isTest && (campaign.mode === "consolidate" || campaign.mode === "seek-peace" ||
-    campaign.constraints.objectivesSecured || campaignCostLimitReached(campaign.constraints));
+  if (!war || war.isTest) return false;
+  if (campaign.mode === "seek-peace" || campaignCostLimitReached(campaign.constraints)) return true;
+  return hasMinimumPeaceAge(world.time.fastTick, war.startedAtFastTick) &&
+    (campaign.mode === "consolidate" || campaign.constraints.objectivesSecured);
 }

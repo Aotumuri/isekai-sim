@@ -27,6 +27,7 @@ function settle(world: WorldState, nationId: NationId) {
   const campaign = world.warCampaigns!.byNationId.get(nationId)!;
   campaign.mode = "consolidate";
   campaign.constraints.objectivesSecured = true;
+  world.time.fastTick = Math.max(world.time.fastTick, 300);
   return campaign;
 }
 
