@@ -1,5 +1,10 @@
 # 国家戦略AIの評価
 
+現在はR2の改善を継続中。本文の最終結果はR1を固定した履歴であり、プロジェクトの
+完了判断ではない。最新の事前基準、Legacy/R1/R2比較、棄却と次の検証は
+[AI_R2_PROTOCOL.md](AI_R2_PROTOCOL.md) を参照。以前のholdoutは観測済みとして扱い、
+新しい最終評価シードを別に予約している。
+
 実験機能 `warCampaignEnabled` の採用判断を記録する文書。
 実装・責任分担は [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md)、
 棄却した案と測定当時の制約は [AI_EXPERIMENT_HISTORY.md](AI_EXPERIMENT_HISTORY.md) を参照。

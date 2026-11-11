@@ -227,3 +227,43 @@ rules. Normalize the budget by manpower committed at campaign opening and retain
 costs through continuous concurrent wars, clearing the ledger once the nation is
 at peace. Compare the ledger against the independent observer; disclose missing
 loss paths instead of claiming complete coverage. No new final seeds are used.
+
+R2.4 cost audit: the campaign ledger matches the independent field-loss observer
+for every nation in all 16 diagnostic episodes, including sea cases, within
+floating-point tolerance (1e-5 manpower). This verifies the observed paths, not
+every possible future removal path. 685 regression tests, production build and
+quick benchmark pass. The 100-row development trial and disabled-control replay
+are being evaluated before any adoption claim.
+
+### Normal-play experimental access
+
+Added an unchecked, non-persistent switch inside the existing debug settings and
+a bounded screen-space national summary. Verified through normal Japan-scale
+startup: enable the experiment and strategic summary, advance to real autonomous
+wars, observe candidate scores, military/political objectives, operations and
+terminal history, pause, and pan the map while the summary stays visible. No
+fixture or hidden game-state injection was used. The screenshot
+`diagnostics/war-ai-r2-normal-strategy.png` records this normal-play path.
+This UI observation verifies integration and visibility, not statistical quality.
+
+### R2.4 development result: not adopted
+
+Source `ef09122`, 100 candidate and 100 disabled-control episodes complete with
+no failures. All actual settings and starting summaries match; every disabled
+end-game summary and war outcome matches the earlier Legacy reference exactly
+after excluding CPU timings. The added battle observations do not change the
+control's rules or trajectory.
+
+Active-war attacker retention is 20% versus Legacy 37% and R1 36%; defender
+retention is 66% versus 44%/46%. Stalemate attacker retention remains 45% versus
+65%/60%, and transfers are 106.7 versus 75.4/88.4. These are material unresolved
+tradeoffs, not an overall improvement. Two-island landings/lost transports are
+27/15 versus Legacy 48/51 and R1 43/35 in this matrix's initialization conditions;
+fewer losses alongside fewer landings is insufficient evidence of better final
+political results. Do not mix these counts with the differently initialized R1
+forecast-only diagnostic (37/31 landings). New final seeds remain untouched.
+
+Next diagnostic hypothesis: the political-purpose adapter currently treats an
+un-cedeable capital as coercion worth only a small weapon concession. It may be
+ignoring the separate, existing military-victory path to legal ownership. Audit
+that classification and the alternative benefit estimates before changing them.

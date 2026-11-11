@@ -1,5 +1,6 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import { formatCampaignDebugLines } from "./war-campaign-debug-summary";
+import { drawCampaignDebugPanel } from "./war-campaign-debug-panel";
 import { WORLD_BALANCE } from "../data/balance";
 import type {
   FrontBorderEdge,
@@ -167,6 +168,7 @@ export function attachFrontDebugOverlay(
 
   const draw = (): void => {
     clearLayer(layer);
+    drawCampaignDebugPanel(renderer, world, enabled && visibility.strategicSummary);
     if (!enabled) {
       return;
     }
@@ -239,6 +241,7 @@ export function attachFrontDebugOverlay(
     } else {
       selectedSectorId = null;
       clearLayer(layer);
+      drawCampaignDebugPanel(renderer, world, false);
     }
   };
 
@@ -252,7 +255,15 @@ export function attachFrontDebugOverlay(
     update();
   };
 
-  attachDebugConfigPanel(renderer, visibility, setCategory);
+  attachDebugConfigPanel(renderer, visibility, setCategory, {
+    isEnabled: () => !!world.settings?.warCampaignEnabled,
+    toggle: () => {
+      if (!world.settings) return;
+      world.settings.warCampaignEnabled = !world.settings.warCampaignEnabled;
+      versions = null;
+      update();
+    },
+  });
 
   window.addEventListener("keydown", (event) => {
     if (event.code !== FRONT_DEBUG_OVERLAY_SHORTCUT || event.repeat || isEditableTarget(event.target)) {
@@ -417,6 +428,7 @@ function attachDebugConfigPanel(
   renderer: Renderer,
   visibility: DebugVisibility,
   setCategory: (category: DebugCategory, shown: boolean) => void,
+  campaign: { isEnabled: () => boolean; toggle: () => void },
 ): void {
   const existing = renderer.uiContainer.getChildByName("FrontDebugConfig");
   if (existing) {
@@ -460,6 +472,8 @@ function attachDebugConfigPanel(
     ));
     rowY += CONFIG_ROW_HEIGHT;
   }
+  content.addChild(createDebugConfigRow(renderer, "Experimental national plans", campaign.isEnabled, campaign.toggle, rowY));
+  rowY += CONFIG_ROW_HEIGHT;
   background.beginFill(CONFIG_BG, 0.96);
   background.lineStyle(1, CONFIG_BORDER, 0.95);
   background.drawRoundedRect(0, 0, CONFIG_WIDTH, rowY + 8, 6);
