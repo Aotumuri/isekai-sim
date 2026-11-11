@@ -6,7 +6,7 @@
 
 ## 比較条件
 
-基準mainは `394d4bd`。試作5は `b19b2bb`。試作6は `1f16d9e`。試作7は和平の最短時刻と目的確保方針の接続を検証する。
+基準mainは `394d4bd`。試作5は `b19b2bb`。試作6は `1f16d9e`。試作7は `93ba1cf` で固定し、和平の最短時刻と目的確保方針の接続を検証した。
 新旧の戦闘、降伏、生産単価・収入、動員上限、同時攻勢上限は同じ。
 試作1〜4の測定後、初回未使用群の結果を読む前の静的監査で終結方針の
 迂回を発見し修正した。その群は試作4の資料として保存し、最終群に再利用しない。
@@ -68,22 +68,26 @@ npm run build
 npm run benchmark:quick
 
 SCENARIOS=active-war,long-frontline,stalemate-breaker,collapse-advance,capital-threat,retreat-heavy,reorganization-heavy,two-island-amphibious,late-game,base-world,matched-war,unequal-war,economic-constraint
-node --import tsx test/diagnostics/war-ai-matrix.ts --seeds 20 --ticks 10000 --full-systems --political-turbulence --normal-wars --observe-wars --scenarios "$SCENARIOS" --output diagnostics/war-ai-v6-control-development.json.gz
-node --import tsx test/diagnostics/war-ai-matrix.ts --campaign --seeds 20 --ticks 10000 --full-systems --political-turbulence --normal-wars --observe-wars --scenarios "$SCENARIOS" --output diagnostics/war-ai-v6-development.json.gz
+node --import tsx test/diagnostics/war-ai-matrix.ts --seeds 20 --ticks 10000 --full-systems --political-turbulence --normal-wars --observe-wars --scenarios "$SCENARIOS" --output diagnostics/war-ai-v7-control-development.json.gz
+node --import tsx test/diagnostics/war-ai-matrix.ts --campaign --seeds 20 --ticks 10000 --full-systems --political-turbulence --normal-wars --observe-wars --scenarios "$SCENARIOS" --output diagnostics/war-ai-v7-development.json.gz
 ```
 
-未使用群は両コマンドに `--partition holdout --seed-offset 2000` を付け、出力名を
-`war-ai-v6-control-holdout.json.gz` / `war-ai-v6-holdout.json.gz` に変える。
+未使用群は両コマンドに `--partition holdout --seed-offset 3000` を付け、出力名を
+`war-ai-v7-control-holdout.json.gz` / `war-ai-v7-holdout.json.gz` に変える。
 比較は `war-ai-report.ts <旧群> <新群>`。JSON・gzipのどちらも読める。
 ソース未保存・異なる条件への追記・比較ペアの不足を拒否し、一件ごとに原子的に保存する。
 再実行時は出力のリビジョンも一致する必要があるため、別のコミットでは新しい出力名を使う。
 
+現行実装の回帰テストは669/669成功、ビルドと短時間ベンチマークも成功。
+共有した和平成熟条件、時刻だけが変わるキャッシュ更新、資源制約、プレイヤー命令、
+国家消滅・戦線消失・戦争終了、輸送兵員の保護、決定性と観測の非干渉を検査する。
+
 ## 長時間・性能・上陸・表示
 
 ```sh
-node --expose-gc --import tsx test/diagnostics/war-ai-soak.ts --ticks 100000 --seeds 3 --political-turbulence --output diagnostics/war-ai-soak-app-v6.json
-node --expose-gc --import tsx test/diagnostics/war-ai-scale.ts --default-map --ticks 2000 --seeds 2 --output diagnostics/war-ai-default-scale-v6.json
-node --import tsx test/diagnostics/war-ai-amphibious.ts --seeds 20 --ticks 10000 --output diagnostics/war-ai-amphibious-v5.json
+node --expose-gc --import tsx test/diagnostics/war-ai-soak.ts --ticks 100000 --seeds 3 --political-turbulence --output diagnostics/war-ai-soak-app-v7.json
+node --expose-gc --import tsx test/diagnostics/war-ai-scale.ts --default-map --ticks 2000 --seeds 2 --output diagnostics/war-ai-default-scale-v7.json
+node --import tsx test/diagnostics/war-ai-amphibious.ts --seeds 20 --ticks 10000 --output diagnostics/war-ai-amphibious-v7.json
 ```
 
 長時間検証は通常自律世界3シードを両群で100000tick（仮想10000秒）動かす。
@@ -91,6 +95,8 @@ node --import tsx test/diagnostics/war-ai-amphibious.ts --seeds 20 --ticks 10000
 検査する。GC時間は計測区間外。既定マップは320000 micro regionを使い、生成を
 含む時間と実行だけの時間を分ける。品質評価の20シードとは別の少数性能確認。
 並列行列の壁時計は競合・JIT・戦争経過の影響を受けるため、速度改善の根拠にしない。
+行列のheapは保存済み結果やGC時期も含み、maxRSSはプロセスの高水位。
+保持メモリの評価には別のGC追跡と状態上限検査を使う。
 
 上陸診断は2シナリオ×20シード×軍事専用/通常設定×新旧で、既存の予測式を変えずに
 予測余裕、実際の戦争存続、出航、上陸、取消を保存する。却下案の反実仮想の成功は
@@ -102,66 +108,126 @@ node --import tsx test/diagnostics/war-ai-amphibious.ts --seeds 20 --ticks 10000
 上部ボタンとの重なりを修正済み。画像は `diagnostics/war-ai-preview.jpg`。
 通常プレイの全面的なUI検証は行っていない。lintコマンドはリポジトリに定義がない。
 
-試作6の長時間検証は全6件が完了。終盤GC後の保持heapは38.09〜42.82MiB。
-新群の計画数は最大4、目標6、変更履歴51、終結履歴30。不変条件違反はなく、
-最後の5区間のheapは各回ともほぼ横ばい。漏れが皆無という証明ではない。
+試作7の長時間検証は全6件が完了。終盤GC後の保持heapは38.14〜43.09MiB。
+新群の計画数は最大5、目標6、変更履歴120、終結履歴50。不変条件違反はない。
+最後の5区間の保持heap増加は最大約1.47MiBで、時点間の段差もある。
+状態の上限違反や大規模な継続増大は検出されないが、漏れが皆無という証明ではない。
 全例で終了時の戦争数は0だった。
 
 |seed末尾|CPU合計 ms 旧→新|終了時部隊数 旧→新|
 |---|---:|---:|
-|780|35934→55882|44→53|
-|781|53518→72910|54→120|
-|782|28045→58858|25→45|
+|780|46833→88629|44→112|
+|781|56071→47242|54→35|
+|782|30853→48831|25→29|
 
-CPU費用は全3例で増加した。部隊数や自律戦争の経過が異なり、並列実験と同時に
-測ったため、固有の戦略層の計算費用と世界経過の費用を分離できない。
-これを高速化や費用増のない改善とは扱わない。既定マップの最終確認は他の
-実験が完走してから独立して実行する。
+CPU費用は増減が混在し、大きく増えた例も残る。部隊数や自律戦争の経過が異なり、
+並列実験と同時に測ったため、固有の戦略層の計算費用と世界経過の費用を分離できない。
+高速化や費用増のない改善とは扱わない。既定320000領域の確認は他の実験の完走後、
+同一プロセス内で新旧の順を交互にして4件を独立実行した。2000tickの実行時間は
+seed780で22399→16747ms、seed781で12810→15784ms。CPUは28495→18910ms、
+14037→17717ms。JIT・世界経過に左右され、2seedから一律の速度優位を主張しない。
 
-試作5の上陸予測診断は160件完走。通常設定の結果を示す（件数は作戦試行単位で、増援も含む）。
+試作7の上陸予測診断は160件完走。通常設定の結果を示す（件数は作戦試行単位で、増援も含む）。
 
 |条件（各20seed）|作成 旧→新|出航|上陸完了|橋頭堡成功|実終戦が予測完了より早い件数|
 |---|---:|---:|---:|---:|---:|
-|active-war|6→6|6→6|3→2|0→1|3→4|
+|active-war|6→6|6→6|3→3|0→2|3→3|
 |two-island-amphibious|92→101|92→101|37→31|27→25|10→21|
 
 到着成功例だけの時刻誤差中央値は全条件0tickだが、成功例の選択による偏りがある。
 航行時間の推定と、戦争自体の存続見込みを区別する必要がある。後者は依然楽観的な
 事例があり、通常二島の輸送損失も42→51件と増加した。新機能による海上品質改善を
 実証したとは主張しない。却下案の反実仮想は未測定。全件は
-`war-ai-amphibious-v5.json.gz`、集計は `war-ai-amphibious-v5-summary.json`。
+`war-ai-amphibious-v7.json.gz`、集計は `war-ai-amphibious-v7-summary.json`。
 コマンドは非圧縮JSONを生成し、保存時にgzipへ圧縮した。
 
 ## 最終比較
 
-試作5・6の全件と悪化は実験経過に記録した。試作7では、目的達成による抑制と
-食料・許容損耗による抑制を分け、前者だけは最短の自動和平時刻まで軍事的な
-出口を残す。既存の30秒/90秒の受諾規則を同じ純粋関数へ抽出して両方から使う。
-戦闘・生産・開戦条件・同時作戦上限・受諾スコア・受諾時刻は変えない。
-開発・未使用とも新旧20seed×13条件、政治変動込み10000tickで再測定する。
-未使用は `--seed-offset 3000`。利得・保持・損耗・配分変更・未終結・分布を全条件で
-報告する。この結果に合わせた追加調整はせず、未達が残れば既定無効の研究成果として
-まとめる。内部目標の追跡も同じ開発3条件で繰り返す。
+全1040件が完走し、実行・構築例外は0。520対の実設定・開始集計が一致した。
+無効群の開発260件は以前の旧AI基準とCPU以外の終了ゲーム状態・戦争結果が全件一致。
+以下は最終未使用群の各20seedの対応差平均（新−旧）。保持・生存はポイント、価値は
+開戦時自領価値で正規化した比。base-worldの初期戦争指標は対象なし。
 
-内部目標の再追跡は次で実行する。旧AIとの共通代理目標評価とは分ける。
+|条件|攻撃目標 Δpp|防御自領 Δpp|攻撃価値比 Δ|防御価値比 Δ|生存 Δpp|
+|---|---:|---:|---:|---:|---:|
+|active-war|+1.00|-1.00|+0.061|-0.046|+2.37|
+|long-frontline|-5.00|+0.00|-0.081|+0.097|+5.00|
+|stalemate-breaker|+5.00|+5.00|-0.015|-0.005|-7.50|
+|collapse-advance|+0.00|+0.00|+0.000|+0.000|+0.00|
+|capital-threat|-5.00|+5.00|-0.043|+0.021|-2.50|
+|retreat-heavy|+0.00|+0.00|+0.000|+0.000|+0.00|
+|reorganization-heavy|-5.00|+0.00|+0.004|-0.021|+5.00|
+|two-island-amphibious|+0.00|+0.00|+0.000|+0.000|+0.00|
+|late-game|-5.22|+5.21|-0.030|+0.048|-0.43|
+|base-world|—|—|—|—|—|
+|matched-war|+0.00|+10.00|-0.074|+0.121|+0.00|
+|unequal-war|-15.00|+15.00|-0.066|+0.093|+5.00|
+|economic-constraint|+5.00|+10.00|+0.052|-0.120|+7.50|
+
+頻度は配分先変更/1000戦争側tick。未終結と配分変更は後続の自発戦争も含む。
+
+|条件|初期損耗 Δ|配分変更 Δ|頻度 Δ|未終結側 Δ|初期戦争期間 Δtick|
+|---|---:|---:|---:|---:|---:|
+|active-war|-3.77|-46.50|-5.15|+0.10|+25.67|
+|long-frontline|+1.63|-8.35|-4.59|-0.30|+14.10|
+|stalemate-breaker|-10.53|+38.00|+9.48|+0.00|-107.80|
+|collapse-advance|-2.68|+22.95|+5.80|-0.20|-17.20|
+|capital-threat|+7.12|-5.10|+0.40|+0.10|-74.30|
+|retreat-heavy|+0.96|-50.45|-14.20|+0.10|+3.85|
+|reorganization-heavy|-7.51|+8.00|+8.76|+0.50|-75.45|
+|two-island-amphibious|-89.14|-1.10|-0.34|-0.10|-380.00|
+|late-game|-1.85|+21.25|-0.29|+0.30|-22.87|
+|base-world|—|+1.80|-2.85|+0.10|—|
+|matched-war|-11.28|-7.10|-1.71|+0.40|-55.15|
+|unequal-war|+0.39|+31.30|+2.59|+0.20|+4.80|
+|economic-constraint|-1.26|-4.45|+0.02|+0.10|-3.00|
+
+改善例はactive-warの初期損耗19.31→15.54、配分変更99.00→52.50。
+均衡戦争は損耗163.18→151.90、防御側の自領保持50→60%、攻撃側は40%のまま。
+一方、膠着の配分変更67.20→105.20、再編成の正規化頻度11.01→19.77など悪化もある。
+active-warの配分変更差は平均−46.5でも中央値−6、範囲−419〜+206。
+再編成の同差は中央値+2.5、範囲−300〜+221で、平均だけでは判断できない。
+全条件の中央値・p95・最悪例・対応差は比較JSONに保存した。
+base-worldの自発戦争数は平均5.65→5.35、戦争のある期間は1961.7→2058.45tick。
+損耗低下を単に戦争回避の成功と数えず、上表の固定された当初戦争も併せて評価する。
+
+**採用判断：既定では無効のまま。** 複数条件での改善はあるが、目標保持・損耗・
+再配分・終結を総合した一貫した優越は実証できない。海上の政治的利得と期間予測、
+移動と継戦の期待費用、複数国の和平調整、実際の観察の面白さは未達・未評価が残る。
+本採用可能な完成版とは主張せず、実装・診断・反復結果をレビュー可能な研究成果とする。
+結果を見て追加調整したり、新機能を既定で有効化したりしない。
+
+原因確認の事後検証では、試作6の悪化例3件を固定した試作7で再実行した。
+最終未使用群には含めない。首都危機seed922748321797の初期終戦は388→142tick、
+長期戦線seed922748321792は910→510tickとなり、両方とも目標保持の結果は同じ。
+均衡戦争の同seedは1010tickのままで、時間接続だけでは全ての悪化を解消しない。
+データは `war-ai-v7-retrospective-capital.json.gz` と
+`war-ai-v7-retrospective-long-war.json.gz`。これは選択済み事例の原因検証であり、
+一般化した改善率の推定として使わない。
+
+内部目標の開発追跡は60件完走。当初の限定目標の終結時確保はactive-warで36/100、
+均衡戦争で10/20、二島で0/20。二島は一時達成9件を観測しても終結後の確保に至らない。
+軍事目標と合法な政治的利得をさらに整合させる必要がある。この新群内の説明は
+旧AIとの公平な比較の代わりにしない。実行方法は次の通り。
 
 ```sh
-node --import tsx test/diagnostics/war-ai-intent-audit.ts --seeds 20 --ticks 10000 --output diagnostics/war-ai-intent-v6.json
-node --import tsx test/diagnostics/war-ai-validate.ts diagnostics/war-ai-v6-control-development.json.gz diagnostics/war-ai-v6-development.json.gz diagnostics/war-ai-app-control-development.json.gz
+node --import tsx test/diagnostics/war-ai-intent-audit.ts --seeds 20 --ticks 10000 --output diagnostics/war-ai-intent-v7.json
+node --import tsx test/diagnostics/war-ai-validate.ts diagnostics/war-ai-v7-control-development.json.gz diagnostics/war-ai-v7-development.json.gz diagnostics/war-ai-app-control-development.json.gz
 ```
 
 ## 成果物の対応
 
 |内容|保存先（diagnostics/以下）|
 |---|---|
-|試作6の開発A/B|`war-ai-v6-control-development.json.gz`, `war-ai-v6-development.json.gz`|
-|試作6の未使用A/B|`war-ai-v6-control-holdout.json.gz`, `war-ai-v6-holdout.json.gz`|
-|全指標の分布・対応差|`war-ai-v6-development-comparison.json.gz`, `war-ai-v6-holdout-comparison.json.gz`|
-|比較条件・無効時互換性|`war-ai-v6-development-validation.json`, `war-ai-v6-holdout-validation.json`|
-|長時間・GC後メモリ|`war-ai-soak-app-v6.json`|
-|既定マップ性能|`war-ai-default-scale-v6.json.gz`|
-|上陸予測の実測|`war-ai-amphibious-v5.json.gz`, `war-ai-amphibious-v5-summary.json`|
-|内部目標の追跡|`war-ai-intent-v6.json.gz`|
+|試作7の開発A/B|`war-ai-v7-control-development.json.gz`, `war-ai-v7-development.json.gz`|
+|試作7の未使用A/B|`war-ai-v7-control-holdout.json.gz`, `war-ai-v7-holdout.json.gz`|
+|時間接続の開発群差|`war-ai-v6-to-v7-development.json.gz`|
+|全指標の分布・対応差|`war-ai-v7-development-comparison.json.gz`, `war-ai-v7-holdout-comparison.json.gz`|
+|比較条件・無効時互換性|`war-ai-v7-development-validation.json`, `war-ai-v7-holdout-validation.json`|
+|長時間・GC後メモリ|`war-ai-soak-app-v7.json`|
+|既定マップ性能|`war-ai-default-scale-v7.json.gz`|
+|上陸予測の実測|`war-ai-amphibious-v7.json.gz`, `war-ai-amphibious-v7-summary.json`|
+|内部目標の追跡|`war-ai-intent-v7.json.gz`|
 |表示確認|`war-ai-preview.jpg`|
 
 大きな生成レポートはレビュー時にソース差分を埋めないようgzipで保存する。
