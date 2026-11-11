@@ -24,6 +24,13 @@ export function campaignCanHoldRecognition(world: WorldState, nationId: NationId
   return !!campaign && campaign.mode === "consolidate" && !campaignCostLimitReached(campaign.constraints);
 }
 
+export function campaignRecognitionWeapons(world: WorldState, nationId: NationId, opponentId: NationId): number {
+  const goal = getWarCampaign(world, nationId)?.objectives.find((item) => item.opponentId === opponentId);
+  if (!goal?.achieved || goal.political?.purpose !== "coercive-settlement") return 0;
+  const stock = world.nations.find((nation) => nation.id === opponentId)?.resources.weapons ?? 0;
+  return stock >= goal.political.weaponTarget ? goal.political.weaponTarget : 0;
+}
+
 /** The recipient evaluates the same transfer and payment in reverse. */
 export function reciprocalRecognitionTerms(terms: PeaceTerms): PeaceTerms {
   return { ...terms, demandedRegionIds: terms.offeredRegionIds, offeredRegionIds: terms.demandedRegionIds,

@@ -16,9 +16,12 @@ export function campaignPeaceValue(
   const goal = campaign?.objectives.find((item) => item.opponentId === proposer);
   if (!campaign || !goal) return 0;
   const owners = getOwnerByMesoId(world);
-  const secured = goal.regionIds.length > 0 && goal.regionIds.every((id) =>
+  const territorial = goal.regionIds.length > 0 && goal.regionIds.every((id) =>
     !terms.demandedRegionIds.includes(id) &&
     (owners.get(id) === recipient || terms.offeredRegionIds.includes(id)));
+  const secured = territorial || goal.political?.purpose === "coercive-settlement" &&
+    terms.offeredWeapons - terms.demandedWeapons >= goal.political.weaponTarget &&
+    terms.demandedRegionIds.length === 0;
   const exitPressure = campaign.mode === "seek-peace" ? 12 : 0;
   return exitPressure + (secured ? 12 : 0);
 }
@@ -32,5 +35,5 @@ export function campaignPrefersSettlement(world: WorldState, nationId: NationId,
   if (!war || war.isTest) return false;
   if (campaign.mode === "seek-peace" || campaignCostLimitReached(campaign.constraints)) return true;
   return hasMinimumPeaceAge(world.time.fastTick, war.startedAtFastTick) &&
-    (campaign.mode === "consolidate" || campaign.constraints.objectivesSecured);
+    campaign.mode === "consolidate";
 }

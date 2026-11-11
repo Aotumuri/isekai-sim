@@ -1,20 +1,18 @@
 import type { WorldState } from "../world-state";
 import { isNationActive } from "../nation-active";
-import { getOwnerByMesoId } from "../world-cache";
 import { campaignWarKey, type WarCampaignState } from "./state";
+import { isPoliticalGoalSecured } from "./political-objectives";
 
 /** Retain bounded terminal evidence, never active orders after a war ends. */
 export function recordCompletedCampaignGoals(world: WorldState, state: WarCampaignState): void {
   const activeNations = new Set(world.nations.filter(isNationActive).map((nation) => nation.id));
   const wars = new Set(world.wars.filter((war) => activeNations.has(war.nationAId) && activeNations.has(war.nationBId))
     .map((war) => campaignWarKey(war.nationAId, war.nationBId, war.startedAtFastTick)));
-  const owners = getOwnerByMesoId(world);
   for (const plan of state.byNationId.values()) {
     for (const goal of plan.objectives) {
       if (wars.has(goal.warKey)) continue;
       const survived = activeNations.has(plan.nationId);
-      const secured = survived && goal.regionIds.length > 0 && goal.regionIds.every((id) =>
-        (world.occupation.mesoById.get(id) ?? owners.get(id)) === plan.nationId);
+      const secured = survived && isPoliticalGoalSecured(world, plan.nationId, goal);
       state.goalHistory.push({ nationId: plan.nationId, opponentId: goal.opponentId,
         warKey: goal.warKey, endedAtTick: world.time.fastTick,
         outcome: !survived ? "nation-eliminated" : secured ? "secured" : "unmet",

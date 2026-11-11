@@ -104,3 +104,28 @@ arrival time, political rather than temporary territorial benefit, observed
 casualty flow, replacement resources, homeland exposure, uncertainty and committed
 travel. Preserve critical-capital and exhausted-budget overrides. Carry R1's
 execution rules unchanged so this trial isolates national decision quality.
+
+The first model uses a 30-second horizon. Relative squared force and estimated
+arrival provide a bounded success estimate, not a new combat rule. It discounts
+uncertainty explicitly, projects an exponentially smoothed observed casualty
+flow, prices replacement shortages, and charges switching according to force
+already traveling or committed. Territory value is normalized to current
+homeland value; force costs to opening field strength. Weapon concessions use
+the existing infantry manpower/weapon ratio as a rough resource equivalent.
+These approximations require empirical checking; no predictive accuracy is
+claimed before measurement. Critical-capital and exhausted-budget safeguards
+precede the option ranking. Periodic review remains eight virtual seconds, with
+earlier review when estimated improvement exceeds uncertainty and switching cost.
+
+A singleton goal that cannot legally be ceded (including an isolated port or
+capital) receives a fixed coercive purpose at adoption, with a bounded weapon
+concession target. Military control remains separately visible. Terminal success
+requires legal ownership or an actual qualifying negotiated concession from
+this war; temporary occupation and opening offers are insufficient. Recognition
+offers use the same legality, affordability and maturity rules as existing AI.
+
+Validation before the development matrix: 677 regression tests passed and the
+production build passed. The optional whole-source `tsc` command also exposes
+existing renderer/unused-symbol errors outside this change; the repository's
+required test typecheck passes. The standard quick benchmark and long/final
+evaluations remain pending; passing unit tests does not adopt the prototype.

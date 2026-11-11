@@ -1,4 +1,5 @@
 /** Pure national policy. Combat and movement rules are deliberately absent. */
+import type { CampaignAlternative } from "./alternatives";
 export type CampaignMode = "defend" | "limited-offensive" | "consolidate" | "seek-peace";
 export interface CampaignConstraints {
   strengthRatio: number;
@@ -30,10 +31,14 @@ export function campaignCostLimitReached(input: CampaignConstraints): boolean {
   return input.casualtyFraction >= input.costTolerance || input.foodSeconds < 45;
 }
 
-export function evaluateCampaignPolicy(input: CampaignConstraints): CampaignDecision {
+export function evaluateCampaignPolicy(input: CampaignConstraints, alternatives?: CampaignAlternative[]): CampaignDecision {
   if (input.capitalCritical) return { mode: "defend", reason: "capital-emergency" };
   if (campaignCostLimitReached(input)) {
     return { mode: "seek-peace", reason: input.foodSeconds < 45 ? "food-runway" : "cost-limit" };
+  }
+  if (alternatives?.length) {
+    const choice = alternatives[0];
+    return { mode: choice.mode, reason: `expected-value:${choice.mode}:${choice.opponentId}` };
   }
   if (input.objectivesSecured) return { mode: "consolidate", reason: "objectives-secured" };
   if (input.strengthRatio < 0.8 || input.replacementConstrained) {

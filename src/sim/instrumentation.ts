@@ -1,4 +1,5 @@
 export type SimulationMetricName =
+  | "warCampaign.evaluation"
   | "production.evaluation"
   | "production.capacityCounting"
   | "production.supplyLookup"
@@ -137,7 +138,6 @@ export type SimulationCounterName =
   | "battle.attackerManpowerLoss"
   | "battle.defenderManpowerLoss"
   | "movement.regionArrivals"
-  | "movement.retainedRetargetProgressMs"
   | "occupation.fullRegionScans"
   | "occupation.regionsScanned"
   | "capitals.activeNationScans"

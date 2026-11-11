@@ -1,5 +1,5 @@
 import { isPeaceNegotiationMature } from "./peace-maturity";
-import { campaignRecognitionRegions, campaignCanHoldRecognition, reciprocalRecognitionTerms } from "./war-campaign/peace-recognition";
+import { campaignRecognitionRegions, campaignRecognitionWeapons, campaignCanHoldRecognition, reciprocalRecognitionTerms } from "./war-campaign/peace-recognition";
 import { getCampaignObjectives } from "./campaign-objectives";
 import { campaignPeaceValue, campaignPrefersSettlement } from "./war-campaign/peace-guidance";
 import { getManualGovernmentId } from "./player-nation";
@@ -177,11 +177,14 @@ function reviseTerms(world: WorldState, negotiation: WarNegotiation, proposer: N
     offeredWeapons: Math.min(current.offeredWeapons, Math.floor(country.resources.weapons)) };
 
   const recognition = settling ? campaignRecognitionRegions(world, proposer, target) : [];
-  if (campaignCanHoldRecognition(world, proposer) && recognition.length &&
-    !recognition.every((id) => terms.demandedRegionIds.includes(id))) {
-    const recognized = { ...whitePeaceTerms(), demandedRegionIds: recognition, truceSeconds: terms.truceSeconds };
+  const recognitionWeapons = settling ? campaignRecognitionWeapons(world, proposer, target) : 0;
+  if (campaignCanHoldRecognition(world, proposer) && (recognition.length || recognitionWeapons > 0) &&
+    (!recognition.every((id) => terms.demandedRegionIds.includes(id)) || terms.demandedWeapons !== recognitionWeapons)) {
+    const recognized = { ...whitePeaceTerms(), demandedRegionIds: recognition,
+      demandedWeapons: recognitionWeapons, truceSeconds: terms.truceSeconds };
     if (!getPeaceTermsIssue(world, proposer, target, recognized)) return recognized;
   }
+  if (campaignCanHoldRecognition(world, proposer) && recognitionWeapons > 0 && terms.demandedWeapons === recognitionWeapons) return terms;
 
   if (wantsCompromise) {
     if (terms.resourceReparation) return { ...terms, resourceReparation: undefined };
@@ -377,8 +380,10 @@ function settleOrAwaitCampaignRecognition(world: WorldState, negotiation: WarNeg
   if (!negotiation.automatic.get(negotiation.a) || !negotiation.automatic.get(negotiation.b)) return false;
   for (const [proposer, recipient] of [[negotiation.a, negotiation.b], [negotiation.b, negotiation.a]]) {
     const ids = campaignRecognitionRegions(world, proposer, recipient);
+    const weapons = campaignRecognitionWeapons(world, proposer, recipient);
     const offer = negotiation.offers.get(proposer)!;
-    if (!ids.length || !ids.every((id) => offer.terms.demandedRegionIds.includes(id)) ||
+    if (!(ids.length || weapons > 0) || !ids.every((id) => offer.terms.demandedRegionIds.includes(id)) ||
+      weapons > 0 && offer.terms.demandedWeapons < weapons ||
       offer.terms.puppetTarget || offer.terms.partition || offer.terms.localSubject || offer.terms.resourceReparation) continue;
     if (!assessPeaceOffer(world, recipient, proposer, offer.terms).accepts ||
       !assessPeaceOffer(world, proposer, recipient, reciprocalRecognitionTerms(offer.terms)).accepts) continue;

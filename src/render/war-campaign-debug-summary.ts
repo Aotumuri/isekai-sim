@@ -10,8 +10,12 @@ export function formatCampaignDebugLines(world: WorldState): string[] {
   for (const plan of plans.slice(0, 3)) {
     lines.push(`${plan.nationId}: ${plan.mode} | priority ${plan.primaryOpponentId ?? "-"} | rev ${plan.revision}`);
     lines.push(`  ${plan.reason} | cost ${plan.constraints.casualtyFraction.toFixed(2)}/${plan.constraints.costTolerance.toFixed(2)}`);
+    for (const option of plan.alternatives?.slice(0, 3) ?? []) {
+      lines.push(`  ALT ${option.mode} vs ${option.opponentId}: ${(option.score * 100).toFixed(1)} | benefit ${(option.benefit * 100).toFixed(1)} cost ${(option.resourceCost * 100).toFixed(1)} risk ${(option.failureRisk * 100).toFixed(1)}`);
+    }
     for (const goal of plan.objectives.slice(0, 3)) {
       lines.push(`  ${goal.opponentId}: ${goal.kind} ${goal.achieved ? "SECURED" : "pending"} | ${goal.rationale ?? "opening goal"} | ${goal.regionIds.slice(0, 3).join(",")}${goal.regionIds.length > 3 ? "..." : ""}`);
+      if (goal.political) lines.push(`    POLITICAL ${goal.political.purpose}${goal.political.weaponTarget ? ` | weapons ${goal.political.weaponTarget}` : ""} | military ${goal.achieved ? "held" : "pending"}`);
     }
     const operations = world.offensiveOperations.operationsByNationId.get(plan.nationId) ?? [];
     for (const operation of operations) lines.push(`  OP ${operation.phase}: ${operation.capturedRegionIds.length} captured | ${operation.completionReason ?? "in progress"}`);

@@ -3,6 +3,9 @@ import type { MesoRegionId } from "../../worldgen/meso-region";
 import type { WorldState } from "../world-state";
 import type { CampaignConstraints, CampaignMode } from "./policy";
 import type { CampaignForceBudget } from "./force-budget";
+import type { PoliticalObjective } from "./political-objectives";
+import type { CampaignAlternative } from "./alternatives";
+import type { CampaignObservation } from "./forecast";
 
 export interface CampaignObjective {
   warKey: string;
@@ -12,6 +15,7 @@ export interface CampaignObjective {
   regionIds: MesoRegionId[];
   openingStrength: number;
   achieved: boolean;
+  political?: PoliticalObjective;
 }
 export interface WarCampaign {
   nationId: NationId;
@@ -23,6 +27,8 @@ export interface WarCampaign {
   revision: number;
   reason: string;
   constraints: CampaignConstraints;
+  alternatives?: CampaignAlternative[];
+  observation?: CampaignObservation;
 }
 export interface WarCampaignState {
   goalHistory: {

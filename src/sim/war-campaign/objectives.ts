@@ -4,6 +4,7 @@ import type { WarState } from "../war-state";
 import { getOwnerByMesoId } from "../world-cache";
 import { campaignWarKey, type CampaignObjective, type WarCampaign } from "./state";
 import { assessCampaignOpening } from "./opening-intent";
+import { buildPoliticalObjective } from "./political-objectives";
 
 export function buildCampaignObjectives(
   world: WorldState, nationId: NationId, wars: WarState[],
@@ -29,6 +30,7 @@ export function buildCampaignObjectives(
       (world.occupation.mesoById.get(id) ?? owners.get(id)) === nationId);
     return { warKey, opponentId, kind: old?.kind ?? kind, regionIds,
       rationale: old?.rationale ?? (opening?.rationale === "no-access" ? "no-access-defense" : opening?.rationale) ?? "preserve-sovereignty",
-      openingStrength: old?.openingStrength ?? strength, achieved };
+      openingStrength: old?.openingStrength ?? strength, achieved,
+      political: old?.political ?? buildPoliticalObjective(world, nationId, opponentId, regionIds, kind === "limited-occupation") };
   });
 }
