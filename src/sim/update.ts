@@ -1,3 +1,4 @@
+import { updateWarCampaigns } from "./war-campaign/update";
 import { updatePlayerNavalOrders } from "./player-naval-orders";
 import { updateResourceReparations } from "./resource-reparations";
 import { updateCrisisDeployments } from "./crisis-deployment";
@@ -259,6 +260,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateSupplyDefense(world);
   updateSupplyRelief(world);
   updateCapitalDefense(world);
+  updateWarCampaigns(world);
   updateNationFrontPlans(world);
   updateRetreatPlans(world);
   cancelOffensiveOperationsForCapitalEmergency(world);

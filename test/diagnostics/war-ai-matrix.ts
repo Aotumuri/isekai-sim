@@ -29,6 +29,7 @@ const count = positiveInteger("--seeds", 20);
 const ticks = positiveInteger("--ticks", 3200);
 const partition = option("--partition", "development");
 const fullSystems = args.includes("--full-systems");
+const campaignEnabled = args.includes("--campaign");
 if (!["development", "holdout"].includes(partition)) throw new Error("Invalid partition");
 const seedStart = partition === "development" ? 822_748_319_780 : 922_748_319_780;
 const output = resolve(option("--output", `diagnostics/war-ai-${partition}.json`));
@@ -42,12 +43,13 @@ interface Experiment {
   seedStart: number;
   seedCount: number;
   fullSystems: boolean;
+  campaignEnabled?: boolean;
   scenarios: BenchmarkScenarioName[];
   results: BenchmarkResult[];
   failures: { scenario: string; seed: number; error: string }[];
 }
 let experiment: Experiment = {
-  revision, partition, ticks, seedStart, seedCount: count, scenarios, fullSystems,
+  revision, partition, ticks, seedStart, seedCount: count, scenarios, fullSystems, campaignEnabled,
   results: [], failures: [],
 };
 try {
@@ -57,6 +59,7 @@ try {
     if (saved[key] !== experiment[key]) throw new Error(`Output has incompatible ${key}`);
   }
   if ((saved.fullSystems ?? false) !== fullSystems) throw new Error("Output has incompatible systems");
+  if (!!saved.campaignEnabled !== campaignEnabled) throw new Error("Output has incompatible campaign setting");
   experiment = saved;
 } catch (error) {
   if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -68,10 +71,10 @@ for (let index = 0; index < count; index += 1) {
     if (experiment.results.some((row) => row.seed === seed && row.scenario === scenario)) continue;
     try {
       const result = runBenchmark({
-        config: fullSystems ? { systems: {
-          mobilizationEnabled: true, diplomacyEnabled: true, researchEnabled: true,
-          armsAidEnabled: true, tradeEnabled: true,
-        } } : undefined,
+        config: { systems: {
+          mobilizationEnabled: fullSystems, diplomacyEnabled: fullSystems, researchEnabled: fullSystems,
+          armsAidEnabled: fullSystems, tradeEnabled: fullSystems, warCampaignEnabled: campaignEnabled,
+        } },
         scenario, seed, ticks, width: 640, height: 360, quick: true,
         speed: 32, mode: "throughput", frameDeltaMs: 1000 / 60,
         reserveEnabled: true, reorganizationEnabled: true,

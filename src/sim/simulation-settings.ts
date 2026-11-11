@@ -3,6 +3,8 @@ import type { NationId } from "../worldgen/nation";
 import type { WorldState } from "./world-state";
 
 export interface SimulationSettings {
+  /** Experimental until paired campaign evaluation passes. */
+  warCampaignEnabled?: boolean;
   mobilizationEnabled: boolean;
   diplomacyEnabled: boolean;
   legacyWarDeclarationsEnabled: boolean;

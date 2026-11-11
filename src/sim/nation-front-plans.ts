@@ -1,3 +1,4 @@
+import { applyCampaignFrontGuidance } from "./war-campaign/front-guidance";
 import { getCampaignObjectives } from "./campaign-objectives";
 import { getCampaignDeadline } from "./campaign-deadline";
 import { WORLD_BALANCE } from "../data/balance";
@@ -20,6 +21,8 @@ import type { WorldState } from "./world-state";
 export type FrontPosture = "attack" | "hold" | "reinforce" | "retreat";
 
 export type FrontPlanReason =
+  | "campaign-primary"
+  | "campaign-economy-of-force"
   | "strength-superiority"
   | "forces-balanced"
   | "strength-disadvantage"
@@ -57,6 +60,7 @@ export interface NationFrontPlan {
 export type NationSectorPlan = NationFrontPlan;
 
 export interface NationFrontPlanState {
+  campaignVersion?: number;
   plans: NationFrontPlan[];
   plansByNationId: Map<NationId, NationFrontPlan[]>;
   plansByFrontNation: Map<string, NationFrontPlan>;
@@ -86,6 +90,7 @@ export function updateNationFrontPlans(world: WorldState): void {
   const state = world.frontPlans;
   if (
     state.physicalFrontVersion === world.landFronts.version &&
+    state.campaignVersion === (world.warCampaigns?.version ?? 0) &&
     state.physicalFrontMetricsVersion === world.landFronts.metricsVersion &&
     state.capitalDefenseVersion === world.capitalDefense.version &&
     state.supplyDefenseVersion === world.supplyDefense.version
@@ -115,6 +120,9 @@ export function updateNationFrontPlans(world: WorldState): void {
       ),
     );
   }
+  for (let index = 0; index < plans.length; index += 1) {
+    plans[index] = applyCampaignFrontGuidance(world, plans[index]);
+  }
   plans.sort(comparePlans);
 
   const decisionsChanged = !plansHaveSameDecisions(state.plans, plans);
@@ -127,6 +135,7 @@ export function updateNationFrontPlans(world: WorldState): void {
     state.version += 1;
   }
   state.physicalFrontVersion = world.landFronts.version;
+  state.campaignVersion = world.warCampaigns?.version ?? 0;
   state.physicalFrontMetricsVersion = world.landFronts.metricsVersion;
   state.capitalDefenseVersion = world.capitalDefense.version;
   state.supplyDefenseVersion = world.supplyDefense.version;

@@ -1,0 +1,96 @@
+import type { NationRuntime } from "../nation-runtime";
+import type { WarState } from "../war-state";
+import type { NationId } from "../../worldgen/nation";
+import { getCapitalDefenseAssessment } from "../capital-defense";
+import { foodReserveSeconds } from "../food-supply";
+import { getNationCharacter } from "../nation-character";
+import { isNationActive } from "../nation-active";
+import { getUnitCombatStrength } from "../unit-strength";
+import { getWarCasualties } from "../war-state";
+import type { WorldState } from "../world-state";
+import { evaluateCampaignPolicy, type CampaignConstraints } from "./policy";
+import { type CampaignObjective, type WarCampaign, type WarCampaignState } from "./state";
+import { buildCampaignObjectives } from "./objectives";
+
+/** One campaign per nation spanning every current opponent; no direct orders. */
+export function updateWarCampaigns(world: WorldState): void {
+  if (!world.settings?.warCampaignEnabled) {
+    delete world.warCampaigns;
+    return;
+  }
+  const state: WarCampaignState = world.warCampaigns ??= { byNationId: new Map(), version: 0, events: [] };
+  const strengths = new Map<NationId, number>();
+  for (const unit of world.units) {
+    if (unit.domain === "land") strengths.set(unit.nationId,
+      (strengths.get(unit.nationId) ?? 0) + getUnitCombatStrength(unit));
+  }
+  const active = new Set(world.nations.filter(isNationActive).map((nation) => nation.id));
+  const next = new Map<NationId, WarCampaign>();
+  for (const nation of world.nations.filter(isNationActive)) {
+    const wars = world.wars.filter((war) =>
+      (war.nationAId === nation.id || war.nationBId === nation.id) &&
+      active.has(war.nationAId) && active.has(war.nationBId));
+    if (!wars.length) continue;
+    const previous = state.byNationId.get(nation.id);
+    const objectives = buildCampaignObjectives(world, nation.id, wars, strengths.get(nation.id) ?? 0, previous);
+    const constraints = assessCampaignConstraints(world, nation, wars, objectives, strengths);
+    const decision = evaluateCampaignPolicy(constraints);
+    const topologyChanged = !previous || previous.objectives.map((goal) => goal.warKey).sort().join("|") !==
+      objectives.map((goal) => goal.warKey).sort().join("|");
+    const emergency = constraints.capitalCritical || constraints.foodSeconds < 45;
+    const reassess = topologyChanged || emergency || world.time.fastTick - previous!.adoptedAtTick >= 80;
+    const primary = reassess
+      ? selectPrimaryOpponent(objectives, previous?.primaryOpponentId, strengths)
+      : previous!.primaryOpponentId;
+    const mode = reassess ? decision.mode : previous!.mode;
+    const changed = !previous || previous.mode !== mode || previous.primaryOpponentId !== primary || topologyChanged;
+    const campaign: WarCampaign = {
+      nationId: nation.id, objectives, constraints, mode, primaryOpponentId: primary,
+      adoptedAtTick: changed ? world.time.fastTick : previous!.adoptedAtTick,
+      evaluatedAtTick: world.time.fastTick, revision: (previous?.revision ?? 0) + Number(changed),
+      reason: changed ? topologyChanged ? "war-membership-changed" : decision.reason : previous!.reason,
+    };
+    if (changed) {
+      state.version += 1;
+      state.events.push({ nationId: nation.id, tick: world.time.fastTick, mode,
+        reason: campaign.reason, revision: campaign.revision });
+    }
+    next.set(nation.id, campaign);
+  }
+  if (state.byNationId.size !== next.size) state.version += 1;
+  state.byNationId = next;
+  if (state.events.length > 200) state.events.splice(0, state.events.length - 200);
+}
+
+function selectPrimaryOpponent(
+  goals: CampaignObjective[], previous: NationId | null | undefined, strengths: Map<NationId, number>,
+): NationId | null {
+  const candidates = goals.filter((goal) => !goal.achieved);
+  const ranked = (candidates.length ? candidates : goals).map((goal) => goal.opponentId)
+    .sort((a, b) => (strengths.get(a) ?? 0) - (strengths.get(b) ?? 0) || a.localeCompare(b));
+  const best = ranked[0];
+  if (previous && ranked.includes(previous) &&
+    (strengths.get(previous) ?? 0) <= (strengths.get(best) ?? 0) * 1.25) return previous;
+  return best ?? null;
+}
+
+function assessCampaignConstraints(
+  world: WorldState, nation: NationRuntime, wars: WarState[],
+  objectives: CampaignObjective[], strengths: Map<NationId, number>,
+): CampaignConstraints {
+    const enemyStrength = [...new Set(objectives.map((goal) => goal.opponentId))]
+      .reduce((sum, id) => sum + (strengths.get(id) ?? 0), 0);
+    const character = getNationCharacter(world, nation.id);
+    return {
+      strengthRatio: (strengths.get(nation.id) ?? 0) / Math.max(1, enemyStrength),
+      casualtyFraction: wars.reduce((sum, war) => sum + getWarCasualties(war, nation.id), 0) /
+        Math.max(1, ...objectives.map((goal) => goal.openingStrength)),
+      costTolerance: 0.5 + character.aggression,
+      foodSeconds: nation.food ? foodReserveSeconds(nation.food) : Infinity,
+      replacementConstrained: nation.resources.weapons <= 0 && nation.resources.manpower <= 0,
+      capitalCritical: getCapitalDefenseAssessment(world, nation.id)?.threatLevel === "critical",
+      objectivesSecured: objectives.some((goal) => goal.kind === "limited-occupation") &&
+        objectives.every((goal) => goal.achieved),
+      aggression: character.aggression,
+    };
+}
