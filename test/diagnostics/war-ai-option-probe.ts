@@ -23,6 +23,7 @@ const option = (name: string, fallback: string) => {
 const count = Number(option("--seeds", "4"));
 if (!Number.isSafeInteger(count) || count < 1) throw new Error("Invalid seeds");
 const results: object[] = [];
+if (execFileSync("git", ["diff", "--", "src"], { encoding: "utf8" })) throw new Error("Commit simulation source first");
 for (let i = 0; i < count; i++) {
   for (const scenario of ["matched-war", "stalemate-breaker", "reorganization-heavy", "two-island-amphibious"] as BenchmarkScenarioName[]) {
     for (const mode of ["limited-offensive", "defend", "seek-peace"] as CampaignMode[]) {

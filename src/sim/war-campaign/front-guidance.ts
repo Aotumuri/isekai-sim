@@ -9,6 +9,7 @@ import { getOffensiveOperationForFront } from "../offensive-operations";
 import { campaignPrefersSettlement } from "./peace-guidance";
 import { campaignCostLimitReached } from "./policy";
 import { getWarCampaign } from "./state";
+import { getOwnerByMesoId } from "../world-cache";
 
 /** Strategic intent changes discretionary effort, never the safety floor. */
 export function applyCampaignFrontGuidance(world: WorldState, plan: NationFrontPlan): NationFrontPlan {
@@ -31,11 +32,15 @@ export function applyCampaignFrontGuidance(world: WorldState, plan: NationFrontP
   // wars also need a military route before the minimum peace age.
   const militaryResolution = !canNegotiate &&
     (campaign.mode === "consolidate" || campaign.mode === "seek-peace");
-  const defensiveOpportunity = campaign.mode === "defend" && friendly && enemy &&
+  const owners = getOwnerByMesoId(world);
+  const homelandRecovery = !!enemy?.borderRegionIds.some((id) => owners.get(id) === plan.nationId &&
+    world.occupation.mesoById.get(id) === enemy.nationId);
+  const defensiveOpportunity = campaign.mode === "defend" && homelandRecovery && friendly && enemy &&
     friendly.strength >= enemy.strength * WORLD_BALANCE.war.landFront.plan.attackContinueRatio &&
     !campaign.constraints.replacementConstrained;
   const committed = getOffensiveOperationForFront(world, front.id, plan.nationId);
   const preserveCommitment = committed && committed.phase !== "recovering" &&
+    (campaign.mode !== "defend" || homelandRecovery) &&
     !campaign.constraints.capitalCritical && campaign.mode !== "seek-peace" &&
     (!settling || committed.phase === "attacking" && !campaignCostLimitReached(campaign.constraints));
   const attackAllowed = preserveCommitment || !settling && primary &&

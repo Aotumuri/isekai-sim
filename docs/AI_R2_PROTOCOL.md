@@ -184,3 +184,11 @@ debug display controls. Screenshot: `diagnostics/war-ai-r2-normal-play.png`.
 This checks the normal rendering/control path with the default AI. The experiment
 still has no normal-UI opt-in control, so this is not evidence of R2 strategy in
 normal play; that remains pending.
+
+R2.3 first isolates execution semantics: ordinary defense permits supported
+recovery of occupied homeland, but no longer authorizes foreign expansion merely
+because a local ratio is favorable. Emergency and supply/bridgehead relief stay
+above that restriction. A foreign offensive commitment cannot silently defeat a
+new defense decision. Dedicated tests check both the prohibition and legitimate
+homeland counterattack. Cost-ledger changes are deferred to a separate iteration
+so this experiment can identify the effect of the execution contract alone.
