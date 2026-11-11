@@ -146,7 +146,10 @@ test("a direct land order survives enabled national planning during war", () => 
 test("an occupied overseas port cannot bypass the existing ban on isolated concessions", () => {
   const { world, operation } = assembledIslandWorld();
   const campaign = settle(world, operation.nationId);
-  campaign.objectives.find((goal) => goal.opponentId === operation.enemyNationId)!.regionIds = [operation.destinationPortId];
+  const goal = campaign.objectives.find((item) => item.opponentId === operation.enemyNationId)!;
+  goal.kind = "limited-occupation";
+  goal.regionIds = [operation.destinationPortId];
+  goal.achieved = true;
   world.occupation.mesoById.set(operation.destinationPortId, operation.nationId);
   world.occupation.version++;
   assert.deepEqual(campaignRecognitionRegions(world, operation.nationId, operation.enemyNationId), []);

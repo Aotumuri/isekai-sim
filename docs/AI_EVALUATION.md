@@ -6,7 +6,7 @@
 
 ## 比較条件
 
-基準mainは `394d4bd`。試作5は `b19b2bb`。試作6は目的承認案の生成と双方受諾時の優先を修正して再測定する。
+基準mainは `394d4bd`。試作5は `b19b2bb`。試作6は `1f16d9e` で固定し、目的承認案の生成と双方受諾時の優先を修正した。
 新旧の戦闘、降伏、生産単価・収入、動員上限、同時攻勢上限は同じ。
 試作1〜4の測定後、初回未使用群の結果を読む前の静的監査で終結方針の
 迂回を発見し修正した。その群は試作4の資料として保存し、最終群に再利用しない。
@@ -48,6 +48,9 @@ base-world は初期戦争なしで外交による開戦から観測する。
 - **分布**：各条件の平均・中央値・最小・最大・p95と、同じシードの対応差を保存する。
   少数サンプルの差を統計的確証とは呼ばず、合成点で悪化を隠さない。
 
+切替は世界の全国家に同時に行う。防御側の改善には攻撃側の方針変更も影響するため、
+防衛戦術そのものが強くなったという因果や、一対一の新旧対戦勝率を示す実験ではない。
+
 同じ初期シードでも生産・外交の経過と乱数呼出し順は後に分岐する。後続戦争の
 集計差を特定の一判断の単独因果と解釈しない。固定の開戦集合と全戦争を分ける
 理由でもある。
@@ -64,12 +67,12 @@ npm run build
 npm run benchmark:quick
 
 SCENARIOS=active-war,long-frontline,stalemate-breaker,collapse-advance,capital-threat,retreat-heavy,reorganization-heavy,two-island-amphibious,late-game,base-world,matched-war,unequal-war,economic-constraint
-node --import tsx test/diagnostics/war-ai-matrix.ts --seeds 20 --ticks 10000 --full-systems --political-turbulence --normal-wars --observe-wars --scenarios "$SCENARIOS" --output diagnostics/war-ai-v5-control-development.json.gz
-node --import tsx test/diagnostics/war-ai-matrix.ts --campaign --seeds 20 --ticks 10000 --full-systems --political-turbulence --normal-wars --observe-wars --scenarios "$SCENARIOS" --output diagnostics/war-ai-v5-development.json.gz
+node --import tsx test/diagnostics/war-ai-matrix.ts --seeds 20 --ticks 10000 --full-systems --political-turbulence --normal-wars --observe-wars --scenarios "$SCENARIOS" --output diagnostics/war-ai-v6-control-development.json.gz
+node --import tsx test/diagnostics/war-ai-matrix.ts --campaign --seeds 20 --ticks 10000 --full-systems --political-turbulence --normal-wars --observe-wars --scenarios "$SCENARIOS" --output diagnostics/war-ai-v6-development.json.gz
 ```
 
-未使用群は両コマンドに `--partition holdout --seed-offset 1000` を付け、出力名を
-`war-ai-v5-control-holdout.json.gz` / `war-ai-v5-holdout.json.gz` に変える。
+未使用群は両コマンドに `--partition holdout --seed-offset 2000` を付け、出力名を
+`war-ai-v6-control-holdout.json.gz` / `war-ai-v6-holdout.json.gz` に変える。
 比較は `war-ai-report.ts <旧群> <新群>`。JSON・gzipのどちらも読める。
 ソース未保存・異なる条件への追記・比較ペアの不足を拒否し、一件ごとに原子的に保存する。
 再実行時は出力のリビジョンも一致する必要があるため、別のコミットでは新しい出力名を使う。
@@ -77,8 +80,8 @@ node --import tsx test/diagnostics/war-ai-matrix.ts --campaign --seeds 20 --tick
 ## 長時間・性能・上陸・表示
 
 ```sh
-node --expose-gc --import tsx test/diagnostics/war-ai-soak.ts --ticks 100000 --seeds 3 --political-turbulence --output diagnostics/war-ai-soak-app-v5.json
-node --expose-gc --import tsx test/diagnostics/war-ai-scale.ts --default-map --ticks 2000 --seeds 2 --output diagnostics/war-ai-default-scale-v5.json
+node --expose-gc --import tsx test/diagnostics/war-ai-soak.ts --ticks 100000 --seeds 3 --political-turbulence --output diagnostics/war-ai-soak-app-v6.json
+node --expose-gc --import tsx test/diagnostics/war-ai-scale.ts --default-map --ticks 2000 --seeds 2 --output diagnostics/war-ai-default-scale-v6.json
 node --import tsx test/diagnostics/war-ai-amphibious.ts --seeds 20 --ticks 10000 --output diagnostics/war-ai-amphibious-v5.json
 ```
 
@@ -98,15 +101,23 @@ node --import tsx test/diagnostics/war-ai-amphibious.ts --seeds 20 --ticks 10000
 上部ボタンとの重なりを修正済み。画像は `diagnostics/war-ai-preview.jpg`。
 通常プレイの全面的なUI検証は行っていない。lintコマンドはリポジトリに定義がない。
 
-長時間検証の全6件が完了。終盤GC後の保持heapは37.97〜42.56MiB。
-新群の計画数は最大4、目標6、変更履歴61、終結履歴32で、上限・ID・兵力の
-不変条件違反は検出されなかった。最後の5区間のheapは各回ともほぼ横ばい。
-これだけで漏れが皆無とは証明しない。全例で終了時の戦争数は0。
-CPU合計はseed780で38682→52753ms、781で50757→46168ms、782で27713→47669ms。
-自律戦争の経過も異なり、並列実験と同時に測ったため、固有のAI計算効率や
-壁時計速度の推定には使わない。CPU増加は残る費用として報告する。
+試作6の長時間検証は全6件が完了。終盤GC後の保持heapは38.09〜42.82MiB。
+新群の計画数は最大4、目標6、変更履歴51、終結履歴30。不変条件違反はなく、
+最後の5区間のheapは各回ともほぼ横ばい。漏れが皆無という証明ではない。
+全例で終了時の戦争数は0だった。
 
-上陸予測診断は160件完走。通常設定の結果を示す（件数は作戦試行単位で、増援も含む）。
+|seed末尾|CPU合計 ms 旧→新|終了時部隊数 旧→新|
+|---|---:|---:|
+|780|35934→55882|44→53|
+|781|53518→72910|54→120|
+|782|28045→58858|25→45|
+
+CPU費用は全3例で増加した。部隊数や自律戦争の経過が異なり、並列実験と同時に
+測ったため、固有の戦略層の計算費用と世界経過の費用を分離できない。
+これを高速化や費用増のない改善とは扱わない。既定マップの最終確認は他の
+実験が完走してから独立して実行する。
+
+試作5の上陸予測診断は160件完走。通常設定の結果を示す（件数は作戦試行単位で、増援も含む）。
 
 |条件（各20seed）|作成 旧→新|出航|上陸完了|橋頭堡成功|実終戦が予測完了より早い件数|
 |---|---:|---:|---:|---:|---:|
@@ -129,18 +140,25 @@ CPU合計はseed780で38682→52753ms、781で50757→46168ms、782で27713→47
 利得・保持・損耗・配分先変更・未終結の基準は同じ。内部目標の追跡も同じ開発3条件で
 繰り返し、主に終結時確保の違いを見る。既定は引き続き無効。
 
+内部目標の再追跡は次で実行する。旧AIとの共通代理目標評価とは分ける。
+
+```sh
+node --import tsx test/diagnostics/war-ai-intent-audit.ts --seeds 20 --ticks 10000 --output diagnostics/war-ai-intent-v6.json
+node --import tsx test/diagnostics/war-ai-validate.ts diagnostics/war-ai-v6-control-development.json.gz diagnostics/war-ai-v6-development.json.gz diagnostics/war-ai-app-control-development.json.gz
+```
+
 ## 成果物の対応
 
 |内容|保存先（diagnostics/以下）|
 |---|---|
-|試作5の開発A/B|`war-ai-v5-control-development.json.gz`, `war-ai-v5-development.json.gz`|
-|試作5の未使用A/B|`war-ai-v5-control-holdout.json.gz`, `war-ai-v5-holdout.json.gz`|
-|全指標の分布・対応差|`war-ai-v5-development-comparison.json.gz`, `war-ai-v5-holdout-comparison.json.gz`|
-|比較条件・無効時互換性|`war-ai-v5-development-validation.json`, `war-ai-v5-holdout-validation.json`|
-|長時間・GC後メモリ|`war-ai-soak-app-v5.json`|
-|既定マップ性能|`war-ai-default-scale-v5.json.gz`|
+|試作6の開発A/B|`war-ai-v6-control-development.json.gz`, `war-ai-v6-development.json.gz`|
+|試作6の未使用A/B|`war-ai-v6-control-holdout.json.gz`, `war-ai-v6-holdout.json.gz`|
+|全指標の分布・対応差|`war-ai-v6-development-comparison.json.gz`, `war-ai-v6-holdout-comparison.json.gz`|
+|比較条件・無効時互換性|`war-ai-v6-development-validation.json`, `war-ai-v6-holdout-validation.json`|
+|長時間・GC後メモリ|`war-ai-soak-app-v6.json`|
+|既定マップ性能|`war-ai-default-scale-v6.json.gz`|
 |上陸予測の実測|`war-ai-amphibious-v5.json.gz`, `war-ai-amphibious-v5-summary.json`|
-|内部目標の追跡|`war-ai-intent-v5.json.gz`|
+|内部目標の追跡|`war-ai-intent-v6.json.gz`|
 |表示確認|`war-ai-preview.jpg`|
 
 大きな生成レポートはレビュー時にソース差分を埋めないようgzipで保存する。
