@@ -80,3 +80,27 @@ progress sum are descriptive and must not be presented as unnecessary travel.
 Actual changed-edge events still need threat/topology context for interpretation.
 This evidence supports testing continuity of a still-valid first edge, rather
 than delaying strategy review or prohibiting useful front transfers.
+
+### R2.1 prototype result: not adopted
+
+Commit `166ba18`, 20 development seeds × four families, full normal systems,
+10,000 ticks. Same-edge retarget resets virtually disappear in the traced cases,
+but this local correction does not establish national quality. Active-war
+opening attacker survival is Legacy 77%, R1 82%, prototype 69%; reorganization
+transfers are 65.55/84.30/98.05. Stalemate attacker objective retention is
+65%/60%/65%, while defender survival is 55%/75%/55%. Two-island attacker survival
+returns from R1's 95% to 100%, but territorial success remains zero. Outcomes are
+mixed and some material point-estimate regressions remain. Full data are retained
+in `diagnostics/war-ai-r2-1-development.json.gz`; no final seeds were inspected.
+
+Remove the movement-continuity integration from R2.2 to isolate the national
+decision model. The prototype remains recoverable from its commit. Do not claim
+that fewer discarded same-edge movements proved a better overall AI.
+
+## R2.2: explicit national alternatives (pending)
+
+Compare limited offense, defense/recovery and settlement using reachable force,
+arrival time, political rather than temporary territorial benefit, observed
+casualty flow, replacement resources, homeland exposure, uncertainty and committed
+travel. Preserve critical-capital and exhausted-budget overrides. Carry R1's
+execution rules unchanged so this trial isolates national decision quality.
