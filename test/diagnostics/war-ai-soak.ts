@@ -15,6 +15,7 @@ function option(name: string, fallback: string): string {
 }
 const ticks = Number(option("--ticks", "100000"));
 const seeds = Number(option("--seeds", "3"));
+const politicalTurbulence = args.includes("--political-turbulence");
 if (![ticks, seeds].every((value) => Number.isSafeInteger(value) && value > 0)) throw new Error("Positive integer ticks/seeds required");
 if (typeof global.gc !== "function") throw new Error("Run with --expose-gc for meaningful retained-heap samples");
 const collect = global.gc;
@@ -27,7 +28,7 @@ interface Sample {
   wars: number; units: number;
 }
 interface Episode { seed: number; campaign: boolean; samples: Sample[]; complete: boolean; peak: ReturnType<typeof stateSize> }
-const report = { revision, ticks, seeds, quick: true, chunkTicks: 10000, episodes: [] as Episode[] };
+const report = { revision, ticks, seeds, politicalTurbulence, quick: true, chunkTicks: 10000, episodes: [] as Episode[] };
 const originalInfo = console.info;
 console.info = () => undefined;
 await mkdir(dirname(output), { recursive: true });
@@ -51,9 +52,11 @@ async function runEpisode(seed: number, campaign: boolean): Promise<void> {
   const world = createScenarioWorld("base-world", {
     seed, width: 640, height: 360, quick: true,
     config: { systems: { mobilizationEnabled: true, diplomacyEnabled: true, researchEnabled: true,
-      armsAidEnabled: true, tradeEnabled: true, warCampaignEnabled: campaign } },
+      armsAidEnabled: true, tradeEnabled: true, warCampaignEnabled: campaign,
+      politicalTurbulenceEnabled: politicalTurbulence } },
   });
   const metrics = new BenchmarkMetrics();
+  assert.equal(world.settings?.politicalTurbulenceEnabled, politicalTurbulence);
   const episode: Episode = { seed, campaign, samples: [], complete: false, peak: stateSize(world) };
   report.episodes.push(episode);
   let checkedSlowTick = -1;

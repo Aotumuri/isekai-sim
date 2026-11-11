@@ -11,6 +11,7 @@ export function runBenchmark(options: BenchmarkOptions): BenchmarkResult {
     const world = createScenarioWorld(options.scenario, options);
     if (options.normalWars) world.wars.forEach((war) => { war.isTest = false; });
     const startWorld = summarizeWorld(world);
+    const simulationSettings = world.settings ? { ...world.settings } : undefined;
     const cpuStart = process.cpuUsage();
     if (options.observeWarOutcomes && options.mode !== "throughput") throw new Error("War observer requires throughput mode");
     const observer = options.observeWarOutcomes ? createWarOutcomeObserver() : undefined;
@@ -20,6 +21,7 @@ export function runBenchmark(options: BenchmarkOptions): BenchmarkResult {
 
     return {
       schemaVersion: 1,
+      simulationSettings,
       warOutcomes: observer?.result(),
       generatedAt: new Date().toISOString(),
       scenario: options.scenario,

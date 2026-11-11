@@ -8,6 +8,7 @@ interface Matrix {
   partition: string;
   seedCount: number;
   fullSystems?: boolean;
+  politicalTurbulence?: boolean;
   observeWarOutcomes?: boolean;
   normalWars?: boolean;
   results: BenchmarkResult[];
@@ -27,6 +28,7 @@ if (matrices.length === 2) {
     throw new Error("Cannot compare incompatible experiments");
   }
   if (!!a.normalWars !== !!b.normalWars) throw new Error("Cannot compare different war rules");
+  if (!!a.politicalTurbulence !== !!b.politicalTurbulence) throw new Error("Cannot compare different political settings");
   const keys = (matrix: Matrix) => matrix.results.map((row) => `${row.scenario}:${row.seed}`).sort().join("|");
   if (keys(a) !== keys(b)) throw new Error("A/B requires identical completed scenario/seed pairs");
 }

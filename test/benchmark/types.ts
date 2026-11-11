@@ -1,4 +1,5 @@
 import type { WorldConfig } from "../../src/data/world-config";
+import type { SimulationSettings } from "../../src/sim/simulation-settings";
 import type { WarOutcomeReport } from "./war-outcome-observer";
 
 export const BENCHMARK_SCENARIOS = [
@@ -649,6 +650,7 @@ export interface WorldSummary {
 }
 
 export interface BenchmarkResult {
+  simulationSettings?: SimulationSettings;
   warOutcomes?: WarOutcomeReport;
   schemaVersion: 1;
   generatedAt: string;

@@ -227,3 +227,25 @@ node --expose-gc --import tsx test/diagnostics/war-ai-soak.ts --ticks 100000 --s
 区間末には目的地域の実在、国家存続、部隊位置と有限な兵力値も検査する。
 この診断は観測の負荷を含み、異なる戦争経過のCPU差を純粋なコード差とは
 解釈しない。GC後の推移と状態の上限を併せて評価する。
+
+## 既定プレイとの差の明示
+
+従来の `--full-systems` は外交・動員・研究・援助・貿易を有効にする統合条件で、
+既定マップで有効な `politicalTurbulenceEnabled` は含んでいなかった。
+従来のA/Bは両群でこの条件が同じであり、比較自体は有効だが、既定プレイ全体の
+検証を代替しない。今後は `--political-turbulence` を明示して別群で測定する。
+レポートと再開処理は異なる政治設定の混在を拒否する。実際の実行設定も
+新しいベンチマーク結果の `simulationSettings` に保存する。
+
+大きな世界の計測は次で行う。`--default-map` は既定の320000 micro region、
+地形国境、国家規模、政治変動の設定を継承し、両群で同じ開戦状態を与える。
+結果には世界生成を含む時間とシミュレーションだけの時間を別々に保存する。
+これは性能検証用の少数シードであり、20シードの品質評価とは区別する。
+
+```sh
+node --expose-gc --import tsx test/diagnostics/war-ai-scale.ts --default-map --ticks 2000 --seeds 2 --output diagnostics/war-ai-default-scale-v4.json
+```
+
+GC追跡の既存6件は完走し、終盤の保持heapは約34〜37 MiBだった。
+この条件では状態上限違反や継続的な大きな増加は見られない。
+政治変動を含む検証は別途、同じsoakコマンドに `--political-turbulence` を付けて行う。

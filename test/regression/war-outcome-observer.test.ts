@@ -34,6 +34,7 @@ test("optional war observation preserves deterministic simulation outcomes", () 
   };
   const plain = runBenchmark(options);
   const observed = runBenchmark({ ...options, observeWarOutcomes: true });
+  assert.deepEqual(observed.simulationSettings, plain.simulationSettings);
   for (const key of ["units", "wars", "occupations", "operationsCompleted", "capitalFalls", "nationalWeaponsStock"] as const) {
     assert.equal(observed.endWorld[key], plain.endWorld[key], key);
   }

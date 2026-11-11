@@ -35,6 +35,8 @@ const count = positiveInteger("--seeds", 20);
 const ticks = positiveInteger("--ticks", 3200);
 const partition = option("--partition", "development");
 const fullSystems = args.includes("--full-systems");
+const politicalTurbulence = args.includes("--political-turbulence");
+if (politicalTurbulence && !fullSystems) throw new Error("Political turbulence requires --full-systems");
 const campaignEnabled = args.includes("--campaign");
 const observeWarOutcomes = args.includes("--observe-wars");
 const normalWars = args.includes("--normal-wars");
@@ -51,6 +53,7 @@ interface Experiment {
   seedStart: number;
   seedCount: number;
   fullSystems: boolean;
+  politicalTurbulence?: boolean;
   campaignEnabled?: boolean;
   observeWarOutcomes?: boolean;
   observationSchema?: number;
@@ -60,7 +63,7 @@ interface Experiment {
   failures: { scenario: string; seed: number; error: string }[];
 }
 let experiment: Experiment = {
-  revision, partition, ticks, seedStart, seedCount: count, scenarios, fullSystems, campaignEnabled, observeWarOutcomes, normalWars,
+  revision, partition, ticks, seedStart, seedCount: count, scenarios, fullSystems, politicalTurbulence, campaignEnabled, observeWarOutcomes, normalWars,
   results: [], failures: [],
 };
 if (observeWarOutcomes) experiment.observationSchema = WAR_OUTCOME_SCHEMA;
@@ -71,6 +74,7 @@ try {
     if (saved[key] !== experiment[key]) throw new Error(`Output has incompatible ${key}`);
   }
   if ((saved.fullSystems ?? false) !== fullSystems) throw new Error("Output has incompatible systems");
+  if (!!saved.politicalTurbulence !== politicalTurbulence) throw new Error("Output has incompatible political settings");
   if (!!saved.campaignEnabled !== campaignEnabled) throw new Error("Output has incompatible campaign setting");
   if (!!saved.observeWarOutcomes !== observeWarOutcomes) throw new Error("Output has incompatible observation setting");
   if (observeWarOutcomes && (saved.observationSchema ?? 1) !== WAR_OUTCOME_SCHEMA) throw new Error("Output has incompatible observation schema");
@@ -92,6 +96,7 @@ for (let index = 0; index < count; index += 1) {
         config: { systems: {
           mobilizationEnabled: fullSystems, diplomacyEnabled: fullSystems, researchEnabled: fullSystems,
           armsAidEnabled: fullSystems, tradeEnabled: fullSystems, warCampaignEnabled: campaignEnabled,
+          politicalTurbulenceEnabled: politicalTurbulence,
         } },
         scenario, seed, ticks, width: 640, height: 360, quick: true,
         speed: 32, mode: "throughput", frameDeltaMs: 1000 / 60,
