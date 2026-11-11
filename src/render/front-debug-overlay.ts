@@ -1334,7 +1334,7 @@ function drawStrategicThreatSummary(layer: Container, world: WorldState): void {
   background.drawRoundedRect(0, 0, bounds.width + padding * 2, bounds.height + padding * 2, 4);
   background.endFill();
   text.position.set(padding, padding);
-  container.position.set(8, 8);
+  container.position.set(8, CONFIG_MARGIN * 2 + CONFIG_TAB_HEIGHT);
   container.addChild(background, text);
   layer.addChild(container);
 }

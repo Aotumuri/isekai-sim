@@ -64,6 +64,8 @@ if (matrices.every((matrix) => matrix.observeWarOutcomes)) {
     ["meanEndedWarTicks", (row) => average(row.warOutcomes!.wars.filter((war) => war.endedAtTick !== null).map((war) => war.endedAtTick! - war.startedAtTick))],
     ["unfinishedWarSides", (row) => row.warOutcomes!.wars.filter((war) => war.endedAtTick === null).length],
     ["activeWarTicks", (row) => row.warOutcomes!.activeWarTicks],
+    ["frontTransfersPer1000WarSideTicks", (row) => (row.counters["landFront.allocationFrontTransfers"] ?? 0) * 1000 /
+      Math.max(1, row.warOutcomes!.wars.reduce((sum, war) => sum + Math.max(0, (war.endedAtTick ?? row.requestedTicks) - war.observedAtTick), 0))],
     ["campaignChanges", (row) => row.warOutcomes!.campaignChanges],
   );
   if (matrices.every((matrix) => matrix.results.every((row) => row.warOutcomes!.schemaVersion >= 2))) {
