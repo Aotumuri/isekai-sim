@@ -1,3 +1,5 @@
+import type { WorldConfig } from "../../src/data/world-config";
+
 export const BENCHMARK_SCENARIOS = [
   "base-world",
   "active-war",
@@ -19,6 +21,7 @@ export type BenchmarkScenarioName = (typeof BENCHMARK_SCENARIOS)[number];
 export type BenchmarkMode = "throughput" | "frame-loop";
 
 export interface BenchmarkOptions {
+  config?: Partial<WorldConfig>;
   scenario: BenchmarkScenarioName;
   seed: number;
   ticks: number;
