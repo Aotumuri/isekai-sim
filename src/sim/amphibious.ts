@@ -1,4 +1,5 @@
 import { getExpeditionCandidates } from "./amphibious-front-priority";
+import { getCampaignObjectives } from "./campaign-objectives";
 import { getPlayerNation } from "./player-nation";
 import { getMoveTicksPerRegion } from "./movement";
 import { getDesignTransportCapacity, getFleetTransportCapacity, planTransportLoading } from "./unit-capabilities";
@@ -862,6 +863,7 @@ function chooseCandidate(world: WorldState, nationId: NationId, enemyId: NationI
   const friendlyObjectives = world.offensiveOperations.operations
     .filter((operation) => operation.nationId === nationId && operation.enemyNationId === enemyId && operation.outcome === null)
     .flatMap((operation) => [operation.primaryTargetRegionId, ...operation.supportingTargetRegionIds]);
+  if (world.settings?.warCampaignEnabled) friendlyObjectives.push(...getCampaignObjectives(world, nationId, enemyId));
   const candidates: LandingCandidate[] = [];
   for (const destination of [...destinations].sort(compareIds).slice(0, 8)) {
     const estimate = estimateAssaultStrength(world, enemyId, destination, enemyUnits,

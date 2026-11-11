@@ -5,6 +5,7 @@ import { annexedOutputFactor } from "./annexation";
 import { allFieldUnits, getArmyLimits, getMobilization } from "./mobilization";
 import { equipNewUnit, getDevelopedUnitWeaponCost } from "./equipment-development";
 import { getNationalDesign, type WeaponDesign } from "./research";
+import { getCampaignRecoveryStock, campaignProductionResources } from "./war-campaign/production-budget";
 import { WORLD_BALANCE } from "../data/balance";
 import type { MacroRegion } from "../worldgen/macro-region";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
@@ -299,6 +300,7 @@ function updateProductionInternal(world: WorldState): void {
       world.productionDiagnostics.version += 1;
     };
     const amphibiousTransports = amphibiousTransportDemandByNation.get(nation.id) ?? 0;
+    const recoveryStock = getCampaignRecoveryStock(world, nation.id);
     const amphibiousEscorts = amphibiousEscortDemandByNation.get(nation.id) ?? 0;
     const requestedTransports = (logisticsTransportDemandByNation.get(nation.id) ?? 0) +
       amphibiousTransports;
@@ -371,7 +373,7 @@ function updateProductionInternal(world: WorldState): void {
           performance.now() - supplyStartedAt,
         );
       }
-      const unitType = pickAffordableUnitType(nation.resources, world.simRng, designs);
+      const unitType = pickAffordableUnitType(campaignProductionResources(nation.resources, recoveryStock), world.simRng, designs);
       if (!unitType) {
         recordResourceBlock(world, nation.resources);
         return false;
@@ -401,7 +403,7 @@ function updateProductionInternal(world: WorldState): void {
       const diagnostics = world.productionDiagnostics;
       diagnostics.attemptedProductions += 1;
       world.instrumentation?.incrementCounter("production.attempted");
-      const unitType = pickNavalUnitType(nation.resources, forcedType, designs[forcedType]);
+      const unitType = pickNavalUnitType(campaignProductionResources(nation.resources, recoveryStock), forcedType, designs[forcedType]);
       if (!unitType) {
         recordResourceBlock(world, nation.resources, "naval");
         return false;

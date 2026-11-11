@@ -45,7 +45,15 @@ const metrics: [string, (row: BenchmarkResult) => number][] = [
 ];
 if (matrices.every((matrix) => matrix.observeWarOutcomes)) {
   const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+  // Registered scenario factories all start at fastTick=0. Separate fixed
+  // opening wars from endogenous declarations, whose population can differ.
+  const openingWars = (row: BenchmarkResult) => row.warOutcomes!.wars.filter((war) => war.observedAtTick === 0);
   metrics.push(
+    ["openingWarSides", (row) => openingWars(row).length],
+    ["openingAggressorObjectiveHeldRate", (row) => average(openingWars(row).filter((war) => war.aggressor).map((war) => Number(war.objectiveHeld)))],
+    ["openingDefenderTerritoryHeldRate", (row) => average(openingWars(row).filter((war) => !war.aggressor).map((war) => Number(war.objectiveHeld)))],
+    ["openingNationSurvivalRate", (row) => average(openingWars(row).map((war) => Number(war.survived)))],
+    ["openingMeanCasualties", (row) => average(openingWars(row).map((war) => war.casualties))],
     ["aggressorObjectiveHeldRate", (row) => average(row.warOutcomes!.wars.filter((war) => war.aggressor).map((war) => Number(war.objectiveHeld)))],
     ["defenderTerritoryHeldRate", (row) => average(row.warOutcomes!.wars.filter((war) => !war.aggressor).map((war) => Number(war.objectiveHeld)))],
     ["nationSurvivalRate", (row) => average(row.warOutcomes!.wars.map((war) => Number(war.survived)))],

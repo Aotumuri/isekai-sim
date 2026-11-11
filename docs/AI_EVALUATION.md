@@ -149,3 +149,34 @@ node --import tsx test/diagnostics/war-ai-report.ts diagnostics/war-ai-baseline-
 既存の強制戦争フラグを外して、通常の交渉可能な戦争として両群を測定できる。
 強制戦争群と通常戦争群の成績を直接A/Bとして比較しない。
 試作2の実証と未使用シード評価は未完了で、既定無効を継続する。
+
+## 試作2と追加評価
+
+軍事群200件の比較は `war-ai-v2-comparison.json`。試作1で増えた未終結は
+大幅に減り、active-war の未終結側数の差は平均+0.1まで縮小した。
+限定目標保持率は active-war で+3.5ポイント、two-island で+5ポイント、
+long-frontline と stalemate-breaker ではそれぞれ-5ポイント。
+これは一律の改善ではなく、未使用シードでの確認も未完了である。
+
+通常交渉可能な全システム群も各200件完了した。
+`war-ai-normal-v2-comparison.json` の開始時戦争だけの指標では、
+active-war の攻撃側目標保持率-2ポイント、防衛側保全率+4ポイント。
+late-game は攻撃側+7.2ポイント、防衛側-5.4ポイント。
+全戦争を含む平均損耗は active-war で43.3減、capital-threat では33.6増。
+新規開戦集合の変化と未終結の打ち切りを含むため、損耗の差を同じ戦争に
+対する純粋な効果とは解釈しない。
+
+試作3は、予備・再編成の共通引き抜き予算、補充と生産の資源優先度、
+国家目標と海上任務の接続を追加する。戦闘係数は変更しない。
+
+追加の固定条件を次で検証する（A/Bで同じオプションを使う）。
+
+```sh
+node --import tsx test/diagnostics/war-ai-matrix.ts --seeds 20 --ticks 10000 --observe-wars --normal-wars --full-systems --scenarios matched-war,unequal-war,economic-constraint --output diagnostics/war-ai-controlled-control-development.json.gz
+```
+
+matched-war は戦力・編成・在庫を等しく、unequal-war は同じ編成比率で
+攻撃側戦力を2倍、economic-constraint は同戦力で初期補充・燃料在庫を0とする。
+ゲームの資源収入は止めない。開始条件は回帰テストで検査する。
+通常外交による後続の戦争は別に観測する。開戦時戦争側数0の指標は
+未測定のプレースホルダ0であり、目標達成失敗を意味しない。

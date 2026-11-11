@@ -1,13 +1,14 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { runBenchmark } from "../benchmark/benchmark-runner";
 import type { BenchmarkResult, BenchmarkScenarioName } from "../benchmark/types";
+import { BENCHMARK_SCENARIOS } from "../benchmark/types";
 
 // Incremental output allows long experiments to resume without rerunning rows.
 // Never compare different horizons, world sizes, or combat rules as an AI A/B.
-const scenarios: BenchmarkScenarioName[] = [
+const defaultScenarios: BenchmarkScenarioName[] = [
   "active-war", "long-frontline", "stalemate-breaker", "collapse-advance",
   "capital-threat", "retreat-heavy", "reorganization-heavy",
   "two-island-amphibious", "late-game", "base-world",
@@ -25,6 +26,10 @@ function positiveInteger(name: string, fallback: number): number {
   if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`Invalid ${name}`);
   return value;
 }
+const requestedScenarios = option("--scenarios", defaultScenarios.join(",")).split(",");
+if (!requestedScenarios.length || requestedScenarios.some((name) => !BENCHMARK_SCENARIOS.includes(name as BenchmarkScenarioName)) ||
+  new Set(requestedScenarios).size !== requestedScenarios.length) throw new Error("Invalid scenarios");
+const scenarios = requestedScenarios as BenchmarkScenarioName[];
 const count = positiveInteger("--seeds", 20);
 const ticks = positiveInteger("--ticks", 3200);
 const partition = option("--partition", "development");
@@ -66,6 +71,7 @@ try {
   if (!!saved.campaignEnabled !== campaignEnabled) throw new Error("Output has incompatible campaign setting");
   if (!!saved.observeWarOutcomes !== observeWarOutcomes) throw new Error("Output has incompatible observation setting");
   if (!!saved.normalWars !== normalWars) throw new Error("Output has incompatible war rules");
+  if (saved.scenarios.join(",") !== scenarios.join(",")) throw new Error("Output has incompatible scenarios");
   experiment = saved;
 } catch (error) {
   if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -96,7 +102,8 @@ for (let index = 0; index < count; index += 1) {
       console.error(`${scenario} seed=${seed}: ${String(error)}`);
     }
     const json = `${JSON.stringify(experiment, null, 2)}\n`;
-    await writeFile(output, output.endsWith(".gz") ? gzipSync(json) : json);
+    await writeFile(`${output}.tmp`, output.endsWith(".gz") ? gzipSync(json) : json);
+    await rename(`${output}.tmp`, output);
   }
 }
 if (experiment.failures.length) process.exitCode = 1;

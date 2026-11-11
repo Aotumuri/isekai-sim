@@ -2,6 +2,9 @@ import type { WorldConfig } from "../../src/data/world-config";
 import type { WarOutcomeReport } from "./war-outcome-observer";
 
 export const BENCHMARK_SCENARIOS = [
+  "matched-war",
+  "unequal-war",
+  "economic-constraint",
   "base-world",
   "active-war",
   "many-units",

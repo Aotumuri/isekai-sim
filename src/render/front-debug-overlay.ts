@@ -1,4 +1,5 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
+import { formatCampaignDebugLines } from "./war-campaign-debug-summary";
 import { WORLD_BALANCE } from "../data/balance";
 import type {
   FrontBorderEdge,
@@ -111,6 +112,7 @@ const CONFIG_TAB_WIDTH = 62;
 const CONFIG_TAB_HEIGHT = 28;
 
 interface OverlayVersions {
+  campaigns: number;
   fronts: number;
   frontMetrics: number;
   plans: number;
@@ -1363,6 +1365,7 @@ export function formatStrategicThreatSummary(world: WorldState): string {
     lines.push(`${intent.aggressorId} → ${intent.targetNationId} ${intent.route} | ${intent.score.toFixed(0)} | O +${intent.opportunity.toFixed(0)} T +${intent.threatResponse.toFixed(0)} V +${intent.strategicValue.toFixed(0)} C -${intent.expectedCost.toFixed(0)} K -${intent.existingCommitment.toFixed(0)} X -${intent.externalExposure.toFixed(0)}`);
     lines.push(`  ${intent.dominantReason} | ${intent.declared ? "DECLARE" : `reject: ${intent.rejectedReasons.join(", ")}`}`);
   }
+  lines.push(...formatCampaignDebugLines(world));
   return lines.join("\n");
 }
 
@@ -1542,6 +1545,7 @@ function readVersions(world: WorldState): OverlayVersions {
     coverage: world.frontlineCoverage.version,
     stalemate: world.stalematePressure.version,
     strategicThreat: world.strategicThreatObservation.version,
+    campaigns: world.warCampaigns?.version ?? 0,
     coalitions: world.commonThreatCoalitions.version,
     reserveDeployments: world.strategicReserves.reserves
       .map((reserve) => {
@@ -1558,7 +1562,7 @@ function readVersions(world: WorldState): OverlayVersions {
 }
 
 function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
-  return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
+  return a.campaigns === b.campaigns && a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
     a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment && a.maritimeInterdiction === b.maritimeInterdiction && a.navalStrategy === b.navalStrategy && a.amphibiousOperations === b.amphibiousOperations && a.convoys === b.convoys && a.isolationEffects === b.isolationEffects && a.productionDiagnostics === b.productionDiagnostics && a.supplyCutoffs === b.supplyCutoffs && a.supplyDefense === b.supplyDefense && a.supplyRelief === b.supplyRelief &&
     a.retreats === b.retreats && a.coverage === b.coverage && a.stalemate === b.stalemate &&
     a.strategicThreat === b.strategicThreat && a.coalitions === b.coalitions &&

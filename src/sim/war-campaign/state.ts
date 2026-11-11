@@ -2,6 +2,7 @@ import type { NationId } from "../../worldgen/nation";
 import type { MesoRegionId } from "../../worldgen/meso-region";
 import type { WorldState } from "../world-state";
 import type { CampaignConstraints, CampaignMode } from "./policy";
+import type { CampaignForceBudget } from "./force-budget";
 
 export interface CampaignObjective {
   warKey: string;
@@ -23,6 +24,7 @@ export interface WarCampaign {
   constraints: CampaignConstraints;
 }
 export interface WarCampaignState {
+  forceBudget?: CampaignForceBudget;
   byNationId: Map<NationId, WarCampaign>;
   version: number;
   events: { nationId: NationId; tick: number; mode: CampaignMode; reason: string; revision: number }[];

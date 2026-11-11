@@ -1,3 +1,4 @@
+import { claimCampaignFrontExtraction } from "./war-campaign/force-budget";
 import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
@@ -540,6 +541,9 @@ function reconcileReserveMembership(
       );
     for (const unit of candidates) {
       if (strength >= reserve.desiredReserveStrength) break;
+      const frontId = world.frontAllocations.frontIdByUnitId.get(unit.id);
+      const allocation = frontId && world.frontAllocations.allocationsByFrontNation.get(`${frontId}::${unit.nationId}`);
+      if (!claimCampaignFrontExtraction(world, unit, allocation ? allocation.desiredStrength * settings.frontStrengthFloorRatio : 0)) continue;
       reserve.unitIds.push(unit.id);
       reserve.membershipStartedAtTickByUnitId.set(unit.id, now);
       strength += finiteUnitStrength(unit);
