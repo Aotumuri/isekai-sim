@@ -1,3 +1,6 @@
+import { runSimulation } from "../helpers/simulation-driver";
+import { semanticWorldSignature } from "../helpers/invariants";
+import { withMutedSimulationLogs } from "../helpers/muted-logs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createScenarioWorld } from "../scenarios";
@@ -40,4 +43,21 @@ test("optional war observation preserves deterministic simulation outcomes", () 
   }
   assert.equal(plain.warOutcomes, undefined);
   assert.ok(observed.warOutcomes!.wars.length > 0);
+});
+
+test("observing enabled normal campaigns leaves gameplay and plans unchanged", () => {
+  const worlds = [0, 1].map(() => createScenarioWorld("active-war", {
+    seed: 822_748_319_788, quick: true, width: 640, height: 360,
+    config: { systems: { warCampaignEnabled: true, diplomacyEnabled: true, mobilizationEnabled: true,
+      researchEnabled: true, armsAidEnabled: true, tradeEnabled: true, politicalTurbulenceEnabled: true } },
+  }));
+  worlds.forEach((world) => world.wars.forEach((war) => { war.isTest = false; }));
+  const observer = createWarOutcomeObserver();
+  withMutedSimulationLogs(() => {
+    runSimulation(worlds[0], { ticks: 1200 });
+    runSimulation(worlds[1], { ticks: 1200, observe: observer.observe });
+  });
+  assert.deepEqual(semanticWorldSignature(worlds[0]), semanticWorldSignature(worlds[1]));
+  assert.deepEqual(worlds[0].warCampaigns, worlds[1].warCampaigns);
+  assert.deepEqual(worlds[0].simRng.fork().nextFloat(), worlds[1].simRng.fork().nextFloat());
 });

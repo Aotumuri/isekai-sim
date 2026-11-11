@@ -68,7 +68,23 @@ if (matrices.every((matrix) => matrix.observeWarOutcomes)) {
       Math.max(1, row.warOutcomes!.wars.reduce((sum, war) => sum + Math.max(0, (war.endedAtTick ?? row.requestedTicks) - war.observedAtTick), 0))],
     ["campaignChanges", (row) => row.warOutcomes!.campaignChanges],
   );
+  metrics.push(
+    ["openingAggressorFirstGoalRate", (row) => average(openingWars(row).filter((war) => war.aggressor).map((war) => Number(war.firstAchievedTick !== null)))],
+    ["openingAggressorGoalTicksCapped", (row) => average(openingWars(row).filter((war) => war.aggressor).map((war) => (war.firstAchievedTick ?? row.requestedTicks) - war.startedAtTick))],
+    ["openingWarDurationTicksCapped", (row) => average(openingWars(row).map((war) => (war.endedAtTick ?? row.requestedTicks) - war.startedAtTick))],
+    ["operationsCancelledSettlement", (row) => row.warOutcomes!.operationEndReasons["cancelled:campaign-settlement"] ?? 0],
+  );
   if (matrices.every((matrix) => matrix.results.every((row) => row.warOutcomes!.schemaVersion >= 2))) {
+    for (const aggressor of [true, false]) {
+      const role = aggressor ? "Aggressor" : "Defender";
+      const sides = (row: BenchmarkResult) => openingWars(row).filter((war) => war.aggressor === aggressor);
+      metrics.push(
+        [`opening${role}NetValueRate`, (row) => average(sides(row).map((war) =>
+          (war.opponentTerritorySecuredValue - war.homelandLostValue) / Math.max(1, war.openingTerritorialValue)))],
+        [`opening${role}Casualties`, (row) => average(sides(row).map((war) => war.casualties))],
+        [`opening${role}SurvivalRate`, (row) => average(sides(row).map((war) => Number(war.survived)))],
+      );
+    }
     metrics.push(
       ["openingNetStrategicValueRate", (row) => average(openingWars(row).map((war) =>
         (war.opponentTerritorySecuredValue - war.homelandLostValue) / Math.max(1, war.openingTerritorialValue)))],

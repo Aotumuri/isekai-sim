@@ -1,0 +1,15 @@
+{
+  "control": "diagnostics/war-ai-v5-control-development.json.gz",
+  "campaign": "diagnostics/war-ai-v5-development.json.gz",
+  "reference": "diagnostics/war-ai-app-control-development.json.gz",
+  "revisions": [
+    "b19b2bb0b69b5eb5740122262880cd1909880156",
+    "b19b2bb0b69b5eb5740122262880cd1909880156"
+  ],
+  "pairedRows": 260,
+  "failures": 0,
+  "pairedActualSettings": true,
+  "pairedStartingSummaries": true,
+  "unchangedControlRows": 260,
+  "note": "Starting summaries are aggregate counts and stocks; CPU timings are excluded from gameplay equality."
+}

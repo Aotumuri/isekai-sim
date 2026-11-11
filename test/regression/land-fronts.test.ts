@@ -2434,17 +2434,25 @@ test("a gap toward the capital beats a weaker city route", () => {
   assert(Math.abs(operation.exploitationTargetScore - 174.525) < 0.001);
 });
 
-test("a disappearing Front cancels its offensive operation", () => {
-  const world = createOperationWorld();
-  updateOffensiveOperations(world);
-  const operation = onlyOperation(world, NATION_A);
-  world.landFronts.physicalFronts = [];
-  world.landFronts.physicalFrontsById.clear();
-
-  updateOffensiveOperations(world);
-
-  assert.equal(operation.outcome, "cancelled");
-  assert.equal(operation.completionReason, "front-disappeared");
+test("a disappearing Front cancels its offensive operation with or without a campaign", () => {
+  for (const enabled of [false, true]) {
+    const world = createOperationWorld();
+    if (enabled) {
+      world.settings = createSimulationSettings({ warCampaignEnabled: true });
+      updateWarCampaigns(world);
+    }
+    updateOffensiveOperations(world);
+    const operation = onlyOperation(world, NATION_A);
+    world.landFronts.physicalFronts = [];
+    world.landFronts.physicalFrontsById.clear();
+    updateOffensiveOperations(world);
+    assert.equal(operation.outcome, "cancelled");
+    assert.equal(operation.completionReason, "front-disappeared");
+    if (enabled) {
+      updateWarCampaigns(world);
+      assert.equal(world.warCampaigns!.byNationId.size, 2);
+    }
+  }
 });
 
 test("ending the war cancels its offensive operation", () => {
@@ -4629,4 +4637,19 @@ test("settlement preserves an achieved attack as success without starting exploi
   assert.equal(operation.completionReason, "primary-target-occupied");
   assert.equal(operation.outcome, "success");
   assert.equal(operation.exploitationStartedAtTick, null);
+});
+
+test("settlement ends active exploitation while retaining the successful attack", () => {
+  const { world, operation } = prepareStrategicExploitationWorld();
+  const metrics = new BenchmarkMetrics();
+  world.instrumentation = metrics;
+  updateOffensiveOperations(world);
+  assert.equal(operation.phase, "exploiting");
+  settleCampaign(world);
+  updateOffensiveOperations(world);
+  assert.equal(operation.phase, "recovering");
+  assert.equal(operation.exploitationStopReason, "campaign-settlement");
+  assert.equal(world.offensiveOperations.exploitationStopCounts["campaign-settlement"], 1);
+  assert.equal(metrics.getCounter("offensiveOperation.exploitationStop.campaign-settlement"), 1);
+  assert.equal(operation.outcome, "success");
 });
