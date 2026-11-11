@@ -279,3 +279,45 @@ It values the existing victory path without allowing illegal capital cession or
 counting temporary occupation as final ownership. Ordinary isolated ports remain
 instrumental coercive footholds. Only the political-purpose/value adapter changes
 in this trial; the complete cost observations and execution contract remain fixed.
+
+### R2.5 result: not adopted
+
+Source `6d236f8`, five families × 20 development seeds. Active-war attacker target
+retention is 23% versus Legacy 37%/R1 36%; attacker net territorial value is
+−0.056 of opening homeland versus −0.133/−0.119, and survival 86% versus 77%/82%.
+Those separate metrics show a tradeoff rather than a universal improvement.
+Stalemate attacker retention remains 45% versus 65%/60%, so the gate still fails.
+686 regression tests pass. Complete paired distributions and intervals are saved.
+
+Sea audit corrects a measurement gap: zero territorial gains did not mean zero
+political gains. Matched starting fingerprints and all 20 Legacy/R1 end states
+and war outcomes reproduce the frozen matrix. Opening-war aggressor net weapon
+receipts average −12 (Legacy), +11.25 (R1), +17.25 (R2.5); defenders have the
+opposite transfers. R2.5−R1 is +6 for attackers, 95% interval −9.75 to +21,
+so a payment improvement is not established. Whole-episode unavailable force
+falls by 22,708 (interval −38,610 to −6,557) for attackers and by 23,893
+(−38,215 to −10,484) for defenders. Production weapons fall by 613 and 643
+respectively, with intervals excluding zero. Later wars are included in these
+costs, whereas payments are matched to the opening war's pair and end time.
+War participation count changes by +0.05 per side (−0.15 to +0.25), and opening
+wars end about 453 ticks earlier. These results are development evidence, not
+fresh final confirmation; never sum the opposing transfers into a quality score.
+
+Two further hypotheses were checked before changing the design. Available
+opening replacement stock is zero in median active-war and only 240 manpower
+in stalemate, so merely adding initial stock to the budget is not a supported
+explanation for their main regressions. An activation audit finds 64 all-hold,
+no-commitment samples among 368 offensive nation samples, but most carry capital
+or supply protection. Do not label all of those as errors or weaken emergencies
+to manufacture more attacks. Causal traces also show the current single mode
+stops military effort when choosing an uncertain, possibly rejected settlement.
+
+## R2.6: separate negotiation intent from military fallback (pending)
+
+A desire to negotiate is not an available agreement. Preserve the best feasible
+military effort while an acceptable agreement is unavailable, and stand down
+discretionary commitments when both governments can accept a legal settlement.
+Keep food/exhausted-budget and capital safeguards. Record military effort and
+diplomatic intent separately in the existing national plan, rather than adding a
+competing planner or changing peace rules. Test the distinction before another
+development matrix. No final seeds have been inspected.

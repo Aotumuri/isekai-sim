@@ -14,7 +14,9 @@ if (execFileSync("git", ["diff", "--", "src"], { encoding: "utf8" })) throw new 
 for (let i = 0; i < 20; i++) for (const scenario of scenarios) {
   results.push(withMutedSimulationLogs(() => audit(822748319780 + i, scenario)));
 }
-await writeFile("diagnostics/war-ai-r2-4-opening-values.json.gz", gzipSync(JSON.stringify({
+const at = process.argv.indexOf("--output");
+const output = at >= 0 ? process.argv[at + 1] : "diagnostics/war-ai-r2-opening-values.json.gz";
+await writeFile(output, gzipSync(JSON.stringify({
   revision: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
   note: "First real slow-tick adoption, not a changed evaluation seed or a forced political objective.", results,
 })));
@@ -36,9 +38,13 @@ function audit(seed: number, scenario: BenchmarkScenarioName) {
     const goal = plan?.objectives.find((g) => g.opponentId === war.defenderId);
     if (!goal) return [];
     const enemy = world.nations.find((n) => n.id === goal.opponentId)!;
+    const own = world.nations.find((n) => n.id === nation)!;
     const enemyLand = world.mesoRegions.filter((r) => owners.get(r.id) === enemy.id).map((r) => r.id);
     return [{ nation, opponent: enemy.id, cause: war.cause, regionIds: goal.regionIds,
       rationale: goal.rationale, purpose: goal.political, mode: plan!.mode,
+      openingManpower: goal.openingManpower, resources: { ...own.resources },
+      resourceFlow: structuredClone(own.resourceFlow), mobilization: world.mobilization?.byNationId.get(nation),
+      replacementManpowerCapacity: Math.min(own.resources.manpower, own.resources.weapons * 120),
       capitalTarget: goal.regionIds.includes(enemy.capitalMesoId), enemyRegions: enemyLand.length,
       targetRelativeValue: getTerritorialValue(world, nation, goal.regionIds) / getNationalTerritorialValue(world, nation),
       enemyRelativeValue: getTerritorialValue(world, nation, enemyLand) / getNationalTerritorialValue(world, nation),

@@ -17,17 +17,21 @@ const { createScenarioWorld } = await load("test/scenarios/index.ts");
 const { runSimulation } = await load("test/helpers/simulation-driver.ts");
 const { BenchmarkMetrics } = await load("test/benchmark/metrics.ts");
 const { getWarCasualties } = await load("src/sim/war-state.ts");
+const { createWarOutcomeObserver } = await load("test/benchmark/war-outcome-observer.ts");
+const { summarizeWorld } = await load("test/helpers/world-summary.ts");
 const campaign = args.includes("--campaign");
 const ticks = Number(option("--ticks", "1000"));
 const count = Number(option("--seeds", "4"));
-if (![ticks, count].every((n) => Number.isSafeInteger(n) && n > 0)) throw new Error("Invalid integers");
+const seedStart = Number(option("--seed-start", "1022748319780"));
+const scenarios = option("--scenarios", "matched-war,stalemate-breaker,reorganization-heavy,two-island-amphibious").split(",");
+if (![ticks, count, seedStart].every((n) => Number.isSafeInteger(n) && n > 0)) throw new Error("Invalid integers");
 const results: object[] = [];
 const original = console.info;
 console.info = () => undefined;
 try {
   for (let i = 0; i < count; i++) {
-    for (const scenario of ["matched-war", "stalemate-breaker", "reorganization-heavy", "two-island-amphibious"]) {
-      const seed = 1022748319780 + i;
+    for (const scenario of scenarios) {
+      const seed = seedStart + i;
       const world: WorldState = createScenarioWorld(scenario, { seed, quick: true, width: 640, height: 360,
         reserveEnabled: true, reorganizationEnabled: true, exploitationEnabled: true, pocketReductionEnabled: true,
         config: { systems: { warCampaignEnabled: campaign, diplomacyEnabled: true, mobilizationEnabled: true,
@@ -35,6 +39,8 @@ try {
       world.wars.forEach((war) => { war.isTest = false; });
       const openingWars = [...world.wars];
       const seenWars = new Set(world.wars);
+      const outcomes = createWarOutcomeObserver();
+      const settlements = new Map<string, NonNullable<WorldState["warNegotiations"]>["settlements"][number]>();
       const startFingerprint = createHash("sha256").update(JSON.stringify({
         units: world.units, wars: world.wars, macroRegions: world.macroRegions,
         resources: world.nations.map((n) => [n.id, n.resources]),
@@ -65,7 +71,11 @@ try {
         }
       }
       runSimulation(world, { ticks, metrics: new AuditMetrics(), observe(current: WorldState) {
+        outcomes.observe(current);
         current.wars.forEach((war) => seenWars.add(war));
+        for (const settlement of current.warNegotiations?.settlements ?? []) {
+          settlements.set(`${settlement.a}:${settlement.b}:${settlement.atSlowTick}:${settlement.proposerId}`, settlement);
+        }
         if (current.time.slowTick === lastSlowTick) return;
         const elapsed = current.time.slowTick - lastSlowTick;
         lastSlowTick = current.time.slowTick;
@@ -84,6 +94,7 @@ try {
       const totalDirectWarCasualties = Object.fromEntries(world.nations.map((nation) => [nation.id,
         [...seenWars].reduce((sum, war) => sum + getWarCasualties(war, nation.id), 0)]));
       results.push({ seed, scenario, startFingerprint, costs: loss.result(), totalDirectWarCasualties,
+        warOutcomes: outcomes.result(), settlements: [...settlements.values()], endWorld: summarizeWorld(world),
         campaignLedger: Object.fromEntries(ledgerTotals),
         spending: Object.fromEntries(spending),
         openingWarSides: openingWars.flatMap((war) => [war.nationAId, war.nationBId].map((nationId) => ({
@@ -95,7 +106,7 @@ try {
   }
 } finally { console.info = original; }
 const report = { revision: execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
-  engineRoot: root, campaign, ticks, seeds: count,
+  engineRoot: root, campaign, ticks, seeds: count, seedStart, scenarios,
   note: "Field losses and totalDirectWarCasualties cover the whole episode; production flow excludes recovery, trade and aid. openingWarSides direct casualties cover opening wars only. Compare scopes explicitly.", results };
 await writeFile(option("--output", "diagnostics/war-ai-r2-cost-audit.json.gz"), gzipSync(JSON.stringify(report)));
 console.log(JSON.stringify({ rows: results.length, revision: report.revision, campaign }));
