@@ -33,7 +33,7 @@ let report = {
   measurementPhase: "after-reposition-before-battle-and-slow-ai",
   runtime: { node: process.version, v8: process.versions.v8, platform: process.platform, arch: process.arch },
   ticks, seeds, seedStart, campaign, scenarios, results: [] as ReturnType<typeof episode>[],
-  note: "Read-only endpoint travel audit. Enemy-blocked edges are excluded. Ordinary mission requires unchanged front/revision and no special ownership. Also report unconditional unblocked retargets and exposure denominators; shorter wars alone do not prove better travel. No speed or battle rule is changed.",
+  note: "Read-only movement-phase audit. Enemy-blocked edges are excluded. Original ordinary mission requires unchanged front/revision and no special ownership. Supplemental sameFront context excludes special ownership but not policy revisions; it does not label every policy change unnecessary. Also report all-unblocked retargets and exposure denominators. No speed or battle rule is changed.",
 };
 try {
   const saved = JSON.parse(gunzipSync(await readFile(output)).toString());

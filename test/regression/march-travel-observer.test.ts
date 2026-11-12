@@ -40,6 +40,9 @@ test("travel audit distinguishes discarded progress, retained travel and changin
   assert.equal(observer.result().ordinaryResetEvents, 1);
   assert.equal(observer.result().allUnblockedResetEvents, 2);
   assert.equal(observer.result().allUnblockedDiscardedProgressMs, 900);
+  assert.equal(observer.result().sameFrontDiscardedProgressMs, 900);
+  assert.equal(observer.result().sameFrontResetEvents, 2);
+  assert.equal(observer.result().sameFrontTravelMs, 300);
 });
 
 test("an enemy-blocked arrival is not labeled discarded ordinary travel", () => {
@@ -50,4 +53,16 @@ test("an enemy-blocked arrival is not labeled discarded ordinary travel", () => 
   observer.observe(world);
   assert.equal(observer.result().ordinaryDiscardedProgressMs, 0);
   assert.equal(observer.result().allUnblockedResetEvents, 0);
+  assert.equal(observer.result().sameFrontResetEvents, 0);
+});
+
+test("common physical context excludes special-role transitions even on the same edge", () => {
+  const { world, unit, target } = moving(), observer = createMarchTravelObserver();
+  observer.observe(world);
+  world.strategicReserves.reserveNationByUnitId.set(unit.id, unit.nationId);
+  world.time.fastTick = 1; unit.moveTargetId = target; unit.moveProgressMs = 100;
+  observer.observe(world);
+  assert.equal(observer.result().allUnblockedResetEvents, 1);
+  assert.equal(observer.result().sameFrontResetEvents, 0);
+  assert.equal(observer.result().sameFrontTravelMs, 0);
 });

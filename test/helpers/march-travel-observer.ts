@@ -12,7 +12,9 @@ export function createMarchTravelObserver() {
   let previous = new Map<string, MarchSample>(), lastTick = -1;
   const totals = { ordinaryTravelMs: 0, ordinarySameEdgeRetargets: 0, ordinaryResetEvents: 0,
     ordinaryDiscardedProgressMs: 0, allUnblockedSameEdgeRetargets: 0,
-    allUnblockedResetEvents: 0, allUnblockedDiscardedProgressMs: 0 };
+    allUnblockedResetEvents: 0, allUnblockedDiscardedProgressMs: 0,
+    sameFrontTravelMs: 0, sameFrontSameEdgeRetargets: 0,
+    sameFrontResetEvents: 0, sameFrontDiscardedProgressMs: 0 };
   return { result: () => ({ ...totals }), observe(world: WorldState) {
     const elapsed = lastTick < 0 ? 0 : Math.max(0, world.time.fastTick - lastTick) * 100;
     lastTick = world.time.fastTick;
@@ -32,13 +34,19 @@ export function createMarchTravelObserver() {
       next.set(unit.id, after);
       const before = previous.get(unit.id);
       if (!before || !elapsed || before.nation !== after.nation) continue;
-      const ordinary = before.ordinary && after.ordinary && before.front === after.front && before.revision === after.revision;
+      const sameFront = before.ordinary && after.ordinary && before.front === after.front;
+      const ordinary = sameFront && before.revision === after.revision;
+      if (sameFront && before.to && !before.blocked) totals.sameFrontTravelMs += elapsed;
       if (ordinary && before.to && !before.blocked) totals.ordinaryTravelMs += elapsed;
       if (!before.to || before.progress <= 0 || before.region !== after.region || before.to !== after.to ||
         !after.target || before.target === after.target || before.blocked || after.blocked) continue;
       const lost = Math.min(before.progress, Math.max(0, before.progress + elapsed - after.progress));
       totals.allUnblockedSameEdgeRetargets++;
       if (lost > 0) { totals.allUnblockedResetEvents++; totals.allUnblockedDiscardedProgressMs += lost; }
+      if (sameFront) {
+        totals.sameFrontSameEdgeRetargets++;
+        if (lost > 0) { totals.sameFrontResetEvents++; totals.sameFrontDiscardedProgressMs += lost; }
+      }
       if (!ordinary) continue;
       totals.ordinarySameEdgeRetargets++;
       if (lost > 0) { totals.ordinaryResetEvents++; totals.ordinaryDiscardedProgressMs += lost; }
