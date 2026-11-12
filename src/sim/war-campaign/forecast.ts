@@ -1,11 +1,10 @@
 import type { NationId } from "../../worldgen/nation";
-import type { MesoRegionId } from "../../worldgen/meso-region";
 import type { NationRuntime } from "../nation-runtime";
 import type { WarState } from "../war-state";
 import type { WorldState } from "../world-state";
 import type { CampaignObjective, WarCampaign } from "./state";
 import type { CampaignOpportunity } from "./alternatives";
-import { getOwnerByMesoId, getMesoById } from "../world-cache";
+import { getOwnerByMesoId } from "../world-cache";
 import { getUnitCombatStrength } from "../unit-strength";
 import { getMoveMsPerRegion } from "../movement";
 import { getNationalTerritorialValue, getTerritorialValue } from "../territorial-value";
@@ -18,6 +17,7 @@ import { WORLD_BALANCE } from "../../data/balance";
 import { hasReadyCampaignSettlement } from "./settlement-readiness";
 import type { PeaceAssessmentContext } from "../peace-assessment-context";
 import { forecastCampaignForceShares } from "./forecast-force";
+import { getCampaignObjectiveDistances } from "./forecast-distances";
 
 export interface CampaignObservation { tick: number; casualtyFraction: number; lossRate: number }
 
@@ -50,7 +50,7 @@ export function forecastCampaignOpportunities(
       world.occupation.mesoById.get(id) === goal.opponentId)) / totalValue;
     const war = wars.find((w) => campaignWarKey(w.nationAId, w.nationBId, w.startedAtFastTick) === goal.warKey)!;
     const enemy = world.nations.find((n) => n.id === goal.opponentId)!;
-    const distances = objectiveDistances(world, nation.id, goal.opponentId, goal.regionIds);
+    const distances = getCampaignObjectiveDistances(world, nation.id, goal);
     const shares = forecastCampaignForceShares(world, nation.id, goal.opponentId, units);
     const arriving = units.map((unit) => ({ strength: getUnitCombatStrength(unit) * (shares.get(unit.id) ?? 0),
       seconds: (distances.get(unit.regionId) ?? Infinity) * getMoveMsPerRegion(unit) / 1000 }))
@@ -93,21 +93,4 @@ export function forecastCampaignOpportunities(
       committedFraction: units.filter((u) => u.moveToId || world.offensiveOperations.operationIdByUnitId.has(u.id))
         .reduce((sum, u) => sum + getUnitCombatStrength(u), 0) / own };
   });
-}
-
-function objectiveDistances(world: WorldState, nation: NationId, opponent: NationId, targets: MesoRegionId[]) {
-  const owners = getOwnerByMesoId(world);
-  const regions = getMesoById(world);
-  const distance = new Map(targets.map((id) => [id, 0]));
-  const queue = [...targets];
-  for (let i = 0; i < queue.length; i++) {
-    const id = queue[i];
-    for (const next of regions.get(id)?.neighbors ?? []) {
-      if (regions.get(next.id)?.type === "sea" || distance.has(next.id) ||
-        owners.get(next.id) !== nation && owners.get(next.id) !== opponent) continue;
-      distance.set(next.id, distance.get(id)! + 1);
-      queue.push(next.id);
-    }
-  }
-  return distance;
 }

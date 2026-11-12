@@ -18,10 +18,12 @@ import { observeCampaignCost, forecastCampaignOpportunities } from "./forecast";
 import { evaluateCampaignAlternatives, hasClearCampaignImprovement, selectCampaignMilitaryEffort } from "./alternatives";
 import { unavailableManpower } from "./battle-costs";
 import { createPeaceAssessmentContext } from "../peace-assessment-context";
+import { clearCampaignDistanceFields, pruneCampaignDistanceFields } from "./forecast-distances";
 
 /** One campaign per nation spanning every current opponent; no direct orders. */
 export function updateWarCampaigns(world: WorldState): void {
   if (!world.settings?.warCampaignEnabled) {
+    clearCampaignDistanceFields(world);
     delete world.warCampaigns;
     return;
   }
@@ -93,6 +95,7 @@ export function updateWarCampaigns(world: WorldState): void {
   }
   if (state.byNationId.size !== next.size) state.version += 1;
   state.byNationId = next;
+  pruneCampaignDistanceFields(world, next.values());
   for (const id of state.battleCosts?.keys() ?? []) if (!next.has(id)) state.battleCosts!.delete(id);
   if (state.events.length > 200) state.events.splice(0, state.events.length - 200);
 }

@@ -86,6 +86,17 @@ episodes (`war-ai-r2-11-pre-cache-fix-partial.json.gz`), rather than adopted.
 
 ## Loss-exit diagnostic (preregistered, not a production change)
 
+### Objective-distance performance follow-up (preregistered)
+
+The profile identified repeated goal-distance BFS work. Its traversability uses
+legal ownership and terrain, not occupation or unit positions. Cache one field
+per active national war goal, invalidate on map/territory/target/opponent changes,
+and prune ended goals or disabled campaigns. The cache is scoped to the world
+through a weak reference. Require identical non-CPU diagnostic results against
+the frozen uncached source before retaining it; measure fixed-state CPU with the
+same Node 24 runtime. Unit tests cover actual third-party route blocking, changed
+targets/terrain, occupation independence and cleanup. This is not a quality gain.
+
 Test whether an exhausted field-loss budget suppresses useful local defensive
 pressure before a mutually acceptable exit exists. Use four diagnostic seeds,
 four land families, 10,000 ticks and three arms: normal; forced front review;
