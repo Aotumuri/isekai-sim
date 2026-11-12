@@ -325,3 +325,24 @@ cost limit, manual orders and capital/supply safeguards remain. Do not alter
 battle rules or tune ratios. Use the same five development families, 20 seeds
 and 10,000 ticks; compare against Legacy, R1 and R2.7. The untouched final range
 remains reserved. A counterattack count alone cannot establish improvement.
+
+### Force-availability diagnosis and next preregistered test
+
+A read-only audit at the campaign evaluation stage covers 16 diagnostic
+episodes, four families × seeds 1022748319780–783, 1,000 ticks. Of 3,956
+goal samples with projected land strength, 2,029 include strategic reserve
+members, 1,883 include another opponent's front allocation, 117 include another
+opponent's active operation, and 17 include amphibious commitments. Categories
+are exclusive per unit; samples are correlated observations, not independent
+episodes. Other-front strength is on average 37.6% of projected strength in
+active-war and 5.4/4.2/10.2% in matched/stalemate/reorganization. Assignment
+alone does not prove a unit unavailable, and a reserve can reinforce a front.
+
+R2.9 will align the forecast with existing resource reservations: exclude manual,
+retreat/recovery, amphibious and other-opponent operation commitments; count a
+reserve only when already deployed toward this opponent; limit extraction from
+other fronts to their current surplus over the existing coverage floor. Keep
+same-opponent front force and existing deployment rules. This changes forecast
+inputs, not orders, defense floors or combat. Test the accounting independently
+and compare the same five development families against R2.8, Legacy and R1.
+Do not use the reserved final seeds or tune combat/decision coefficients.
