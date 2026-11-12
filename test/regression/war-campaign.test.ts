@@ -171,7 +171,7 @@ test("peace guidance values recognition after settlement rather than temporary o
   const recognition = { ...whitePeaceTerms(), offeredRegionIds: [...goal.regionIds] };
   assert.equal(campaignPeaceValue(world, war.aggressorId, war.defenderId, recognition), 12);
   campaign.mode = "seek-peace";
-  assert.equal(campaignPeaceValue(world, war.aggressorId, war.defenderId, recognition), 24);
+  assert.equal(campaignPeaceValue(world, war.aggressorId, war.defenderId, recognition), 12);
   world.settings!.warCampaignEnabled = false;
   assert.equal(campaignPeaceValue(world, war.aggressorId, war.defenderId, recognition), 0);
 });

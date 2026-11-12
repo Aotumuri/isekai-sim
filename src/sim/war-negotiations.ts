@@ -2,7 +2,8 @@ import { isPeaceNegotiationMature } from "./peace-maturity";
 import { readPeaceAssessmentFact, type PeaceAssessmentContext } from "./peace-assessment-context";
 import { campaignRecognitionRegions, campaignRecognitionWeapons, campaignCanHoldRecognition, reciprocalRecognitionTerms } from "./war-campaign/peace-recognition";
 import { getCampaignObjectives } from "./campaign-objectives";
-import { campaignPeaceValue, campaignPrefersSettlement } from "./war-campaign/peace-guidance";
+import { campaignContinuationPressure, campaignPeaceValue, campaignPrefersSettlement } from "./war-campaign/peace-guidance";
+import { PEACE_OUTLOOK_LIMIT, PEACE_OUTLOOK_WEIGHT } from "./peace-outlook";
 import { getManualGovernmentId } from "./player-nation";
 import { isValidResourceReparation, REPARATION_INTERVAL, REPARATION_RESOURCES, type ResourceReparation } from "./resource-reparations";
 import { foodReserveSeconds } from "./food-supply";
@@ -71,7 +72,7 @@ function sampleWarOutlook(world: WorldState, negotiation: WarNegotiation): void 
   const old = negotiation.outlook;
   if (old && world.time.slowTick <= old.sampledAtSlowTick) return;
   const change = old ? (advantage - old.advantageA) * 30 / (world.time.slowTick - old.sampledAtSlowTick) : 0;
-  const trend = Math.max(-0.5, Math.min(0.5, change));
+  const trend = Math.max(-PEACE_OUTLOOK_LIMIT, Math.min(PEACE_OUTLOOK_LIMIT, change));
   negotiation.outlook = { advantageA: advantage, trendA: old ? old.trendA * 0.4 + trend * 0.6 : 0, sampledAtSlowTick: world.time.slowTick };
 }
 
@@ -286,7 +287,8 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
   const ageSeconds = Math.max(0, world.time.fastTick - war.startedAtFastTick) * FAST_TICK_MS / 1000;
   const urgency = readPeaceAssessmentFact(context?.urgency, recipient, () => getPeaceUrgency(world, recipient));
   const domestic = urgency * 42;
-  const forecast = -getWarTrend(negotiation, recipient) * 45;
+  const forecast = campaignContinuationPressure(world, recipient, proposer) ??
+    -getWarTrend(negotiation, recipient) * PEACE_OUTLOOK_WEIGHT;
   const competingWars = readPeaceAssessmentFact(context?.competingPressure, pair, () => competingWarPressure(world, recipient, proposer));
   const foodRunway = nation.food ? foodReserveSeconds(nation.food) : Infinity;
   const foodPressure = nation.food ? Math.max(0, 1 - foodRunway / 90) * 10 +

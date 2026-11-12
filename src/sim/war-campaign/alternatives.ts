@@ -12,6 +12,7 @@ export interface CampaignAlternative {
   uncertainty: number;
   changeCost: number;
   score: number;
+  securedValue?: number;
 }
 export interface CampaignOpportunity {
   opponentId: NationId;
@@ -74,7 +75,7 @@ export function evaluateCampaignAlternatives(
       const riskAversion = 1.5 - aggression;
       const replacementRisk = Math.max(0, loss - input.replacementFraction) *
         (option.mode === "limited-offensive" ? 1 : option.mode === "defend" ? 0.5 : 1 - input.peaceProbability);
-      alternatives.push({ ...option, opponentId: input.opponentId, changeCost,
+      alternatives.push({ ...option, opponentId: input.opponentId, changeCost, securedValue: input.securedValue,
         score: option.benefit - option.resourceCost * riskAversion -
           (option.failureRisk + replacementRisk) * riskAversion - option.uncertainty * 0.25 - changeCost });
     }

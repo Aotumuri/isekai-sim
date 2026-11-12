@@ -7,6 +7,15 @@ import { getWarDeclarationMode } from "../simulation-settings";
 import { findWar } from "../war-state";
 import { campaignCostLimitReached } from "./policy";
 import { getWarCampaign } from "./state";
+import { boundedContinuationPressure } from "../peace-outlook";
+
+/** Compare peace with the best continuing military option against this opponent.
+ * Previously retained legal gains are a baseline, not new gains from fighting. */
+export function campaignContinuationPressure(world: WorldState, nationId: NationId, opponentId: NationId): number | undefined {
+  const alternative = getWarCampaign(world, nationId)?.alternatives?.find((option) =>
+    option.opponentId === opponentId && (option.mode === "defend" || option.mode === "limited-offensive"));
+  return alternative ? boundedContinuationPressure(alternative.score - (alternative.securedValue ?? 0)) : undefined;
+}
 
 /** Evaluate the post-settlement goal, not temporary occupation or demands. */
 export function campaignPeaceValue(
@@ -22,7 +31,7 @@ export function campaignPeaceValue(
   const secured = territorial || goal.political?.purpose === "coercive-settlement" &&
     terms.offeredWeapons - terms.demandedWeapons >= goal.political.weaponTarget &&
     terms.demandedRegionIds.length === 0;
-  const exitPressure = campaign.mode === "seek-peace" ? 12 : 0;
+  const exitPressure = campaign.alternatives?.length ? 0 : campaign.mode === "seek-peace" ? 12 : 0;
   return exitPressure + (secured ? 12 : 0);
 }
 
