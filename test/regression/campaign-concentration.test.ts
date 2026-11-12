@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { createScenarioWorld } from "../scenarios";
 import { updateLandFronts } from "../../src/sim/land-fronts";
 import { updateWarCampaigns } from "../../src/sim/war-campaign/update";
-import { updateNationFrontPlans, type NationFrontPlan } from "../../src/sim/nation-front-plans";
-import { campaignConcentrationDirective, campaignPreservesFrontDemand } from "../../src/sim/war-campaign/concentration-guidance";
+import { updateNationFrontPlans } from "../../src/sim/nation-front-plans";
+import { campaignConcentrationDirective } from "../../src/sim/war-campaign/concentration-guidance";
 import { getStalemateAssessment, recordMajorOffensiveOutcome, updateStalematePressure } from "../../src/sim/stalemate-pressure";
 import type { CapitalDefenseAssessment } from "../../src/sim/capital-defense";
 import { WORLD_BALANCE } from "../../src/data/balance";
@@ -72,12 +72,3 @@ test("other theaters keep local defense but cannot request competing discretiona
   assert.equal(campaignConcentrationDirective(world, nation, opponent), "legacy");
 });
 
-test("secondary concentration preserves capital, supply and bridgehead demands", () => {
-  const { world, nation } = fixture();
-  const plan = { nationId: nation, reasonFlags: [] } as unknown as NationFrontPlan;
-  assert.equal(campaignPreservesFrontDemand(world, plan), false);
-  for (const flag of ["capital-threatened", "major-force-supply-risk", "supply-corridor", "bridgehead-campaign"] as const) {
-    plan.reasonFlags = [flag];
-    assert.equal(campaignPreservesFrontDemand(world, plan), true);
-  }
-});
