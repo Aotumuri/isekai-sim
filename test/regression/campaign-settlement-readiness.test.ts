@@ -1,8 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createScenarioWorld } from "../scenarios";
-import { getWarNegotiation, whitePeaceTerms } from "../../src/sim/war-negotiations";
+import { acceptPeaceOffer, getWarNegotiation, whitePeaceTerms } from "../../src/sim/war-negotiations";
 import { hasReadyCampaignSettlement } from "../../src/sim/war-campaign/settlement-readiness";
+import { createFaction, joinFaction } from "../../src/sim/factions";
+import { getDiplomacyState, getRelation } from "../../src/sim/diplomacy";
+import { declareWar } from "../../src/sim/war-state";
+import { getSeparatePeaceIssue } from "../../src/sim/separate-peace";
+import { updateWarCampaigns } from "../../src/sim/war-campaign/update";
 
 function fixture() {
   const world = createScenarioWorld("matched-war", { seed: 1022748319780, quick: true, width: 640, height: 360 });
@@ -42,4 +47,33 @@ test("checking available agreements does not publish or revise offers, spend res
   assert.deepEqual([...negotiation.offers], offers);
   assert.deepEqual(world.nations.map((n) => n.resources), resources);
   assert.equal(world.simRng.fork().nextFloat(), random);
+});
+
+test("mutual acceptance cannot make a faction-prohibited separate peace executable", () => {
+  const { world, war, negotiation } = fixture();
+  assert.equal(hasReadyCampaignSettlement(world, war, negotiation), true);
+  const leader = world.nations.find((n) => n.id === war.aggressorId)!;
+  const partner = world.nations.find((n) => n.id !== war.aggressorId && n.id !== war.defenderId)!;
+  for (const nation of [leader, partner]) {
+    nation.ideologyId = "capitalism";
+    getDiplomacyState(world).influenceByNationId.set(nation.id, 100);
+  }
+  const relation = getRelation(world, leader.id, partner.id); relation.opinion = 80; relation.trust = 80;
+  const faction = createFaction(world, leader.id, { allowedIdeologyIds: ["capitalism"],
+    defensiveObligation: "none", offensiveObligation: "none", considerPersonality: false, jointPeaceOnly: true })!;
+  assert.ok(faction); assert.ok(joinFaction(world, partner.id, faction.id));
+  declareWar(world.wars, partner.id, war.defenderId, 0);
+  assert.ok(getSeparatePeaceIssue(world, leader.id, war.defenderId));
+  assert.equal(acceptPeaceOffer(world, war.defenderId, leader.id), false);
+  assert.equal(hasReadyCampaignSettlement(world, war, negotiation), false);
+  world.settings!.warCampaignEnabled = true;
+  updateWarCampaigns(world);
+  const campaign = world.warCampaigns!.byNationId.get(leader.id)!;
+  assert.equal(campaign.settlementReadyOpponentIds!.includes(war.defenderId), false);
+  assert.equal(campaign.alternatives!.some((a) => a.opponentId === war.defenderId &&
+    (a.mode === "seek-peace" || a.mode === "consolidate")), false);
+  faction.charter.jointPeaceOnly = false;
+  assert.equal(hasReadyCampaignSettlement(world, war, negotiation), true);
+  updateWarCampaigns(world);
+  assert.equal(world.warCampaigns!.byNationId.get(leader.id)!.settlementReadyOpponentIds!.includes(war.defenderId), true);
 });

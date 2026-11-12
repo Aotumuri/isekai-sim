@@ -9,12 +9,11 @@ import { getUnitCombatStrength } from "../unit-strength";
 import { getMoveMsPerRegion } from "../movement";
 import { getNationalTerritorialValue, getTerritorialValue } from "../territorial-value";
 import { assessPeaceOffer, whitePeaceTerms } from "../war-negotiations";
-import { getWarDeclarationMode } from "../simulation-settings";
 import { hasMinimumPeaceAge } from "../peace-maturity";
 import { campaignWarKey } from "./state";
 import { isPoliticalGoalSecured } from "./political-objectives";
 import { WORLD_BALANCE } from "../../data/balance";
-import { hasReadyCampaignSettlement } from "./settlement-readiness";
+import { canNegotiateCampaignBilateralPeace, hasReadyCampaignSettlement } from "./settlement-readiness";
 import type { PeaceAssessmentContext } from "../peace-assessment-context";
 import { forecastCampaignForceShares } from "./forecast-force";
 import { getCampaignObjectiveDistances } from "./forecast-distances";
@@ -69,8 +68,8 @@ export function forecastCampaignOpportunities(
       ? Math.min(goal.political.weaponTarget, enemy.resources.weapons) * strengthPerWeapon / own
       : getTerritorialValue(world, nation.id, victoryRegions) / totalValue;
     const securedValue = goal.kind !== "preserve-sovereignty" && isPoliticalGoalSecured(world, nation.id, goal) ? politicalValue : 0;
-    const negotiationAllowed = getWarDeclarationMode(world) === "diplomacy" && !war.isTest &&
-      hasMinimumPeaceAge(world.time.fastTick, war.startedAtFastTick);
+    const negotiationAllowed = hasMinimumPeaceAge(world.time.fastTick, war.startedAtFastTick) &&
+      canNegotiateCampaignBilateralPeace(world, war);
     // Only assess existing negotiations: forecasting must not manufacture an
     // opening offer or change its opening-power snapshot ahead of diplomacy.
     const negotiation = [...(world.warNegotiations?.active.values() ?? [])].find((n) =>
