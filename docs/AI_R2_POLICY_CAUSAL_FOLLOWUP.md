@@ -65,3 +65,60 @@ Use existing paired 95%/10,000-bootstrap reports; do not claim CPU gains from
 concurrent runs. No coefficients, original R2.16 conditions, final seeds or
 adoption gates change. A defender benefit caused by weakening the attacker is
 not evidence that the defender's own decision rule improved.
+
+## R2.17 development results
+
+Both role controls completed 60/60 cases with zero failures and exactly matching
+start summaries/settings. Patches, source trees, safety checks and runtime are
+in `war-ai-r2-17-validation.json.gz`. Four paired reports compare control and
+both-sided selection. No arm is a production change or an adopted improvement.
+
+| Unscored role | Family | Attacker goal | Attacker survives | Defender homeland | Defender survives |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Aggressor only | Matched | 35% | 100% | 60% | 70% |
+| Defender only | Matched | 40% | 100% | 60% | 75% |
+| Aggressor only | Stalemate | 35% | 90% | 50% | 65% |
+| Defender only | Stalemate | 50% | 95% | 40% | 55% |
+| Aggressor only | Reorganization | 60% | 95% | 30% | 65% |
+| Defender only | Reorganization | 45% | 95% | 45% | 60% |
+
+Against the scored control, aggressor-only changes stalemate defender survival
+by +10 pp [-10, +30], attacker goal by -15 pp [-30, 0], and attacker survival
+by -10 pp [-25, 0]. Defender-only changes stalemate defender survival by 0 pp
+[0, 0]; matched defender survival changes -5 pp [-15, 0]. Reorganization
+attacker goal changes +15 pp [-5, +35] under aggressor-only and 0 under
+defender-only. These results support separating opponent weakening from own
+defensive competence, with wide intervals on many contrasts. Do not choose
+the source control based only on the opponent's survival.
+
+Additional read-only focus traces for 783/794 retain exact reference end states
+and full outcomes. Focus affects **operation size**, not just which front is
+prioritized: `buildOperationCandidate` selects the existing 90% surplus fraction
+whenever `isSchwerpunktOperation`, even when `isMajorOffensive` is false; normal
+operations use 60%. In selection seed 794 the early focused operation has
+initial strength 4554 versus control's 2728 and succeeds where control's first
+operation depletes. In 783 both first operations cancel on changed posture,
+with 3415 versus 2732 assigned strength and later divergent field outcomes.
+The benefit is therefore conditional; this is not evidence that smaller forces
+are always better or that early concentration should be removed. Raw expanded
+traces are `war-ai-focus-*`, with `war-ai-focus-validation.json.gz`.
+
+Both 60-case cost/government replays also completed with exact non-CPU end
+summaries and full war outcomes. `war-ai-government-r2-17-report.json.gz`
+contains paired costs, without adding attacker and defender interests.
+Aggressor-only reduces stalemate attacker production manpower by 50,421
+[-104,044, -2,756], alongside worse attacker goal/survival results; this is not
+a cost-efficiency victory. Its defender whole-episode unavailable manpower
+changes +11,359 [-4,751, +31,487]. Defender-only has no resolved stalemate
+government-preservation gain and no clear field-loss reduction. These controls
+do not meet adoption requirements; production remains unchanged.
+
+Replay validation is now directly reproducible:
+
+```sh
+node --import tsx test/diagnostics/war-ai-replay-validation.ts diagnostics/war-ai-r2-17-aggressor-development.json.gz diagnostics/war-ai-government-r2-17-aggressor-development.json.gz
+```
+
+Use `--subset` explicitly for individual selected traces. The validator rejects
+duplicate cases and changed end states; it claims only common recorded fields,
+not equality of all hidden state.

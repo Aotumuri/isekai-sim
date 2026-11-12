@@ -25,6 +25,7 @@ const scenario = option("--scenario", "reorganization-heavy");
 const parentId = option("--parent", "nation-2");
 const childId = option("--child", "nation-3");
 const campaign = args.includes("--campaign");
+const operations = args.includes("--operations");
 if (![seed, ticks].every((n) => Number.isSafeInteger(n) && n > 0)) throw new Error("Invalid integers");
 const original = console.info;
 console.info = () => undefined;
@@ -78,6 +79,21 @@ function sample(current: WorldState): void {
         reserve: current.strategicReserves.reserveNationByUnitId.get(u.id),
         recovery: current.reorganization.planIdByUnitId.get(u.id),
         retreat: current.retreatPlans.retreatIdByUnitId.get(u.id) })),
+      ...(operations ? { focus: structuredClone(current.stalematePressure.assessments.filter((a) => a.nationId === id)),
+        operations: structuredClone(current.offensiveOperations.operations.filter((op) => op.nationId === id)
+          .map((op) => ({ id: op.id, phase: op.phase, target: op.primaryTargetRegionId,
+            focus: op.isSchwerpunktOperation, major: op.isMajorOffensive,
+            surplus: op.offensiveSurplusAvailable, assigned: op.assignedStrength,
+            units: op.assignedUnitIds, required: [...op.plannedStrengthByApproach],
+            readiness: op.readinessCompletion, synchronizationReady: op.synchronizationReady,
+            started: op.startedAtTick, phaseStarted: op.phaseStartedAtTick,
+            expires: op.expiresAtTick, outcome: op.outcome, reason: op.completionReason }))),
+        candidates: structuredClone([...current.offensiveOperations.candidatesByFrontNation.values()]
+          .filter((c) => c.nationId === id).map((c) => ({ target: c.primaryTargetRegionId,
+            focus: c.isSchwerpunktOperation, major: c.isMajorOffensive,
+            surplus: c.offensiveSurplusAvailable, required: [...c.requiredStrengthByApproach],
+            onTime: [...c.onTimeStrengthByApproach], feasible: c.feasible,
+            rejects: c.rejectionReasons, manifest: c.manifest }))) } : {}),
       campaign: structuredClone(current.warCampaigns?.byNationId.get(nation.id)),
       plans: structuredClone(current.frontPlans.plans.filter((p) => p.nationId === id)) };
   });
@@ -89,7 +105,7 @@ try { runSimulation(world, { ticks, observe: sample }); } finally { console.info
 const report = { revision: execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
   sourceTree: execFileSync("git", ["-C", root, "rev-parse", "HEAD:src"], { encoding: "utf8" }).trim(),
   harnessHash: createHash("sha256").update(await readFile(new URL(import.meta.url))).digest("hex"),
-  seed, scenario, campaign, ticks, parentId, childId, events, samples, simulationEvents: [...simulationEvents.values()],
+  seed, scenario, campaign, operations, ticks, parentId, childId, events, samples, simulationEvents: [...simulationEvents.values()],
   warOutcomes: outcomes.result(), endWorld: summarizeWorld(world) };
 const output = option("--output", "diagnostics/war-ai-subject-trace.json.gz");
 await writeFile(output, gzipSync(JSON.stringify(report)));
