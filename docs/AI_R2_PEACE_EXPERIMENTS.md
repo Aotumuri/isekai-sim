@@ -32,3 +32,40 @@ terms already cover the goal. Do not publish offers or change the simulation.
 First verify observer parity on opening-war outcomes and use those observations
 only to decide the next prototype. No final seeds or adoption gates change.
 
+### R2.12 and frontier results
+
+Source `c32b322` passes 710 tests and build. Sixteen diagnostic trajectories
+match `ae50bd5` on all non-CPU results. The joint-peace charter regression
+demonstrates a real readiness/acceptance disagreement, but these standard
+diagnostics do not expose it; no strategic quality gain is claimed.
+
+Source `3a3f2df`: all 120 audit episodes complete, with exact observer parity in
+all 60 pairs. In matched/stalemate/reorganization, 7/8/12 episodes hold legal
+adopted goals; 2/3/9 contain an unpublished goal. Only one matched episode has a
+mutually executable recognition bargain, with zero compensation; no other
+episode has mutual willingness even with affordable compensation. These are
+episode counts, not independent repeated observations. Missing goal proposals
+exist, but cannot explain most failures by themselves.
+
+## R2.13: sovereignty differs from intact borders (preregistered)
+
+The defender adopts the political purpose `preserve-sovereignty`, but its peace
+value currently requires keeping every opening homeland district. A minor
+cession removes the entire political recognition value, in addition to the
+existing territorial cost. This confuses the military objective (defend the
+homeland) with the political objective (retain an independent government).
+
+Test one semantic correction: a surviving independent state that keeps its
+capital can preserve sovereignty despite a peripheral concession. Puppet or
+partition terms cannot secure that objective; an existing active overlord also
+prevents independent sovereignty. Local subject terms retain the original
+government's independence and continue to pay existing territorial/subject costs.
+Use the same predicate for prospective peace value and terminal political
+history. Keep all military targets, territorial costs, recognition weights,
+automatic acceptance, legality, maturity and emergency protection unchanged.
+Test actual territory transfer, occupation versus ownership, puppet government,
+extinction and capital loss. Compare the same five development families with
+R2.11, Legacy and R1. Internal history changes are not evidence of quality:
+retain the unchanged external objective, legal territory, survival and cost
+metrics. No final seeds or adoption gates change.
+

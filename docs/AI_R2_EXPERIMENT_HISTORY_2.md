@@ -82,7 +82,7 @@ capital, force-supply, corridor and bridgehead protection; it replaces a weaker
 boolean-only test. The initial matrix was deliberately stopped at 68 saved
 episodes (`war-ai-r2-11-pre-cache-fix-partial.json.gz`), rather than adopted.
 705 full regression tests and build pass on the corrected source; its
-100-episode matrix is running. The feature remains opt-in.
+100-episode matrix is complete. The feature remains opt-in.
 
 ### Objective-distance performance follow-up (preregistered)
 
@@ -116,3 +116,33 @@ do not attribute the difference to the budget intervention. Compare the two
 review arms only as a causal diagnostic, never as evidence for adopting an
 unlimited budget. Observe unavailable force independently and freeze opening-war
 outcomes; record exposures rather than calling every hold a mistake.
+
+### Completed R2.11 and diagnostic results
+
+Corrected source `dc5f955`: 100 development episodes, no failures. Attacker
+retention is 29/35/45/50/0% in active/matched/stalemate/reorganization/sea;
+defender survival is 72/75/60/55/100%. R1 is 36/45/60/60/0% and
+74/70/75/70/100%. Concentration now changes actual execution, but has not
+resolved the strategic deficits. This prototype is not adopted.
+
+Distance-cache source `ae50bd5` preserves all non-CPU results in 16 diagnostic
+episodes and passes 709 tests/build. Same-process alternating measurements with
+identical physical and campaign fingerprints save approximately 7–9% campaign
+decision CPU in the four active-war fixtures; the two no-war fixtures are
+unchanged or slightly slower. Sequential ABBA results were inconsistent and
+are retained as exploratory evidence. This is neither an end-to-end speed claim
+nor strategic improvement. A long wall-clock gap caused by machine suspension
+is not attributed to AI computation.
+
+The 48 loss-exit episodes finish. Normal versus forced-review trajectories are
+identical in all 16 pairs. Removing only the defender's front-construction loss
+limit changes one of 16 review pairs; 8 pairs expose the condition, with 183
+interventions. That one reorganization case retains defender survival and its
+opening objective, ends the opening war at tick 510 rather than 1310, but has
+whole-episode defender unavailable manpower 42,102 rather than 9,639 (including
+later wars). This does not support removing the budget as a general remedy.
+All five diagnostic normal-arm defender deaths precede any additional war;
+multifront prioritization alone cannot explain these failures.
+
+Peace-route and recognition follow-ups are recorded in
+[AI_R2_PEACE_EXPERIMENTS.md](AI_R2_PEACE_EXPERIMENTS.md).
