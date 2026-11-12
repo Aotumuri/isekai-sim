@@ -17,25 +17,45 @@ export function connectedRegionGroups(ids: Set<MesoRegionId>, neighbors: Map<Mes
   return result;
 }
 
-/** Evaluate the final borders of both sides together, including reciprocal exchanges. */
-export function getPeaceBorderIssue(world: WorldState, legs: TerritoryTransfer[]): string | null {
-  if (!legs.length) return null;
-  const before = getOwnerByMesoId(world), after = new Map(before);
+/** Immutable map facts for one evaluation pass, never across territory changes. */
+export interface PeaceBorderContext {
+  before: Map<MesoRegionId, NationId>;
+  land: Set<MesoRegionId>;
+  neighbors: Map<MesoRegionId, MesoRegionId[]>;
+  originalByNation: Map<NationId, { ids: Set<MesoRegionId>; groups: MesoRegionId[][] }>;
+}
+
+export function createPeaceBorderContext(world: WorldState): PeaceBorderContext {
+  const before = getOwnerByMesoId(world);
   const land = new Set(world.mesoRegions.filter((region) => region.type !== "sea").map((region) => region.id));
   const neighbors = new Map(world.mesoRegions.filter((region) => land.has(region.id))
     .map((region) => [region.id, region.neighbors.filter((next) => land.has(next.id)).map((next) => next.id)]));
+  return { before, land, neighbors, originalByNation: new Map() };
+}
+
+/** Evaluate the final borders of both sides together, including reciprocal exchanges. */
+export function getPeaceBorderIssue(world: WorldState, legs: TerritoryTransfer[], context?: PeaceBorderContext): string | null {
+  if (!legs.length) return null;
+  const facts = context ?? createPeaceBorderContext(world);
+  const { before, land, neighbors } = facts, after = new Map(before);
   const affected = new Set<NationId>();
   for (const leg of legs) {
     affected.add(leg.from); affected.add(leg.to);
     for (const id of leg.regionIds) after.set(id, leg.to);
   }
   for (const nation of affected) {
-    const original = new Set([...land].filter((id) => before.get(id) === nation));
+    let originalFacts = facts.originalByNation.get(nation);
+    if (!originalFacts) {
+      const ids = new Set([...land].filter((id) => before.get(id) === nation));
+      originalFacts = { ids, groups: connectedRegionGroups(ids, neighbors) };
+      facts.originalByNation.set(nation, originalFacts);
+    }
+    const original = originalFacts.ids;
     const final = new Set([...land].filter((id) => after.get(id) === nation));
     const groups = connectedRegionGroups(final, neighbors);
     const groupById = new Map(groups.flatMap((group, index) => group.map((id) => [id, index] as const)));
     // Existing islands and enclaves are permitted, but no original land component may be cut apart.
-    for (const group of connectedRegionGroups(original, neighbors)) {
+    for (const group of originalFacts.groups) {
       const remainingGroups = new Set(group.filter((id) => final.has(id)).map((id) => groupById.get(id)));
       if (remainingGroups.size > 1) return "This settlement would split a country's remaining territory. Choose a different border.";
     }

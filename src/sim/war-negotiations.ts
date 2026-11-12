@@ -14,7 +14,7 @@ import { dividePartitionResources, getPartitionIssue, planLocalSubject, planPupp
 import { estimateAnnexationResistance, recordAnnexation } from "./annexation";
 import { getPuppetTermsIssue, installSubjectGovernment } from "./subject-governments";
 import { getRelation } from "./diplomacy";
-import { getPeaceBorderIssue, getWholeProvinces, selectPeaceDistricts, selectPeaceProvinces } from "./peace-borders";
+import { createPeaceBorderContext, getPeaceBorderIssue, getWholeProvinces, selectPeaceDistricts, selectPeaceProvinces } from "./peace-borders";
 import type { NationId } from "../worldgen/nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { WorldState } from "./world-state";
@@ -132,8 +132,8 @@ export function getPeaceTermsIssue(world: WorldState, proposer: NationId, target
       { nation, occupationSponsor: proposer }) ? null : "A third party controls part of the proposed subject.";
   }
   if (legs.length && !canTransferTerritories(world, legs)) return "Territory changed, a third party controls a district, or a country would lose its last territory.";
-  const borderIssue = readPeaceAssessmentFact(context?.borderIssue, JSON.stringify(legs),
-    () => getPeaceBorderIssue(world, legs));
+  if (context && legs.length) context.borders ??= createPeaceBorderContext(world);
+  const borderIssue = getPeaceBorderIssue(world, legs, context?.borders);
   if (borderIssue) return borderIssue;
   return null;
 }

@@ -4,7 +4,7 @@ import test from "node:test";
 import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 import { createMesoRegionId } from "../../src/worldgen/meso-region";
 import { createMacroRegionId } from "../../src/worldgen/macro-region";
-import { getPeaceBorderIssue, selectPeaceDistricts, selectPeaceProvinces } from "../../src/sim/peace-borders";
+import { createPeaceBorderContext, getPeaceBorderIssue, selectPeaceDistricts, selectPeaceProvinces } from "../../src/sim/peace-borders";
 import { declareWar, findWar } from "../../src/sim/war-state";
 import { getPeaceTermsIssue, proposePeaceTerms, acceptPeaceOffer, whitePeaceTerms } from "../../src/sim/war-negotiations";
 import { getOwnerByMesoId } from "../../src/sim/world-cache";
@@ -82,9 +82,10 @@ test("AI transfers whole small islands together and skips corridor cuts", () => 
 test("individually valid cessions cannot bypass validation of the combined exchange", () => {
   const { world, a, b, id, leg } = scene("aabb", [[0, 1], [1, 2], [2, 3]]);
   const offer = { from: a.id, to: b.id, regionIds: [id(1)] };
-  assert.equal(getPeaceBorderIssue(world, leg(2)), null);
-  assert.equal(getPeaceBorderIssue(world, [offer]), null);
-  assert.match(getPeaceBorderIssue(world, [...leg(2), offer])!, /enclaves/);
+  const context = createPeaceBorderContext(world);
+  assert.equal(getPeaceBorderIssue(world, leg(2), context), null);
+  assert.equal(getPeaceBorderIssue(world, [offer], context), null);
+  assert.match(getPeaceBorderIssue(world, [...leg(2), offer], context)!, /enclaves/);
 });
 
 test("surrender grows contiguous shares even when both victors occupied alternating provinces", () => {

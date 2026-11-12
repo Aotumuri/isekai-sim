@@ -1,6 +1,7 @@
 import type { NationId } from "../worldgen/nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { WarState } from "./war-state";
+import type { PeaceBorderContext } from "./peace-borders";
 
 /** One immutable evaluation pass only. Never retain this across ticks, offers,
  * player actions or campaign adoption. Formulas stay in the peace evaluator. */
@@ -12,13 +13,12 @@ export interface PeaceAssessmentContext {
   territorialValue: Map<NationId, number>;
   occupied: Map<string, MesoRegionId[]>;
   settlementReady: Map<WarState, boolean>;
-  borderIssue: Map<string, string | null>;
+  borders?: PeaceBorderContext;
 }
 
 export function createPeaceAssessmentContext(): PeaceAssessmentContext {
   return { power: new Map(), advantage: new Map(), urgency: new Map(),
-    competingPressure: new Map(), territorialValue: new Map(), occupied: new Map(), settlementReady: new Map(),
-    borderIssue: new Map() };
+    competingPressure: new Map(), territorialValue: new Map(), occupied: new Map(), settlementReady: new Map() };
 }
 
 export function readPeaceAssessmentFact<K, V>(cache: Map<K, V> | undefined, key: K, compute: () => V): V {

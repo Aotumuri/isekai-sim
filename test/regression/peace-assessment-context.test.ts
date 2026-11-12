@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createScenarioWorld } from "../scenarios";
 import { assessPeaceOffer, getWarNegotiation, whitePeaceTerms, type PeaceTerms } from "../../src/sim/war-negotiations";
 import { createPeaceAssessmentContext } from "../../src/sim/peace-assessment-context";
+import { getOwnerByMesoId } from "../../src/sim/world-cache";
 
 test("sharing immutable peace facts preserves every legal and illegal offer assessment", () => {
   const world = createScenarioWorld("matched-war", { seed: 1022748319780, width: 640, height: 360, quick: true });
@@ -12,7 +13,10 @@ test("sharing immutable peace facts preserves every legal and illegal offer asse
   getWarNegotiation(world, war);
   for (const nation of world.nations) nation.resources.weapons = 100;
   const context = createPeaceAssessmentContext();
-  const terms: PeaceTerms[] = [whitePeaceTerms(),
+  const district = world.mesoRegions.find((r) => getOwnerByMesoId(world).get(r.id) === war.nationBId &&
+    r.id !== world.nations.find((n) => n.id === war.nationBId)!.capitalMesoId)!;
+  assert.ok(district);
+  const terms: PeaceTerms[] = [whitePeaceTerms(), { ...whitePeaceTerms(), demandedRegionIds: [district.id] },
     { ...whitePeaceTerms(), demandedWeapons: 10 }, { ...whitePeaceTerms(), offeredWeapons: 20 },
     { ...whitePeaceTerms(), demandedWeapons: 101 }, { ...whitePeaceTerms(), truceSeconds: 600 },
     { ...whitePeaceTerms(), puppetTarget: true }];
@@ -24,9 +28,8 @@ test("sharing immutable peace facts preserves every legal and illegal offer asse
   }
   assert.ok(context.power.size > 0);
   assert.ok(context.territorialValue.size > 0);
-  // Different non-territorial offers and both recipients share one unchanged
-  // final-border check; affordability and all other checks remain per offer.
-  assert.equal(context.borderIssue.size, 1);
+  // Final ownership is checked per offer; only original map facts are shared.
+  assert.ok(context.borders!.originalByNation.size > 0);
   // The next evaluation creates its own context, rather than hiding changes.
   world.nations.find((nation) => nation.id === war.nationAId)!.food = {
     stock: 0, harvest: 0, demand: 100, rationCoverage: 0, shortageCycles: 10, deaths: 0,
