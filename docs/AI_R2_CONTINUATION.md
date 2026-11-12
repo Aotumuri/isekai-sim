@@ -32,7 +32,25 @@ merge main or force-push. Adoption gates and untouched final seeds remain in
 
 ## Frozen ongoing comparisons
 
-All experiment outputs use atomic saves except the small cost scope audit.
+Current active experiment: **R2.17**, preregistered in
+[AI_R2_POLICY_CAUSAL_FOLLOWUP.md](AI_R2_POLICY_CAUSAL_FOLLOWUP.md).
+R2.16 and all older comparisons below are completed archives.
+
+- Aggressor-only control: `/private/tmp/isekai-r2-17-aggressor`, HEAD `afddf82`.
+- Defender-only control: `/private/tmp/isekai-r2-17-defender`, HEAD `932aaf3`.
+- Each variant passes typecheck, 20 targeted protection/budget/government/
+  march/readiness tests and build. These are diagnostic source controls;
+  canonical production remains unchanged and off by default.
+- Both run `war-ai-matrix.ts --campaign --full-systems --political-turbulence
+  --normal-wars --observe-wars --ticks 10000 --seeds 20 --scenarios
+  matched-war,stalemate-breaker,reorganization-heavy`, outputting root
+  `diagnostics/war-ai-r2-17-{aggressor,defender}-development.json.gz`.
+  Logs: `/private/tmp/isekai-r217-{aggressor,defender}.log`.
+- Resume from the matching frozen checkout with the same options and absolute
+  output path. Never mutate an active engine. Compare with original R2.16
+  control/selection before proposing a behavior change. Final seeds untouched.
+
+All current experiment outputs use atomic saves, including the cost audit.
 Do not edit a frozen engine while its run is active.
 
 - R2.14: `/private/tmp/isekai-r2-14-march`, HEAD `b488da5`; same production source
