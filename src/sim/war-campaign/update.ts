@@ -18,7 +18,7 @@ import { observeCampaignCost, forecastCampaignOpportunities } from "./forecast";
 import { evaluateCampaignAlternatives, hasClearCampaignImprovement, selectCampaignMilitaryEffort } from "./alternatives";
 import { unavailableManpower } from "./battle-costs";
 import { createPeaceAssessmentContext } from "../peace-assessment-context";
-import { clearCampaignDistanceFields, pruneCampaignDistanceFields } from "./forecast-distances";
+import { beginCampaignDistancePass, clearCampaignDistanceFields, pruneCampaignDistanceFields } from "./forecast-distances";
 
 /** One campaign per nation spanning every current opponent; no direct orders. */
 export function updateWarCampaigns(world: WorldState): void {
@@ -39,6 +39,7 @@ export function updateWarCampaigns(world: WorldState): void {
   const active = new Set(world.nations.filter(isNationActive).map((nation) => nation.id));
   const next = new Map<NationId, WarCampaign>();
   const peaceContext = createPeaceAssessmentContext();
+  beginCampaignDistancePass(world);
   for (const nation of world.nations.filter(isNationActive)) {
     const wars = world.wars.filter((war) =>
       (war.nationAId === nation.id || war.nationBId === nation.id) &&
@@ -95,7 +96,7 @@ export function updateWarCampaigns(world: WorldState): void {
   }
   if (state.byNationId.size !== next.size) state.version += 1;
   state.byNationId = next;
-  pruneCampaignDistanceFields(world, next.values());
+  pruneCampaignDistanceFields(world);
   for (const id of state.battleCosts?.keys() ?? []) if (!next.has(id)) state.battleCosts!.delete(id);
   if (state.events.length > 200) state.events.splice(0, state.events.length - 200);
 }

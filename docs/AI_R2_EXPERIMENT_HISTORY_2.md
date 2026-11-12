@@ -84,8 +84,6 @@ episodes (`war-ai-r2-11-pre-cache-fix-partial.json.gz`), rather than adopted.
 705 full regression tests and build pass on the corrected source; its
 100-episode matrix is running. The feature remains opt-in.
 
-## Loss-exit diagnostic (preregistered, not a production change)
-
 ### Objective-distance performance follow-up (preregistered)
 
 The profile identified repeated goal-distance BFS work. Its traversability uses
@@ -96,6 +94,15 @@ through a weak reference. Require identical non-CPU diagnostic results against
 the frozen uncached source before retaining it; measure fixed-state CPU with the
 same Node 24 runtime. Unit tests cover actual third-party route blocking, changed
 targets/terrain, occupation independence and cleanup. This is not a quality gain.
+
+The first cache preserves all non-CPU results in 16 diagnostic episodes and
+passes 709 tests/build, but sequential ABBA timings do not show a consistent
+gain. Revise its bookkeeping to mark active fields by evaluation generation and
+avoid serializing war keys/active sets. Target snapshots still catch in-place
+edits. Measure both engines alternately in one process with matching physical
+and campaign fingerprints to reduce drift; keep per-call samples descriptive.
+
+## Loss-exit diagnostic (preregistered, not a production change)
 
 Test whether an exhausted field-loss budget suppresses useful local defensive
 pressure before a mutually acceptable exit exists. Use four diagnostic seeds,

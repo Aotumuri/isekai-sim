@@ -2,31 +2,46 @@ import type { NationId } from "../../worldgen/nation";
 import type { MesoRegionId } from "../../worldgen/meso-region";
 import type { WorldState } from "../world-state";
 import { getMesoById, getOwnerByMesoId } from "../world-cache";
-import type { CampaignObjective, WarCampaign } from "./state";
+import type { CampaignObjective } from "./state";
 
-interface DistanceField { targets: string; distances: ReadonlyMap<MesoRegionId, number> }
+interface DistanceField {
+  nation: NationId;
+  opponent: NationId;
+  generation: number;
+  targets: string;
+  distances: ReadonlyMap<MesoRegionId, number>;
+}
 interface CampaignDistanceCache {
   mapVersion: number;
   territoryVersion: number;
-  fields: Map<string, DistanceField>;
+  generation: number;
+  fields: Map<readonly MesoRegionId[], DistanceField>;
 }
 const caches = new WeakMap<WorldState, CampaignDistanceCache>();
-const goalKey = (nationId: NationId, warKey: string) => JSON.stringify([nationId, warKey]);
+
+export function beginCampaignDistancePass(world: WorldState): void {
+  const cache = caches.get(world);
+  if (cache) cache.generation++;
+}
 
 /** This projection uses legal ownership, not occupation or unit positions.
  * Those changing observations still enter the forecast separately every tick. */
 export function getCampaignObjectiveDistances(world: WorldState, nationId: NationId, goal: CampaignObjective): ReadonlyMap<MesoRegionId, number> {
   let cache = caches.get(world);
   if (!cache || cache.mapVersion !== world.mapVersion || cache.territoryVersion !== world.territoryVersion) {
-    cache = { mapVersion: world.mapVersion, territoryVersion: world.territoryVersion, fields: new Map() };
+    cache = { mapVersion: world.mapVersion, territoryVersion: world.territoryVersion, generation: 1, fields: new Map() };
     caches.set(world, cache);
   }
-  const key = goalKey(nationId, goal.warKey);
-  const targets = JSON.stringify([goal.opponentId, goal.regionIds]);
-  const existing = cache.fields.get(key);
-  if (existing?.targets === targets) return existing.distances;
+  // Adoption normally reuses this array. The snapshot also catches in-place
+  // edits made by callers, independently of the array's identity.
+  const targets = JSON.stringify(goal.regionIds);
+  const existing = cache.fields.get(goal.regionIds);
+  if (existing?.nation === nationId && existing.opponent === goal.opponentId && existing.targets === targets) {
+    existing.generation = cache.generation;
+    return existing.distances;
+  }
   const distances = buildObjectiveDistances(world, nationId, goal.opponentId, goal.regionIds);
-  cache.fields.set(key, { targets, distances });
+  cache.fields.set(goal.regionIds, { nation: nationId, opponent: goal.opponentId, generation: cache.generation, targets, distances });
   return distances;
 }
 
@@ -34,16 +49,14 @@ export function clearCampaignDistanceFields(world: WorldState): void { caches.de
 
 /** Keep at most one field per active national war goal; ending wars or nations
  * cannot leave an ever-growing history of path maps. */
-export function pruneCampaignDistanceFields(world: WorldState, campaigns: Iterable<Pick<WarCampaign, "nationId" | "objectives">>): void {
+export function pruneCampaignDistanceFields(world: WorldState): void {
   const cache = caches.get(world);
   if (!cache) return;
-  const active = new Set([...campaigns].flatMap((campaign) =>
-    campaign.objectives.map((goal) => goalKey(campaign.nationId, goal.warKey))));
-  for (const key of cache.fields.keys()) if (!active.has(key)) cache.fields.delete(key);
+  for (const [key, field] of cache.fields) if (field.generation !== cache.generation) cache.fields.delete(key);
   if (!cache.fields.size) caches.delete(world);
 }
 
-function buildObjectiveDistances(world: WorldState, nation: NationId, opponent: NationId, targets: MesoRegionId[]) {
+function buildObjectiveDistances(world: WorldState, nation: NationId, opponent: NationId, targets: readonly MesoRegionId[]) {
   const owners = getOwnerByMesoId(world), regions = getMesoById(world);
   const distance = new Map(targets.map((id) => [id, 0]));
   const queue = [...targets];

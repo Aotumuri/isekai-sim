@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createFixedSocietyWorld, fixedSocietyDistrict as district } from "../helpers/fixed-society-world";
-import { getCampaignObjectiveDistances, pruneCampaignDistanceFields } from "../../src/sim/war-campaign/forecast-distances";
+import { beginCampaignDistancePass, getCampaignObjectiveDistances, pruneCampaignDistanceFields } from "../../src/sim/war-campaign/forecast-distances";
 import { updateWarCampaigns } from "../../src/sim/war-campaign/update";
 import type { CampaignObjective } from "../../src/sim/war-campaign/state";
 
@@ -32,6 +32,8 @@ test("changed targets and terrain invalidate paths without waiting for a virtual
   const moved = getCampaignObjectiveDistances(world, a.id, goal);
   assert.notEqual(moved, first);
   assert.equal(moved.get(district(4, 2)), 3);
+  goal.regionIds[0] = district(6, 2);
+  assert.equal(getCampaignObjectiveDistances(world, a.id, goal).get(district(4, 2)), 2);
   goal.regionIds = [district(5, 2)];
   for (const region of world.mesoRegions) {
     if (region.id === district(5, 2)) region.neighbors = region.neighbors.filter((n) => n.id !== district(4, 2));
@@ -59,10 +61,12 @@ test("a third country's legal corridor blocks a formerly reachable objective", (
 
 test("completed goals are pruned and disabling the campaign releases remaining fields", () => {
   const { world, a, goal } = fixture();
-  const secondGoal = { ...goal, warKey: "other-war" };
+  const secondGoal = { ...goal, warKey: "other-war", regionIds: [district(7, 2)] };
   const first = getCampaignObjectiveDistances(world, a.id, goal);
   const second = getCampaignObjectiveDistances(world, a.id, secondGoal);
-  pruneCampaignDistanceFields(world, [{ nationId: a.id, objectives: [goal] }]);
+  beginCampaignDistancePass(world);
+  getCampaignObjectiveDistances(world, a.id, goal);
+  pruneCampaignDistanceFields(world);
   assert.equal(getCampaignObjectiveDistances(world, a.id, goal), first);
   assert.notEqual(getCampaignObjectiveDistances(world, a.id, secondGoal), second);
   world.settings!.warCampaignEnabled = false;
