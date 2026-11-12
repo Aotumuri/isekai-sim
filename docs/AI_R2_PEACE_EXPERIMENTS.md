@@ -122,3 +122,15 @@ all home approaches; do not arbitrarily choose one of tied approaches. Keep
 this an exposure measurement, not evidence that all cross-front transfers are
 wasteful or that remote operations cannot help apply political pressure.
 
+### Goal-specific force audit result
+
+Sixteen diagnostic episodes complete. Same-war remote-front floor exposure is
+six samples in one active-war episode, averaging 9.6% of its projected force
+(maximum 13.8%). There is no exposure in the three single-war families. Do not
+implement this as the general explanation for their quality deficits.
+
+R2.13's completed recognition audit retains parity in all 60 pairs. Executable
+recognition occurs in two matched episodes, none in stalemate/reorganization;
+one matched case already publishes the goal with an additional weapon demand.
+The correction alone does not provide a broad set of unexploited bargains.
+
