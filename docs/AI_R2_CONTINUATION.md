@@ -32,12 +32,53 @@ merge main or force-push. Adoption gates and untouched final seeds remain in
 
 ## Frozen ongoing comparisons
 
-Current active experiment: **R2.18**, preregistered in
+Current active experiment: **R2.19**, preregistered in
+[AI_R2_MARCH_CONTROLLER_CONTROL.md](AI_R2_MARCH_CONTROLLER_CONTROL.md).
+R2.18 completed both 60-case matrices and both exact 60-case cost/government
+replays. Neither operation-size variant is adopted. Its conditions are in
 [AI_R2_OPERATION_SIZE_EXPERIMENTS.md](AI_R2_OPERATION_SIZE_EXPERIMENTS.md).
 R2.17 completed 120 matrix cases and 120 cost/government replays, with zero
 failures and exact reference outcomes. No role control was adopted; see
 [AI_R2_POLICY_CAUSAL_FOLLOWUP.md](AI_R2_POLICY_CAUSAL_FOLLOWUP.md).
 R2.16 and all older comparisons below are completed archives.
+
+- R2.19 source: `/private/tmp/isekai-r2-19-r1-march`, HEAD `a8510bb`;
+  source tree `f2143c1b29f388e4b58c5ca4beecbde65fcbf629`. It applies only the
+  archived march patch to R1, plus matrix runtime metadata. 673 inherited and
+  march regressions, typecheck, build and quick benchmark pass. Production
+  root remains unchanged/off; root diagnostic regressions now total 724.
+- `war-ai-r2-19-r1-march.patch` applies to public `e6245a1`. Its original
+  production tree exactly matches archived `93ba1cf`. The 40-case Legacy/R1
+  references are filtered unchanged from the original 260-case matrices.
+- Two sequential pipelines keep at most two simulations active. Pipeline A:
+  frozen-engine matrix with `--campaign --full-systems --political-turbulence
+  --normal-wars --observe-wars --ticks 10000 --seeds 20 --scenarios
+  stalemate-breaker,reorganization-heavy`, output root
+  `diagnostics/war-ai-r2-19-development.json.gz`, log
+  `/private/tmp/isekai-r219-matrix.log`; after success it runs the root cost
+  audit with `--engine-root /private/tmp/isekai-r2-19-r1-march --campaign
+  --ticks 10000 --seeds 20 --seed-start 822748319780 --scenarios
+  stalemate-breaker,reorganization-heavy`, output
+  `diagnostics/war-ai-government-r2-19-development.json.gz`, log
+  `/private/tmp/isekai-r219-cost.log`.
+- Pipeline B: root travel audit with the same ticks/seeds/scenarios and
+  `--campaign`, first against `/private/tmp/isekai-r1-e6245a1`, then against
+  the R2.19 engine. Outputs `war-ai-r1-physical-travel-audit.json.gz` and
+  `war-ai-r2-19-physical-travel-audit.json.gz`; logs
+  `/private/tmp/isekai-{r1,r2-19}-physical-travel.log`.
+- Do not mutate either engine or root cost/government/travel measurement files
+  while queued pipelines run. All outputs save atomically and check hashes.
+  Validate all replays with `war-ai-replay-validation.ts`; use the two-arm
+  form of `war-ai-travel-report.ts BASELINE CANDIDATE OUTPUT` and original
+  paired national reports. New same-front physical travel view supplements
+  unchanged original metrics. Old four-arm reports reproduce exactly.
+- Exact peace publication/acceptance observations are complete for four
+  selected experimental cases and preserve reference outcomes. Results and
+  pending Legacy/R1 scope are in
+  [AI_PEACE_DECISION_OBSERVATION.md](AI_PEACE_DECISION_OBSERVATION.md).
+- A GitHub push timed out during SSL connection. Local commits/data are saved;
+  a bounded retry may still be active. Verify its outcome before another push,
+  then update the existing Draft PR. This does not block local quality work.
 
 - R2.18 scored variant: `/private/tmp/isekai-r2-18-scored`, HEAD `19ce4ea`.
 - R2.18 selection mechanism control: `/private/tmp/isekai-r2-18-selection`,
