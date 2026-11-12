@@ -93,3 +93,11 @@ puppet occupation/city requirement is **not met**, despite military advantage
 reaching +1.0 in reorganization 780. These are selected contrasts, not a rate
 of premature peace or proof of feasible puppet superiority. Parity validation
 is recorded separately; Legacy/R1 scope remains pending.
+
+The same observation signals are prepared and typechecked in a separate
+Legacy/R1 checkout `/private/tmp/isekai-peace-decision-r1`, HEAD `ce1d6dc`.
+`war-ai-peace-publication-r1-hook.patch` applies to public `e6245a1`; the older
+metric schema is preserved with only the two diagnostic name declarations.
+Run matched 781 and stalemate 780 with campaign off/on after current pipelines
+free capacity, and validate each against the original full matrix. No Legacy
+or R1 observation replay has yet been claimed complete.

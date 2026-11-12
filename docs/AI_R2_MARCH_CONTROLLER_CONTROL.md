@@ -45,3 +45,13 @@ Compare own attacker/defender goals, survival, legal gains, cost distributions
 and censoring separately, with existing paired 95%/10,000 bootstrap intervals.
 No sum of opposing interests or speed claim from concurrent/historical runs.
 If outcomes worsen, do not reduce the safety requirement to adopt travel gains.
+
+Before inspecting R2.19 national outcomes, also specify the existing-data
+interaction contrast: pair archived R2.13 (no continuity) and R2.14 (continuity)
+with R1 and R2.19 on these same 40 cases. For each role's common outcome,
+bootstrap by seed the difference
+`(R2.14 - R2.13) - (R2.19 - R1)`. This describes interaction with the **whole
+controller bundle**, not an isolated scoring coefficient or budget. Require
+identical starts/settings and keep original data unchanged. It can distinguish
+a general movement effect from controller-dependent effects, but cannot by
+itself justify adopting an older architecture or weakening a safety gate.
