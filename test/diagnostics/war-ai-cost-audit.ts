@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { gzipSync } from "node:zlib";
@@ -12,11 +12,16 @@ const option = (name: string, fallback: string) => {
   const i = args.indexOf(name); return i < 0 ? fallback : args[i + 1];
 };
 const root = resolve(option("--engine-root", "."));
+if (execFileSync("git", ["-C", root, "diff", "--", "src"], { encoding: "utf8" })) throw new Error("Commit engine source first");
+const revision = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const sourceTree = execFileSync("git", ["-C", root, "rev-parse", "HEAD:src"], { encoding: "utf8" }).trim();
+const harnessHash = createHash("sha256").update(await readFile(new URL(import.meta.url))).digest("hex");
 const load = (path: string) => import(pathToFileURL(resolve(root, path)).href);
 const { createScenarioWorld } = await load("test/scenarios/index.ts");
 const { runSimulation } = await load("test/helpers/simulation-driver.ts");
 const { BenchmarkMetrics } = await load("test/benchmark/metrics.ts");
 const { getWarCasualties } = await load("src/sim/war-state.ts");
+const { getSubjectOverlord } = await load("src/sim/subject-governments.ts");
 const { createWarOutcomeObserver } = await load("test/benchmark/war-outcome-observer.ts");
 const { summarizeWorld } = await load("test/helpers/world-summary.ts");
 const campaign = args.includes("--campaign");
@@ -48,11 +53,26 @@ try {
       const loss = createFieldLossObserver();
       const ledgerTotals = new Map<string, { direct: number; removed: number; weapons: number }>();
       const ledgerSamples = new Map<string, { entry: object; direct: number; removed: number; weapons: number }>();
+      const seenGoals = new Set<string>();
+      let dependentDefenderGoalCount = 0;
+      const firstDependentDefenderGoals: object[] = [];
       const spending = new Map<string, { weapons: number; manpower: number; fuel: number; lastTick: number; burdenSeconds: number }>();
       let lastSlowTick = world.time.slowTick;
       class AuditMetrics extends BenchmarkMetrics {
         recordDuration(name: string, ms: number) {
           super.recordDuration(name, ms);
+          if (name === "warCampaign.evaluation") {
+            for (const campaign of world.warCampaigns?.byNationId.values() ?? []) for (const goal of campaign.objectives) {
+              const key = `${campaign.nationId}:${goal.warKey}`;
+              if (seenGoals.has(key)) continue;
+              seenGoals.add(key);
+              const overlord = getSubjectOverlord(world, campaign.nationId);
+              if (goal.kind !== "preserve-sovereignty" || !overlord) continue;
+              dependentDefenderGoalCount++;
+              if (firstDependentDefenderGoals.length < 20) firstDependentDefenderGoals.push({ tick: world.time.fastTick,
+                nation: campaign.nationId, opponent: goal.opponentId, overlord, political: structuredClone(goal.political) });
+            }
+          }
           if (name === "repositionUnits") loss.before(world);
           if (name === "battle.update") {
             loss.after(world);
@@ -94,6 +114,7 @@ try {
       const totalDirectWarCasualties = Object.fromEntries(world.nations.map((nation) => [nation.id,
         [...seenWars].reduce((sum, war) => sum + getWarCasualties(war, nation.id), 0)]));
       results.push({ seed, scenario, startFingerprint, costs: loss.result(), totalDirectWarCasualties,
+        dependentDefenderGoalCount, firstDependentDefenderGoals,
         warOutcomes: outcomes.result(), settlements: [...settlements.values()], endWorld: summarizeWorld(world),
         campaignLedger: Object.fromEntries(ledgerTotals),
         spending: Object.fromEntries(spending),
@@ -105,7 +126,7 @@ try {
     }
   }
 } finally { console.info = original; }
-const report = { revision: execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+const report = { revision, sourceTree, harnessHash,
   runtime: { node: process.version, v8: process.versions.v8, platform: process.platform, arch: process.arch },
   engineRoot: root, campaign, ticks, seeds: count, seedStart, scenarios,
   note: "Field losses and totalDirectWarCasualties cover the whole episode; production flow excludes recovery, trade and aid. openingWarSides direct casualties cover opening wars only. Compare scopes explicitly.", results };
