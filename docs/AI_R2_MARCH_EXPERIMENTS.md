@@ -43,3 +43,20 @@ seed distributions and exposure denominators/rates; fewer events due solely to
 shorter wars or less movement are not sufficient. Check non-CPU outcomes and
 end summaries against observer-free matrices. Preserve engine source tree,
 harness/observer hashes and runtime; incremental output must reject mismatches.
+
+### Measurement phase correction
+
+The initial travel observer sampled after the whole fast/slow tick. A slow
+campaign revision can occur after movement, making the preceding edge appear
+bound to the new plan; a later reset is then misclassified as an unchanged
+mission. Observing after battles can also miss the enemy that blocked entry.
+The four incomplete frame-end audits are preserved as `travel-frame-partial`
+files and are not adoption evidence. Their completed rows preserve physical
+outcome parity, but that does not validate their mission classification.
+
+Restart the travel audit at the existing `repositionUnits` instrumentation
+boundary, after movement but before battles and slow strategic updates. This
+uses the same phase for all four frozen engines and does not alter production
+code. Keep outcomes at the normal diagnostic boundary for parity comparison.
+Record this phase explicitly, reject old outputs on resume/reporting, and
+recheck paired physical outcomes. No adoption thresholds or seed ranges change.

@@ -30,13 +30,14 @@ let report = {
   sourceTree: execFileSync("git", ["-C", root, "rev-parse", "HEAD:src"], { encoding: "utf8" }).trim(),
   harnessHash: hash(await readFile(new URL(import.meta.url))),
   observerHash: hash(await readFile(new URL("../helpers/march-travel-observer.ts", import.meta.url))),
+  measurementPhase: "after-reposition-before-battle-and-slow-ai",
   runtime: { node: process.version, v8: process.versions.v8, platform: process.platform, arch: process.arch },
   ticks, seeds, seedStart, campaign, scenarios, results: [] as ReturnType<typeof episode>[],
   note: "Read-only endpoint travel audit. Enemy-blocked edges are excluded. Ordinary mission requires unchanged front/revision and no special ownership. Also report unconditional unblocked retargets and exposure denominators; shorter wars alone do not prove better travel. No speed or battle rule is changed.",
 };
 try {
   const saved = JSON.parse(gunzipSync(await readFile(output)).toString());
-  for (const key of ["sourceTree", "harnessHash", "observerHash", "runtime", "ticks", "seeds", "seedStart", "campaign", "scenarios"] as const) {
+  for (const key of ["sourceTree", "harnessHash", "observerHash", "measurementPhase", "runtime", "ticks", "seeds", "seedStart", "campaign", "scenarios"] as const) {
     if (JSON.stringify(saved[key]) !== JSON.stringify(report[key])) throw new Error(`Incompatible ${key}`);
   }
   report = saved;
@@ -58,9 +59,16 @@ function episode(seed: number, scenario: string) {
   const startFingerprint = hash(Buffer.from(JSON.stringify({ units: world.units, wars: world.wars,
     macroRegions: world.macroRegions, resources: world.nations.map((nation) => [nation.id, nation.resources]) })));
   const travel = createMarchTravelObserver(), outcomes = createWarOutcomeObserver();
-  const metrics = new BenchmarkMetrics();
+  class TravelMetrics extends BenchmarkMetrics {
+    recordDuration(name: string, ms: number) {
+      super.recordDuration(name, ms);
+      if (name === "repositionUnits") travel.observe(world);
+    }
+  }
+  const metrics = new TravelMetrics();
+  travel.observe(world);
   runSimulation(world, { ticks, metrics, observe(current: WorldState) {
-    travel.observe(current); outcomes.observe(current);
+    outcomes.observe(current);
   } });
   return { seed, scenario, startFingerprint, travel: travel.result(),
     warOutcomes: outcomes.result(), endWorld: summarizeWorld(world),
