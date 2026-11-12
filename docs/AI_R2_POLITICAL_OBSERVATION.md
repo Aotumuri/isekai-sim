@@ -88,6 +88,27 @@ peace valuation anticipates mismatched protection windows, how threatened
 subjects enter the national portfolio, and what legal non-war support was
 possible. These require separate evaluation before behavior changes.
 
+The same trace separates material resources from eligible aid. At creation
+(410), the parent/subject have 20/5 land units and 57.6/98.9 weapons; the
+subject already has only two macro regions at episode start and creation.
+At 2210 weapons are 151.2/0.5, and at attack (3210) 2697.2/12.5, with 76/10
+land units. These observations do not establish timely military deployability
+or intrinsic subject viability. No parent/subject arms-aid event occurs;
+trade includes the parent buying eight weapons from the subject earlier and
+later selling food for cash.
+
+The parent character's cooperation is 0.3. Existing `updateArmsAid` skips
+automatic donors below 0.5 before evaluating recipients, independently of
+national maintenance benefits. At the later attack the observed parent/child
+opinion is 9.74, trust 68.4, with trade/truce but no alliance, no shared faction
+or current common enemy. `canSupportNation` does not treat the subject link
+alone as friendly; its opinion/trust route requires both >=40. These are
+separate existing eligibility/policy constraints, not evidence that the
+parent considered a legal feasible shipment and ranked it too low. Delivery
+route, timing, production response and other legal support remain to be
+evaluated. Do not change shared diplomatic/aid permissions as an unreviewed
+fix; assess whether the AI anticipates such limits when acquiring a subject.
+
 Priority remains the measured survival regression and policy-model coverage.
 These selected cases also allow testing whether settlement value and postwar
 maintenance are disconnected. Record participation, feasible access, actual
