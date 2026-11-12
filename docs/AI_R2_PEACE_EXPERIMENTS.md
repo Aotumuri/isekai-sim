@@ -86,3 +86,26 @@ selected failure cases are causal diagnostics, not adoption evidence; 600-tick
 unfinished wars remain censored. Do not infer that forcing one mode universally
 is a suitable policy.
 
+### Defender-effort result
+
+Source `ecffda2`, 27 episodes complete. All nine normal/forced-defense pairs
+match exactly on non-CPU outcomes, end summaries, independent force losses,
+production costs and episode survival. Limited-offense intervention is exposed
+in eight cases; the remaining matched case stays under protected conditions.
+Three normally eliminated defenders survive the 600-tick episode under forced
+offense, while one normally surviving defender is eliminated. Four other deaths
+occur sooner. This supports studying the timing and location of investment,
+but rejects a universal offense override. The normal R2.13 stalemate-780
+defender already survives, unlike R2.11; full paired development evaluation is
+still required before treating that individual case as a general gain.
+
+### Objective-proxy limitation
+
+Comparing R2.5's saved first-real-tick adopted goals with the unchanged neutral
+benchmark goals gives exact target matches in 11/20 matched, 11/20 stalemate and
+9/20 reorganization openings. The neutral proxy chooses the first border ID;
+the planner values locations. These measurements are different questions.
+Do not optimize the planner toward an arbitrary identifier to improve the
+proxy, and do not silently replace the prespecified adoption gate. Continue to
+report that proxy alongside legal territorial value, survival and costs.
+
