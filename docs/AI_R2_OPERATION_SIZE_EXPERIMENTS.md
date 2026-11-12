@@ -38,3 +38,37 @@ duration/censoring and costs with existing paired bootstrap intervals. Keep
 whole-episode losses/spending distinct from opening-war outcomes. Do not infer
 quality from reduced costs alongside weaker national results, nor CPU gains
 from concurrent runs. Any adoption still requires the unchanged full protocol.
+
+## Matrix result (cost replays still running)
+
+Both 60-case matrices completed with zero failures and exactly matching start
+summaries/settings against their own parents. Candidate sources remain isolated;
+canonical production is unchanged.
+
+| Variant | Family | Attacker goal | Attacker survives | Defender homeland | Defender survives |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Scored + ordinary early size | Matched | 30% | 100% | 65% | 80% |
+| Scored + ordinary early size | Stalemate | 50% | 95% | 35% | 55% |
+| Scored + ordinary early size | Reorganization | 40% | 95% | 55% | 70% |
+| Selection + ordinary early size | Matched | 25% | 100% | 65% | 75% |
+| Selection + ordinary early size | Stalemate | 55% | 100% | 35% | 65% |
+| Selection + ordinary early size | Reorganization | 45% | 95% | 45% | 70% |
+
+Against its scored parent, reorganization defender survival changes +10 pp
+[0, +25], but attacker goal changes -5 pp [-15, 0] in both matched and
+reorganization. Stalemate defender survival is unchanged for every paired seed,
+so the statistically clear R1 deficit (-20 pp [-40, -5]) remains. No adoption.
+
+Against its selection parent, stalemate attacker goal improves +20 pp
+[+5, +40] and survival +15 pp [0, +30]; matched attacker goal declines -10 pp
+[-25, 0], and reorganization goal -15 pp [-35, +5]. These are conditional
+operation-size effects, not support for deploying the diagnostic selection
+branch. The proposal keeps multi-approach planning unchanged; it does not
+claim to separate every existing focus/major-offensive coupling.
+
+Raw matrices, paired reports and safety/start validation are archived under
+`war-ai-r2-18-*`. Both variants pass 723 full regressions plus the added
+real-planner regression, typecheck, build and quick benchmark. The planner
+regression fails under original sizing. Whole-episode cost/government replays
+are continuing and must be validated against the completed matrices before
+their costs are interpreted. No final seeds or R2.16 conditions changed.
