@@ -60,3 +60,39 @@ uses the same phase for all four frozen engines and does not alter production
 code. Keep outcomes at the normal diagnostic boundary for parity comparison.
 Record this phase explicitly, reject old outputs on resume/reporting, and
 recheck paired physical outcomes. No adoption thresholds or seed ranges change.
+
+## R2.14 result: travel improves, national adoption rejected
+
+Source `b488da5` (same production tree as `c61f7c0`): 717 tests, build and quick
+benchmark pass. The independent observer adds two passing tests. All 100
+development episodes finish without failures. Attacker retention is
+29/35/50/45/0% in active/matched/stalemate/reorganization/sea; defender survival
+is 74/80/55/60/100%. Stalemate defender survival is 20 points below R1,
+paired 95% interval −40 to −5. Attacker retention in that family is also below
+R1 (−10 points, −30 to +10). Reduced travel does not justify this safety loss.
+
+All four movement-phase audits finish, 40 episodes each. Every recorded
+non-CPU end summary and full war-outcome report matches the observer-free
+reference (160/160). Average discarded ordinary movement time, summed across
+units per episode, is:
+
+| Family | Legacy-equivalent | R1 | R2.13 | R2.14 |
+| --- | ---: | ---: | ---: | ---: |
+| Stalemate | 345.965 s | 362.220 s | 364.450 s | 26.045 s |
+| Reorganization | 545.250 s | 279.380 s | 363.580 s | 12.735 s |
+
+Against R1, the paired ordinary-time differences are −336.175 seconds
+(−538.855 to −171.375) and −266.645 (−403.180 to −149.000).
+The broader all-unblocked time differences are also negative: −242.740
+(−456.570 to −55.755) and −199.230 (−411.460 to −12.390).
+Pooled ordinary discarded/travel exposure is 1.03% / 0.60%, versus R1
+13.98% / 10.20%; the per-seed rate intervals also exclude zero. These are
+summed unit times, not faster war resolution or saved computer wall time.
+
+Ordinary counts are conditional on the observed campaign revision, which
+Legacy lacks, so do not treat that conditional comparison alone as proof of
+superior planning. The all-unblocked view and exposure rates are necessary
+cross-checks; not every reset during a mission change is unnecessary. A common
+physical-order context without the revision filter will supplement any future
+adoption comparison. Keep this implementation experimental while investigating
+the national policy deficit; do not enable it on the strength of travel alone.

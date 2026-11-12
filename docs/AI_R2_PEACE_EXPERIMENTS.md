@@ -184,3 +184,15 @@ already exists. Cases with no such adoption must retain all non-CPU outcomes,
 costs, settlements and end summaries exactly; exposed cases are inspected
 separately. Internal goal-history reclassification is not an improvement metric.
 
+### R2.15 result
+
+Source `9d9c6e5` passes 721 full regression tests, build and quick benchmark.
+The two new regressions fail on the previous source and pass after correction,
+including actual acceptance of a third-party white peace. The fresh 16-pair
+scope cohort completes on `b488da5` versus `29fa088`. One active-war case adopts
+an already-dependent defensive goal at tick 1690: the old purpose is
+independence; the new purpose preserves the opening government under nation-5.
+All 16 pairs match every recorded non-CPU outcome, settlement, cost, spending
+and end-summary field. This demonstrates the corrected contract and limited
+observed scope, not a measured improvement in strategic outcomes.
+
