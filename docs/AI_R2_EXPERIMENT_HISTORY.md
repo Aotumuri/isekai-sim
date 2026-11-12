@@ -300,3 +300,17 @@ forecast weight (45) and existing bounded range (−0.5 to +0.5). It removes the
 mode-only exit bonus where a scored model exists. Already legally retained value
 is not counted as new continuation benefit. All legality, maturity, direct-order,
 emergency, combat and economic rules stay fixed. No final seeds have been used.
+
+## R2.8: counterpressure ablation (preregistered)
+
+R2.3 added a homeland-only condition to defensive counterattacks and continued
+commitments. That isolated trial already failed, yet the condition remained in
+later prototypes. Test its removal against R2.7 before adding another mechanism:
+restore the existing favorable-local-ratio opportunity and commitment continuity
+in defensive effort. This permits a locally justified counterattack rather than
+turning every defensive plan into a new national offensive. Existing front
+eligibility, primary opponent, replacement constraint, agreement stand-down,
+cost limit, manual orders and capital/supply safeguards remain. Do not alter
+battle rules or tune ratios. Use the same five development families, 20 seeds
+and 10,000 ticks; compare against Legacy, R1 and R2.7. The untouched final range
+remains reserved. A counterattack count alone cannot establish improvement.
