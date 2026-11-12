@@ -326,6 +326,17 @@ battle rules or tune ratios. Use the same five development families, 20 seeds
 and 10,000 ticks; compare against Legacy, R1 and R2.7. The untouched final range
 remains reserved. A counterattack count alone cannot establish improvement.
 
+### R2.8 result: not adopted
+
+Source `0890bd9`, 100 completed development episodes, no failures. Attacker
+retention is 26/40/45/50% in active/matched/stalemate/reorganization, defender
+survival 76/70/60/60%. R2.7 is 25/45/50/45% and 75/70/55/60% respectively.
+Restoring counterpressure alone does not resolve the objective/safety deficits.
+Active-war attacker survival drops 7 points from R2.7 (95% paired interval
+−18 to +1); it is 81%, versus R1 82% and Legacy 77%. This uncertainty does not
+establish equivalence or improvement. 692 tests and build pass. Keep the variant
+only as an opt-in prototype for the next reservation-aware forecast test.
+
 ### Force-availability diagnosis and next preregistered test
 
 A read-only audit at the campaign evaluation stage covers 16 diagnostic

@@ -12,6 +12,7 @@ import { getOpposingFrontSide } from "../../src/sim/land-fronts";
 import type { WorldState } from "../../src/sim/world-state";
 import type { CampaignObjective, WarCampaign } from "../../src/sim/war-campaign/state";
 import type { BenchmarkScenarioName } from "../benchmark/types";
+import { forecastCampaignForceShares } from "../../src/sim/war-campaign/forecast-force";
 
 // Read-only audit at the exact forecasting stage. Reconstruct the current
 // 30-second land projection independently; do not issue or override orders.
@@ -29,7 +30,7 @@ for (let i = 0; i < seeds; i++) {
     results.push(withMutedSimulationLogs(() => audit(1022748319780 + i, scenario)));
   }
 }
-await writeFile(option("--output", "diagnostics/war-ai-r2-8-force-availability.json.gz"), gzipSync(JSON.stringify({
+await writeFile(option("--output", "diagnostics/war-ai-force-availability.json.gz"), gzipSync(JSON.stringify({
   revision: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(), ticks, seeds, results,
 })));
 console.log(`force availability audit: ${results.length} episodes`);
@@ -61,6 +62,7 @@ function sampleGoal(world: WorldState, campaign: WarCampaign, goal: CampaignObje
   const projected = ownUnits.filter((u) =>
     (distances.get(u.regionId) ?? Infinity) * getMoveMsPerRegion(u) / 1000 < 30 &&
     !world.retreatPlans.retreatIdByUnitId.has(u.id) && !world.reorganization.planIdByUnitId.has(u.id));
+  const shares = forecastCampaignForceShares(world, campaign.nationId, goal.opponentId, ownUnits);
   const unavailable: Record<string, number> = {};
   for (const unit of projected) {
     const operationId = world.offensiveOperations.operationIdByUnitId.get(unit.id);
@@ -88,8 +90,11 @@ function sampleGoal(world: WorldState, campaign: WarCampaign, goal: CampaignObje
   return { tick: world.time.fastTick, nation: campaign.nationId, opponent: goal.opponentId,
     primary: campaign.primaryOpponentId, mode: campaign.mode,
     militaryMode: campaign.militaryMode, capitalCritical: campaign.constraints.capitalCritical,
+    concentrationOpponents: world.stalematePressure.assessments.filter((a) =>
+      a.nationId === campaign.nationId && a.schwerpunktSectorId).map((a) => a.enemyNationId),
     opponents: campaign.objectives.length, hostileOccupation,
     projectedStrength: projected.reduce((sum, u) => sum + getUnitCombatStrength(u), 0), unavailable,
+    reservationAdjustedStrength: projected.reduce((sum, u) => sum + getUnitCombatStrength(u) * (shares.get(u.id) ?? 0), 0),
     otherFrontFloor: world.frontlineCoverage.coverages.filter((coverage) => {
       const front = world.landFronts.operationalSectorsById.get(coverage.sectorId);
       return coverage.nationId === campaign.nationId && front &&
