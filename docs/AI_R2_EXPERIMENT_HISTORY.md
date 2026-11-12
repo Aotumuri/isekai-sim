@@ -301,6 +301,17 @@ mode-only exit bonus where a scored model exists. Already legally retained value
 is not counted as new continuation benefit. All legality, maturity, direct-order,
 emergency, combat and economic rules stay fixed. No final seeds have been used.
 
+### R2.7 result: not adopted
+
+Source `ba41862`, 100 development episodes, no failures. Attacker retention is
+25/45/50/45% in active/matched/stalemate/reorganization, versus R1 36/45/60/60%.
+Active-war paired difference from R1 is −11 points (95% interval −20 to −2).
+Defender survival is 75/70/55/60%, versus R1 74/70/75/70%. Sea territorial
+retention remains unchanged. The consistency fix does not establish quality
+superiority or remedy the safety tradeoff. 692 tests, build and quick benchmark
+pass. Raw comparisons against Legacy, R1 and R2.6 include all paired metrics,
+distributions and intervals. Keep the feature opt-in and continue the next trial.
+
 ## R2.8: counterpressure ablation (preregistered)
 
 R2.3 added a homeland-only condition to defensive counterattacks and continued
