@@ -357,3 +357,47 @@ same-opponent front force and existing deployment rules. This changes forecast
 inputs, not orders, defense floors or combat. Test the accounting independently
 and compare the same five development families against R2.8, Legacy and R1.
 Do not use the reserved final seeds or tune combat/decision coefficients.
+
+### R2.9 result: not adopted
+
+Source `7ebb111`, 100 completed development episodes, no failures. Attacker
+retention is 27/40/45/50% in active/matched/stalemate/reorganization, defender
+survival 74/70/60/60%. R1 is 36/45/60/60% and 74/70/75/70%. Reservation
+accounting changes active-war outcomes but does not remedy the main deficits.
+The diagnostic projection loses an average 36.5/13.8/11.6/18.1% of its originally
+counted strength after reservations, across correlated samples in those four
+families. This validates an accounting change, not a quality gain. 696 tests
+and build pass. Keep the feature opt-in and continue.
+
+CPU profiling of 3,000 fixed-state repeats attributes about 15% of campaign
+samples to border checking, another 6.5% to connected groups, and 13% to goal
+distance fields. `0c56fc2` reuses identical border-check results and the static
+region index; it does not show a consistent timing gain. `17e5be4` instead
+shares original ownership/connectivity within one evaluation, while checking
+each proposal's final borders independently. All non-CPU results match exactly
+in 16 diagnostic episodes against `7ebb111`, including outcomes, settlements,
+spending and unavailable force. Fixed-state medians before/after are 0.720/0.618
+ms in one land case, 0.473/0.473 in another, and 0.221/0.241 plus 0.205/0.223 in
+sea cases. These short measurements do not establish a general performance win.
+The context remains local to one evaluation and cannot grow across ticks.
+
+## R2.10: compare complete national portfolios (preregistered)
+
+Current alternatives compare one opponent's benefit/cost while omitting the
+other wars. A defensive option against an unthreatening opponent can therefore
+outscore defending the endangered front simply because it ignores that front's
+risk. Preserve the defensive baseline for all other wars in every candidate;
+compare replacing one theater's effort with offense or settlement. Share the
+observed national loss/replacement estimate across opponents rather than adding
+the same national cost repeatedly; attribute current occupation to its actual
+occupier rather than charging every war for the same lost land. Rank equal national defensive plans by local
+exposure, with the existing periodic review, uncertainty and emergency override.
+Peace continuation pressure must still use the relevant opponent's incremental
+estimate, not the summed cost of unrelated wars. Test the portfolio accounting
+and priority with independent counterexamples, then the same five development
+families against R2.9, Legacy and R1. Leave actual orders, coefficients and final
+seeds unchanged. Forward territorial exposure is a separate later test: current
+risk uses only land already occupied; 623 noncritical diagnostic goal samples in
+13 episodes have an outnumbered unoccupied border and zero defensive risk,
+including 37 with zero projected available land force. Do not infer 623
+independent failures or claim that every local mismatch requires an emergency.

@@ -8,7 +8,7 @@ import { BenchmarkMetrics } from "../benchmark/metrics";
 import { getUnitCombatStrength } from "../../src/sim/unit-strength";
 import { getMoveMsPerRegion } from "../../src/sim/movement";
 import { getOwnerByMesoId } from "../../src/sim/world-cache";
-import { getOpposingFrontSide } from "../../src/sim/land-fronts";
+import { getFrontSide, getOpposingFrontSide } from "../../src/sim/land-fronts";
 import type { WorldState } from "../../src/sim/world-state";
 import type { CampaignObjective, WarCampaign } from "../../src/sim/war-campaign/state";
 import type { BenchmarkScenarioName } from "../benchmark/types";
@@ -87,12 +87,22 @@ function sampleGoal(world: WorldState, campaign: WarCampaign, goal: CampaignObje
     if (owners.get(region.id) !== campaign.nationId || !occupant || occupant === campaign.nationId) continue;
     hostileOccupation[occupant] = (hostileOccupation[occupant] ?? 0) + 1;
   }
+  const exposed = new Set(world.landFronts.operationalSectors.flatMap((front) => {
+    const friendly = getFrontSide(front, campaign.nationId);
+    const enemy = getOpposingFrontSide(front, campaign.nationId);
+    return friendly && enemy?.nationId === goal.opponentId && enemy.strength > friendly.strength
+      ? friendly.borderRegionIds.filter((id) => owners.get(id) === campaign.nationId &&
+        (world.occupation.mesoById.get(id) ?? campaign.nationId) === campaign.nationId) : [];
+  }));
   return { tick: world.time.fastTick, nation: campaign.nationId, opponent: goal.opponentId,
     primary: campaign.primaryOpponentId, mode: campaign.mode,
     militaryMode: campaign.militaryMode, capitalCritical: campaign.constraints.capitalCritical,
     concentrationOpponents: world.stalematePressure.assessments.filter((a) =>
       a.nationId === campaign.nationId && a.schwerpunktSectorId).map((a) => a.enemyNationId),
     opponents: campaign.objectives.length, hostileOccupation,
+    unoccupiedExposedBorderRegions: exposed.size,
+    forecastDefensiveRisk: campaign.alternatives?.find((a) =>
+      a.opponentId === goal.opponentId && a.mode === "defend")?.failureRisk,
     projectedStrength: projected.reduce((sum, u) => sum + getUnitCombatStrength(u), 0), unavailable,
     reservationAdjustedStrength: projected.reduce((sum, u) => sum + getUnitCombatStrength(u) * (shares.get(u.id) ?? 0), 0),
     otherFrontFloor: world.frontlineCoverage.coverages.filter((coverage) => {
