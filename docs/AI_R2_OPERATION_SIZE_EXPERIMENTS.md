@@ -39,7 +39,7 @@ whole-episode losses/spending distinct from opening-war outcomes. Do not infer
 quality from reduced costs alongside weaker national results, nor CPU gains
 from concurrent runs. Any adoption still requires the unchanged full protocol.
 
-## Matrix result (cost replays still running)
+## Completed development result
 
 Both 60-case matrices completed with zero failures and exactly matching start
 summaries/settings against their own parents. Candidate sources remain isolated;
@@ -69,6 +69,9 @@ claim to separate every existing focus/major-offensive coupling.
 Raw matrices, paired reports and safety/start validation are archived under
 `war-ai-r2-18-*`. Both variants pass 723 full regressions plus the added
 real-planner regression, typecheck, build and quick benchmark. The planner
-regression fails under original sizing. Whole-episode cost/government replays
-are continuing and must be validated against the completed matrices before
-their costs are interpreted. No final seeds or R2.16 conditions changed.
+regression fails under original sizing. Both whole-episode cost/government
+replays also completed 60/60 cases, reproducing every common non-CPU end field
+and full war outcome. Role-separated distributions and paired intervals are
+in `war-ai-government-r2-18-{scored,selection}-v-parent.json.gz`; raw replays
+and validation are archived. Lower expenditure alone cannot override the
+retained safety deficit. No final seeds or R2.16 conditions changed.
