@@ -71,4 +71,3 @@ test("other theaters keep local defense but cannot request competing discretiona
   world.settings!.warCampaignEnabled = false;
   assert.equal(campaignConcentrationDirective(world, nation, opponent), "legacy");
 });
-
