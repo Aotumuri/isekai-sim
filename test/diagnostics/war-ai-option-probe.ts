@@ -34,6 +34,7 @@ for (let i = 0; i < count; i++) {
 }
 await writeFile(option("--output", "diagnostics/war-ai-r2-2-option-probe.json.gz"), gzipSync(JSON.stringify({
   revision: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+  schemaVersion: 2, intervention: "Mode plus its military effort for offense/defense; negotiation preserves the military fallback.",
   horizonTicks: 300, seeds: count, results,
 })));
 
@@ -61,8 +62,10 @@ function probe(seed: number, scenario: BenchmarkScenarioName, mode: CampaignMode
       const plan = world.warCampaigns?.byNationId.get(nation.id);
       if (!plan) return;
       if (plan.constraints.capitalCritical || campaignCostLimitReached(plan.constraints)) { emergencies++; return; }
-      if (plan.mode !== mode || plan.primaryOpponentId !== war.defenderId) {
+      const militaryMode = mode === "limited-offensive" ? "limited-offensive" : mode === "defend" ? "defend" : plan.militaryMode;
+      if (plan.mode !== mode || plan.primaryOpponentId !== war.defenderId || plan.militaryMode !== militaryMode) {
         plan.mode = mode; plan.primaryOpponentId = war.defenderId;
+        plan.militaryMode = militaryMode;
         plan.revision++; world.warCampaigns!.version++; overrides++;
       }
     }

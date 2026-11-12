@@ -1,4 +1,5 @@
 import { WORLD_BALANCE } from "../data/balance";
+import { campaignPreservesFrontDemand } from "./war-campaign/concentration-guidance";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { getFrontDistanceField } from "./ai-geography";
@@ -655,7 +656,7 @@ function createAllocationContexts(
     const isFocus = focus?.schwerpunktSectorId === front.id;
     const isSameEnemy = !!focus;
     const defensiveFloor = getFrontlineCoverage(world, front.id, nationId)?.minimumRequiredStrength ?? 0;
-    const effectivePlan = !focus ? plan : {
+    const effectivePlan = !focus || campaignPreservesFrontDemand(world, plan) ? plan : {
       ...plan,
       desiredStrength: isFocus
         ? plan.desiredStrength
