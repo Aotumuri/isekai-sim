@@ -14,7 +14,11 @@ merge main or force-push. Adoption gates and untouched final seeds remain in
   immutable engine/source/harness provenance. Production source is the same.
 - The last completed strategic matrix is R2.13 (`cb71f68`), 100 episodes;
   results and regressions are in [AI_R2_PEACE_EXPERIMENTS.md](AI_R2_PEACE_EXPERIMENTS.md).
-- No later prototype has passed adoption. R2.14 remains under evaluation.
+- R2.14's matrix and four travel audits are complete: travel improves, but
+  stalemate defender survival falls 20 points against R1 (95% interval −40 to
+  −5). It is not adopted. The completed R2.15 scope audit matches all 16
+  non-CPU results, with one actually exposed government-purpose correction.
+- Next: the source controls in [AI_R2_POLICY_EXPERIMENTS.md](AI_R2_POLICY_EXPERIMENTS.md).
 
 ## Frozen ongoing comparisons
 
