@@ -1,3 +1,14 @@
+diff --git a/src/sim/instrumentation.ts b/src/sim/instrumentation.ts
+index 3daf219..316418f 100644
+--- a/src/sim/instrumentation.ts
++++ b/src/sim/instrumentation.ts
+@@ -1,4 +1,6 @@
+ export type SimulationMetricName =
++  | `diagnostic.peaceOffer.${string}.${string}`
++  | `diagnostic.peaceOfferPublished.${string}.${string}`
+   | "warCampaign.evaluation"
+   | "production.evaluation"
+   | "production.capacityCounting"
 diff --git a/src/sim/war-negotiations.ts b/src/sim/war-negotiations.ts
 index 72b893f..0f4ff26 100644
 --- a/src/sim/war-negotiations.ts

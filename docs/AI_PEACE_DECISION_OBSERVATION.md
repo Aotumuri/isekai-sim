@@ -58,22 +58,38 @@ Preserve the existing binding-offer and truce rules. Evaluate future changes
 to the AI's choice of published terms separately; do not make the AI always
 choose puppetization when it is legally available.
 
-## Prepared publication extension (not yet parity-validated)
+## Publication extension
 
 The observer now distinguishes `publication` from `acceptance`, and an isolated
 hook also signals after both opening offers are constructed and immediately
 after an automatic revised offer is installed. The root harness typechecks.
-The full five-line hook patch applies to both original frozen parents and is
+The hook patch, including type-only metric-name declarations, applies to both original frozen parents and is
 archived as `war-ai-peace-publication-hook.patch`. Frozen observation sources:
 
-- `/private/tmp/isekai-peace-decision-29fa088`, HEAD `94c0d6f`.
-- `/private/tmp/isekai-peace-decision-selection`, HEAD `873088f`.
+- `/private/tmp/isekai-peace-decision-29fa088`, HEAD `fa2da33`.
+- `/private/tmp/isekai-peace-decision-selection`, HEAD `4846dd9`.
 
-Engine typecheck and full parity of this extension are still pending. To keep
-R2.18's four active comparisons prioritized, defer additional simulations until
-those runs free capacity. Start with selection matched seed 822748319793,
-`--campaign --ticks 10000`, writing a **new** output
-`war-ai-peace-publication-selection-793.json.gz`; preserve the earlier
-acceptance-only trace. Compare the offer revision at 2110 with acceptance at
-2210 before inferring that changing the battlefield made an originally sound
-offer stale. Then perform the canonical selected cases and Legacy/R1 scope.
+Both observed engines now typecheck. The first check exposed the restricted
+metric-name type; diagnostic names were declared only in these isolated
+checkouts. The selection 793 replay records 30 publications and three
+acceptances, preserving full reference war outcomes and non-CPU end summaries.
+Every acceptance matches an actual settlement. It is saved separately as
+`war-ai-peace-publication-selection-793.json.gz`.
+
+At publication (2110), the proposer's reciprocal assessment was already
+negative, -40.630, while the recipient would accept at +14.775. Thus this case
+is **not explained solely by an originally satisfactory offer becoming stale**.
+Puppetization was then illegal (occupation/city requirement), becoming legal
+by acceptance at 2210. The existing offer is binding; do not add a unilateral
+last-minute veto. Inspect how the AI chooses/revises its standing terms and
+how political upgrade opportunities and maintenance constraints enter its
+forecast. The internal campaign and diplomatic acceptance models also disagree
+about continuation, which needs separate calibration.
+
+The three canonical selected replays completed. At their opening-war peace,
+proposer reciprocal scores are -27.604 (stalemate 782), -15.185 (stalemate 784),
+and -43.826 (reorganization 780), while recipients accept. In all three the
+puppet occupation/city requirement is **not met**, despite military advantage
+reaching +1.0 in reorganization 780. These are selected contrasts, not a rate
+of premature peace or proof of feasible puppet superiority. Parity validation
+is recorded separately; Legacy/R1 scope remains pending.
