@@ -39,3 +39,7 @@ defender interests separate and use the existing paired intervals. This is
 causal diagnosis; no final seeds or adoption thresholds change. If the older
 rule works better, investigate model coverage/uncertainty rather than treating
 an unmodeled benefit as a known zero or deploying a diagnostic switch blindly.
+
+The user's 2026-11-13 observations are recorded separately in
+[AI_NATIONAL_STRATEGY_OBSERVATIONS.md](AI_NATIONAL_STRATEGY_OBSERVATIONS.md).
+They do not alter this three-arm experiment, conditions or reserved seeds.
