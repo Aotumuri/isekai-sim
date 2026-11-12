@@ -12,13 +12,23 @@ merge main or force-push. Adoption gates and untouched final seeds remain in
   are in `diagnostics/war-ai-r2-15-validation.json.gz`.
 - `29fa088`: cost audit records first observed dependent defensive goals and
   immutable engine/source/harness provenance. Production source is the same.
-- The last completed strategic matrix is R2.13 (`cb71f68`), 100 episodes;
-  results and regressions are in [AI_R2_PEACE_EXPERIMENTS.md](AI_R2_PEACE_EXPERIMENTS.md).
+- R2.16's original three-arm matrix is complete (180 cases, zero failures).
+  [AI_R2_POLICY_EXPERIMENTS.md](AI_R2_POLICY_EXPERIMENTS.md) records results.
+  No arm is adopted; do not alter this experiment or use final seeds.
 - R2.14's matrix and four travel audits are complete: travel improves, but
   stalemate defender survival falls 20 points against R1 (95% interval −40 to
   −5). It is not adopted. The completed R2.15 scope audit matches all 16
   non-CPU results, with one actually exposed government-purpose correction.
-- Next: the source controls in [AI_R2_POLICY_EXPERIMENTS.md](AI_R2_POLICY_EXPERIMENTS.md).
+- Five government/cost audits completed (300 cases), all with exact non-CPU
+  end summaries and full war outcomes against observer-free references.
+  Canonical full regression count is 723. Government metrics supplement the
+  original gates; no gate is replaced.
+- Two lifecycle traces distinguish peaceful subject integration from a real
+  subject defeat during a parent/enemy truce. See
+  [AI_R2_POLITICAL_OBSERVATION.md](AI_R2_POLITICAL_OBSERVATION.md).
+- Next: causal traces of selection's stalemate defender rescues (783, 792,
+  793) and new defeat (794), alongside actual settlement/maintenance valuation
+  gaps. Do not deploy the unscored control blindly.
 
 ## Frozen ongoing comparisons
 

@@ -43,3 +43,44 @@ an unmodeled benefit as a known zero or deploying a diagnostic switch blindly.
 The user's 2026-11-13 observations are recorded separately in
 [AI_NATIONAL_STRATEGY_OBSERVATIONS.md](AI_NATIONAL_STRATEGY_OBSERVATIONS.md).
 They do not alter this three-arm experiment, conditions or reserved seeds.
+
+## Development result (2026-11-13)
+
+All original 180 cases completed, zero matrix failures. Start summaries and
+settings match for all three arms. `war-ai-r2-16-validation.json.gz` records
+source trees, patch hashes and application checks against public `29fa088`.
+Diagnostic variants remain isolated; neither patch is enabled in production.
+
+| Arm | Family | Attacker opening goal | Defender homeland | Defender survives |
+| --- | --- | ---: | ---: | ---: |
+| Control | Matched | 35% | 65% | 80% |
+| Selection | Matched | 35% | 60% | 70% |
+| Natural | Matched | 40% | 55% | 70% |
+| Control | Stalemate | 50% | 35% | 55% |
+| Selection | Stalemate | 35% | 60% | 65% |
+| Natural | Stalemate | 50% | 35% | 55% |
+| Control | Reorganization | 45% | 45% | 60% |
+| Selection | Reorganization | 60% | 30% | 65% |
+| Natural | Reorganization | 45% | 45% | 65% |
+
+Paired 95% seed-bootstrap intervals (20 seeds, 10,000 resamples): selection
+versus control changes stalemate attacker goal by -15 pp [-30, 0], attacker
+survival by -15 pp [-30, 0], and defender survival by +10 pp [-10, +30].
+Reorganization attacker goal changes +15 pp [-5, +35]. Matched defender
+survival changes -10 pp [-25, 0]. Natural concentration reverses much of the
+stalemate/reorganization selection effect, without consistent overall gains.
+These controls do not justify a blanket rollback or universal offensive effort.
+
+Six additional paired reports compare each arm with Legacy and R1 on the same
+60 cases. Control and natural still have a stalemate defender survival deficit
+against R1: -20 pp [-40, -5]. Selection's corresponding difference is -10 pp
+[-35, +15], while its stalemate attacker goal difference is -25 pp [-50, 0].
+No arm is adopted. All raw matrices and nine paired reports are archived under
+`diagnostics/war-ai-r2-16-*`. Concurrent/historical CPU timings in those reports
+are not controlled speed evidence.
+
+Government observation is a separate supplement: 300 replays across Legacy,
+R1 and the original three arms have exact non-CPU end summaries and full war
+outcomes against their observer-free references. See
+[AI_R2_POLITICAL_OBSERVATION.md](AI_R2_POLITICAL_OBSERVATION.md). No evaluation
+gate, experiment condition or unused seed was changed.
