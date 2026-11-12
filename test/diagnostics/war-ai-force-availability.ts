@@ -12,7 +12,7 @@ import { getFrontSide, getOpposingFrontSide } from "../../src/sim/land-fronts";
 import type { WorldState } from "../../src/sim/world-state";
 import type { CampaignObjective, WarCampaign } from "../../src/sim/war-campaign/state";
 import type { BenchmarkScenarioName } from "../benchmark/types";
-import { forecastCampaignForceShares } from "../../src/sim/war-campaign/forecast-force";
+import { forecastCampaignForceShares, projectedSurplusFraction } from "../../src/sim/war-campaign/forecast-force";
 
 // Read-only audit at the exact forecasting stage. Reconstruct the current
 // 30-second land projection independently; do not issue or override orders.
@@ -63,6 +63,29 @@ function sampleGoal(world: WorldState, campaign: WarCampaign, goal: CampaignObje
     (distances.get(u.regionId) ?? Infinity) * getMoveMsPerRegion(u) / 1000 < 30 &&
     !world.retreatPlans.retreatIdByUnitId.has(u.id) && !world.reorganization.planIdByUnitId.has(u.id));
   const shares = forecastCampaignForceShares(world, campaign.nationId, goal.opponentId, ownUnits);
+  const approaches = world.landFronts.operationalSectors.flatMap((front) => {
+    const friendly = getFrontSide(front, campaign.nationId);
+    const enemy = getOpposingFrontSide(front, campaign.nationId);
+    return friendly && enemy?.nationId === goal.opponentId ? [{ frontId: front.id,
+      distance: Math.min(Infinity, ...friendly.borderRegionIds.map((id) => distances.get(id) ?? Infinity)) }] : [];
+  });
+  const nearest = Math.min(Infinity, ...approaches.map((front) => front.distance));
+  const approachIds = new Set(approaches.filter((front) => Number.isFinite(nearest) && front.distance === nearest).map((front) => front.frontId));
+  const frontStrength = new Map<string, number>();
+  for (const unit of ownUnits) {
+    const frontId = world.frontAllocations.frontIdByUnitId.get(unit.id);
+    if (frontId && (shares.get(unit.id) ?? 0) > 0) frontStrength.set(frontId,
+      (frontStrength.get(frontId) ?? 0) + getUnitCombatStrength(unit));
+  }
+  let sameOpponentOtherFrontProtectedStrength = 0;
+  for (const unit of projected) {
+    const frontId = world.frontAllocations.frontIdByUnitId.get(unit.id);
+    const front = frontId && world.landFronts.operationalSectorsById.get(frontId);
+    if (!front || getOpposingFrontSide(front, campaign.nationId)?.nationId !== goal.opponentId || approachIds.has(front.id)) continue;
+    const floor = world.frontlineCoverage.coverageBySectorNation.get(`${front.id}::${campaign.nationId}`)?.minimumRequiredStrength ?? 0;
+    sameOpponentOtherFrontProtectedStrength += getUnitCombatStrength(unit) * (shares.get(unit.id) ?? 0) *
+      (1 - projectedSurplusFraction(frontStrength.get(front.id) ?? 0, floor));
+  }
   const unavailable: Record<string, number> = {};
   for (const unit of projected) {
     const operationId = world.offensiveOperations.operationIdByUnitId.get(unit.id);
@@ -104,6 +127,7 @@ function sampleGoal(world: WorldState, campaign: WarCampaign, goal: CampaignObje
     forecastDefensiveRisk: campaign.alternatives?.find((a) =>
       a.opponentId === goal.opponentId && a.mode === "defend")?.failureRisk,
     projectedStrength: projected.reduce((sum, u) => sum + getUnitCombatStrength(u), 0), unavailable,
+    approaches, sameOpponentOtherFrontProtectedStrength,
     reservationAdjustedStrength: projected.reduce((sum, u) => sum + getUnitCombatStrength(u) * (shares.get(u.id) ?? 0), 0),
     otherFrontFloor: world.frontlineCoverage.coverages.filter((coverage) => {
       const front = world.landFronts.operationalSectorsById.get(coverage.sectorId);

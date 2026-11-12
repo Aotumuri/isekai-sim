@@ -109,3 +109,16 @@ Do not optimize the planner toward an arbitrary identifier to improve the
 proxy, and do not silently replace the prespecified adoption gate. Continue to
 report that proxy alongside legal territorial value, survival and costs.
 
+## Goal-specific force feasibility audit (preregistered)
+
+The reservation forecast retains another opponent's front floor, but counts
+every formation on other fronts against the same opponent as available to one
+specific target. Audit whether this matters before changing the forecast.
+Extend the existing four diagnostic seeds × four land families × 1,000 ticks
+observer: find the nearest front approaches to each adopted target using the
+same legal route distances, then report projected force reserved by coverage
+floors on other fronts of that same war. Defensive homeland goals can include
+all home approaches; do not arbitrarily choose one of tied approaches. Keep
+this an exposure measurement, not evidence that all cross-front transfers are
+wasteful or that remote operations cannot help apply political pressure.
+
