@@ -8,6 +8,7 @@ import { findWar } from "../war-state";
 import { campaignCostLimitReached } from "./policy";
 import { getWarCampaign } from "./state";
 import { boundedContinuationPressure } from "../peace-outlook";
+import { preservesCampaignSovereignty } from "./political-objectives";
 
 /** Compare peace with the best continuing military option against this opponent.
  * Previously retained legal gains are a baseline, not new gains from fighting. */
@@ -29,7 +30,9 @@ export function campaignPeaceValue(
   const territorial = goal.regionIds.length > 0 && goal.regionIds.every((id) =>
     !terms.demandedRegionIds.includes(id) &&
     (owners.get(id) === recipient || terms.offeredRegionIds.includes(id)));
-  const secured = territorial || goal.political?.purpose === "coercive-settlement" &&
+  const secured = goal.political?.purpose === "preserve-sovereignty"
+    ? preservesCampaignSovereignty(world, recipient, terms)
+    : territorial || goal.political?.purpose === "coercive-settlement" &&
     terms.offeredWeapons - terms.demandedWeapons >= goal.political.weaponTarget &&
     terms.demandedRegionIds.length === 0;
   const exitPressure = campaign.alternatives?.length ? 0 : campaign.mode === "seek-peace" ? 12 : 0;

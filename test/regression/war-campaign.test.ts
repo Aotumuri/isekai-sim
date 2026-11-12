@@ -176,14 +176,18 @@ test("peace guidance values recognition after settlement rather than temporary o
   assert.equal(campaignPeaceValue(world, war.aggressorId, war.defenderId, recognition), 0);
 });
 
-test("a defender values peace that preserves its homeland without demanding conquests", () => {
+test("a defender distinguishes sovereignty from territorial integrity", () => {
   const world = campaignWorld();
   updateWarCampaigns(world);
   const war = world.wars[0];
   const defender = getWarCampaign(world, war.defenderId)!;
   defender.mode = "defend";
   assert.equal(campaignPeaceValue(world, war.defenderId, war.aggressorId, whitePeaceTerms()), 12);
-  const home = defender.objectives.find((goal) => goal.opponentId === war.aggressorId)!.regionIds[0];
+  const capital = world.nations.find((nation) => nation.id === war.defenderId)!.capitalMesoId;
+  const home = defender.objectives.find((goal) => goal.opponentId === war.aggressorId)!.regionIds.find((id) => id !== capital)!;
+  assert.ok(home);
   assert.equal(campaignPeaceValue(world, war.defenderId, war.aggressorId,
-    { ...whitePeaceTerms(), demandedRegionIds: [home] }), 0);
+    { ...whitePeaceTerms(), demandedRegionIds: [home] }), 12);
+  assert.equal(campaignPeaceValue(world, war.defenderId, war.aggressorId,
+    { ...whitePeaceTerms(), demandedRegionIds: [capital] }), 0);
 });

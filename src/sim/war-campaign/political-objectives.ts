@@ -4,6 +4,9 @@ import type { WorldState } from "../world-state";
 import type { CampaignObjective } from "./state";
 import { getPeaceBorderIssue } from "../peace-borders";
 import { getOwnerByMesoId } from "../world-cache";
+import { isNationActive } from "../nation-active";
+import { getSubjectOverlord } from "../subject-governments";
+import type { PeaceTerms } from "../war-negotiations";
 
 export interface PoliticalObjective {
   purpose: "territorial-concession" | "decisive-victory" | "coercive-settlement" | "preserve-sovereignty";
@@ -29,6 +32,7 @@ export function buildPoliticalObjective(
 }
 
 export function isPoliticalGoalSecured(world: WorldState, nation: NationId, goal: CampaignObjective): boolean {
+  if (goal.political?.purpose === "preserve-sovereignty") return preservesCampaignSovereignty(world, nation);
   const owners = getOwnerByMesoId(world);
   if (goal.regionIds.length > 0 && goal.regionIds.every((id) => owners.get(id) === nation)) return true;
   if (goal.political?.purpose !== "coercive-settlement" && goal.political?.purpose !== "decisive-victory") return false;
@@ -43,4 +47,14 @@ export function isPoliticalGoalSecured(world: WorldState, nation: NationId, goal
     return goal.political!.purpose === "coercive-settlement" &&
       (payment >= goal.political!.weaponTarget || proposer && !!terms.localSubject);
   });
+}
+
+/** Independence and the government's seat are distinct from intact borders.
+ * Territory and local-subject losses retain their own costs in peace scoring. */
+export function preservesCampaignSovereignty(world: WorldState, nation: NationId, terms?: PeaceTerms): boolean {
+  const government = world.nations.find((item) => item.id === nation);
+  if (!government || !isNationActive(government) || getSubjectOverlord(world, nation) ||
+    terms?.puppetTarget || terms?.partition || terms?.demandedRegionIds.includes(government.capitalMesoId)) return false;
+  return getOwnerByMesoId(world).get(government.capitalMesoId) === nation ||
+    !!terms?.offeredRegionIds.includes(government.capitalMesoId);
 }
