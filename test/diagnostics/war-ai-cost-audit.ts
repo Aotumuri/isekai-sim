@@ -1,10 +1,11 @@
-import { readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { gzipSync } from "node:zlib";
+import { gzipSync, gunzipSync } from "node:zlib";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createFieldLossObserver } from "../helpers/field-loss-observer";
+import { createOpeningGovernmentObserver } from "../helpers/war-government-outcome-observer";
 import type { WorldState } from "../../src/sim/world-state";
 
 const args = process.argv.slice(2);
@@ -12,10 +13,13 @@ const option = (name: string, fallback: string) => {
   const i = args.indexOf(name); return i < 0 ? fallback : args[i + 1];
 };
 const root = resolve(option("--engine-root", "."));
-if (execFileSync("git", ["-C", root, "diff", "--", "src"], { encoding: "utf8" })) throw new Error("Commit engine source first");
+if (execFileSync("git", ["-C", root, "diff", "--", "src", "test"], { encoding: "utf8" })) throw new Error("Commit engine and test source first");
 const revision = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const sourceTree = execFileSync("git", ["-C", root, "rev-parse", "HEAD:src"], { encoding: "utf8" }).trim();
 const harnessHash = createHash("sha256").update(await readFile(new URL(import.meta.url))).digest("hex");
+const observerHash = createHash("sha256")
+  .update(await readFile(new URL("../helpers/field-loss-observer.ts", import.meta.url)))
+  .update(await readFile(new URL("../helpers/war-government-outcome-observer.ts", import.meta.url))).digest("hex");
 const load = (path: string) => import(pathToFileURL(resolve(root, path)).href);
 const { createScenarioWorld } = await load("test/scenarios/index.ts");
 const { runSimulation } = await load("test/helpers/simulation-driver.ts");
@@ -30,19 +34,40 @@ const count = Number(option("--seeds", "4"));
 const seedStart = Number(option("--seed-start", "1022748319780"));
 const scenarios = option("--scenarios", "matched-war,stalemate-breaker,reorganization-heavy,two-island-amphibious").split(",");
 if (![ticks, count, seedStart].every((n) => Number.isSafeInteger(n) && n > 0)) throw new Error("Invalid integers");
-const results: object[] = [];
+interface AuditCase { seed: number; scenario: string; [key: string]: unknown }
+const results: AuditCase[] = [];
+const output = resolve(option("--output", "diagnostics/war-ai-r2-cost-audit.json.gz"));
+const report = { revision, sourceTree, harnessHash, observerHash,
+  runtime: { node: process.version, v8: process.versions.v8, platform: process.platform, arch: process.arch },
+  engineRoot: root, campaign, ticks, seeds: count, seedStart, scenarios,
+  note: "Field losses and totalDirectWarCasualties cover the whole episode; production flow excludes recovery, trade and aid. openingWarSides direct casualties cover opening wars only; alive is episode-end territory survival. openingGovernmentOutcomes freeze at opening-war end, or are censored. Compare scopes explicitly.", results };
+try {
+  const saved = JSON.parse(gunzipSync(await readFile(output)).toString());
+  for (const key of ["revision", "sourceTree", "harnessHash", "observerHash", "runtime", "campaign", "ticks", "seeds", "seedStart", "scenarios"] as const) {
+    if (JSON.stringify(saved[key]) !== JSON.stringify(report[key])) throw new Error(`Incompatible ${key}`);
+  }
+  if (!Array.isArray(saved.results)) throw new Error("Invalid saved results");
+  results.push(...saved.results);
+} catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+await mkdir(dirname(output), { recursive: true });
+async function saveAuditProgress(): Promise<void> {
+  await writeFile(`${output}.tmp`, gzipSync(JSON.stringify(report)));
+  await rename(`${output}.tmp`, output);
+}
 const original = console.info;
 console.info = () => undefined;
 try {
   for (let i = 0; i < count; i++) {
     for (const scenario of scenarios) {
       const seed = seedStart + i;
+      if (results.some((row) => row.seed === seed && row.scenario === scenario)) continue;
       const world: WorldState = createScenarioWorld(scenario, { seed, quick: true, width: 640, height: 360,
         reserveEnabled: true, reorganizationEnabled: true, exploitationEnabled: true, pocketReductionEnabled: true,
         config: { systems: { warCampaignEnabled: campaign, diplomacyEnabled: true, mobilizationEnabled: true,
           researchEnabled: true, armsAidEnabled: true, tradeEnabled: true, politicalTurbulenceEnabled: true } } });
       world.wars.forEach((war) => { war.isTest = false; });
       const openingWars = [...world.wars];
+      const governments = createOpeningGovernmentObserver(world, openingWars);
       const seenWars = new Set(world.wars);
       const outcomes = createWarOutcomeObserver();
       const settlements = new Map<string, NonNullable<WorldState["warNegotiations"]>["settlements"][number]>();
@@ -92,6 +117,7 @@ try {
       }
       runSimulation(world, { ticks, metrics: new AuditMetrics(), observe(current: WorldState) {
         outcomes.observe(current);
+        governments.observe(current);
         current.wars.forEach((war) => seenWars.add(war));
         for (const settlement of current.warNegotiations?.settlements ?? []) {
           settlements.set(`${settlement.a}:${settlement.b}:${settlement.atSlowTick}:${settlement.proposerId}`, settlement);
@@ -114,21 +140,22 @@ try {
       const totalDirectWarCasualties = Object.fromEntries(world.nations.map((nation) => [nation.id,
         [...seenWars].reduce((sum, war) => sum + getWarCasualties(war, nation.id), 0)]));
       results.push({ seed, scenario, startFingerprint, costs: loss.result(), totalDirectWarCasualties,
+        openingGovernmentOutcomes: governments.result(),
+        episodeGovernmentStates: governments.currentStates(world),
         dependentDefenderGoalCount, firstDependentDefenderGoals,
         warOutcomes: outcomes.result(), settlements: [...settlements.values()], endWorld: summarizeWorld(world),
         campaignLedger: Object.fromEntries(ledgerTotals),
         spending: Object.fromEntries(spending),
         openingWarSides: openingWars.flatMap((war) => [war.nationAId, war.nationBId].map((nationId) => ({
-          nationId, aggressor: nationId === war.aggressorId,
+          nationId, opponentId: nationId === war.nationAId ? war.nationBId : war.nationAId,
+          startedAtTick: war.startedAtFastTick, aggressor: nationId === war.aggressorId,
           directWarCasualties: getWarCasualties(war, nationId),
           alive: world.nations.find((nation) => nation.id === nationId)!.macroRegionIds.length > 0,
         }))) });
+      await saveAuditProgress();
+      console.log(`cost audit ${scenario} ${seed}: ${results.length}/${count * scenarios.length}`);
     }
   }
 } finally { console.info = original; }
-const report = { revision, sourceTree, harnessHash,
-  runtime: { node: process.version, v8: process.versions.v8, platform: process.platform, arch: process.arch },
-  engineRoot: root, campaign, ticks, seeds: count, seedStart, scenarios,
-  note: "Field losses and totalDirectWarCasualties cover the whole episode; production flow excludes recovery, trade and aid. openingWarSides direct casualties cover opening wars only. Compare scopes explicitly.", results };
-await writeFile(option("--output", "diagnostics/war-ai-r2-cost-audit.json.gz"), gzipSync(JSON.stringify(report)));
+await saveAuditProgress();
 console.log(JSON.stringify({ rows: results.length, revision: report.revision, campaign }));
