@@ -31,3 +31,15 @@ prototype, alongside the unchanged five-family development outcomes and costs.
 Do not call all target changes or allocation changes waste. Keep the original
 adoption gates and final seeds untouched; fewer discarded seconds alone does
 not establish national quality.
+
+Travel measurement uses a read-only endpoint observer for all four arms, first
+on the same 20 development seeds in stalemate/reorganization. Exclude an edge
+blocked by an enemy at either endpoint, and measure lost elapsed time rather
+than counting blocked entry as wasted movement. Report unchanged ordinary
+mission retargets and losses, total ordinary travel exposure, and all unblocked
+same-edge retargets/losses regardless of mission. The latter prevents a change
+in mission classification from silently hiding resets. Show both absolute
+seed distributions and exposure denominators/rates; fewer events due solely to
+shorter wars or less movement are not sufficient. Check non-CPU outcomes and
+end summaries against observer-free matrices. Preserve engine source tree,
+harness/observer hashes and runtime; incremental output must reject mismatches.
