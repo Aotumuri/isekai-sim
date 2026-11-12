@@ -7,6 +7,7 @@ import { updateNationFrontPlans, type NationFrontPlan } from "../../src/sim/nati
 import { campaignConcentrationDirective, campaignPreservesFrontDemand } from "../../src/sim/war-campaign/concentration-guidance";
 import { getStalemateAssessment, recordMajorOffensiveOutcome, updateStalematePressure } from "../../src/sim/stalemate-pressure";
 import type { CapitalDefenseAssessment } from "../../src/sim/capital-defense";
+import { WORLD_BALANCE } from "../../src/data/balance";
 
 function fixture() {
   const world = createScenarioWorld("matched-war", { seed: 1022748319780, quick: true, width: 640, height: 360 });
@@ -45,6 +46,19 @@ test("campaign concentration respects operation cooldowns and capital emergencie
   world.capitalDefense.assessmentsByNationId.set(nation, { threatLevel: "critical" } as CapitalDefenseAssessment);
   updateStalematePressure(world);
   assert.equal(getStalemateAssessment(world, nation, opponent)!.schwerpunktSectorId, null);
+});
+
+test("natural stalemate can sustain a focus after national discretionary investment ends", () => {
+  const { world, nation, opponent, campaign } = fixture();
+  updateStalematePressure(world);
+  const focus = getStalemateAssessment(world, nation, opponent)!;
+  const selected = focus.schwerpunktSectorId;
+  focus.pressure = WORLD_BALANCE.war.landFront.stalemate.maximumPressure;
+  campaign.mode = "defend"; campaign.militaryMode = "defend";
+  updateStalematePressure(world);
+  const next = getStalemateAssessment(world, nation, opponent)!;
+  assert.equal(next.schwerpunktSectorId, selected);
+  assert.equal(next.campaignRequested, false);
 });
 
 test("other theaters keep local defense but cannot request competing discretionary concentration", () => {
