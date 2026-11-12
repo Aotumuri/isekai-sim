@@ -20,11 +20,14 @@ function fixture() {
     posture: "attack", priority: 80, desiredStrength: 1000, reasonFlags: [], evaluatedAtTick: 0 };
   return { world, nationId, front, campaign, plan };
 }
-test("defense and limited offense produce different permissions for foreign expansion", () => {
+test("defense permits eligible local counterpressure but requires a favorable ratio", () => {
   const { world, front, campaign, plan } = fixture();
   getFrontSide(front, plan.nationId)!.strength = 100000;
   getOpposingFrontSide(front, plan.nationId)!.strength = 1;
   campaign.mode = "defend";
+  assert.equal(applyCampaignFrontGuidance(world, plan).posture, "attack");
+  getFrontSide(front, plan.nationId)!.strength = 1;
+  getOpposingFrontSide(front, plan.nationId)!.strength = 100000;
   assert.equal(applyCampaignFrontGuidance(world, plan).posture, "hold");
   campaign.mode = "limited-offensive";
   assert.equal(applyCampaignFrontGuidance(world, plan).posture, "attack");
