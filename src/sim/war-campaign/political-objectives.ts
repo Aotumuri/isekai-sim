@@ -9,8 +9,9 @@ import { getSubjectOverlord } from "../subject-governments";
 import type { PeaceTerms } from "../war-negotiations";
 
 export interface PoliticalObjective {
-  purpose: "territorial-concession" | "decisive-victory" | "coercive-settlement" | "preserve-sovereignty";
+  purpose: "territorial-concession" | "decisive-victory" | "coercive-settlement" | "preserve-sovereignty" | "preserve-government";
   weaponTarget: number;
+  openingOverlordId?: NationId;
 }
 
 /** A military foothold is a means of applying pressure, not a legal enclave.
@@ -19,7 +20,11 @@ export function buildPoliticalObjective(
   world: WorldState, nation: NationId, opponent: NationId,
   regionIds: MesoRegionId[], offensive: boolean, rationale?: string,
 ): PoliticalObjective {
-  if (!offensive) return { purpose: "preserve-sovereignty", weaponTarget: 0 };
+  if (!offensive) {
+    const openingOverlordId = getSubjectOverlord(world, nation);
+    return openingOverlordId ? { purpose: "preserve-government", weaponTarget: 0, openingOverlordId }
+      : { purpose: "preserve-sovereignty", weaponTarget: 0 };
+  }
   const enemy = world.nations.find((item) => item.id === opponent)!;
   const legal = regionIds.length > 0 && !regionIds.includes(enemy.capitalMesoId) &&
     !getPeaceBorderIssue(world, [{ from: opponent, to: nation, regionIds }]);
@@ -32,7 +37,10 @@ export function buildPoliticalObjective(
 }
 
 export function isPoliticalGoalSecured(world: WorldState, nation: NationId, goal: CampaignObjective): boolean {
-  if (goal.political?.purpose === "preserve-sovereignty") return preservesCampaignSovereignty(world, nation);
+  if (goal.political?.purpose === "preserve-sovereignty" || goal.political?.purpose === "preserve-government") {
+    return preservesCampaignGovernment(world, nation, undefined,
+      goal.political.purpose === "preserve-government" ? goal.political.openingOverlordId : undefined);
+  }
   const owners = getOwnerByMesoId(world);
   if (goal.regionIds.length > 0 && goal.regionIds.every((id) => owners.get(id) === nation)) return true;
   if (goal.political?.purpose !== "coercive-settlement" && goal.political?.purpose !== "decisive-victory") return false;
@@ -49,11 +57,12 @@ export function isPoliticalGoalSecured(world: WorldState, nation: NationId, goal
   });
 }
 
-/** Independence and the government's seat are distinct from intact borders.
+/** The opening relationship and government's seat are distinct from intact borders.
  * Territory and local-subject losses retain their own costs in peace scoring. */
-export function preservesCampaignSovereignty(world: WorldState, nation: NationId, terms?: PeaceTerms): boolean {
+export function preservesCampaignGovernment(world: WorldState, nation: NationId, terms?: PeaceTerms, openingOverlordId?: NationId): boolean {
   const government = world.nations.find((item) => item.id === nation);
-  if (!government || !isNationActive(government) || getSubjectOverlord(world, nation) ||
+  const overlord = getSubjectOverlord(world, nation);
+  if (!government || !isNationActive(government) || overlord && overlord !== openingOverlordId ||
     terms?.puppetTarget || terms?.partition || terms?.demandedRegionIds.includes(government.capitalMesoId)) return false;
   return getOwnerByMesoId(world).get(government.capitalMesoId) === nation ||
     !!terms?.offeredRegionIds.includes(government.capitalMesoId);
