@@ -14,7 +14,8 @@ import { boundedContinuationPressure } from "../peace-outlook";
 export function campaignContinuationPressure(world: WorldState, nationId: NationId, opponentId: NationId): number | undefined {
   const alternative = getWarCampaign(world, nationId)?.alternatives?.find((option) =>
     option.opponentId === opponentId && (option.mode === "defend" || option.mode === "limited-offensive"));
-  return alternative ? boundedContinuationPressure(alternative.score - (alternative.securedValue ?? 0)) : undefined;
+  return alternative ? boundedContinuationPressure(alternative.opponentContinuationValue ??
+    alternative.score - (alternative.securedValue ?? 0)) : undefined;
 }
 
 /** Evaluate the post-settlement goal, not temporary occupation or demands. */

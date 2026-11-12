@@ -44,9 +44,10 @@ export function forecastCampaignOpportunities(
   const owners = getOwnerByMesoId(world);
   const homeland = world.mesoRegions.filter((r) => owners.get(r.id) === nation.id &&
     world.occupation.mesoById.has(r.id) && world.occupation.mesoById.get(r.id) !== nation.id).map((r) => r.id);
-  const atRisk = getTerritorialValue(world, nation.id, homeland) / totalValue;
   const units = world.units.filter((u) => u.domain === "land" && u.nationId === nation.id);
   return goals.map((goal) => {
+    const atRisk = getTerritorialValue(world, nation.id, homeland.filter((id) =>
+      world.occupation.mesoById.get(id) === goal.opponentId)) / totalValue;
     const war = wars.find((w) => campaignWarKey(w.nationAId, w.nationBId, w.startedAtFastTick) === goal.warKey)!;
     const enemy = world.nations.find((n) => n.id === goal.opponentId)!;
     const distances = objectiveDistances(world, nation.id, goal.opponentId, goal.regionIds);

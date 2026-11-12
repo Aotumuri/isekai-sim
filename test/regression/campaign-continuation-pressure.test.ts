@@ -22,6 +22,9 @@ test("peace uses incremental continuation value rather than a nominal mode or su
   assert.equal(campaignContinuationPressure(world, nation, opponent), -9);
   option.score = -2;
   assert.equal(campaignContinuationPressure(world, nation, opponent), 22.5);
+  option.opponentContinuationValue = -0.1;
+  assert.equal(campaignContinuationPressure(world, nation, opponent), 4.5);
+  delete option.opponentContinuationValue;
   option.score = 0.3; option.securedValue = 0.3;
   assert.equal(campaignContinuationPressure(world, nation, opponent), 0);
   campaign.alternatives = [{ ...option, mode: "seek-peace", score: 10 },
