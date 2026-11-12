@@ -177,3 +177,10 @@ diagnostic trajectories to check scope before any broader comparative run.
 This is a correction to the objective contract, not a claim of strategic
 quality improvement; the R2.14 source and ongoing comparisons remain frozen.
 
+The new scope cohort is diagnostic seeds 1022748319784–787, active/matched/
+stalemate/reorganization, 10,000 ticks, both frozen `b488da5` and the corrected
+source. Record the first adoption of a defensive goal while an active overlord
+already exists. Cases with no such adoption must retain all non-CPU outcomes,
+costs, settlements and end summaries exactly; exposed cases are inspected
+separately. Internal goal-history reclassification is not an improvement metric.
+
