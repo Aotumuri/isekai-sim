@@ -134,3 +134,29 @@ recognition occurs in two matched episodes, none in stalemate/reorganization;
 one matched case already publishes the goal with an additional weapon demand.
 The correction alone does not provide a broad set of unexploited bargains.
 
+### R2.13 development result: not adopted
+
+Source `cb71f68`, 100 episodes, no failures; 713 tests, build and quick benchmark
+pass. Attacker objective retention is 32/30/45/50/0% in
+active/matched/stalemate/reorganization/sea. Defender survival is
+72/80/65/55/100%; defender intact-home retention is 50/65/45/50/100%.
+Against R2.11 the correction saves one matched and one stalemate defender and
+raises active attacker retention by three points, but does not resolve the
+general deficits. R1 attacker retention is 36/45/60/60/0%, defender survival
+74/70/75/70/100%.
+
+Matched defender intact-home retention improves over R1 by 30 points
+(paired 95% interval +10 to +50), and over Legacy by 35 points (+15 to +55).
+Reorganization improves that objective over R1 by 25 points (+10 to +45), but
+over Legacy its +15-point estimate spans −5 to +35. Stalemate attacker retention
+remains 20 points below Legacy (−40 to −5). Reorganization defender survival
+remains 15 points below R1 (−35 to +5). Opposing interests are not summed.
+One family meets the objective interval comparison against both references;
+this is not the two-family adoption gate or a solution to the safety concerns.
+
+The matrices overlapped diagnostic or regression work. Runtime provenance is
+recorded, but mixed-runtime historical wall-clock timings and concurrent runs
+are not used to claim an end-to-end speed improvement. The final seed range
+remains untouched. The next continuity experiment is documented in
+[AI_R2_MARCH_EXPERIMENTS.md](AI_R2_MARCH_EXPERIMENTS.md).
+
