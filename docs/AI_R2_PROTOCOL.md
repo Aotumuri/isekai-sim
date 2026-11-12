@@ -57,3 +57,4 @@ previous holdouts are development evidence, never new final evaluation data.
 
 See [AI_R2_EXPERIMENT_HISTORY.md](AI_R2_EXPERIMENT_HISTORY.md) for R2.1 onward,
 including unsuccessful trials, causal findings, performance checks and the next hypothesis.
+The continuation from R2.10 is in [AI_R2_EXPERIMENT_HISTORY_2.md](AI_R2_EXPERIMENT_HISTORY_2.md).

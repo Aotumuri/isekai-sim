@@ -381,23 +381,6 @@ ms in one land case, 0.473/0.473 in another, and 0.221/0.241 plus 0.205/0.223 in
 sea cases. These short measurements do not establish a general performance win.
 The context remains local to one evaluation and cannot grow across ticks.
 
-## R2.10: compare complete national portfolios (preregistered)
+## Further experiments
 
-Current alternatives compare one opponent's benefit/cost while omitting the
-other wars. A defensive option against an unthreatening opponent can therefore
-outscore defending the endangered front simply because it ignores that front's
-risk. Preserve the defensive baseline for all other wars in every candidate;
-compare replacing one theater's effort with offense or settlement. Share the
-observed national loss/replacement estimate across opponents rather than adding
-the same national cost repeatedly; attribute current occupation to its actual
-occupier rather than charging every war for the same lost land. Rank equal national defensive plans by local
-exposure, with the existing periodic review, uncertainty and emergency override.
-Peace continuation pressure must still use the relevant opponent's incremental
-estimate, not the summed cost of unrelated wars. Test the portfolio accounting
-and priority with independent counterexamples, then the same five development
-families against R2.9, Legacy and R1. Leave actual orders, coefficients and final
-seeds unchanged. Forward territorial exposure is a separate later test: current
-risk uses only land already occupied; 623 noncritical diagnostic goal samples in
-13 episodes have an outnumbered unoccupied border and zero defensive risk,
-including 37 with zero projected available land force. Do not infer 623
-independent failures or claim that every local mismatch requires an emergency.
+Continue with [R2.10 onward](AI_R2_EXPERIMENT_HISTORY_2.md).
