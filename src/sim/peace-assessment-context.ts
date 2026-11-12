@@ -12,11 +12,13 @@ export interface PeaceAssessmentContext {
   territorialValue: Map<NationId, number>;
   occupied: Map<string, MesoRegionId[]>;
   settlementReady: Map<WarState, boolean>;
+  borderIssue: Map<string, string | null>;
 }
 
 export function createPeaceAssessmentContext(): PeaceAssessmentContext {
   return { power: new Map(), advantage: new Map(), urgency: new Map(),
-    competingPressure: new Map(), territorialValue: new Map(), occupied: new Map(), settlementReady: new Map() };
+    competingPressure: new Map(), territorialValue: new Map(), occupied: new Map(), settlementReady: new Map(),
+    borderIssue: new Map() };
 }
 
 export function readPeaceAssessmentFact<K, V>(cache: Map<K, V> | undefined, key: K, compute: () => V): V {

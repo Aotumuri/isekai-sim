@@ -5,7 +5,7 @@ import type { WarState } from "../war-state";
 import type { WorldState } from "../world-state";
 import type { CampaignObjective, WarCampaign } from "./state";
 import type { CampaignOpportunity } from "./alternatives";
-import { getOwnerByMesoId } from "../world-cache";
+import { getOwnerByMesoId, getMesoById } from "../world-cache";
 import { getUnitCombatStrength } from "../unit-strength";
 import { getMoveMsPerRegion } from "../movement";
 import { getNationalTerritorialValue, getTerritorialValue } from "../territorial-value";
@@ -96,7 +96,7 @@ export function forecastCampaignOpportunities(
 
 function objectiveDistances(world: WorldState, nation: NationId, opponent: NationId, targets: MesoRegionId[]) {
   const owners = getOwnerByMesoId(world);
-  const regions = new Map(world.mesoRegions.map((r) => [r.id, r]));
+  const regions = getMesoById(world);
   const distance = new Map(targets.map((id) => [id, 0]));
   const queue = [...targets];
   for (let i = 0; i < queue.length; i++) {

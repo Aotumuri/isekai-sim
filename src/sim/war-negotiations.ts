@@ -92,7 +92,7 @@ function legsFor(proposer: NationId, target: NationId, terms: PeaceTerms): Terri
   return [...(terms.demandedRegionIds.length ? [{ from: target, to: proposer, regionIds: terms.demandedRegionIds }] : []),
     ...(terms.offeredRegionIds.length ? [{ from: proposer, to: target, regionIds: terms.offeredRegionIds }] : [])];
 }
-export function getPeaceTermsIssue(world: WorldState, proposer: NationId, target: NationId, terms: PeaceTerms): string | null {
+export function getPeaceTermsIssue(world: WorldState, proposer: NationId, target: NationId, terms: PeaceTerms, context?: PeaceAssessmentContext): string | null {
   const war = findWar(world.wars, proposer, target);
   if (!war || (war.cause !== "player-declaration" && getWarDeclarationMode(world) !== "diplomacy")) return "These nations are not negotiating an active war.";
   if (!Array.isArray(terms.demandedRegionIds) || !Array.isArray(terms.offeredRegionIds)) return "Select valid territories.";
@@ -132,7 +132,8 @@ export function getPeaceTermsIssue(world: WorldState, proposer: NationId, target
       { nation, occupationSponsor: proposer }) ? null : "A third party controls part of the proposed subject.";
   }
   if (legs.length && !canTransferTerritories(world, legs)) return "Territory changed, a third party controls a district, or a country would lose its last territory.";
-  const borderIssue = getPeaceBorderIssue(world, legs);
+  const borderIssue = readPeaceAssessmentFact(context?.borderIssue, JSON.stringify(legs),
+    () => getPeaceBorderIssue(world, legs));
   if (borderIssue) return borderIssue;
   return null;
 }
@@ -275,7 +276,7 @@ function competingWarPressure(world: WorldState, nation: NationId, negotiatingWi
 }
 
 export function assessPeaceOffer(world: WorldState, recipient: NationId, proposer: NationId, terms: PeaceTerms, context?: PeaceAssessmentContext) {
-  const issue = getPeaceTermsIssue(world, proposer, recipient, terms);
+  const issue = getPeaceTermsIssue(world, proposer, recipient, terms, context);
   if (issue) return { accepts: false, score: -Infinity, reason: issue };
   const war = findWar(world.wars, recipient, proposer)!, negotiation = getWarNegotiation(world, war);
   const nation = world.nations.find((item) => item.id === recipient)!, character = getNationCharacter(world, recipient);

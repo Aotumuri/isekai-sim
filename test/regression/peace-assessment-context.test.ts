@@ -24,6 +24,9 @@ test("sharing immutable peace facts preserves every legal and illegal offer asse
   }
   assert.ok(context.power.size > 0);
   assert.ok(context.territorialValue.size > 0);
+  // Different non-territorial offers and both recipients share one unchanged
+  // final-border check; affordability and all other checks remain per offer.
+  assert.equal(context.borderIssue.size, 1);
   // The next evaluation creates its own context, rather than hiding changes.
   world.nations.find((nation) => nation.id === war.nationAId)!.food = {
     stock: 0, harvest: 0, demand: 100, rationCoverage: 0, shortageCycles: 10, deaths: 0,
