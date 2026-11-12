@@ -50,6 +50,7 @@ const dirty = execFileSync("git", ["diff", "--", "src"], { encoding: "utf8" });
 if (dirty) throw new Error("Commit simulation source before recording an experiment");
 interface Experiment {
   revision: string;
+  runtime?: { node: string; v8: string; platform: string; arch: string };
   partition: string;
   ticks: number;
   seedStart: number;
@@ -65,6 +66,7 @@ interface Experiment {
   failures: { scenario: string; seed: number; error: string }[];
 }
 let experiment: Experiment = {
+  runtime: { node: process.version, v8: process.versions.v8, platform: process.platform, arch: process.arch },
   revision, partition, ticks, seedStart, seedCount: count, scenarios, fullSystems, politicalTurbulence, campaignEnabled, observeWarOutcomes, normalWars,
   results: [], failures: [],
 };
@@ -72,6 +74,9 @@ if (observeWarOutcomes) experiment.observationSchema = WAR_OUTCOME_SCHEMA;
 try {
   const bytes = await readFile(output);
   const saved = JSON.parse((output.endsWith(".gz") ? gunzipSync(bytes) : bytes).toString("utf8")) as Experiment;
+  if (saved.runtime) for (const key of ["node", "v8", "platform", "arch"] as const) {
+    if (saved.runtime[key] !== experiment.runtime![key]) throw new Error(`Output has incompatible runtime ${key}`);
+  }
   for (const key of ["revision", "partition", "ticks", "seedStart", "seedCount"] as const) {
     if (saved[key] !== experiment[key]) throw new Error(`Output has incompatible ${key}`);
   }

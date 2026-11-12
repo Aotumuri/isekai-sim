@@ -106,6 +106,7 @@ try {
   }
 } finally { console.info = original; }
 const report = { revision: execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+  runtime: { node: process.version, v8: process.versions.v8, platform: process.platform, arch: process.arch },
   engineRoot: root, campaign, ticks, seeds: count, seedStart, scenarios,
   note: "Field losses and totalDirectWarCasualties cover the whole episode; production flow excludes recovery, trade and aid. openingWarSides direct casualties cover opening wars only. Compare scopes explicitly.", results };
 await writeFile(option("--output", "diagnostics/war-ai-r2-cost-audit.json.gz"), gzipSync(JSON.stringify(report)));

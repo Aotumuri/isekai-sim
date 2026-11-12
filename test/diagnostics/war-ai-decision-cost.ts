@@ -53,7 +53,8 @@ try {
     }
   }
 } finally { console.info = original; }
-const report = { engineRoot: root, revision: execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(), results };
+const report = { engineRoot: root, revision: execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+  runtime: { node: process.version, v8: process.versions.v8, platform: process.platform, arch: process.arch }, results };
 const output = option("--output", "diagnostics/war-ai-r2-decision-cost.json.gz");
 const bytes = Buffer.from(JSON.stringify(report));
 await writeFile(output, output.endsWith(".gz") ? gzipSync(bytes) : bytes);
