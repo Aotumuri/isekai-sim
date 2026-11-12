@@ -39,7 +39,7 @@ function treaties(a: NationId, b: NationId) {
   return [...(world.diplomacy?.relations.values() ?? [])].find((r) =>
     [r.nationAId, r.nationBId].includes(a) && [r.nationAId, r.nationBId].includes(b))?.treaties ?? [];
 }
-function inspect(recipient: NationId, proposer: NationId): void {
+function inspect(recipient: NationId, proposer: NationId, kind: "publication" | "acceptance"): void {
   const negotiation = [...(world.warNegotiations?.active.values() ?? [])].find((n) =>
     [n.a, n.b].includes(recipient) && [n.a, n.b].includes(proposer));
   if (!negotiation) throw new Error("Diagnostic signal has no negotiation");
@@ -66,7 +66,7 @@ function inspect(recipient: NationId, proposer: NationId): void {
             [w.nationAId, w.nationBId].includes(enemy)) };
       });
   });
-  decisions.push({ tick: world.time.fastTick, slowTick: world.time.slowTick, recipient, proposer,
+  decisions.push({ kind, tick: world.time.fastTick, slowTick: world.time.slowTick, recipient, proposer,
     offer: structuredClone(offer), offerAgeSlowTicks: world.time.slowTick - offer.revisedAtSlowTick,
     recipientAssessment: assessPeaceOffer(world, recipient, proposer, terms),
     proposerAssessment: ordinary ? assessPeaceOffer(world, proposer, recipient, reciprocal) : null,
@@ -86,9 +86,10 @@ function inspect(recipient: NationId, proposer: NationId): void {
 class DecisionMetrics extends BenchmarkMetrics {
   recordDuration(name: string, ms: number) {
     super.recordDuration(name, ms);
-    if (!name.startsWith("diagnostic.peaceOffer.")) return;
+    const publication = name.startsWith("diagnostic.peaceOfferPublished.");
+    if (!publication && !name.startsWith("diagnostic.peaceOffer.")) return;
     const [, , recipient, proposer] = name.split(".");
-    inspect(recipient as NationId, proposer as NationId);
+    inspect(recipient as NationId, proposer as NationId, publication ? "publication" : "acceptance");
   }
 }
 try {
@@ -104,7 +105,7 @@ const report = { revision: execFileSync("git", ["-C", root, "rev-parse", "HEAD"]
   harnessHash: createHash("sha256").update(await readFile(new URL(import.meta.url))).digest("hex"),
   seed, scenario, campaign, ticks, decisions, settlements: [...settlements.values()],
   warOutcomes: outcomes.result(), endWorld: summarizeWorld(world),
-  note: "Isolated diagnostic signal after offer validation, before transfers. Match attempted decisions to observed settlements. Puppet legality/recipient acceptance is not overlord net benefit. Truce gaps are conditional legal windows, not predicted attacks. No commands or simulation RNG calls." };
+  note: "Isolated diagnostic signals at offer publication and after acceptance validation, before transfers. Match acceptance attempts to observed settlements. Puppet legality/recipient acceptance is not overlord net benefit. Truce gaps are conditional legal windows, not predicted attacks. No commands or simulation RNG calls." };
 const output = option("--output", "diagnostics/war-ai-peace-decision-trace.json.gz");
 await writeFile(output, gzipSync(JSON.stringify(report)));
 console.log(JSON.stringify({ output, decisions: decisions.length }));

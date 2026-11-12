@@ -57,3 +57,23 @@ campaign exit pressure and proposer willingness, and legal non-war support.
 Preserve the existing binding-offer and truce rules. Evaluate future changes
 to the AI's choice of published terms separately; do not make the AI always
 choose puppetization when it is legally available.
+
+## Prepared publication extension (not yet parity-validated)
+
+The observer now distinguishes `publication` from `acceptance`, and an isolated
+hook also signals after both opening offers are constructed and immediately
+after an automatic revised offer is installed. The root harness typechecks.
+The full five-line hook patch applies to both original frozen parents and is
+archived as `war-ai-peace-publication-hook.patch`. Frozen observation sources:
+
+- `/private/tmp/isekai-peace-decision-29fa088`, HEAD `94c0d6f`.
+- `/private/tmp/isekai-peace-decision-selection`, HEAD `873088f`.
+
+Engine typecheck and full parity of this extension are still pending. To keep
+R2.18's four active comparisons prioritized, defer additional simulations until
+those runs free capacity. Start with selection matched seed 822748319793,
+`--campaign --ticks 10000`, writing a **new** output
+`war-ai-peace-publication-selection-793.json.gz`; preserve the earlier
+acceptance-only trace. Compare the offer revision at 2110 with acceptance at
+2210 before inferring that changing the battlefield made an originally sound
+offer stale. Then perform the canonical selected cases and Legacy/R1 scope.
