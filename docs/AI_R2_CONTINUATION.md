@@ -32,9 +32,34 @@ merge main or force-push. Adoption gates and untouched final seeds remain in
 
 ## Frozen ongoing comparisons
 
-Current active experiment: **R2.17**, preregistered in
+Current active experiment: **R2.18**, preregistered in
+[AI_R2_OPERATION_SIZE_EXPERIMENTS.md](AI_R2_OPERATION_SIZE_EXPERIMENTS.md).
+R2.17 completed 120 matrix cases and 120 cost/government replays, with zero
+failures and exact reference outcomes. No role control was adopted; see
 [AI_R2_POLICY_CAUSAL_FOLLOWUP.md](AI_R2_POLICY_CAUSAL_FOLLOWUP.md).
 R2.16 and all older comparisons below are completed archives.
+
+- R2.18 scored variant: `/private/tmp/isekai-r2-18-scored`, HEAD `19ce4ea`.
+- R2.18 selection mechanism control: `/private/tmp/isekai-r2-18-selection`,
+  HEAD `10b0d05`. Both source+test patches apply to public `29fa088` and are
+  archived under `diagnostics/war-ai-r2-18-{scored,selection}.patch`.
+- Each passes 723 full regressions plus one added real-planner regression,
+  typecheck, build and quick benchmark. The real-planner regression fails with
+  the original sizing. Canonical production has not changed.
+- Matrices use the same arguments listed below, outputting
+  `diagnostics/war-ai-r2-18-{scored,selection}-development.json.gz`; logs are
+  `/private/tmp/isekai-r218-{scored,selection}.log`.
+- Parallel cost/government replays use the root `war-ai-cost-audit.ts` with
+  `--engine-root` set to each frozen source, `--campaign --ticks 10000
+  --seeds 20 --seed-start 822748319780 --scenarios
+  matched-war,stalemate-breaker,reorganization-heavy`, output
+  `diagnostics/war-ai-government-r2-18-{scored,selection}-development.json.gz`.
+  Logs: `/private/tmp/isekai-government-r218-{scored,selection}.log`.
+- Do not edit these engines or the root cost/government observers while active.
+  Validate replays with `war-ai-replay-validation.ts`, compare each variant
+  against its own R2.16 control/selection parent with `war-ai-report.ts`, and
+  use the government report for distinct whole-episode costs. Continue causal
+  improvement if gates fail; no completion or adoption is implied by tests.
 
 - Aggressor-only control: `/private/tmp/isekai-r2-17-aggressor`, HEAD `afddf82`.
 - Defender-only control: `/private/tmp/isekai-r2-17-defender`, HEAD `932aaf3`.
