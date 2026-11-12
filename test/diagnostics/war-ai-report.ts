@@ -5,6 +5,7 @@ import { pairedBootstrap } from "../helpers/paired-bootstrap";
 
 interface Matrix {
   revision: string;
+  runtime?: Record<string, string>;
   ticks: number;
   partition: string;
   seedCount: number;
@@ -115,6 +116,7 @@ function distribution(values: number[]) {
 }
 const summary = matrices.map((matrix) => ({
   revision: matrix.revision, ticks: matrix.ticks, fullSystems: !!matrix.fullSystems,
+  runtime: matrix.runtime ?? { node: "not recorded" },
   failures: matrix.failures,
   scenarios: Object.fromEntries([...new Set(matrix.results.map((row) => row.scenario))].map((scenario) => {
     const rows = matrix.results.filter((row) => row.scenario === scenario);
