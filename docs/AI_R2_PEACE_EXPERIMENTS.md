@@ -69,3 +69,20 @@ R2.11, Legacy and R1. Internal history changes are not evidence of quality:
 retain the unchanged external objective, legal territory, survival and cost
 metrics. No final seeds or adoption gates change.
 
+## Defender-effort causal diagnostic (preregistered)
+
+In R2.11, nine development openings survive under R1 but lose the defender under
+the prototype: stalemate 780/786/790, reorganization 780/789/790/792, matched
+781/789 (suffixes of 822748319xxx). The forecast gives unoccupied homeland no
+exposure value, so a defender has no modeled benefit from proactive investment
+before invasion. Test whether this actually matters before introducing a threat
+model. On the R2.13 source, replay these nine openings for 600 ticks in normal,
+forced-defense and forced-limited-offense arms. Intervene only at the campaign
+boundary while the opening war exists, without overriding capital, food, loss
+budget or a negotiated exit. Keep lower-level emergency guards and battle rules.
+Record actual intervention exposure, both sides' frozen opening-war outcomes,
+independent force losses, production costs and episode-end survival. These
+selected failure cases are causal diagnostics, not adoption evidence; 600-tick
+unfinished wars remain censored. Do not infer that forcing one mode universally
+is a suitable policy.
+
