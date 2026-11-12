@@ -160,3 +160,20 @@ are not used to claim an end-to-end speed improvement. The final seed range
 remains untouched. The next continuity experiment is documented in
 [AI_R2_MARCH_EXPERIMENTS.md](AI_R2_MARCH_EXPERIMENTS.md).
 
+## R2.15: preserve an already dependent government (preregistered correctness fix)
+
+R2.13's independence predicate omits governments that were already subjects
+when defending against a third party. Keeping their existing government and
+relationship cannot satisfy an independence objective they never possessed.
+Two regressions reproduce the mismatch on the current source. Distinguish
+`preserve-government` at adoption and snapshot its active opening overlord;
+independent defenders keep `preserve-sovereignty`. The dependent purpose permits
+retaining that relationship or gaining independence, but cannot count a new
+master, new puppet/partition terms, loss of government or extinction as success.
+Keep the military homeland goal and territorial costs unchanged. Test a real
+third-party white peace, relationship changes and frozen adoption metadata;
+retain the independent-defender regressions and run all checks. Use new
+diagnostic trajectories to check scope before any broader comparative run.
+This is a correction to the objective contract, not a claim of strategic
+quality improvement; the R2.14 source and ongoing comparisons remain frozen.
+
