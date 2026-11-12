@@ -17,6 +17,7 @@ import { isPoliticalGoalSecured } from "./political-objectives";
 import { WORLD_BALANCE } from "../../data/balance";
 import { hasReadyCampaignSettlement } from "./settlement-readiness";
 import type { PeaceAssessmentContext } from "../peace-assessment-context";
+import { forecastCampaignForceShares } from "./forecast-force";
 
 export interface CampaignObservation { tick: number; casualtyFraction: number; lossRate: number }
 
@@ -49,11 +50,12 @@ export function forecastCampaignOpportunities(
     const war = wars.find((w) => campaignWarKey(w.nationAId, w.nationBId, w.startedAtFastTick) === goal.warKey)!;
     const enemy = world.nations.find((n) => n.id === goal.opponentId)!;
     const distances = objectiveDistances(world, nation.id, goal.opponentId, goal.regionIds);
-    const arriving = units.map((unit) => ({ unit, seconds: (distances.get(unit.regionId) ?? Infinity) * getMoveMsPerRegion(unit) / 1000 }))
-      .filter(({ unit, seconds }) => seconds < 30 && !world.retreatPlans.retreatIdByUnitId.has(unit.id) &&
-        !world.reorganization.planIdByUnitId.has(unit.id));
-    let available = arriving.reduce((sum, { unit }) => sum + getUnitCombatStrength(unit), 0);
-    let arrival = available > 0 ? arriving.reduce((sum, { unit, seconds }) => sum + getUnitCombatStrength(unit) * seconds, 0) / available : Infinity;
+    const shares = forecastCampaignForceShares(world, nation.id, goal.opponentId, units);
+    const arriving = units.map((unit) => ({ strength: getUnitCombatStrength(unit) * (shares.get(unit.id) ?? 0),
+      seconds: (distances.get(unit.regionId) ?? Infinity) * getMoveMsPerRegion(unit) / 1000 }))
+      .filter(({ strength, seconds }) => strength > 0 && seconds < 30);
+    let available = arriving.reduce((sum, { strength }) => sum + strength, 0);
+    let arrival = available > 0 ? arriving.reduce((sum, { strength, seconds }) => sum + strength * seconds, 0) / available : Infinity;
     const invasion = world.amphibiousOperations.operations.find((op) => op.nationId === nation.id &&
       op.enemyNationId === goal.opponentId && op.phase !== "cancelled" && op.phase !== "landed");
     if (!available && invasion) {
