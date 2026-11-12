@@ -1,4 +1,5 @@
 import { isPeaceNegotiationMature } from "./peace-maturity";
+import { readPeaceAssessmentFact, type PeaceAssessmentContext } from "./peace-assessment-context";
 import { campaignRecognitionRegions, campaignRecognitionWeapons, campaignCanHoldRecognition, reciprocalRecognitionTerms } from "./war-campaign/peace-recognition";
 import { getCampaignObjectives } from "./campaign-objectives";
 import { campaignPeaceValue, campaignPrefersSettlement } from "./war-campaign/peace-guidance";
@@ -272,23 +273,27 @@ function competingWarPressure(world: WorldState, nation: NationId, negotiatingWi
   return Math.min(25, pressure);
 }
 
-export function assessPeaceOffer(world: WorldState, recipient: NationId, proposer: NationId, terms: PeaceTerms) {
+export function assessPeaceOffer(world: WorldState, recipient: NationId, proposer: NationId, terms: PeaceTerms, context?: PeaceAssessmentContext) {
   const issue = getPeaceTermsIssue(world, proposer, recipient, terms);
   if (issue) return { accepts: false, score: -Infinity, reason: issue };
   const war = findWar(world.wars, recipient, proposer)!, negotiation = getWarNegotiation(world, war);
   const nation = world.nations.find((item) => item.id === recipient)!, character = getNationCharacter(world, recipient);
-  const militaryLoss = Math.max(0, 1 - nationalPower(world, recipient) / Math.max(1, negotiation.openingPower.get(recipient) ?? 1));
-  const advantage = getWarAdvantage(world, recipient, proposer), fatigue = getWarFatigue(world, recipient, proposer);
+  const power = readPeaceAssessmentFact(context?.power, recipient, () => nationalPower(world, recipient));
+  const militaryLoss = Math.max(0, 1 - power / Math.max(1, negotiation.openingPower.get(recipient) ?? 1));
+  const pair = `${recipient}:${proposer}`;
+  const advantage = readPeaceAssessmentFact(context?.advantage, pair, () => getWarAdvantage(world, recipient, proposer));
+  const fatigue = getWarFatigue(world, recipient, proposer);
   const ageSeconds = Math.max(0, world.time.fastTick - war.startedAtFastTick) * FAST_TICK_MS / 1000;
-  const urgency = getPeaceUrgency(world, recipient);
+  const urgency = readPeaceAssessmentFact(context?.urgency, recipient, () => getPeaceUrgency(world, recipient));
   const domestic = urgency * 42;
   const forecast = -getWarTrend(negotiation, recipient) * 45;
-  const competingWars = competingWarPressure(world, recipient, proposer);
+  const competingWars = readPeaceAssessmentFact(context?.competingPressure, pair, () => competingWarPressure(world, recipient, proposer));
   const foodRunway = nation.food ? foodReserveSeconds(nation.food) : Infinity;
   const foodPressure = nation.food ? Math.max(0, 1 - foodRunway / 90) * 10 +
     (1 - nation.food.rationCoverage) * 10 : 0;
-  const totalValue = getNationalTerritorialValue(world, recipient);
-  const occupied = ownedLand(world, recipient).filter((id) => world.occupation.mesoById.get(id) === proposer);
+  const totalValue = readPeaceAssessmentFact(context?.territorialValue, recipient, () => getNationalTerritorialValue(world, recipient));
+  const occupied = readPeaceAssessmentFact(context?.occupied, pair,
+    () => ownedLand(world, recipient).filter((id) => world.occupation.mesoById.get(id) === proposer));
   const occupiedValue = getTerritorialValue(world, recipient, occupied) / totalValue;
   const pressure = fatigue * 0.7 + Math.min(18, ageSeconds * 0.025) + occupiedValue * 45 + militaryLoss * 15 + Math.max(0, -advantage) * 30 + (1 - nation.warCooperation) * 12 + domestic + forecast + competingWars + foodPressure;
   const occupiedSet = new Set(occupied);

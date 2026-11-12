@@ -17,6 +17,7 @@ import { recordCompletedCampaignGoals } from "./lifecycle";
 import { observeCampaignCost, forecastCampaignOpportunities } from "./forecast";
 import { evaluateCampaignAlternatives, hasClearCampaignImprovement, selectCampaignMilitaryEffort } from "./alternatives";
 import { unavailableManpower } from "./battle-costs";
+import { createPeaceAssessmentContext } from "../peace-assessment-context";
 
 /** One campaign per nation spanning every current opponent; no direct orders. */
 export function updateWarCampaigns(world: WorldState): void {
@@ -35,6 +36,7 @@ export function updateWarCampaigns(world: WorldState): void {
   }
   const active = new Set(world.nations.filter(isNationActive).map((nation) => nation.id));
   const next = new Map<NationId, WarCampaign>();
+  const peaceContext = createPeaceAssessmentContext();
   for (const nation of world.nations.filter(isNationActive)) {
     const wars = world.wars.filter((war) =>
       (war.nationAId === nation.id || war.nationBId === nation.id) &&
@@ -45,7 +47,7 @@ export function updateWarCampaigns(world: WorldState): void {
       (manpower.get(nation.id) ?? 0) + unavailableManpower(state.battleCosts?.get(nation.id)));
     const constraints = assessCampaignConstraints(world, nation, wars, objectives, strengths);
     const observation = observeCampaignCost(world, constraints.casualtyFraction, previous);
-    const opportunities = forecastCampaignOpportunities(world, nation, wars, objectives, strengths, observation);
+    const opportunities = forecastCampaignOpportunities(world, nation, wars, objectives, strengths, observation, peaceContext);
     const alternatives = evaluateCampaignAlternatives(opportunities, constraints.aggression, previous);
     const settlementReadyOpponentIds = opportunities.filter((option) => option.settlementReady).map((option) => option.opponentId).sort();
     const decision = evaluateCampaignPolicy(constraints, alternatives);

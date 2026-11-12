@@ -16,6 +16,7 @@ import { campaignWarKey } from "./state";
 import { isPoliticalGoalSecured } from "./political-objectives";
 import { WORLD_BALANCE } from "../../data/balance";
 import { hasReadyCampaignSettlement } from "./settlement-readiness";
+import type { PeaceAssessmentContext } from "../peace-assessment-context";
 
 export interface CampaignObservation { tick: number; casualtyFraction: number; lossRate: number }
 
@@ -32,6 +33,7 @@ export function observeCampaignCost(world: WorldState, casualtyFraction: number,
 export function forecastCampaignOpportunities(
   world: WorldState, nation: NationRuntime, wars: WarState[], goals: CampaignObjective[],
   strengths: Map<NationId, number>, observation: CampaignObservation,
+  peaceContext?: PeaceAssessmentContext,
 ): CampaignOpportunity[] {
   const own = Math.max(1, strengths.get(nation.id) ?? 0);
   const investment = Math.max(1, ...goals.map((goal) => goal.openingManpower ?? goal.openingStrength));
@@ -73,7 +75,7 @@ export function forecastCampaignOpportunities(
     const terms = whitePeaceTerms();
     if (goal.political?.purpose === "territorial-concession" && goal.achieved) terms.demandedRegionIds = [...goal.regionIds];
     if (goal.political?.purpose === "coercive-settlement" && goal.achieved) terms.demandedWeapons = Math.min(goal.political.weaponTarget, Math.floor(enemy.resources.weapons));
-    const peace = negotiationAllowed && negotiation ? assessPeaceOffer(world, goal.opponentId, nation.id, terms) : undefined;
+    const peace = negotiationAllowed && negotiation ? assessPeaceOffer(world, goal.opponentId, nation.id, terms, peaceContext) : undefined;
     const peaceProbability = peace ? peace.accepts ? 1 : Number.isFinite(peace.score) ?
       1 / (1 + Math.exp(-peace.score / 10)) * 0.5 : 0 : 0;
     const settlingGain = securedValue || (terms.demandedRegionIds.length || terms.demandedWeapons > 0 ? politicalValue : 0);
@@ -82,7 +84,7 @@ export function forecastCampaignOpportunities(
       objectiveValue: Math.max(0, politicalValue - securedValue), securedValue,
       homelandAtRisk: atRisk, lossFractionPerSecond: observation.lossRate,
       replacementFraction: Math.min(nation.resources.manpower, nation.resources.weapons * strengthPerWeapon) / investment,
-      peaceProbability, settlementReady: hasReadyCampaignSettlement(world, war, negotiation),
+      peaceProbability, settlementReady: hasReadyCampaignSettlement(world, war, negotiation, peaceContext),
       settlementValue: settlingGain, militaryGoalHeld: goal.achieved,
       uncertainty: available > 0 ? 0.25 : 0.75,
       committedFraction: units.filter((u) => u.moveToId || world.offensiveOperations.operationIdByUnitId.has(u.id))
