@@ -121,3 +121,24 @@ premature-peace rate or proof of net political benefit. The disagreement
 between standing-offer publication and proposer continuation assessment also
 exists in Legacy; it is not unique to the experimental campaign controller.
 No binding-offer, acceptance or puppet/truce rule has been changed.
+
+## R2.20's changed stalemate 786
+
+The paired publication replays preserve their own matrix end summaries and
+full war outcomes. Only the fuel candidate publishes nation-0's white peace
+to nation-1 at 310; that proposal is actually accepted at 410. Its recipient
+scores +20.63 at publication and +22.26 at acceptance, while proposer reciprocal
+scores are -72.64/-70.05. A puppet alternative is illegal at publication.
+
+The campaign's reason is not simply military weakness or an exceeded hard
+budget. At publication its latest assessment has strength ratio 2.937,
+casualty fraction 0.5435 below tolerance 1.4, food runway 8,900 seconds,
+no capital emergency and no replacement constraint. Its alternatives prefer
+peace (0) over defense (-0.209) and attack (-0.417); projected attack resource
+cost is 0.676, with observed loss rate 0.02186. Its territorial-concession
+goal is unmet. Thus the campaign's projected future cost/value comparison
+explains an exit preference, while the diplomatic willingness scale disagrees.
+This does not establish either model as correct. The next selected
+[revision-delay counterfactual](AI_PEACE_REVISION_COUNTERFACTUAL.md) measures
+actual continuation consequences without replacing legal rules or assuming
+that a high force ratio requires continued war.

@@ -72,7 +72,7 @@ Each attacker-goal difference against the canonical parent is -5 pp
 -15 pp [-30, 0] and -5 pp [-20, +10], respectively. These intervals include
 zero; neither the selected rescue nor altered composition establishes an
 improvement. The material stalemate survival concern remains. Whole-episode
-fuel expenditure changes substantially but is not a substitute for national
+production-recorded fuel use changes substantially but is not a substitute for national
 goals, survival, or role-specific costs. This candidate is not adopted, and
 passing tests does not resolve its strategic shortcomings.
 

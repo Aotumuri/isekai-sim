@@ -27,3 +27,27 @@ without confusing them with this war. No intervention arm should reproduce
 the original end by construction. This selected counterfactual estimates the
 effect of one revision delay, not optimal future policy or a population effect.
 No production policy is adopted from this case and final seeds stay unused.
+
+## Observed result
+
+The untreated replay matches the frozen matrix. Both arms have identical
+recorded checkpoints at 309 (CPU measurements excluded). The intervention
+temporarily changes timer 1 to 30 at 309, restores 1 at 310 and verifies the
+old offer was retained. Both then settle nation-0's white peace, at 410 and
+510 respectively. Neither arm retains the aggressor objective or gains legal
+territory; both nations survive and the defender retains its home objective.
+
+Opening-war direct casualties rise from 196.42 to 228.90 for the attacker and
+181.97 to 221.45 for the defender. Thus this one-cycle delay yields additional
+losses and no additional opening-war gains under the unchanged military AI.
+It does **not** test a deliberate new offensive strategy, establish that the
+original forecast is calibrated, or prove early peace is generally optimal.
+The candidate's peace preference has an observable cost basis; high military
+advantage alone was insufficient evidence that delaying peace would pay off.
+
+The 10,000-tick episodes also diverge in later wars and national survival.
+Those endogenous effects are separate from the opening-war marginal losses;
+do not sum opposing interests or infer a general benefit from final country
+counts. Raw branches and explicit validation are archived as
+`war-ai-peace-revision-r2-20-{control,defer}-786.json.gz` and
+`war-ai-peace-revision-r2-20-786-validation.json.gz`.
