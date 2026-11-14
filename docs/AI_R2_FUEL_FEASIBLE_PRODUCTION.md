@@ -21,7 +21,7 @@ Disabled mode and manual governments retain the original choice.
 Before comparison, require an integration regression that fails on the parent,
 budget/no-double-spending/design/off/manual checks, full inherited regressions,
 typecheck, build and quick benchmark. Archive source patch/hash and metadata.
-Then compare matched-frontage, stalemate-breaker and reorganization-heavy on
+Then compare matched-war, stalemate-breaker and reorganization-heavy on
 all 20 existing development seeds 822748319780–799, 10,000 fast ticks, unchanged
 640x360 full-system settings, against frozen canonical, R1 and Legacy cases.
 Do not use final seeds. Existing R2.16 conditions and outputs remain unchanged.

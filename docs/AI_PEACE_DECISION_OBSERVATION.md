@@ -101,3 +101,23 @@ metric schema is preserved with only the two diagnostic name declarations.
 Run matched 781 and stalemate 780 with campaign off/on after current pipelines
 free capacity, and validate each against the original full matrix. No Legacy
 or R1 observation replay has yet been claimed complete.
+
+## Completed Legacy/R1 selected scope
+
+All four prepared replays are now complete: matched 781 and stalemate 780,
+campaign off/on. Each reproduces its matching original matrix's non-CPU end
+summary and full war outcomes; every sampled acceptance matches a settlement.
+The observer source metadata is retained and its hook-only difference from
+`e6245a1` is explicit in `war-ai-peace-publication-legacy-r1-validation.json.gz`.
+
+In stalemate 780, both engines settle at 410 with the original proposer still
+preferring continuation under its reciprocal assessment (Legacy -71.56,
+R1 -62.98). The recipient accepts at +3.13/+5.16. Puppetization is legal then
+but the recipient rejects that alternative (-10.20/-6.58). In matched 781's
+nation-0/nation-2 settlement at 410, proposer values are -53.21/-48.60 and
+recipient values +13.72/+3.47; a puppet alternative is legal and accepted by
+the recipient (+13.29/+16.17). These are selected observations, not an overall
+premature-peace rate or proof of net political benefit. The disagreement
+between standing-offer publication and proposer continuation assessment also
+exists in Legacy; it is not unique to the experimental campaign controller.
+No binding-offer, acceptance or puppet/truce rule has been changed.
