@@ -18,7 +18,7 @@ Keep the original casualty fraction, smoothed loss rate, projected defense/
 attack resource cost, current military mode, force/manpower, resources and war
 membership. Compare the original fraction's future increase only when the
 same opening war, membership and denominator remain observable. Mark wars
-that end, observations that disappear, and changed military modes separately;
+that end, observations that disappear, and changed military modes/priorities separately;
 do not impute zero cost after settlement or treat a changed policy as the
 counterfactual outcome of an unchosen option. Stable mode is still an
 observational subgroup, not randomized causal identification.
