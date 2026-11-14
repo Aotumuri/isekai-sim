@@ -33,3 +33,18 @@ from one selected rescue, extra production alone, or summed opposing utility.
 If no material exposure or safety/goal regression occurs, report it rather
 than broadening the policy after inspecting seeds. Default remains off and
 the PR remains Draft. Any later combination with march is another experiment.
+
+## Frozen candidate
+
+Candidate `3aa0ba7`, production tree
+`67375fd0ebed0b7e9a2788d90b09a78416c86048`, is isolated in
+`/private/tmp/isekai-r2-20-fuel-feasible`. Its complete patch and validation
+record are archived as `war-ai-r2-20-fuel-feasible.patch` and
+`war-ai-r2-20-source-validation.json.gz`. Six added tests exercise actual
+recruitment, design-adjusted batch accounting, ordinary random draws,
+disabled/manual behavior and the one-pass budget. The original production
+implementation fails the behavioral regression. The candidate passes all
+727 tests, typecheck, build and the ordinary quick benchmark. The latter is
+only a smoke check, not enabled-policy quality or intrinsic timing evidence.
+The 60-case quality and matching cost/government replays are next; no adoption
+or improved national outcome is claimed from passing tests.
