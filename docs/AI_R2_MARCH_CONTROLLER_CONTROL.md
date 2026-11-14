@@ -55,3 +55,38 @@ controller bundle**, not an isolated scoring coefficient or budget. Require
 identical starts/settings and keep original data unchanged. It can distinguish
 a general movement effect from controller-dependent effects, but cannot by
 itself justify adopting an older architecture or weakening a safety gate.
+
+## Completed initial comparison
+
+All 40 matrix cases and three 40-case observation sets completed. R1 travel,
+candidate travel and candidate cost/government replays reproduce their matching
+reference non-CPU end summaries and full war outcomes. No original/final seeds
+or R2.16 conditions changed. Results remain a source control, not an adoption.
+
+| Family | R1 attacker goal → continuity | R1 defender survival → continuity |
+| --- | ---: | ---: |
+| Stalemate | 60% → 65% | 75% → 60% |
+| Reorganization | 60% → 50% | 70% → 80% |
+
+Paired 95% intervals: stalemate defender survival -15 pp [-30, 0];
+reorganization attacker goal -10 pp [-25, 0] and defender survival +10 pp
+[0, +25]. These intervals include zero; the material survival decline remains
+a safety concern, not proof of a statistically established universal effect.
+All-war averages must not replace these fixed opening-war outcomes.
+
+Supplemental same-front discarded unit time falls by 321.335 seconds
+[-547.815, -144.855] in stalemate and 255.965 [-390.605, -141.180] in
+reorganization. This is unit travel time, not faster computation or shorter
+wars. The travel gain alone does not justify adopting the control.
+
+The preregistered controller-bundle interaction in defender survival is
++5 pp [0, +15] for stalemate and -5 pp [-20, +10] for reorganization.
+It does not establish the newer scoring model as the sole cause of the
+regression. All four cells have identical starts, settings and external goals.
+Raw interaction data and its replayable calculation are archived separately.
+
+Selected new stalemate defender defeats are seeds 780/790/792 (full development
+prefix 822748319), where R1 ends the opening war at tick 410 and continuity
+instead ends it in defeat at 406/376/356. Trace the actual orders, capital
+defense and peace timing before changing behavior; do not use these selected
+contrasts as a population estimate. The first paired lifecycle trace uses 780.

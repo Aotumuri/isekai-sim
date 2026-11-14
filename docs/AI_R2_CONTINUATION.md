@@ -1,5 +1,20 @@
 # R2 continuation checkpoint
 
+## 2026-11-14 resume update
+
+R2.19's matrix and all three observation sets are complete (40 cases each),
+with exact replay parity. Reports and the controller interaction are saved;
+see AI_R2_MARCH_CONTROLLER_CONTROL.md. No adoption: stalemate defender survival
+falls 75% to 60% against R1 despite reduced travel loss. Current work is the
+paired seed-780 causal lifecycle trace (R1 versus R1+continuity); 790/792 are
+other selected new defeats. Older pipeline descriptions below are now archives.
+Use at most **one** Luna-low sub-agent for bounded checks/log summaries, as
+requested by the user; do not spawn additional agents. Parent summaries must
+use fixed opening-war metrics, not all-war averages. Source changes/final seeds
+remain frozen. GitHub still reflects 8ecc90a: transport attempts failed, and
+the last API retry was not executed because approval review hit a usage limit.
+Do not bypass that review. Local commits/results remain available.
+
 The quality objective remains active. Completing a trial, tests or PR is not
 project completion. Keep WarCampaign off by default and PR #2 Draft; do not
 merge main or force-push. Adoption gates and untouched final seeds remain in
