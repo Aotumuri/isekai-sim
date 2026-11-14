@@ -132,3 +132,20 @@ organization decline. Before interpreting that as a strength-model defect,
 record the guard's actual combat power/equipment and the other local units,
 plus movement progress for potential reinforcements. This remains read-only
 causal observation; no combat, defense cadence or diplomatic rule changes.
+
+The strength-input replay resolves the constant-strength question: unit-48
+has `combatPower: 0` and nation-4 fuel stock is zero throughout the sampled
+240–280 interval in **both** engines. `applyFuelStatus` sets fuel-dependent
+units' combat power to zero and movement duration to infinity when fuel is
+unavailable. JSON encodes that non-finite duration as null, so the null value
+alone is not evidence. The recorded zero power makes the guard's computed
+combat-strength contribution zero regardless of its organization; the constant
+assessment total is therefore not evidence of ignoring organization.
+
+This distinguishes capacity from orders: a physically present, equipped
+guard was unable to fight effectively, and the potential relief unit was
+itself in another battle. R1's slower enemy did not expose the same weak
+capital during this window. Do not infer a universal maintenance failure,
+change fuel/combat rules, or restore discarded travel to conceal the shortage.
+Further improvement should compare national resource feasibility and reachable
+relief before introducing another capital-defense exception.
