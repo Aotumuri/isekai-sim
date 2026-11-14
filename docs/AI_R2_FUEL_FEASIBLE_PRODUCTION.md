@@ -83,3 +83,19 @@ same case therefore supplies both a rescue and an opposing goal loss; do not
 count them as independent general improvements. Next inspect actual offers,
 campaign choices and military capacity at that divergence, without another
 fuel coefficient change or a diplomatic-rule change.
+
+Do not omit favorable comparisons when retaining this decision. Against R1,
+defender home retention improves by 30 pp [10, 50] in matched, 15 pp [-10, 40]
+in stalemate and 20 pp [0, 45] in reorganization. Stalemate aggressor
+production-recorded fuel use falls by 10,952 [-24,280, -234]. These have
+different roles/scopes from the safety concern and do not cancel it by adding
+opposing interests. Further costs, including later wars, remain in the full
+role-specific government reports.
+
+Stalemate's defender-survival vector is identical to R2.19 on all 20 seeds.
+Both lose defenders 780/790/792 that survived under R1, with no reverse rescue.
+This points to a shared movement/opponent interaction worth inspecting, not
+proof that forecast selection or fuel recruitment alone caused the defeats.
+Seed 780's zero-fuel guard is already traced. Next inspect the other two
+selected losses with paired read-only battle/capital/capability windows; do
+not generalize that first capacity explanation to them without observing it.
