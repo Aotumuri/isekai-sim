@@ -6,8 +6,8 @@ and the march control. This is a capacity constraint, not proof that a guard
 was ignored. Existing recruitment checks material affordability and randomly
 chooses infantry/tanks, without checking the extra tank's operating fuel.
 
-Create an isolated candidate from canonical `29fa088`, without adding march
-continuity or changing any diplomatic/combat/fuel rule. During an existing
+Create an isolated candidate from canonical `29fa088`, retaining its existing
+march continuity and controller, without changing diplomatic/combat/fuel rules. During an existing
 experimental AI war campaign only, bound extra tank upkeep by remaining fuel
 plus this production pass's fuel income minus existing next-pass upkeep.
 Deduct newly recruited tanks' upkeep from that same budget within the batch.
@@ -32,7 +32,7 @@ paired 95%/10,000 bootstrap intervals and replay parity. No improvement claim
 from one selected rescue, extra production alone, or summed opposing utility.
 If no material exposure or safety/goal regression occurs, report it rather
 than broadening the policy after inspecting seeds. Default remains off and
-the PR remains Draft. Any later combination with march is another experiment.
+the PR remains Draft. Any application to a different controller is another experiment.
 
 ## Frozen candidate
 
@@ -48,3 +48,38 @@ implementation fails the behavioral regression. The candidate passes all
 only a smoke check, not enabled-policy quality or intrinsic timing evidence.
 The 60-case quality and matching cost/government replays are next; no adoption
 or improved national outcome is claimed from passing tests.
+
+Documentation clarification: canonical `29fa088` already contains R2.14's
+march continuity. The frozen patch changes only recruitment fuel feasibility;
+it neither introduces nor removes that inherited movement behavior. The
+preregistered parent, candidate source, settings and seeds are unchanged.
+
+## Completed first comparison: not adopted
+
+All 60 matrix cases and 60 cost/government replays completed without failures.
+The matching replays have identical common non-CPU end summaries and complete
+war outcomes. Reference starts/external goals match; Legacy differs in its
+intended disabled campaign setting. Original matrices are unchanged.
+
+| Family | Canonical attacker goal → candidate | Canonical defender survival → candidate |
+| --- | ---: | ---: |
+| Matched | 35% → 30% | 80% → 80% |
+| Stalemate | 50% → 45% | 55% → 60% |
+| Reorganization | 45% → 40% | 60% → 65% |
+
+Each attacker-goal difference against the canonical parent is -5 pp
+[-15, 0]. Against R1, defender-survival differences are +10 pp [-15, +35],
+-15 pp [-30, 0] and -5 pp [-20, +10], respectively. These intervals include
+zero; neither the selected rescue nor altered composition establishes an
+improvement. The material stalemate survival concern remains. Whole-episode
+fuel expenditure changes substantially but is not a substitute for national
+goals, survival, or role-specific costs. This candidate is not adopted, and
+passing tests does not resolve its strategic shortcomings.
+
+In the selected changed stalemate seed 822748319786, the canonical aggressor
+holds its goal and the defender dies at 422. The candidate ends that war at
+410 with the aggressor goal unmet and the defender alive/home retained. The
+same case therefore supplies both a rescue and an opposing goal loss; do not
+count them as independent general improvements. Next inspect actual offers,
+campaign choices and military capacity at that divergence, without another
+fuel coefficient change or a diplomatic-rule change.

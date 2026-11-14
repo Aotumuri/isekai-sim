@@ -60,3 +60,11 @@ including unsuccessful trials, causal findings, performance checks and the next 
 The continuation from R2.10 is in [AI_R2_EXPERIMENT_HISTORY_2.md](AI_R2_EXPERIMENT_HISTORY_2.md).
 Peace and ordinary-march follow-ups are in [AI_R2_PEACE_EXPERIMENTS.md](AI_R2_PEACE_EXPERIMENTS.md)
 and [AI_R2_MARCH_EXPERIMENTS.md](AI_R2_MARCH_EXPERIMENTS.md).
+Later isolated controls are recorded in
+[R2.16 policy experiments](AI_R2_POLICY_EXPERIMENTS.md),
+[R2.17 role controls](AI_R2_POLICY_CAUSAL_FOLLOWUP.md),
+[R2.18 operation sizing](AI_R2_OPERATION_SIZE_EXPERIMENTS.md),
+[R2.19 controller/march interaction](AI_R2_MARCH_CONTROLLER_CONTROL.md), and
+[R2.20 fuel-feasible recruitment](AI_R2_FUEL_FEASIBLE_PRODUCTION.md).
+The user's cross-stage national-interest observations remain tracked in
+[AI_NATIONAL_STRATEGY_OBSERVATIONS.md](AI_NATIONAL_STRATEGY_OBSERVATIONS.md).
