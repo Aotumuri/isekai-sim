@@ -1,3 +1,4 @@
+import { claimCampaignFrontExtraction, isCampaignDetachedUnit } from "./war-campaign/force-budget";
 import { WORLD_BALANCE } from "../data/balance";
 import type { EquipmentKey } from "../data/equipment-catalog";
 import type { MesoRegionId } from "../worldgen/meso-region";
@@ -531,6 +532,10 @@ export function updateReorganization(world: WorldState): void {
       ? selectRearRegion(world, unit, context)
       : undefined;
     if (!locationRegionId) continue;
+    const allocation = world.frontAllocations.allocationsByFrontNation.get(
+      `${world.frontAllocations.frontIdByUnitId.get(unit.id)}::${unit.nationId}`,
+    );
+    if (!claimCampaignFrontExtraction(world, unit, (allocation?.desiredStrength ?? 0) * settings.frontExtractionDesiredFloorRatio)) continue;
 
     releaseStrategicReserveUnit(world, unit.id);
     releaseUnitFromFrontAllocation(world, unit.id);
@@ -611,6 +616,7 @@ function consumeFrontExtractionBudget(
   unit: UnitState,
   budgetByFrontNation: Map<string, number>,
 ): boolean {
+  if (isCampaignDetachedUnit(world, unit)) return true;
   const frontId = world.frontAllocations.frontIdByUnitId.get(unit.id);
   if (!frontId) return true;
   const allocation = world.frontAllocations.allocationsByFrontNation.get(
@@ -636,6 +642,7 @@ function hasFrontExtractionBudget(
   unit: UnitState,
   budgetByFrontNation: ReadonlyMap<string, number>,
 ): boolean {
+  if (isCampaignDetachedUnit(world, unit)) return true;
   const frontId = world.frontAllocations.frontIdByUnitId.get(unit.id);
   if (!frontId) return true;
   const allocation = world.frontAllocations.allocationsByFrontNation.get(

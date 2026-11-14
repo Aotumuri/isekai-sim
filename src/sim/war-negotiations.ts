@@ -1,3 +1,9 @@
+import { isPeaceNegotiationMature } from "./peace-maturity";
+import { readPeaceAssessmentFact, type PeaceAssessmentContext } from "./peace-assessment-context";
+import { campaignRecognitionRegions, campaignRecognitionWeapons, campaignCanHoldRecognition, reciprocalRecognitionTerms } from "./war-campaign/peace-recognition";
+import { getCampaignObjectives } from "./campaign-objectives";
+import { campaignContinuationPressure, campaignPeaceValue, campaignPrefersSettlement } from "./war-campaign/peace-guidance";
+import { PEACE_OUTLOOK_LIMIT, PEACE_OUTLOOK_WEIGHT } from "./peace-outlook";
 import { getManualGovernmentId } from "./player-nation";
 import { isValidResourceReparation, REPARATION_INTERVAL, REPARATION_RESOURCES, type ResourceReparation } from "./resource-reparations";
 import { foodReserveSeconds } from "./food-supply";
@@ -8,7 +14,7 @@ import { dividePartitionResources, getPartitionIssue, planLocalSubject, planPupp
 import { estimateAnnexationResistance, recordAnnexation } from "./annexation";
 import { getPuppetTermsIssue, installSubjectGovernment } from "./subject-governments";
 import { getRelation } from "./diplomacy";
-import { getPeaceBorderIssue, getWholeProvinces, selectPeaceDistricts, selectPeaceProvinces } from "./peace-borders";
+import { createPeaceBorderContext, getPeaceBorderIssue, getWholeProvinces, selectPeaceDistricts, selectPeaceProvinces } from "./peace-borders";
 import type { NationId } from "../worldgen/nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { WorldState } from "./world-state";
@@ -66,7 +72,7 @@ function sampleWarOutlook(world: WorldState, negotiation: WarNegotiation): void 
   const old = negotiation.outlook;
   if (old && world.time.slowTick <= old.sampledAtSlowTick) return;
   const change = old ? (advantage - old.advantageA) * 30 / (world.time.slowTick - old.sampledAtSlowTick) : 0;
-  const trend = Math.max(-0.5, Math.min(0.5, change));
+  const trend = Math.max(-PEACE_OUTLOOK_LIMIT, Math.min(PEACE_OUTLOOK_LIMIT, change));
   negotiation.outlook = { advantageA: advantage, trendA: old ? old.trendA * 0.4 + trend * 0.6 : 0, sampledAtSlowTick: world.time.slowTick };
 }
 
@@ -86,7 +92,7 @@ function legsFor(proposer: NationId, target: NationId, terms: PeaceTerms): Terri
   return [...(terms.demandedRegionIds.length ? [{ from: target, to: proposer, regionIds: terms.demandedRegionIds }] : []),
     ...(terms.offeredRegionIds.length ? [{ from: proposer, to: target, regionIds: terms.offeredRegionIds }] : [])];
 }
-export function getPeaceTermsIssue(world: WorldState, proposer: NationId, target: NationId, terms: PeaceTerms): string | null {
+export function getPeaceTermsIssue(world: WorldState, proposer: NationId, target: NationId, terms: PeaceTerms, context?: PeaceAssessmentContext): string | null {
   const war = findWar(world.wars, proposer, target);
   if (!war || (war.cause !== "player-declaration" && getWarDeclarationMode(world) !== "diplomacy")) return "These nations are not negotiating an active war.";
   if (!Array.isArray(terms.demandedRegionIds) || !Array.isArray(terms.offeredRegionIds)) return "Select valid territories.";
@@ -126,7 +132,8 @@ export function getPeaceTermsIssue(world: WorldState, proposer: NationId, target
       { nation, occupationSponsor: proposer }) ? null : "A third party controls part of the proposed subject.";
   }
   if (legs.length && !canTransferTerritories(world, legs)) return "Territory changed, a third party controls a district, or a country would lose its last territory.";
-  const borderIssue = getPeaceBorderIssue(world, legs);
+  if (context && legs.length) context.borders ??= createPeaceBorderContext(world);
+  const borderIssue = getPeaceBorderIssue(world, legs, context?.borders);
   if (borderIssue) return borderIssue;
   return null;
 }
@@ -167,9 +174,20 @@ function reviseTerms(world: WorldState, negotiation: WarNegotiation, proposer: N
   const advantage = getWarAdvantage(world, proposer, target);
   const urgency = getPeaceUrgency(world, proposer);
   const exitValue = assessPeaceOffer(world, proposer, target, whitePeaceTerms()).score;
-  const wantsCompromise = exitValue > -18 || urgency >= 0.5 || getWarTrend(negotiation, proposer) < -0.16;
+  const settling = campaignPrefersSettlement(world, proposer, target);
+  const wantsCompromise = settling || exitValue > -18 || urgency >= 0.5 || getWarTrend(negotiation, proposer) < -0.16;
   const terms = { ...current, demandedWeapons: Math.min(current.demandedWeapons, Math.floor(opponent.resources.weapons)),
     offeredWeapons: Math.min(current.offeredWeapons, Math.floor(country.resources.weapons)) };
+
+  const recognition = settling ? campaignRecognitionRegions(world, proposer, target) : [];
+  const recognitionWeapons = settling ? campaignRecognitionWeapons(world, proposer, target) : 0;
+  if (campaignCanHoldRecognition(world, proposer) && (recognition.length || recognitionWeapons > 0) &&
+    (!recognition.every((id) => terms.demandedRegionIds.includes(id)) || terms.demandedWeapons !== recognitionWeapons)) {
+    const recognized = { ...whitePeaceTerms(), demandedRegionIds: recognition,
+      demandedWeapons: recognitionWeapons, truceSeconds: terms.truceSeconds };
+    if (!getPeaceTermsIssue(world, proposer, target, recognized)) return recognized;
+  }
+  if (campaignCanHoldRecognition(world, proposer) && recognitionWeapons > 0 && terms.demandedWeapons === recognitionWeapons) return terms;
 
   if (wantsCompromise) {
     if (terms.resourceReparation) return { ...terms, resourceReparation: undefined };
@@ -179,13 +197,20 @@ function reviseTerms(world: WorldState, negotiation: WarNegotiation, proposer: N
     if (terms.demandedRegionIds.length) {
       const provinces = getWholeProvinces(world, target, terms.demandedRegionIds);
       const parcels = provinces?.map(({ mesoRegionIds }) => mesoRegionIds) ?? terms.demandedRegionIds.map((id) => [id]);
-      parcels.sort((a, b) => getTerritorialValue(world, target, b) - getTerritorialValue(world, target, a));
+      const goals = new Set(settling ? getCampaignObjectives(world, proposer, target) : []);
+      const isGoal = (parcel: MesoRegionId[]) => parcel.some((id) => goals.has(id));
+      parcels.sort((a, b) => Number(isGoal(a)) - Number(isGoal(b)) ||
+        getTerritorialValue(world, target, b) - getTerritorialValue(world, target, a));
+      if (settling && parcels.every(isGoal) && terms.demandedWeapons > 0) {
+        return { ...terms, demandedWeapons: Math.max(0, terms.demandedWeapons - 15) };
+      }
       for (const parcel of parcels) {
+        if (campaignCanHoldRecognition(world, proposer) && parcel.some((id) => recognition.includes(id))) continue;
         const removed = new Set(parcel);
         const reduced = { ...terms, demandedRegionIds: terms.demandedRegionIds.filter((id) => !removed.has(id)) };
         if (!getPeaceTermsIssue(world, proposer, target, reduced)) return reduced;
       }
-      return { ...terms, demandedRegionIds: [] };
+      return campaignCanHoldRecognition(world, proposer) && recognition.length ? terms : { ...terms, demandedRegionIds: [] };
     }
     if (terms.demandedWeapons > 0) return { ...terms, demandedWeapons: Math.max(0, terms.demandedWeapons - 15) };
     if (exitValue >= 0 && (advantage < -0.15 || urgency >= 0.65)) {
@@ -250,23 +275,28 @@ function competingWarPressure(world: WorldState, nation: NationId, negotiatingWi
   return Math.min(25, pressure);
 }
 
-export function assessPeaceOffer(world: WorldState, recipient: NationId, proposer: NationId, terms: PeaceTerms) {
-  const issue = getPeaceTermsIssue(world, proposer, recipient, terms);
+export function assessPeaceOffer(world: WorldState, recipient: NationId, proposer: NationId, terms: PeaceTerms, context?: PeaceAssessmentContext) {
+  const issue = getPeaceTermsIssue(world, proposer, recipient, terms, context);
   if (issue) return { accepts: false, score: -Infinity, reason: issue };
   const war = findWar(world.wars, recipient, proposer)!, negotiation = getWarNegotiation(world, war);
   const nation = world.nations.find((item) => item.id === recipient)!, character = getNationCharacter(world, recipient);
-  const militaryLoss = Math.max(0, 1 - nationalPower(world, recipient) / Math.max(1, negotiation.openingPower.get(recipient) ?? 1));
-  const advantage = getWarAdvantage(world, recipient, proposer), fatigue = getWarFatigue(world, recipient, proposer);
+  const power = readPeaceAssessmentFact(context?.power, recipient, () => nationalPower(world, recipient));
+  const militaryLoss = Math.max(0, 1 - power / Math.max(1, negotiation.openingPower.get(recipient) ?? 1));
+  const pair = `${recipient}:${proposer}`;
+  const advantage = readPeaceAssessmentFact(context?.advantage, pair, () => getWarAdvantage(world, recipient, proposer));
+  const fatigue = getWarFatigue(world, recipient, proposer);
   const ageSeconds = Math.max(0, world.time.fastTick - war.startedAtFastTick) * FAST_TICK_MS / 1000;
-  const urgency = getPeaceUrgency(world, recipient);
+  const urgency = readPeaceAssessmentFact(context?.urgency, recipient, () => getPeaceUrgency(world, recipient));
   const domestic = urgency * 42;
-  const forecast = -getWarTrend(negotiation, recipient) * 45;
-  const competingWars = competingWarPressure(world, recipient, proposer);
+  const forecast = campaignContinuationPressure(world, recipient, proposer) ??
+    -getWarTrend(negotiation, recipient) * PEACE_OUTLOOK_WEIGHT;
+  const competingWars = readPeaceAssessmentFact(context?.competingPressure, pair, () => competingWarPressure(world, recipient, proposer));
   const foodRunway = nation.food ? foodReserveSeconds(nation.food) : Infinity;
   const foodPressure = nation.food ? Math.max(0, 1 - foodRunway / 90) * 10 +
     (1 - nation.food.rationCoverage) * 10 : 0;
-  const totalValue = getNationalTerritorialValue(world, recipient);
-  const occupied = ownedLand(world, recipient).filter((id) => world.occupation.mesoById.get(id) === proposer);
+  const totalValue = readPeaceAssessmentFact(context?.territorialValue, recipient, () => getNationalTerritorialValue(world, recipient));
+  const occupied = readPeaceAssessmentFact(context?.occupied, pair,
+    () => ownedLand(world, recipient).filter((id) => world.occupation.mesoById.get(id) === proposer));
   const occupiedValue = getTerritorialValue(world, recipient, occupied) / totalValue;
   const pressure = fatigue * 0.7 + Math.min(18, ageSeconds * 0.025) + occupiedValue * 45 + militaryLoss * 15 + Math.max(0, -advantage) * 30 + (1 - nation.warCooperation) * 12 + domestic + forecast + competingWars + foodPressure;
   const occupiedSet = new Set(occupied);
@@ -288,10 +318,10 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
   const sacrificeCost = Math.max(0, politicalInvestment - recognition) * (1 - Math.min(0.85, urgency));
   // A longer truce secures the rear while forces move to other theaters.
   const truceValue = (terms.truceSeconds - 300) / 100 * (1 + competingWars / 12);
-  const score = pressure + disposition + landBenefit + paymentBenefit + truceValue - landCost - paymentCost - resolve - sacrificeCost - (terms.partition ? 38 : terms.puppetTarget ? 25 : terms.localSubject ? 8 : 0);
+  const score = pressure + disposition + landBenefit + paymentBenefit + truceValue + campaignPeaceValue(world, recipient, proposer, terms) - landCost - paymentCost - resolve - sacrificeCost - (terms.partition ? 38 : terms.puppetTarget ? 25 : terms.localSubject ? 8 : 0);
   const exchangedBlows = casualties + getWarCasualties(war, proposer) > 0 ||
     occupationRatio(world, proposer, recipient) + occupationRatio(world, recipient, proposer) > 0;
-  const matureEnough = ageSeconds >= 90 || (ageSeconds >= 30 && (exchangedBlows || urgency >= 0.8));
+  const matureEnough = isPeaceNegotiationMature(ageSeconds, exchangedBlows, urgency);
   if (!matureEnough) return { accepts: false, score, reason: "The government is waiting for battlefield evidence before accepting terms." };
   const reason = score >= 0 ? foodPressure >= 10 ? "The food emergency makes continued fighting too costly."
     : "Ending the war now is preferable to continued losses and domestic danger."
@@ -352,6 +382,28 @@ export function acceptPeaceOffer(world: WorldState, recipient: NationId, propose
   if (state.settlements.length > 40) state.settlements.splice(0, state.settlements.length - 40);
   return true;
 }
+/** Prefer a mutually acceptable recognition offer over a white peace that
+ * returns the achieved goal. Never override manual policy or offer maturity. */
+function settleOrAwaitCampaignRecognition(world: WorldState, negotiation: WarNegotiation): boolean {
+  if (!negotiation.automatic.get(negotiation.a) || !negotiation.automatic.get(negotiation.b)) return false;
+  for (const [proposer, recipient] of [[negotiation.a, negotiation.b], [negotiation.b, negotiation.a]]) {
+    const ids = campaignRecognitionRegions(world, proposer, recipient);
+    const weapons = campaignRecognitionWeapons(world, proposer, recipient);
+    const offer = negotiation.offers.get(proposer)!;
+    if (!(ids.length || weapons > 0) || !ids.every((id) => offer.terms.demandedRegionIds.includes(id)) ||
+      weapons > 0 && offer.terms.demandedWeapons < weapons ||
+      offer.terms.puppetTarget || offer.terms.partition || offer.terms.localSubject || offer.terms.resourceReparation) continue;
+    if (!assessPeaceOffer(world, recipient, proposer, offer.terms).accepts ||
+      !assessPeaceOffer(world, proposer, recipient, reciprocalRecognitionTerms(offer.terms)).accepts) continue;
+    if (world.time.slowTick - offer.revisedAtSlowTick < 10) {
+      if (campaignCanHoldRecognition(world, proposer)) return true;
+      continue;
+    }
+    if (acceptPeaceOffer(world, recipient, proposer)) return true;
+  }
+  return false;
+}
+
 function tryMutualCompromise(world: WorldState, negotiation: WarNegotiation): boolean {
   const { a, b, automatic, offers } = negotiation;
   if (!automatic.get(a) || !automatic.get(b) || getSeparatePeaceIssue(world, a, b)) return false;
@@ -407,6 +459,7 @@ export function updateWarNegotiations(world: WorldState): void {
         }
       }
     }
+    if (negotiation.a !== player && negotiation.b !== player && settleOrAwaitCampaignRecognition(world, negotiation)) continue;
     let settled = false;
     for (const [recipient, proposer] of [[negotiation.a, negotiation.b], [negotiation.b, negotiation.a]]) {
       const offer = negotiation.offers.get(proposer)!;

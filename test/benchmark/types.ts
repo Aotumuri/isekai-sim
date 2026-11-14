@@ -1,4 +1,11 @@
+import type { WorldConfig } from "../../src/data/world-config";
+import type { SimulationSettings } from "../../src/sim/simulation-settings";
+import type { WarOutcomeReport } from "./war-outcome-observer";
+
 export const BENCHMARK_SCENARIOS = [
+  "matched-war",
+  "unequal-war",
+  "economic-constraint",
   "base-world",
   "active-war",
   "many-units",
@@ -19,6 +26,9 @@ export type BenchmarkScenarioName = (typeof BENCHMARK_SCENARIOS)[number];
 export type BenchmarkMode = "throughput" | "frame-loop";
 
 export interface BenchmarkOptions {
+  normalWars?: boolean;
+  observeWarOutcomes?: boolean;
+  config?: Partial<WorldConfig>;
   scenario: BenchmarkScenarioName;
   seed: number;
   ticks: number;
@@ -640,6 +650,8 @@ export interface WorldSummary {
 }
 
 export interface BenchmarkResult {
+  simulationSettings?: SimulationSettings;
+  warOutcomes?: WarOutcomeReport;
   schemaVersion: 1;
   generatedAt: string;
   scenario: BenchmarkScenarioName;

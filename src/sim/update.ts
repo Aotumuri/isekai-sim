@@ -1,3 +1,4 @@
+import { updateWarCampaigns } from "./war-campaign/update";
 import { updatePlayerNavalOrders } from "./player-naval-orders";
 import { updateResourceReparations } from "./resource-reparations";
 import { updateCrisisDeployments } from "./crisis-deployment";
@@ -259,6 +260,9 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateSupplyDefense(world);
   updateSupplyRelief(world);
   updateCapitalDefense(world);
+  const campaignStartedAt = world.instrumentation ? performance.now() : 0;
+  updateWarCampaigns(world);
+  world.instrumentation?.recordDuration("warCampaign.evaluation", performance.now() - campaignStartedAt);
   updateNationFrontPlans(world);
   updateRetreatPlans(world);
   cancelOffensiveOperationsForCapitalEmergency(world);

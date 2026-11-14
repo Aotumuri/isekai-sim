@@ -1,4 +1,5 @@
 import { getManualGovernmentId, getPlayerNation } from "./player-nation";
+import { assessCampaignOpening } from "./war-campaign/opening-intent";
 import { getCrisisDeploymentReadiness } from "./crisis-deployment";
 import { getNationalTerritorialValue, getTerritorialValue } from "./territorial-value";
 import { hasWarApproach } from "./maritime-war-readiness";
@@ -173,6 +174,7 @@ function createDiplomaticWar(world: WorldState, aggressorId: NationId, targetId:
   if (relation.crisis?.aggressorId === aggressorId && relation.crisis.regionIds) {
     war.ultimatumRegionIds = [...relation.crisis.regionIds];
   }
+  if (world.settings?.warCampaignEnabled) war.campaignIntent = assessCampaignOpening(world, aggressorId, targetId, war.ultimatumRegionIds);
   relation.crisis = null; relation.treaties = [];
   relation.opinion = -80; relation.trust = Math.max(0, relation.trust - 30); relation.tension = 100;
   getDiplomacyState(world).declarations += 1;
@@ -242,6 +244,10 @@ export function updateDiplomaticCrises(world: WorldState): void {
       resolveCrisisPeacefully(world, attacker, defender, "expedition no longer feasible");
       continue;
     }
+    if (world.settings?.warCampaignEnabled && !assessCampaignOpening(world, attacker, defender, crisis.regionIds).feasible) {
+      resolveCrisisPeacefully(world, attacker, defender, "campaign no longer affordable");
+      continue;
+    }
     const staged = getCrisisDeploymentReadiness(world, attacker, defender);
     if (crisis.deadlineSlowTick >= crisis.openedAtSlowTick + 30 && now < crisis.openedAtSlowTick + 50 &&
       staged !== undefined && staged < 0.4) {
@@ -284,7 +290,7 @@ export function updateDiplomaticCrises(world: WorldState): void {
     if (relation.tension < 45 && relation.grievance < 35) continue;
     if (character.aggression < 0.45 && relation.grievance < 50) continue;
     const intent = assessWarIntent(world, candidate);
-    if (intent.rejectedReasons.some((reason) => ["insufficient-strength", "capital-emergency", "maritime-infeasible"].includes(reason))) continue;
+    if (intent.rejectedReasons.some((reason) => ["insufficient-strength", "capital-emergency", "maritime-infeasible", "campaign-unaffordable"].includes(reason))) continue;
     const desire = character.aggression * 40 + relation.tension * 0.6 + relation.grievance * 0.4 -
       relation.opinion * 0.35 + intent.opportunity * 0.3 - intent.expectedCost * 0.3 - intent.existingCommitment;
     const claims = getForeignClaims(world, attacker, candidate.targetNationId);

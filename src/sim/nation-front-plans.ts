@@ -1,3 +1,5 @@
+import { hasMinimumPeaceAge } from "./peace-maturity";
+import { applyCampaignFrontGuidance } from "./war-campaign/front-guidance";
 import { getCampaignObjectives } from "./campaign-objectives";
 import { getCampaignDeadline } from "./campaign-deadline";
 import { WORLD_BALANCE } from "../data/balance";
@@ -20,6 +22,9 @@ import type { WorldState } from "./world-state";
 export type FrontPosture = "attack" | "hold" | "reinforce" | "retreat";
 
 export type FrontPlanReason =
+  | "campaign-military-exit"
+  | "campaign-primary"
+  | "campaign-economy-of-force"
   | "strength-superiority"
   | "forces-balanced"
   | "strength-disadvantage"
@@ -57,6 +62,9 @@ export interface NationFrontPlan {
 export type NationSectorPlan = NationFrontPlan;
 
 export interface NationFrontPlanState {
+  campaignVersion?: number;
+  campaignOperationVersion?: number;
+  campaignPeaceReadiness?: number;
   plans: NationFrontPlan[];
   plansByNationId: Map<NationId, NationFrontPlan[]>;
   plansByFrontNation: Map<string, NationFrontPlan>;
@@ -84,8 +92,13 @@ export function createNationFrontPlanState(): NationFrontPlanState {
 
 export function updateNationFrontPlans(world: WorldState): void {
   const state = world.frontPlans;
+  const campaignPeaceReadiness = world.settings?.warCampaignEnabled && world.settings.diplomacyEnabled
+    ? world.wars.filter((war) => !war.isTest && hasMinimumPeaceAge(world.time.fastTick, war.startedAtFastTick)).length : 0;
   if (
     state.physicalFrontVersion === world.landFronts.version &&
+    state.campaignVersion === (world.warCampaigns?.version ?? 0) &&
+    state.campaignPeaceReadiness === campaignPeaceReadiness &&
+    state.campaignOperationVersion === (world.warCampaigns ? world.offensiveOperations.version : 0) &&
     state.physicalFrontMetricsVersion === world.landFronts.metricsVersion &&
     state.capitalDefenseVersion === world.capitalDefense.version &&
     state.supplyDefenseVersion === world.supplyDefense.version
@@ -127,6 +140,9 @@ export function updateNationFrontPlans(world: WorldState): void {
     state.version += 1;
   }
   state.physicalFrontVersion = world.landFronts.version;
+  state.campaignVersion = world.warCampaigns?.version ?? 0;
+  state.campaignPeaceReadiness = campaignPeaceReadiness;
+  state.campaignOperationVersion = world.warCampaigns ? world.offensiveOperations.version : 0;
   state.physicalFrontMetricsVersion = world.landFronts.metricsVersion;
   state.capitalDefenseVersion = world.capitalDefense.version;
   state.supplyDefenseVersion = world.supplyDefense.version;
@@ -319,7 +335,7 @@ function evaluateNationFrontPlan(
   if (bridgehead && !reasonFlags.includes("bridgehead-campaign")) {
     reasonFlags.push("bridgehead-campaign");
   }
-  return {
+  const result: NationFrontPlan = {
     frontId: front.id,
     physicalFrontId: front.physicalFrontId,
     nationId,
@@ -338,6 +354,12 @@ function evaluateNationFrontPlan(
     reasonFlags,
     evaluatedAtTick: currentTick,
   };
+  const guided = applyCampaignFrontGuidance(world, result);
+  if (guided.posture !== result.posture) {
+    guided.desiredStrength = Math.max(supplyRequired, bridgehead?.desiredStrength ?? 0,
+      calculateDesiredStrength(friendly, enemy, guided.posture, capitalDefense, front.id, isCapitalDefenseFront));
+  }
+  return guided;
 }
 
 function getBridgeheadFrontPriority(

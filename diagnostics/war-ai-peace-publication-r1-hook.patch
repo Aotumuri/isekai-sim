@@ -1,0 +1,41 @@
+diff --git a/src/sim/instrumentation.ts b/src/sim/instrumentation.ts
+index 986f58d..8cebe0a 100644
+--- a/src/sim/instrumentation.ts
++++ b/src/sim/instrumentation.ts
+@@ -1,4 +1,6 @@
+ export type SimulationMetricName =
++  | `diagnostic.peaceOffer.${string}.${string}`
++  | `diagnostic.peaceOfferPublished.${string}.${string}`
+   | "production.evaluation"
+   | "production.capacityCounting"
+   | "production.supplyLookup"
+diff --git a/src/sim/war-negotiations.ts b/src/sim/war-negotiations.ts
+index e7dcc29..c81d4bc 100644
+--- a/src/sim/war-negotiations.ts
++++ b/src/sim/war-negotiations.ts
+@@ -251,6 +251,9 @@ export function getWarNegotiation(world: WorldState, war: WarState): WarNegotiat
+       negotiation.automatic.set(proposer, true); negotiation.lastRevisionSlowTick.set(proposer, world.time.slowTick);
+       negotiation.offers.set(proposer, { proposerId: proposer, terms: openingTerms(world, war, proposer, target), revisedAtSlowTick: world.time.slowTick, revision: 0, source: "opening" });
+     }
++    for (const [proposer, target] of [[negotiation.a, negotiation.b], [negotiation.b, negotiation.a]]) {
++      world.instrumentation?.recordDuration(`diagnostic.peaceOfferPublished.${target}.${proposer}`, 0);
++    }
+     recordSimulationEvent(world, { category: "diplomacy", nationIds: [negotiation.a, negotiation.b],
+       message: `${getNationName(world, negotiation.a)} and ${getNationName(world, negotiation.b)} published opening peace conditions.` });
+   }
+@@ -336,6 +339,7 @@ export function acceptPeaceOffer(world: WorldState, recipient: NationId, propose
+   const terms = offer.terms;
+   if (expectedRevision !== undefined && expectedRevision !== offer.revision) return false;
+   if (getSeparatePeaceIssue(world, proposer, recipient) || getPeaceTermsIssue(world, proposer, recipient, terms)) return false;
++  world.instrumentation?.recordDuration(`diagnostic.peaceOffer.${recipient}.${proposer}`, 0);
+   const defeated = world.nations.find((nation) => nation.id === recipient)!;
+   const localPlan = terms.localSubject ? planLocalSubject(world, proposer, recipient, terms.demandedRegionIds) : undefined;
+   const plan = localPlan ?? terms.partition;
+@@ -441,6 +445,7 @@ export function updateWarNegotiations(world: WorldState): void {
+         negotiation.lastRevisionSlowTick.set(proposer, world.time.slowTick);
+         if (JSON.stringify(terms) !== JSON.stringify(old.terms)) {
+           negotiation.offers.set(proposer, { proposerId: proposer, terms, revisedAtSlowTick: world.time.slowTick, revision: old.revision + 1, source: "automatic" });
++          world.instrumentation?.recordDuration(`diagnostic.peaceOfferPublished.${target}.${proposer}`, 0);
+           recordSimulationEvent(world, { category: "diplomacy", nationIds: [proposer, target],
+             message: `${getNationName(world, proposer)} revised its peace terms: ${terms.demandedRegionIds.length} districts demanded, ${terms.demandedWeapons || -terms.offeredWeapons} weapons reparations.` });
+         }

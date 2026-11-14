@@ -1,0 +1,14 @@
+{
+  "control": "diagnostics/war-ai-v6-control-holdout.json.gz",
+  "campaign": "diagnostics/war-ai-v6-holdout.json.gz",
+  "revisions": [
+    "1f16d9eb827b5faf966981872152400b60806149",
+    "1f16d9eb827b5faf966981872152400b60806149"
+  ],
+  "pairedRows": 260,
+  "failures": 0,
+  "pairedActualSettings": true,
+  "pairedStartingSummaries": true,
+  "unchangedControlRows": 0,
+  "note": "Starting summaries are aggregate counts and stocks; CPU timings are excluded from gameplay equality."
+}

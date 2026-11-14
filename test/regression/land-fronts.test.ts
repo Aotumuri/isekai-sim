@@ -1,3 +1,5 @@
+import { updateWarCampaigns } from "../../src/sim/war-campaign/update";
+import { createSimulationSettings } from "../../src/sim/simulation-settings";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { WORLD_BALANCE } from "../../src/data/balance";
@@ -2432,17 +2434,25 @@ test("a gap toward the capital beats a weaker city route", () => {
   assert(Math.abs(operation.exploitationTargetScore - 174.525) < 0.001);
 });
 
-test("a disappearing Front cancels its offensive operation", () => {
-  const world = createOperationWorld();
-  updateOffensiveOperations(world);
-  const operation = onlyOperation(world, NATION_A);
-  world.landFronts.physicalFronts = [];
-  world.landFronts.physicalFrontsById.clear();
-
-  updateOffensiveOperations(world);
-
-  assert.equal(operation.outcome, "cancelled");
-  assert.equal(operation.completionReason, "front-disappeared");
+test("a disappearing Front cancels its offensive operation with or without a campaign", () => {
+  for (const enabled of [false, true]) {
+    const world = createOperationWorld();
+    if (enabled) {
+      world.settings = createSimulationSettings({ warCampaignEnabled: true });
+      updateWarCampaigns(world);
+    }
+    updateOffensiveOperations(world);
+    const operation = onlyOperation(world, NATION_A);
+    world.landFronts.physicalFronts = [];
+    world.landFronts.physicalFrontsById.clear();
+    updateOffensiveOperations(world);
+    assert.equal(operation.outcome, "cancelled");
+    assert.equal(operation.completionReason, "front-disappeared");
+    if (enabled) {
+      updateWarCampaigns(world);
+      assert.equal(world.warCampaigns!.byNationId.size, 2);
+    }
+  }
 });
 
 test("ending the war cancels its offensive operation", () => {
@@ -4570,3 +4580,111 @@ function id(value: string): MesoRegionId {
 function ids(...values: string[]): MesoRegionId[] {
   return values.map(id).sort();
 }
+
+// These exercise the real operation lifecycle, including posture bypasses.
+function settleCampaign(world: WorldState): void {
+  world.settings = createSimulationSettings({ warCampaignEnabled: true, diplomacyEnabled: true });
+  world.wars[0]!.isTest = false;
+  updateWarCampaigns(world);
+  const campaign = world.warCampaigns!.byNationId.get(NATION_A)!;
+  campaign.mode = "consolidate";
+  campaign.settlementReadyOpponentIds = campaign.objectives.map((goal) => goal.opponentId);
+  campaign.constraints.objectivesSecured = true;
+  world.time.fastTick = Math.max(world.time.fastTick, 300);
+}
+
+test("an available settlement prevents a dedicated pocket operation from bypassing hold posture", () => {
+  const control = createPocketClosureWorld();
+  updateBattlefieldTopology(control);
+  for (const assessment of control.battlefieldTopology.assessments) {
+    for (const opportunity of assessment.pocketClosureOpportunities) opportunity.score = 100;
+  }
+  planFor(control, NATION_A).posture = "hold";
+  updateOffensiveOperations(control);
+  assert(onlyOperation(control, NATION_A).pocketClosureObjective);
+  const world = createPocketClosureWorld();
+  updateBattlefieldTopology(world);
+  for (const assessment of world.battlefieldTopology.assessments) {
+    for (const opportunity of assessment.pocketClosureOpportunities) opportunity.score = 100;
+  }
+  settleCampaign(world);
+  planFor(world, NATION_A).posture = "hold";
+  updateOffensiveOperations(world);
+  assert.equal(getOffensiveOperations(world).filter((item) => item.nationId === NATION_A).length, 0);
+});
+
+test("settlement cancels preparation with an explicit reason and releases its lease", () => {
+  const world = createOperationWorld();
+  updateFrontlineCoverage(world);
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  assert.equal(operation.phase, "preparing");
+  settleCampaign(world);
+  updateOffensiveOperations(world);
+  assert.equal(operation.phase, "recovering");
+  assert.equal(operation.completionReason, "campaign-settlement");
+  assert.notEqual(operation.preparationLeaseEndedAtTick, null);
+  const version = world.frontPlans.version;
+  updateNationFrontPlans(world);
+  assert.equal(planFor(world, NATION_A).posture, "hold");
+  assert.ok(world.frontPlans.version > version);
+});
+
+test("settlement preserves an achieved attack as success without starting exploitation", () => {
+  const { world, operation } = prepareStrategicExploitationWorld();
+  assert.equal(operation.phase, "attacking");
+  settleCampaign(world);
+  updateOffensiveOperations(world);
+  assert.equal(operation.phase, "recovering");
+  assert.equal(operation.completionReason, "primary-target-occupied");
+  assert.equal(operation.outcome, "success");
+  assert.equal(operation.exploitationStartedAtTick, null);
+});
+
+test("settlement ends active exploitation while retaining the successful attack", () => {
+  const { world, operation } = prepareStrategicExploitationWorld();
+  const metrics = new BenchmarkMetrics();
+  world.instrumentation = metrics;
+  updateOffensiveOperations(world);
+  assert.equal(operation.phase, "exploiting");
+  settleCampaign(world);
+  updateOffensiveOperations(world);
+  assert.equal(operation.phase, "recovering");
+  assert.equal(operation.exploitationStopReason, "campaign-settlement");
+  assert.equal(world.offensiveOperations.exploitationStopCounts["campaign-settlement"], 1);
+  assert.equal(metrics.getCounter("offensiveOperation.exploitationStop.campaign-settlement"), 1);
+  assert.equal(operation.outcome, "success");
+});
+
+test("consolidation retains a military exit before peace can mature and invalidates the readiness cache", () => {
+  const world = createOperationWorld();
+  world.settings = createSimulationSettings({ warCampaignEnabled: true, diplomacyEnabled: true });
+  world.wars[0]!.isTest = false;
+  updateWarCampaigns(world);
+  const campaign = world.warCampaigns!.byNationId.get(NATION_A)!;
+  campaign.mode = "consolidate";
+  campaign.settlementReadyOpponentIds = campaign.objectives.map((goal) => goal.opponentId);
+  campaign.constraints.objectivesSecured = true;
+  updateNationFrontPlans(world);
+  assert.equal(planFor(world, NATION_A).posture, "attack");
+  assert(planFor(world, NATION_A).reasonFlags.includes("campaign-military-exit"));
+  const version = world.frontPlans.version;
+  world.time.fastTick = 300;
+  updateNationFrontPlans(world);
+  assert.equal(planFor(world, NATION_A).posture, "hold");
+  assert(world.frontPlans.version > version);
+});
+
+test("a binding cost limit still blocks discretionary attacks before peace can mature", () => {
+  const world = createOperationWorld();
+  world.settings = createSimulationSettings({ warCampaignEnabled: true, diplomacyEnabled: true });
+  world.wars[0]!.isTest = false;
+  updateWarCampaigns(world);
+  const campaign = world.warCampaigns!.byNationId.get(NATION_A)!;
+  campaign.mode = "consolidate";
+  campaign.constraints.objectivesSecured = true;
+  campaign.constraints.foodSeconds = 0;
+  updateNationFrontPlans(world);
+  assert.equal(planFor(world, NATION_A).posture, "hold");
+  assert(!planFor(world, NATION_A).reasonFlags.includes("campaign-military-exit"));
+});

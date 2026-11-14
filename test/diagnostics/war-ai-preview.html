@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>War campaign debug preview</title>
+<style>html,body,#app{margin:0;width:100%;height:100%;overflow:hidden;background:#081018}button{position:fixed;bottom:8px;right:8px;z-index:1}</style>
+<div id="app"></div>
+<button id="advance">Advance 30 simulation seconds</button>
+<script type="module">
+  import { createScenarioWorld } from "../scenarios/index.ts";
+  import { runSimulation } from "../helpers/simulation-driver.ts";
+  import { createRenderer } from "../../src/render/renderer.ts";
+  import { attachFrontDebugOverlay } from "../../src/render/front-debug-overlay.ts";
+  const world = createScenarioWorld("active-war", {
+    seed: 822748319788, width: 900, height: 700, quick: true,
+    config: { systems: { warCampaignEnabled: true, mobilizationEnabled: true,
+      diplomacyEnabled: true, researchEnabled: true, armsAidEnabled: true,
+      tradeEnabled: true, politicalTurbulenceEnabled: true } },
+  });
+  runSimulation(world, { ticks: 300 });
+  const renderer = createRenderer(document.querySelector("#app"));
+  const overlay = attachFrontDebugOverlay(renderer, world);
+  document.querySelector("#advance").addEventListener("click", () => {
+    runSimulation(world, { ticks: 300 });
+    overlay.update();
+  });
+  overlay.update();
+</script>
+</html>

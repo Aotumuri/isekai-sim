@@ -1,0 +1,305 @@
+diff --git a/src/sim/instrumentation.ts b/src/sim/instrumentation.ts
+index 986f58d..b4244ff 100644
+--- a/src/sim/instrumentation.ts
++++ b/src/sim/instrumentation.ts
+@@ -137,6 +137,7 @@ export type SimulationCounterName =
+   | "battle.attackerManpowerLoss"
+   | "battle.defenderManpowerLoss"
+   | "movement.regionArrivals"
++  | "movement.retainedRetargetProgressMs"
+   | "occupation.fullRegionScans"
+   | "occupation.regionsScanned"
+   | "capitals.activeNationScans"
+diff --git a/src/sim/nation/movement-continuity.ts b/src/sim/nation/movement-continuity.ts
+new file mode 100644
+index 0000000..b6a2cbd
+--- /dev/null
++++ b/src/sim/nation/movement-continuity.ts
+@@ -0,0 +1,65 @@
++import type { UnitState } from "../unit";
++import type { WorldState } from "../world-state";
++import { isAmphibiousOwnedUnit } from "../amphibious";
++import { isPlayerDirectedLandUnit } from "../player-land-orders";
++
++export type MovementLeg = Pick<UnitState,
++  "regionId" | "moveTargetId" | "moveFromId" | "moveToId" | "moveProgressMs">;
++interface MarchMission { nation: string; front: string; revision: number }
++type CampaignMarchLeg = MovementLeg & { mission: MarchMission };
++const missionsByWorld = new WeakMap<WorldState, Map<UnitState["id"], MarchMission>>();
++
++export function clearCampaignMarchMissions(world: WorldState): void { missionsByWorld.delete(world); }
++
++/** Remember only the preceding pass's ordinary mission, never an old route.
++ * This is also called without reassignment so intervening role changes count. */
++export function captureCampaignMarchLegs(world: WorldState, units: UnitState[], reassign: boolean): Map<UnitState["id"], CampaignMarchLeg> | undefined {
++  if (!world.settings?.warCampaignEnabled) { clearCampaignMarchMissions(world); return; }
++  const previous = missionsByWorld.get(world);
++  const next = new Map<UnitState["id"], MarchMission>();
++  const legs = new Map<UnitState["id"], CampaignMarchLeg>();
++  for (const unit of units) {
++    const mission = ordinaryMarchMission(world, unit);
++    if (!mission) continue;
++    next.set(unit.id, mission);
++    if (!reassign || !sameMission(previous?.get(unit.id), mission) || !unit.moveToId || unit.moveProgressMs <= 0) continue;
++    legs.set(unit.id, { regionId: unit.regionId, moveTargetId: unit.moveTargetId,
++      moveFromId: unit.moveFromId, moveToId: unit.moveToId, moveProgressMs: unit.moveProgressMs, mission });
++  }
++  if (next.size) missionsByWorld.set(world, next); else missionsByWorld.delete(world);
++  return legs.size ? legs : undefined;
++}
++
++/** Assignment may have changed ownership of a unit's orders within this pass. */
++export function discardChangedMarchMissions(world: WorldState, units: UnitState[], legs?: Map<UnitState["id"], CampaignMarchLeg>): void {
++  if (!legs) return;
++  const byId = new Map(units.map((unit) => [unit.id, unit]));
++  for (const [id, leg] of legs) {
++    const unit = byId.get(id);
++    if (!unit || !sameMission(leg.mission, ordinaryMarchMission(world, unit))) legs.delete(id);
++  }
++}
++
++function ordinaryMarchMission(world: WorldState, unit: UnitState): MarchMission | undefined {
++  const campaign = world.warCampaigns?.byNationId.get(unit.nationId);
++  const front = world.frontAllocations.frontIdByUnitId.get(unit.id);
++  if (!campaign || campaign.constraints.capitalCritical || !front || !world.landFronts.operationalSectorsById.has(front) ||
++    world.playerNation && isPlayerDirectedLandUnit(world.playerNation, unit) || isAmphibiousOwnedUnit(world, unit.id) ||
++    world.strategicReserves.reserveNationByUnitId.has(unit.id) || world.retreatPlans.retreatIdByUnitId.has(unit.id) ||
++    world.reorganization.planIdByUnitId.has(unit.id) || world.offensiveOperations.operationIdByUnitId.has(unit.id)) return;
++  return { nation: unit.nationId, front, revision: campaign.revision };
++}
++
++function sameMission(before?: MarchMission, after?: MarchMission): boolean {
++  return !!before && !!after && before.nation === after.nation && before.front === after.front && before.revision === after.revision;
++}
++
++/** Called after routing has validated the new first edge. Enemy blocking and
++ * arrival still run normally, so failed arrivals cannot accumulate old time. */
++export function retainedRetargetProgress(unit: MovementLeg, previous: MovementLeg | undefined, dtMs: number): number {
++  if (!previous || !unit.moveTargetId || previous.moveTargetId === unit.moveTargetId ||
++    !previous.moveToId || previous.moveFromId !== previous.regionId ||
++    previous.regionId !== unit.regionId || unit.moveFromId !== previous.moveFromId ||
++    unit.moveToId !== previous.moveToId) return unit.moveProgressMs;
++  return Math.max(unit.moveProgressMs, previous.moveProgressMs + dtMs);
++}
+diff --git a/src/sim/nation/reposition-units.ts b/src/sim/nation/reposition-units.ts
+index ba4b550..d07b3de 100644
+--- a/src/sim/nation/reposition-units.ts
++++ b/src/sim/nation/reposition-units.ts
+@@ -1,4 +1,5 @@
+ import { isAmphibiousOwnedUnit } from "../amphibious";
++import { captureCampaignMarchLegs, clearCampaignMarchMissions, discardChangedMarchMissions, retainedRetargetProgress, type MovementLeg } from "./movement-continuity";
+ import { getPlayerNation, type PlayerNation } from "../player-nation";
+ import { isPlayerDirectedLandUnit } from "../player-land-orders";
+ import { applyCrisisDeployments } from "../crisis-deployment";
+@@ -103,10 +104,12 @@ const landAiRuntimeByWorld = new WeakMap<WorldState, LandAiRuntime>();
+ 
+ export function repositionUnits(world: WorldState, dtMs: number): void {
+   if (world.units.length === 0 || world.mesoRegions.length === 0) {
++    clearCampaignMarchMissions(world);
+     return;
+   }
+   const landUnits = world.units.filter((unit) => unit.domain === "land");
+   if (landUnits.length === 0) {
++    clearCampaignMarchMissions(world);
+     return;
+   }
+   applyMilitaryStagingOrders(world);
+@@ -175,6 +178,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
+   const mesoById = getMesoById(world);
+   const neighborsById = getNeighborsById(world);
+   const ownerByMesoId = getOwnerByMesoId(world);
++  const previousLegs = captureCampaignMarchLegs(world, landUnits, shouldReassign);
+ 
+   if (warsChanged) {
+     runtime.warAdjacency = buildWarAdjacency(world.wars);
+@@ -219,6 +223,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
+ 
+   applyCrisisDeployments(world);
+   applyMilitaryStagingOrders(world);
++  discardChangedMarchMissions(world, landUnits, previousLegs);
+   const movementStartedAt = instrumentation ? performance.now() : 0;
+   const directed = player ? landUnits.filter((unit) => isPlayerDirectedLandUnit(player, unit) &&
+     !isAmphibiousOwnedUnit(world, unit.id)) : [];
+@@ -259,6 +264,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
+       isBlockedByEnemy,
+       group.controlledOnly ?? false,
+       instrumentation,
++      previousLegs,
+     );
+     if (group.units === directed && player) {
+       for (const unit of directed) {
+@@ -1218,6 +1224,7 @@ function progressNationUnits(
+   isBlockedByEnemy: (toId: MesoRegionId) => boolean,
+   controlledOnly: boolean,
+   instrumentation?: SimulationInstrumentation,
++  previousLegs?: Map<UnitState["id"], MovementLeg>,
+ ): boolean {
+   let orderInvalidated = false;
+   for (const unit of orderedUnits) {
+@@ -1261,6 +1268,7 @@ function progressNationUnits(
+               pathMode: useWarPath ? "war" : "owned",
+               sharedPathFields,
+             },
++        previousLegs?.get(unit.id),
+       ) || orderInvalidated;
+   }
+   return orderInvalidated;
+@@ -1273,6 +1281,7 @@ function moveUnitTowardTarget(
+   isAllowed: (id: MesoRegionId) => boolean,
+   isBlockedByEnemy: (toId: MesoRegionId) => boolean,
+   pathContext?: SharedPathContext,
++  previousLeg?: MovementLeg,
+ ): boolean {
+   if (!unit.moveTargetId || unit.regionId === unit.moveTargetId) {
+     unit.moveFromId = null;
+@@ -1299,6 +1308,11 @@ function moveUnitTowardTarget(
+   }
+ 
+   const moveMsPerRegion = getMoveMsPerRegion(unit);
++  const progress = retainedRetargetProgress(unit, previousLeg, dtMs);
++  if (progress > unit.moveProgressMs) {
++    pathContext?.instrumentation?.incrementCounter("movement.retainedRetargetProgressMs", progress - unit.moveProgressMs);
++    unit.moveProgressMs = progress;
++  }
+   while (unit.moveProgressMs >= moveMsPerRegion) {
+     const nextId = unit.moveToId ?? unit.regionId;
+     unit.moveProgressMs -= moveMsPerRegion;
+diff --git a/test/diagnostics/war-ai-matrix.ts b/test/diagnostics/war-ai-matrix.ts
+index afe20e8..5d1d9dc 100644
+--- a/test/diagnostics/war-ai-matrix.ts
++++ b/test/diagnostics/war-ai-matrix.ts
+@@ -50,6 +50,7 @@ const dirty = execFileSync("git", ["diff", "--", "src"], { encoding: "utf8" });
+ if (dirty) throw new Error("Commit simulation source before recording an experiment");
+ interface Experiment {
+   revision: string;
++  runtime?: { node: string; v8: string; platform: string; arch: string };
+   partition: string;
+   ticks: number;
+   seedStart: number;
+@@ -65,6 +66,7 @@ interface Experiment {
+   failures: { scenario: string; seed: number; error: string }[];
+ }
+ let experiment: Experiment = {
++  runtime: { node: process.version, v8: process.versions.v8, platform: process.platform, arch: process.arch },
+   revision, partition, ticks, seedStart, seedCount: count, scenarios, fullSystems, politicalTurbulence, campaignEnabled, observeWarOutcomes, normalWars,
+   results: [], failures: [],
+ };
+@@ -72,6 +74,9 @@ if (observeWarOutcomes) experiment.observationSchema = WAR_OUTCOME_SCHEMA;
+ try {
+   const bytes = await readFile(output);
+   const saved = JSON.parse((output.endsWith(".gz") ? gunzipSync(bytes) : bytes).toString("utf8")) as Experiment;
++  if (saved.runtime) for (const key of ["node", "v8", "platform", "arch"] as const) {
++    if (saved.runtime[key] !== experiment.runtime![key]) throw new Error(`Output has incompatible runtime ${key}`);
++  }
+   for (const key of ["revision", "partition", "ticks", "seedStart", "seedCount"] as const) {
+     if (saved[key] !== experiment[key]) throw new Error(`Output has incompatible ${key}`);
+   }
+diff --git a/test/regression/campaign-march-continuity.test.ts b/test/regression/campaign-march-continuity.test.ts
+new file mode 100644
+index 0000000..b1db935
+--- /dev/null
++++ b/test/regression/campaign-march-continuity.test.ts
+@@ -0,0 +1,103 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { createScenarioWorld } from "../scenarios";
++import { updateWarCampaigns } from "../../src/sim/war-campaign/update";
++import { updateLandFronts, getFrontSide } from "../../src/sim/land-fronts";
++import { enterPlayerNation } from "../../src/sim/player-nation";
++import { captureCampaignMarchLegs, discardChangedMarchMissions, retainedRetargetProgress } from "../../src/sim/nation/movement-continuity";
++import { repositionUnits } from "../../src/sim/nation/reposition-units";
++
++function march() {
++  const world = createScenarioWorld("matched-war", { seed: 1022748319780, width: 640, height: 360, quick: true });
++  world.settings!.warCampaignEnabled = true;
++  updateLandFronts(world); updateWarCampaigns(world);
++  const nation = world.wars[0].aggressorId;
++  const unit = world.units.find((u) => u.domain === "land" && u.nationId === nation)!;
++  const front = world.landFronts.operationalSectors.find((f) => getFrontSide(f, nation))!;
++  world.frontAllocations.frontIdByUnitId.set(unit.id, front.id);
++  const campaign = world.warCampaigns!.byNationId.get(nation)!;
++  campaign.constraints.capitalCritical = false;
++  world.strategicReserves.reserveNationByUnitId.delete(unit.id);
++  world.reorganization.planIdByUnitId.delete(unit.id);
++  world.retreatPlans.retreatIdByUnitId.delete(unit.id);
++  world.offensiveOperations.operationIdByUnitId.delete(unit.id);
++  unit.moveFromId = unit.regionId;
++  unit.moveToId = world.mesoRegions.find((r) => r.id === unit.regionId)!.neighbors[0].id;
++  unit.moveTargetId = unit.moveToId;
++  unit.moveProgressMs = 700;
++  const capture = (reassign = true) => captureCampaignMarchLegs(world, [unit], reassign);
++  assert.equal(capture(false), undefined, "a new mission has no previously validated march");
++  assert.ok(capture()?.has(unit.id));
++  return { world, unit, front, campaign, capture };
++}
++
++test("only a retarget on the same validated first edge retains elapsed travel", () => {
++  const { world, unit, capture } = march();
++  const before = capture()!.get(unit.id)!;
++  const target = world.mesoRegions.find((r) => r.id !== unit.regionId && r.id !== unit.moveTargetId)!.id;
++  const next = { ...unit, moveTargetId: target, moveProgressMs: 100 };
++  assert.equal(retainedRetargetProgress(next, before, 100), 800);
++  assert.equal(retainedRetargetProgress({ ...next, moveToId: target }, before, 100), 100);
++  assert.equal(retainedRetargetProgress({ ...next, moveTargetId: before.moveTargetId }, before, 100), 100);
++  assert.equal(retainedRetargetProgress({ ...next, moveTargetId: null }, before, 100), 100);
++  assert.equal(retainedRetargetProgress({ ...next, moveFromId: target }, before, 100), 100);
++  assert.equal(retainedRetargetProgress({ ...next, moveProgressMs: 900 }, before, 100), 900);
++});
++
++test("special mission ownership invalidates captured progress and cannot resurrect it on return", () => {
++  for (const role of ["reserve", "retreat", "reorganization", "operation", "amphibious", "capability"] as const) {
++    const { world, unit, capture } = march();
++    const map = role === "reserve" ? world.strategicReserves.reserveNationByUnitId
++      : role === "retreat" ? world.retreatPlans.retreatIdByUnitId
++      : role === "reorganization" ? world.reorganization.planIdByUnitId
++      : role === "operation" ? world.offensiveOperations.operationIdByUnitId
++      : role === "amphibious" ? world.amphibiousOperations.operationByUnitId : world.amphibiousOperations.capabilityDemandByUnitId;
++    const legs = capture();
++    map.set(unit.id, "special-mission" as never);
++    discardChangedMarchMissions(world, [unit], legs);
++    assert.equal(legs!.size, 0, role);
++    assert.equal(capture(false), undefined, role);
++    map.delete(unit.id);
++    assert.equal(capture(), undefined, `${role} return starts a new ordinary mission`);
++  }
++});
++
++test("direct commands and capital emergencies keep their normal reset semantics", () => {
++  const { world, unit, campaign, capture } = march();
++  const legs = capture();
++  enterPlayerNation(world, unit.nationId);
++  world.playerNation!.landOrders.set(unit.id, unit.moveTargetId!);
++  discardChangedMarchMissions(world, [unit], legs);
++  assert.equal(legs!.size, 0);
++  assert.equal(capture(false), undefined);
++  world.playerNation!.landOrders.clear();
++  world.playerNation!.commandMode = "assisted";
++  assert.equal(capture(), undefined);
++  assert.ok(capture());
++  campaign.constraints.capitalCritical = true;
++  assert.equal(capture(), undefined);
++  campaign.constraints.capitalCritical = false;
++  assert.equal(capture(), undefined);
++});
++
++test("new plans, vanished fronts, disablement and empty worlds clear prior mission eligibility", () => {
++  const { world, unit, front, campaign, capture } = march();
++  campaign.revision++;
++  assert.equal(capture(), undefined);
++  assert.ok(capture());
++  world.landFronts.operationalSectorsById.delete(front.id);
++  assert.equal(capture(false), undefined);
++  world.landFronts.operationalSectorsById.set(front.id, front);
++  assert.equal(capture(), undefined);
++  assert.ok(capture());
++  world.settings!.warCampaignEnabled = false;
++  assert.equal(capture(), undefined);
++  world.settings!.warCampaignEnabled = true;
++  assert.equal(capture(), undefined);
++  assert.ok(capture());
++  const units = world.units;
++  world.units = [];
++  repositionUnits(world, 100);
++  world.units = units;
++  assert.equal(capture(), undefined);
++});

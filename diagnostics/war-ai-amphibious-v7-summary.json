@@ -1,0 +1,168 @@
+{
+  "sourceRevision": "93ba1cf30a43f49b14efd86fb4f8e7876d03c3a0",
+  "episodes": 160,
+  "groups": [
+    {
+      "scenario": "active-war",
+      "normal": false,
+      "campaign": false,
+      "seeds": 20,
+      "attempts": 9,
+      "created": 7,
+      "launched": 7,
+      "landed": 3,
+      "beachheadSuccess": 2,
+      "resolvedCreatedWars": 7,
+      "rightCensoredCreatedWars": 0,
+      "endedBeforeEstimatedCompletion": 4,
+      "cancelReasons": {
+        "war-ended": 4
+      },
+      "medianLandingErrorTicks": 0,
+      "rejected": 2
+    },
+    {
+      "scenario": "active-war",
+      "normal": false,
+      "campaign": true,
+      "seeds": 20,
+      "attempts": 11,
+      "created": 7,
+      "launched": 7,
+      "landed": 1,
+      "beachheadSuccess": 0,
+      "resolvedCreatedWars": 7,
+      "rightCensoredCreatedWars": 0,
+      "endedBeforeEstimatedCompletion": 4,
+      "cancelReasons": {
+        "war-ended": 4,
+        "transport-lost": 2
+      },
+      "medianLandingErrorTicks": 0,
+      "rejected": 4
+    },
+    {
+      "scenario": "active-war",
+      "normal": true,
+      "campaign": false,
+      "seeds": 20,
+      "attempts": 9,
+      "created": 6,
+      "launched": 6,
+      "landed": 3,
+      "beachheadSuccess": 0,
+      "resolvedCreatedWars": 6,
+      "rightCensoredCreatedWars": 0,
+      "endedBeforeEstimatedCompletion": 3,
+      "cancelReasons": {
+        "war-ended": 3
+      },
+      "medianLandingErrorTicks": 0,
+      "rejected": 3
+    },
+    {
+      "scenario": "active-war",
+      "normal": true,
+      "campaign": true,
+      "seeds": 20,
+      "attempts": 10,
+      "created": 6,
+      "launched": 6,
+      "landed": 3,
+      "beachheadSuccess": 2,
+      "resolvedCreatedWars": 6,
+      "rightCensoredCreatedWars": 0,
+      "endedBeforeEstimatedCompletion": 3,
+      "cancelReasons": {
+        "war-ended": 3
+      },
+      "medianLandingErrorTicks": 0,
+      "rejected": 4
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "normal": false,
+      "campaign": false,
+      "seeds": 20,
+      "attempts": 159,
+      "created": 153,
+      "launched": 153,
+      "landed": 106,
+      "beachheadSuccess": 94,
+      "resolvedCreatedWars": 58,
+      "rightCensoredCreatedWars": 95,
+      "endedBeforeEstimatedCompletion": 2,
+      "cancelReasons": {
+        "target-invalid": 11,
+        "transport-lost": 32,
+        "war-ended": 2
+      },
+      "medianLandingErrorTicks": 0.0,
+      "rejected": 6
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "normal": false,
+      "campaign": true,
+      "seeds": 20,
+      "attempts": 131,
+      "created": 130,
+      "launched": 130,
+      "landed": 92,
+      "beachheadSuccess": 88,
+      "resolvedCreatedWars": 50,
+      "rightCensoredCreatedWars": 80,
+      "endedBeforeEstimatedCompletion": 5,
+      "cancelReasons": {
+        "target-invalid": 11,
+        "transport-lost": 20,
+        "war-ended": 5
+      },
+      "medianLandingErrorTicks": 0.0,
+      "rejected": 1
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "normal": true,
+      "campaign": false,
+      "seeds": 20,
+      "attempts": 95,
+      "created": 92,
+      "launched": 92,
+      "landed": 37,
+      "beachheadSuccess": 27,
+      "resolvedCreatedWars": 92,
+      "rightCensoredCreatedWars": 0,
+      "endedBeforeEstimatedCompletion": 10,
+      "cancelReasons": {
+        "transport-lost": 42,
+        "war-ended": 8,
+        "target-invalid": 5
+      },
+      "medianLandingErrorTicks": 0,
+      "rejected": 3
+    },
+    {
+      "scenario": "two-island-amphibious",
+      "normal": true,
+      "campaign": true,
+      "seeds": 20,
+      "attempts": 103,
+      "created": 101,
+      "launched": 101,
+      "landed": 31,
+      "beachheadSuccess": 25,
+      "resolvedCreatedWars": 101,
+      "rightCensoredCreatedWars": 0,
+      "endedBeforeEstimatedCompletion": 21,
+      "cancelReasons": {
+        "transport-lost": 51,
+        "war-ended": 14,
+        "target-invalid": 5
+      },
+      "medianLandingErrorTicks": 0,
+      "rejected": 2
+    }
+  ],
+  "note": "Attempt counts include retries and reinforcement. Recorded landing is actual; rejected alternatives have no counterfactual outcome."
+}

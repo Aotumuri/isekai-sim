@@ -1,4 +1,5 @@
 import { WORLD_BALANCE } from "../data/balance";
+import { campaignPreservesFrontDemand } from "./war-campaign/concentration-guidance";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { getFrontDistanceField } from "./ai-geography";
@@ -69,7 +70,9 @@ interface FrontAllocationInputSnapshot {
   stalemateVersion: number;
   operationMembershipVersion: number;
   activeNationIds: NationId[];
-  plans: Array<Pick<NationFrontPlan, "frontId" | "nationId" | "posture" | "priority" | "desiredStrength">>;
+  plans: Array<Pick<NationFrontPlan, "frontId" | "nationId" | "posture" | "priority" | "desiredStrength"> & {
+    preservesCampaignDemand: boolean;
+  }>;
   units: Array<{
     id: UnitId;
     nationId: NationId;
@@ -312,6 +315,7 @@ function captureAllocationInput(
       posture: plan.posture,
       priority: plan.priority,
       desiredStrength: plan.desiredStrength,
+      preservesCampaignDemand: campaignPreservesFrontDemand(world, plan),
     })),
     units: landUnits.map((unit) => ({
       id: unit.id,
@@ -354,7 +358,8 @@ function allocationInputMatches(
       before.nationId !== after.nationId ||
       before.posture !== after.posture ||
       before.priority !== after.priority ||
-      before.desiredStrength !== after.desiredStrength
+      before.desiredStrength !== after.desiredStrength ||
+      before.preservesCampaignDemand !== campaignPreservesFrontDemand(world, after)
     ) return false;
   }
   for (let index = 0; index < landUnits.length; index += 1) {
@@ -657,7 +662,7 @@ function createAllocationContexts(
     const defensiveFloor = getFrontlineCoverage(world, front.id, nationId)?.minimumRequiredStrength ?? 0;
     const effectivePlan = !focus ? plan : {
       ...plan,
-      desiredStrength: isFocus
+      desiredStrength: isFocus || campaignPreservesFrontDemand(world, plan)
         ? plan.desiredStrength
         : isSameEnemy
           ? Math.max(defensiveFloor, plan.desiredStrength * concentration.secondaryDesiredStrengthRatio)

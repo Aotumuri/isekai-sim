@@ -1,0 +1,912 @@
+{
+  "summary": [
+    {
+      "revision": "394d4bdd756b29da9eda82cba3dda6ffb31710f1",
+      "ticks": 10000,
+      "fullSystems": true,
+      "failures": [],
+      "scenarios": {
+        "active-war": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 2327.8085457500006,
+            "median": 1862.5347494999878,
+            "min": 1083.8361670000013,
+            "max": 6178.9380830000155,
+            "p95": 5176.012208
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 2566.0648499999998,
+            "median": 2058.6735,
+            "min": 1257.4660000000001,
+            "max": 6416.400000000001,
+            "p95": 5492.505
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 109.68870468139649,
+            "median": 112.37161636352539,
+            "min": 57.651756286621094,
+            "max": 157.37847900390625,
+            "p95": 154.64037322998047
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 11.45,
+            "median": 7.5,
+            "min": 2,
+            "max": 33,
+            "p95": 33
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 5.45,
+            "median": 4,
+            "min": 1,
+            "max": 15,
+            "p95": 13
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 4.6,
+            "median": 4,
+            "min": 0,
+            "max": 17,
+            "p95": 11
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 1.4,
+            "median": 0,
+            "min": 0,
+            "max": 12,
+            "p95": 7
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 2.8,
+            "median": 2,
+            "min": 0,
+            "max": 7,
+            "p95": 7
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 21.3,
+            "median": 17,
+            "min": 0,
+            "max": 65,
+            "p95": 51
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 356.55,
+            "median": 202.5,
+            "min": 68,
+            "max": 1360,
+            "p95": 1266
+          }
+        },
+        "long-frontline": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 2391.044312549998,
+            "median": 2327.5990624999977,
+            "min": 1376.6927920000162,
+            "max": 4434.330499999982,
+            "p95": 3703.5677499999874
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 2576.50635,
+            "median": 2602.0190000000002,
+            "min": 1475.07,
+            "max": 3820.599,
+            "p95": 3613.7560000000003
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 108.09306297302246,
+            "median": 106.13963317871094,
+            "min": 66.19556427001953,
+            "max": 174.6509246826172,
+            "p95": 151.099853515625
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 9.6,
+            "median": 6.5,
+            "min": 0,
+            "max": 27,
+            "p95": 21
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 4.45,
+            "median": 3,
+            "min": 0,
+            "max": 12,
+            "p95": 11
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 4.7,
+            "median": 3,
+            "min": 0,
+            "max": 14,
+            "p95": 12
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 0.45,
+            "median": 0,
+            "min": 0,
+            "max": 3,
+            "p95": 2
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 2.4,
+            "median": 2,
+            "min": 0,
+            "max": 6,
+            "p95": 6
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.05,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 0
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 18.4,
+            "median": 17.5,
+            "min": 0,
+            "max": 55,
+            "p95": 30
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 326.85,
+            "median": 206,
+            "min": 43,
+            "max": 1141,
+            "p95": 798
+          }
+        },
+        "stalemate-breaker": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 2546.376054199998,
+            "median": 2396.404708499991,
+            "min": 1354.8800829999964,
+            "max": 7175.167375000019,
+            "p95": 3254.8889999999956
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 2623.91285,
+            "median": 2561.2255000000005,
+            "min": 1433.3619999999999,
+            "max": 4781.773999999999,
+            "p95": 3434.167
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 103.62542762756348,
+            "median": 94.20800399780273,
+            "min": 61.640594482421875,
+            "max": 154.5028839111328,
+            "p95": 147.0419921875
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 11.5,
+            "median": 6,
+            "min": 1,
+            "max": 42,
+            "p95": 39
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 4.6,
+            "median": 3.5,
+            "min": 0,
+            "max": 19,
+            "p95": 10
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 4.5,
+            "median": 2.5,
+            "min": 0,
+            "max": 15,
+            "p95": 10
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 2.35,
+            "median": 0.5,
+            "min": 0,
+            "max": 21,
+            "p95": 7
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 2.5,
+            "median": 2,
+            "min": 0,
+            "max": 7,
+            "p95": 6
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.35,
+            "median": 0,
+            "min": 0,
+            "max": 3,
+            "p95": 2
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 32.15,
+            "median": 17.5,
+            "min": 1,
+            "max": 110,
+            "p95": 95
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 325.15,
+            "median": 150.5,
+            "min": 0,
+            "max": 1156,
+            "p95": 1001
+          }
+        },
+        "collapse-advance": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 2433.597864600003,
+            "median": 2075.957791500012,
+            "min": 1390.168667,
+            "max": 8055.733042000036,
+            "p95": 4057.669875000007
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 2624.2625000000003,
+            "median": 2259.568,
+            "min": 1468.1270000000002,
+            "max": 8132.44,
+            "p95": 4662.049
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 106.87675132751465,
+            "median": 108.7752456665039,
+            "min": 56.45648956298828,
+            "max": 161.32860565185547,
+            "p95": 157.94224548339844
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 10.45,
+            "median": 7.5,
+            "min": 0,
+            "max": 34,
+            "p95": 26
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 5.35,
+            "median": 3,
+            "min": 0,
+            "max": 16,
+            "p95": 14
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 4.5,
+            "median": 4,
+            "min": 0,
+            "max": 18,
+            "p95": 16
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 0.55,
+            "median": 0,
+            "min": 0,
+            "max": 4,
+            "p95": 2
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 2.55,
+            "median": 2,
+            "min": 0,
+            "max": 8,
+            "p95": 5
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.25,
+            "median": 0,
+            "min": 0,
+            "max": 3,
+            "p95": 1
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 10.7,
+            "median": 15,
+            "min": 0,
+            "max": 32,
+            "p95": 32
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 339.5,
+            "median": 137.5,
+            "min": 0,
+            "max": 1764,
+            "p95": 866
+          }
+        },
+        "capital-threat": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 2227.334024949997,
+            "median": 2159.256083499982,
+            "min": 1260.429208000016,
+            "max": 3797.813582999981,
+            "p95": 3272.9237079999875
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 2419.5487499999995,
+            "median": 2284.6225000000004,
+            "min": 1281.907,
+            "max": 3973.515,
+            "p95": 3577.761
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 122.70830497741699,
+            "median": 117.17362594604492,
+            "min": 79.34736633300781,
+            "max": 179.92279052734375,
+            "p95": 176.33810424804688
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 9.4,
+            "median": 6.5,
+            "min": 1,
+            "max": 24,
+            "p95": 21
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 4.8,
+            "median": 4,
+            "min": 0,
+            "max": 12,
+            "p95": 11
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 3.7,
+            "median": 2.5,
+            "min": 0,
+            "max": 14,
+            "p95": 8
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 0.85,
+            "median": 0,
+            "min": 0,
+            "max": 4,
+            "p95": 4
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 3.2,
+            "median": 2,
+            "min": 1,
+            "max": 11,
+            "p95": 8
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.15,
+            "median": 0,
+            "min": 0,
+            "max": 2,
+            "p95": 1
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 15.4,
+            "median": 15,
+            "min": 0,
+            "max": 76,
+            "p95": 37
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 259,
+            "median": 178.5,
+            "min": 10,
+            "max": 769,
+            "p95": 687
+          }
+        },
+        "retreat-heavy": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 2174.2891582999964,
+            "median": 2130.763916499993,
+            "min": 1312.731249999999,
+            "max": 4102.035458000028,
+            "p95": 3719.5632089999854
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 2235.9194999999995,
+            "median": 2218.513,
+            "min": 1428.802,
+            "max": 4271.334999999999,
+            "p95": 3528.912
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 117.63373565673828,
+            "median": 112.15436935424805,
+            "min": 71.0500717163086,
+            "max": 194.4204330444336,
+            "p95": 172.9081802368164
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 8.05,
+            "median": 3.5,
+            "min": 0,
+            "max": 40,
+            "p95": 25
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 3.6,
+            "median": 2,
+            "min": 0,
+            "max": 14,
+            "p95": 10
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 2.25,
+            "median": 1.5,
+            "min": 0,
+            "max": 8,
+            "p95": 6
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 2.1,
+            "median": 0,
+            "min": 0,
+            "max": 25,
+            "p95": 11
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 1.8,
+            "median": 2,
+            "min": 0,
+            "max": 5,
+            "p95": 4
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.1,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 14.75,
+            "median": 6,
+            "min": 0,
+            "max": 109,
+            "p95": 32
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 205.85,
+            "median": 75,
+            "min": 0,
+            "max": 935,
+            "p95": 912
+          }
+        },
+        "reorganization-heavy": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 2474.299766600001,
+            "median": 2217.4502495000197,
+            "min": 1383.2222500000207,
+            "max": 6243.046083999972,
+            "p95": 4770.919208000007
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 2576.2783,
+            "median": 2372.214,
+            "min": 1613.081,
+            "max": 6214.813,
+            "p95": 3489.7870000000003
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 115.40732078552246,
+            "median": 117.12299346923828,
+            "min": 57.00260925292969,
+            "max": 176.56195831298828,
+            "p95": 174.49864959716797
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 10.4,
+            "median": 9,
+            "min": 0,
+            "max": 29,
+            "p95": 28
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 4.8,
+            "median": 4.5,
+            "min": 0,
+            "max": 10,
+            "p95": 9
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 3.55,
+            "median": 4,
+            "min": 0,
+            "max": 8,
+            "p95": 7
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 2.05,
+            "median": 0,
+            "min": 0,
+            "max": 16,
+            "p95": 14
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 1.75,
+            "median": 1.5,
+            "min": 0,
+            "max": 5,
+            "p95": 4
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0,
+            "median": 0,
+            "min": 0,
+            "max": 0,
+            "p95": 0
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 28.5,
+            "median": 16.5,
+            "min": 0,
+            "max": 127,
+            "p95": 125
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 244.6,
+            "median": 143,
+            "min": 17,
+            "max": 622,
+            "p95": 620
+          }
+        },
+        "two-island-amphibious": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 2564.3411979499974,
+            "median": 2329.180812499995,
+            "min": 1253.1060419999994,
+            "max": 4129.169792000001,
+            "p95": 3712.9283750000177
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 2770.0065,
+            "median": 2615.8785,
+            "min": 1349.4720000000002,
+            "max": 4523.011,
+            "p95": 4152.655000000001
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 113.57745208740235,
+            "median": 107.09507369995117,
+            "min": 66.20977783203125,
+            "max": 198.2009048461914,
+            "p95": 171.11697387695312
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 4.2,
+            "median": 3,
+            "min": 0,
+            "max": 12,
+            "p95": 12
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 1.75,
+            "median": 1,
+            "min": 0,
+            "max": 6,
+            "p95": 5
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 2.15,
+            "median": 2,
+            "min": 0,
+            "max": 7,
+            "p95": 5
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 0.3,
+            "median": 0,
+            "min": 0,
+            "max": 2,
+            "p95": 1
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 0.15,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.1,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 3.1,
+            "median": 2,
+            "min": 0,
+            "max": 14,
+            "p95": 9
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 107.75,
+            "median": 69,
+            "min": 0,
+            "max": 494,
+            "p95": 294
+          }
+        },
+        "late-game": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 2747.6239769499953,
+            "median": 2241.376978999964,
+            "min": 1545.7042499999807,
+            "max": 6458.516749999995,
+            "p95": 4741.651958000031
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 2908.92655,
+            "median": 2448.5215,
+            "min": 1740.316,
+            "max": 4915.517,
+            "p95": 4810.83
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 120.38665580749512,
+            "median": 109.79075622558594,
+            "min": 65.46269989013672,
+            "max": 222.59625244140625,
+            "p95": 203.99905395507812
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 20.05,
+            "median": 17.5,
+            "min": 7,
+            "max": 49,
+            "p95": 43
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 7,
+            "median": 5.5,
+            "min": 2,
+            "max": 22,
+            "p95": 14
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 10.7,
+            "median": 9.5,
+            "min": 4,
+            "max": 23,
+            "p95": 20
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 2.25,
+            "median": 1,
+            "min": 0,
+            "max": 11,
+            "p95": 9
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 2.6,
+            "median": 2,
+            "min": 0,
+            "max": 7,
+            "p95": 6
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.2,
+            "median": 0,
+            "min": 0,
+            "max": 2,
+            "p95": 1
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 28.95,
+            "median": 24,
+            "min": 18,
+            "max": 55,
+            "p95": 46
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 685,
+            "median": 677,
+            "min": 155,
+            "max": 1657,
+            "p95": 991
+          }
+        },
+        "base-world": {
+          "wallClockMs": {
+            "n": 20,
+            "mean": 2379.0396730499933,
+            "median": 2252.4948960000183,
+            "min": 1283.5137499999983,
+            "max": 8092.817791999958,
+            "p95": 3080.015791999991
+          },
+          "cpuMs": {
+            "n": 20,
+            "mean": 2498.2501,
+            "median": 2571.487,
+            "min": 1380.4579999999999,
+            "max": 5935.246,
+            "p95": 3417.094
+          },
+          "heapMiB": {
+            "n": 20,
+            "mean": 100.55196189880371,
+            "median": 97.93294143676758,
+            "min": 62.54408264160156,
+            "max": 150.2721939086914,
+            "p95": 142.3519287109375
+          },
+          "operationsCreated": {
+            "n": 20,
+            "mean": 9.2,
+            "median": 3.5,
+            "min": 0,
+            "max": 30,
+            "p95": 28
+          },
+          "operationsCompleted": {
+            "n": 20,
+            "mean": 4.2,
+            "median": 2.5,
+            "min": 0,
+            "max": 12,
+            "p95": 11
+          },
+          "operationsCancelled": {
+            "n": 20,
+            "mean": 3.65,
+            "median": 1.5,
+            "min": 0,
+            "max": 14,
+            "p95": 13
+          },
+          "operationsFailed": {
+            "n": 20,
+            "mean": 1.35,
+            "median": 0,
+            "min": 0,
+            "max": 9,
+            "p95": 8
+          },
+          "capitalFalls": {
+            "n": 20,
+            "mean": 1.75,
+            "median": 1,
+            "min": 0,
+            "max": 6,
+            "p95": 6
+          },
+          "warsRemaining": {
+            "n": 20,
+            "mean": 0.15,
+            "median": 0,
+            "min": 0,
+            "max": 1,
+            "p95": 1
+          },
+          "stalemateMaximumDuration": {
+            "n": 20,
+            "mean": 13.05,
+            "median": 8,
+            "min": 0,
+            "max": 51,
+            "p95": 36
+          },
+          "frontlineAssignmentSwitches": {
+            "n": 20,
+            "mean": 324.05,
+            "median": 93,
+            "min": 0,
+            "max": 889,
+            "p95": 839
+          }
+        }
+      }
+    }
+  ]
+}

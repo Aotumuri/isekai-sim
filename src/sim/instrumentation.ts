@@ -1,4 +1,5 @@
 export type SimulationMetricName =
+  | "warCampaign.evaluation"
   | "production.evaluation"
   | "production.capacityCounting"
   | "production.supplyLookup"
@@ -137,6 +138,7 @@ export type SimulationCounterName =
   | "battle.attackerManpowerLoss"
   | "battle.defenderManpowerLoss"
   | "movement.regionArrivals"
+  | "movement.retainedRetargetProgressMs"
   | "occupation.fullRegionScans"
   | "occupation.regionsScanned"
   | "capitals.activeNationScans"
@@ -216,6 +218,7 @@ export type SimulationCounterName =
   | "offensiveOperation.exploitationStop.local-strength-disadvantage"
   | "offensiveOperation.exploitationStop.enemy-reserve-arrival"
   | "offensiveOperation.exploitationStop.retreat-started"
+  | "offensiveOperation.exploitationStop.campaign-settlement"
   | "offensiveOperation.exploitationStop.capital-emergency"
   | "offensiveOperation.exploitationStop.front-disappeared"
   | "offensiveOperation.exploitationStop.timeout"
