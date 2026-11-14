@@ -116,3 +116,19 @@ end summaries and full war outcomes. The observer rejects missing/reversed
 fast-window arguments and typechecks. Next inspect existing removal,
 capital-defense selection and recovery conditions; these data alone do not
 establish a defect in capital defense or the direct battle cause.
+
+The bounded battle window (240–290) also preserves both matching reference
+outcomes. Continuity starts a nation-0 versus nation-4 battle on meso-0 at
+264; R1 has no battle there during this window. Cumulative defender
+organization loss reaches 0.802 by 281. Its timing is consistent with the
+guard's organization collapse, but cumulative battle totals do not identify
+the individual damage recipient.
+
+At 281, the assessment still listing unit-48 explicitly has
+`evaluatedAtTick: 280`. This is a previous slow-pass assessment, not evidence
+that evaluation after removal counted a nonexistent unit. The assessment's
+friendly strength is also exactly unchanged at 260/270/280 despite the guard's
+organization decline. Before interpreting that as a strength-model defect,
+record the guard's actual combat power/equipment and the other local units,
+plus movement progress for potential reinforcements. This remains read-only
+causal observation; no combat, defense cadence or diplomatic rule changes.
