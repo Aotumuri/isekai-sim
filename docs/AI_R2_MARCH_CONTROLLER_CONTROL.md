@@ -90,3 +90,29 @@ prefix 822748319), where R1 ends the opening war at tick 410 and continuity
 instead ends it in defeat at 406/376/356. Trace the actual orders, capital
 defense and peace timing before changing behavior; do not use these selected
 contrasts as a population estimate. The first paired lifecycle trace uses 780.
+
+The whole-episode cost report also flags a tradeoff: stalemate attacker
+unavailable manpower rises by 51,183 [5,987, 110,123] against R1. This scope
+includes later wars; it is not the opening war's casualty count and does not
+prove every extra loss is unproductive. It reinforces the need for national
+outcomes and costs alongside reduced discarded travel time.
+
+Seed-780 lifecycle replays and fast-window replays preserve reference end
+summaries and full outcomes. Common slow samples are identical between the
+slow and fast observation variants. The first capital divergence occurs at
+284, when continuity's defender evacuates from meso-0 to meso-89; R1 retains
+meso-0. At 270 continuity already has three attacker units targeting or moving
+toward meso-0, whereas R1 has none. Continuity's unit-87 reaches meso-0 at 284.
+The defending unit-48 is present on that capital at 270/280, then absent by
+283. Therefore simple lack of a guard is not established. Readiness/organization
+around that disappearance is the next bounded observation; no game behavior
+or rule has been changed on the basis of this selected case.
+
+The readiness trace adds only `UnitState.org`. In continuity, unit-48 has
+1196.8 manpower/org 0.428 at 270, 1193.6/org 0.035 at 280, and disappears
+at 281. Enemy unit-87 arrives at 284. R1's guard remains around 1199.9/org
+0.841 over 270–290. All eight selected trace variants preserve reference
+end summaries and full war outcomes. The observer rejects missing/reversed
+fast-window arguments and typechecks. Next inspect existing removal,
+capital-defense selection and recovery conditions; these data alone do not
+establish a defect in capital defense or the direct battle cause.

@@ -15,6 +15,13 @@ remain frozen. GitHub still reflects 8ecc90a: transport attempts failed, and
 the last API retry was not executed because approval review hit a usage limit.
 Do not bypass that review. Local commits/results remain available.
 
+Git transport subsequently recovered: ec8f83a was pushed and Draft PR #2 was
+updated on 2026-11-14. Seed-780 trace work now identifies the first capital
+loss at 284, preceded by guard unit-48 disappearing at 281 after organization
+falls to 0.035 despite ~1194 remaining manpower. Eight replay variants match
+their references. Current next step is bounded code inspection of removal,
+capital-defense selection and recovery, using the same single sub-agent.
+
 The quality objective remains active. Completing a trial, tests or PR is not
 project completion. Keep WarCampaign off by default and PR #2 Draft; do not
 merge main or force-push. Adoption gates and untouched final seeds remain in

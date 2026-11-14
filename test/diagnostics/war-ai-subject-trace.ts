@@ -24,6 +24,20 @@ const ticks = Number(option("--ticks", "10000"));
 const scenario = option("--scenario", "reorganization-heavy");
 const parentId = option("--parent", "nation-2");
 const childId = option("--child", "nation-3");
+const fastSampleWindowIndex = args.indexOf("--fast-sample-window");
+const fastSampleWindowArg = fastSampleWindowIndex < 0 ? undefined : args[fastSampleWindowIndex + 1];
+if (fastSampleWindowIndex >= 0 && (!fastSampleWindowArg || fastSampleWindowArg.startsWith("--"))) {
+  throw new Error("Missing --fast-sample-window value; expected START:END");
+}
+const fastSampleWindow = fastSampleWindowArg === undefined ? undefined : (() => {
+  const match = /^(\d+):(\d+)$/.exec(fastSampleWindowArg);
+  if (!match) throw new Error("Invalid --fast-sample-window; expected START:END");
+  const start = Number(match[1]), end = Number(match[2]);
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || end > ticks) {
+    throw new Error("Invalid --fast-sample-window bounds");
+  }
+  return { start, end };
+})();
 const campaign = args.includes("--campaign");
 const operations = args.includes("--operations");
 if (![seed, ticks].every((n) => Number.isSafeInteger(n) && n > 0)) throw new Error("Invalid integers");
@@ -64,7 +78,9 @@ function sample(current: WorldState): void {
     n.subject?.overlordId, n.subject?.establishedAtFastTick]));
   if (lifecycle !== lastRelations) events.push({ type: "government-change", tick: current.time.fastTick, states: JSON.parse(fingerprint) });
   lastRelations = lifecycle;
-  if (current.time.slowTick === lastSlowTick) return;
+  const inFastSampleWindow = fastSampleWindow !== undefined &&
+    current.time.fastTick >= fastSampleWindow.start && current.time.fastTick <= fastSampleWindow.end;
+  if (current.time.slowTick === lastSlowTick && !inFastSampleWindow) return;
   lastSlowTick = current.time.slowTick;
   const owners = new Map(current.macroRegions.flatMap((m) => m.mesoRegionIds.map((id) => [id, m.nationId] as const)));
   const nations = [parentId, childId].map((id) => {
@@ -74,7 +90,7 @@ function sample(current: WorldState): void {
       regions: [...owners].filter(([, owner]) => owner === id).map(([region]) => region), capital: nation.capitalMesoId,
       subject: structuredClone(nation.subjectGovernment), resources: structuredClone(nation.resources),
       units: units.map((u) => ({ id: u.id, region: u.regionId, owner: owners.get(u.regionId),
-        from: u.moveFromId, to: u.moveToId, target: u.moveTargetId, manpower: u.manpower,
+        from: u.moveFromId, to: u.moveToId, target: u.moveTargetId, manpower: u.manpower, org: u.org,
         front: current.frontAllocations.frontIdByUnitId.get(u.id),
         reserve: current.strategicReserves.reserveNationByUnitId.get(u.id),
         recovery: current.reorganization.planIdByUnitId.get(u.id),
@@ -105,7 +121,8 @@ try { runSimulation(world, { ticks, observe: sample }); } finally { console.info
 const report = { revision: execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
   sourceTree: execFileSync("git", ["-C", root, "rev-parse", "HEAD:src"], { encoding: "utf8" }).trim(),
   harnessHash: createHash("sha256").update(await readFile(new URL(import.meta.url))).digest("hex"),
-  seed, scenario, campaign, operations, ticks, parentId, childId, events, samples, simulationEvents: [...simulationEvents.values()],
+  seed, scenario, campaign, operations, ticks, parentId, childId, fastSampleWindow, events, samples,
+  simulationEvents: [...simulationEvents.values()],
   warOutcomes: outcomes.result(), endWorld: summarizeWorld(world) };
 const output = option("--output", "diagnostics/war-ai-subject-trace.json.gz");
 await writeFile(output, gzipSync(JSON.stringify(report)));
