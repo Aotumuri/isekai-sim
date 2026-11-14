@@ -114,6 +114,9 @@ function sample(current: WorldState): void {
       plans: structuredClone(current.frontPlans.plans.filter((p) => p.nationId === id)) };
   });
   samples.push({ tick: current.time.fastTick, slowTick: current.time.slowTick, nations, wars: [...wars.values()],
+    ...(inFastSampleWindow ? { battles: structuredClone(current.battles), capitalDefense: structuredClone(
+      current.nations.filter((nation) => nation.id === parentId || nation.id === childId)
+        .map((nation) => current.capitalDefense.assessmentsByNationId.get(nation.id) ?? null)) } : {}),
     relations: structuredClone([...(current.diplomacy?.relations.values() ?? [])].filter((r) =>
       [r.nationAId, r.nationBId].some((id) => id === parentId || id === childId))) });
 }
