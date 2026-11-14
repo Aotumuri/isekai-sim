@@ -144,7 +144,11 @@ assessment total is therefore not evidence of ignoring organization.
 
 This distinguishes capacity from orders: a physically present, equipped
 guard was unable to fight effectively, and the potential relief unit was
-itself in another battle. R1's slower enemy did not expose the same weak
+itself fuel-disabled and in another battle. In both 240–290 windows, unit-54
+first has meso-0 as its next edge at 241 (its ultimate target is elsewhere).
+Later observations at 264/281 are not the first such orders. An edge toward
+the capital is not by itself a dedicated relief mission, and accumulating
+movement progress is not proof of finite arrival time. R1's slower enemy did not expose the same weak
 capital during this window. Do not infer a universal maintenance failure,
 change fuel/combat rules, or restore discarded travel to conceal the shortage.
 Further improvement should compare national resource feasibility and reachable
