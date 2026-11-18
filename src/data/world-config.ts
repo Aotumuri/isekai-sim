@@ -60,7 +60,7 @@ export function createDefaultWorldConfig(preset: WorldMapPreset = "world-map"): 
     ...createWorldConfig(4096, 2304, preset === "japan-scale" ? 160_000 : 320_000),
     continentalLayout: preset,
     nationBorderStyle: "terrain",
-    systems: { politicalTurbulenceEnabled: true },
+    systems: { politicalTurbulenceEnabled: true, warCampaignEnabled: true },
     nationTargetMacroRegionsPerNation: 6,
   };
 }

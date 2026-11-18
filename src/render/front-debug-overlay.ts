@@ -472,7 +472,7 @@ function attachDebugConfigPanel(
     ));
     rowY += CONFIG_ROW_HEIGHT;
   }
-  content.addChild(createDebugConfigRow(renderer, "Experimental national plans", campaign.isEnabled, campaign.toggle, rowY));
+  content.addChild(createDebugConfigRow(renderer, "National war plans", campaign.isEnabled, campaign.toggle, rowY));
   rowY += CONFIG_ROW_HEIGHT;
   background.beginFill(CONFIG_BG, 0.96);
   background.lineStyle(1, CONFIG_BORDER, 0.95);

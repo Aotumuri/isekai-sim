@@ -8,6 +8,7 @@ import test from "node:test";
 import { updateBattles } from "../../src/sim/battles";
 import { declareWar } from "../../src/sim/war-state";
 import { createUnitForType } from "../../src/sim/create-units";
+import { updateWarCampaigns } from "../../src/sim/war-campaign/update";
 import { repositionUnits } from "../../src/sim/nation/reposition-units";
 import { issuePlayerLandOrder, setPlayerCommandMode } from "../../src/sim/player-land-orders";
 import { issuePlayerNavalOrder, updatePlayerNavalOrders } from "../../src/sim/player-naval-orders";
@@ -35,6 +36,24 @@ test("manual land movement accepts only the controlled nation's units and preser
   assert.equal(getPlayerNation(world), undefined);
   assert(enterPlayerNation(world, foreign.id));
   assert.equal(getPlayerNation(world)?.commandMode, "manual");
+});
+
+test("an active war campaign cannot replace a direct player land order", () => {
+  const world = createFixedSocietyWorld();
+  world.settings!.warCampaignEnabled = true;
+  const [home, enemy] = world.nations;
+  const unit = createUnitForType(createUnitId(world.unitIdCounter++), home.id, fixedSocietyDistrict(2, 2), "Infantry");
+  world.units.push(unit);
+  declareWar(world.wars, home.id, enemy.id, 0);
+  assert(enterPlayerNation(world, home.id));
+  setPlayerCommandMode(world, "manual");
+  const target = fixedSocietyDistrict(3, 2);
+  assert.equal(issuePlayerLandOrder(world, target, unit.id), 1);
+
+  updateWarCampaigns(world);
+  assert(world.warCampaigns?.byNationId.get(home.id));
+  repositionUnits(world, 10_000);
+  assert.equal(unit.regionId, target);
 });
 
 test("manual naval orders move ships into battle and reject inland targets", () => {

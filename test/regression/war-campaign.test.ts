@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createDefaultWorldConfig, type WorldMapPreset } from "../../src/data/world-config";
+import { createWorld } from "../../src/sim/create-world";
 import { createScenarioWorld } from "../scenarios";
 import { updateLandFronts } from "../../src/sim/land-fronts";
 import { getCampaignObjectives } from "../../src/sim/campaign-objectives";
@@ -11,6 +13,21 @@ import { applyCampaignFrontGuidance } from "../../src/sim/war-campaign/front-gui
 import { campaignPeaceValue } from "../../src/sim/war-campaign/peace-guidance";
 import { whitePeaceTerms } from "../../src/sim/war-negotiations";
 import { getOpposingFrontSide } from "../../src/sim/land-fronts";
+
+test("new game presets enable campaigns and an explicit opt-out is honored", () => {
+  for (const preset of ["world-map", "japan-scale"] satisfies WorldMapPreset[]) {
+    const config = { ...createDefaultWorldConfig(preset), seed: 822_748_319_788, microRegionCount: 6_000 };
+    const world = createWorld(config);
+    assert.equal(world.settings?.warCampaignEnabled, true);
+    updateWarCampaigns(world);
+    assert.ok(world.warCampaigns);
+
+    const optedOut = createWorld({ ...config, systems: { ...config.systems, warCampaignEnabled: false } });
+    assert.equal(optedOut.settings?.warCampaignEnabled, false);
+    updateWarCampaigns(optedOut);
+    assert.equal(optedOut.warCampaigns, undefined);
+  }
+});
 
 function campaignWorld() {
   const world = createScenarioWorld("active-war", {

@@ -106,6 +106,32 @@ test("a claimed district keeps one objective from ultimatum through legal settle
     [item.objective, item.route, item.outcome, item.retainedRegionIds]), [[objective, "peace", "secured", [id]]]);
 });
 
+test("disabling campaigns during war preserves the claim, manual peace and legal ownership", () => {
+  const { world, a, b, id } = scene();
+  world.settings!.warCampaignEnabled = true;
+  assert(openDiplomaticCrisis(world, a, b, [id]));
+  assert(startDiplomaticWar(world, a, b));
+  const [war] = world.wars;
+  const objective = war.claimObjective;
+  assert(objective);
+  updateWarCampaigns(world);
+  assert(world.warCampaigns?.byNationId.get(a));
+
+  world.settings!.warCampaignEnabled = false;
+  updateWarCampaigns(world);
+  assert.equal(world.warCampaigns, undefined);
+  assert.deepEqual(getWarNegotiation(world, war).offers.get(a)?.terms.demandedRegionIds, [id]);
+  assert(proposePeaceTerms(world, a, b, { ...whitePeaceTerms(), demandedRegionIds: [id] }));
+  assert(acceptPeaceOffer(world, b, a));
+  assert.equal(getOwnerByMesoId(world).get(id), a);
+
+  world.settings!.warCampaignEnabled = true;
+  updateWarCampaigns(world);
+  assert.equal(world.warCampaigns!.byNationId.size, 0);
+  assert.deepEqual(world.diplomacy?.claimOutcomeHistory?.map(({ objective, outcome }) =>
+    [objective.interestId, outcome]), [[objective.interestId, "secured"]]);
+});
+
 test("occupation alone cannot complete a territorial claim after white peace", () => {
   const { world, a, b, id, relation } = scene();
   world.settings!.warCampaignEnabled = true;
