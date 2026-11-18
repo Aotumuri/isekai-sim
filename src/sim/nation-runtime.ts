@@ -1,3 +1,4 @@
+import type { TheaterCommander } from "./theater-command";
 import type { DisplacementOrder } from "./forced-displacement";
 import type { NationalFoodSupply } from "./food-supply";
 import type { NationalTreasury } from "./treasury";
@@ -65,6 +66,7 @@ export type NationRuntime = Nation & {
   character?: NationCharacter;
   preGovernmentCharacter?: NationCharacter;
   politics?: NationalPolitics;
+  theaterCommander?: TheaterCommander;
   subjectGovernment?: SubjectGovernment;
   unitRoles: NationUnitRoles;
   capitalFallCount: number;

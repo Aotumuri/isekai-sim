@@ -1,4 +1,5 @@
 import type { WorldState } from "../../src/sim/world-state";
+import { setupMatchedWar, setupUnequalWar, setupEconomicConstraint } from "./controlled-war";
 import type { BenchmarkScenarioName } from "../benchmark/types";
 import { createSeededWorld } from "../helpers/seeded-world";
 import { setupActiveWar } from "./active-war";
@@ -18,6 +19,9 @@ import { setupTwoIslandAmphibious } from "./two-island-amphibious";
 import type { ScenarioOptions, ScenarioSetup } from "./types";
 
 const scenarioSetups: Record<BenchmarkScenarioName, ScenarioSetup> = {
+  "matched-war": setupMatchedWar,
+  "unequal-war": setupUnequalWar,
+  "economic-constraint": setupEconomicConstraint,
   "base-world": setupBaseWorld,
   "active-war": setupActiveWar,
   "many-units": setupManyUnits,

@@ -1,3 +1,8 @@
+import { formatTerritorialClaimObjective } from "../../src/render/territorial-claim-summary";
+import { updateSurrender } from "../../src/sim/surrender";
+import { addWarContribution } from "../../src/sim/war-state";
+import { updateWarCampaigns } from "../../src/sim/war-campaign/update";
+import { acceptPeaceOffer, getWarNegotiation, proposePeaceTerms, whitePeaceTerms } from "../../src/sim/war-negotiations";
 import { selectPeaceDistricts } from "../../src/sim/peace-borders";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -68,4 +73,119 @@ test("an old territorial agreement cannot authorize betrayal of an unrelated lat
   assert.equal(betrayTerritorialSettlement(world, a, b), false);
   assert.equal(getDiplomacyState(world).influenceByNationId.get(a), influence);
   assert.equal(world.wars.length, 0);
+});
+
+test("a claimed district keeps one objective from ultimatum through legal settlement", () => {
+  const { world, a, b, id, relation } = scene();
+  world.settings!.warCampaignEnabled = true;
+  const unclaimed = getTerritorialClaims(world).history.get(id)!;
+  const memory = unclaimed.get(a)!;
+  unclaimed.delete(a);
+  // The positional test fixture has no sufficiently strong claim on this district
+  // without its territorial history.
+  assert.equal(openDiplomaticCrisis(world, a, b, [id]), false);
+  unclaimed.set(a, memory);
+  assert(openDiplomaticCrisis(world, a, b, [id]));
+  const objective = relation.crisis?.claimObjective;
+  assert(objective);
+  assert.deepEqual(objective.requestedRegionIds, [id]);
+  assert.equal(objective.claims[0]?.heldTicks, 500);
+  assert(startDiplomaticWar(world, a, b));
+  const war = world.wars[0];
+  assert.equal(war.claimObjective, objective);
+  assert.deepEqual(war.campaignIntent?.objectiveRegionIds, [id]);
+  updateWarCampaigns(world);
+  const goal = world.warCampaigns?.byNationId.get(a)?.objectives[0];
+  assert.equal(goal?.claimInterestId, objective.interestId);
+  assert.deepEqual(goal?.regionIds, [id]);
+  assert.deepEqual(getWarNegotiation(world, war).offers.get(a)?.terms.demandedRegionIds, [id]);
+  assert(proposePeaceTerms(world, a, b, { ...whitePeaceTerms(), demandedRegionIds: [id] }));
+  assert(acceptPeaceOffer(world, b, a));
+  assert.equal(getOwnerByMesoId(world).get(id), a);
+  assert.deepEqual(world.diplomacy?.claimOutcomeHistory?.map((item) =>
+    [item.objective, item.route, item.outcome, item.retainedRegionIds]), [[objective, "peace", "secured", [id]]]);
+});
+
+test("disabling campaigns during war preserves the claim, manual peace and legal ownership", () => {
+  const { world, a, b, id } = scene();
+  world.settings!.warCampaignEnabled = true;
+  assert(openDiplomaticCrisis(world, a, b, [id]));
+  assert(startDiplomaticWar(world, a, b));
+  const [war] = world.wars;
+  const objective = war.claimObjective;
+  assert(objective);
+  updateWarCampaigns(world);
+  assert(world.warCampaigns?.byNationId.get(a));
+
+  world.settings!.warCampaignEnabled = false;
+  updateWarCampaigns(world);
+  assert.equal(world.warCampaigns, undefined);
+  assert.deepEqual(getWarNegotiation(world, war).offers.get(a)?.terms.demandedRegionIds, [id]);
+  assert(proposePeaceTerms(world, a, b, { ...whitePeaceTerms(), demandedRegionIds: [id] }));
+  assert(acceptPeaceOffer(world, b, a));
+  assert.equal(getOwnerByMesoId(world).get(id), a);
+
+  world.settings!.warCampaignEnabled = true;
+  updateWarCampaigns(world);
+  assert.equal(world.warCampaigns!.byNationId.size, 0);
+  assert.deepEqual(world.diplomacy?.claimOutcomeHistory?.map(({ objective, outcome }) =>
+    [objective.interestId, outcome]), [[objective.interestId, "secured"]]);
+});
+
+test("occupation alone cannot complete a territorial claim after white peace", () => {
+  const { world, a, b, id, relation } = scene();
+  world.settings!.warCampaignEnabled = true;
+  assert(openDiplomaticCrisis(world, a, b, [id]));
+  assert.match(formatTerritorialClaimObjective(world, relation, String)[0], /Diplomatic demand/);
+  assert(startDiplomaticWar(world, a, b));
+  world.occupation.mesoById.set(id, a);
+  world.occupation.version++;
+  const during = formatTerritorialClaimObjective(world, relation, String);
+  assert.match(during[0], /War aim/);
+  assert.match(during[1], /Legally held 0 of 1 · under occupation 1/);
+  assert(proposePeaceTerms(world, a, b, whitePeaceTerms()));
+  assert(acceptPeaceOffer(world, b, a));
+  assert.equal(getOwnerByMesoId(world).get(id), b);
+  const [result] = world.diplomacy!.claimOutcomeHistory!;
+  assert.equal(result.outcome, "unmet");
+  assert.deepEqual(result.retainedRegionIds, []);
+  assert.match(formatTerritorialClaimObjective(world, relation, String)[0], /Claim unmet/);
+  world.settings!.warCampaignEnabled = false;
+  assert.deepEqual(formatTerritorialClaimObjective(world, relation, String), []);
+});
+
+test("an amicable concession and an invalidated claim record distinct outcomes", () => {
+  const conceded = scene();
+  conceded.world.settings!.warCampaignEnabled = true;
+  assert(openDiplomaticCrisis(conceded.world, conceded.a, conceded.b, [conceded.id]));
+  assert(respondToCrisis(conceded.world, conceded.b, conceded.a, "concede"));
+  assert.equal(conceded.world.diplomacy?.claimOutcomeHistory?.[0]?.outcome, "secured");
+  assert.equal(conceded.world.diplomacy?.claimOutcomeHistory?.[0]?.route, "diplomacy");
+
+  const invalidated = scene();
+  invalidated.world.settings!.warCampaignEnabled = true;
+  assert(openDiplomaticCrisis(invalidated.world, invalidated.a, invalidated.b, [invalidated.id]));
+  const { world, a, b, id } = invalidated;
+  const thirdOwner = world.nations.find((nation) => nation.id !== a && nation.id !== b)!.id;
+  world.macroRegions.find((macro) => macro.mesoRegionIds.includes(id))!.nationId = thirdOwner;
+  world.territoryVersion++;
+  updateDiplomaticCrises(world);
+  const [result] = world.diplomacy!.claimOutcomeHistory!;
+  assert.equal(result.outcome, "unmet");
+  assert.equal(result.reason, "territorial demand no longer valid");
+});
+
+test("the claim reports the legal owner after surrender transfers territory", () => {
+  const { world, a, b, id } = scene();
+  world.settings!.warCampaignEnabled = true;
+  assert(openDiplomaticCrisis(world, a, b, [id]));
+  assert(startDiplomaticWar(world, a, b));
+  addWarContribution(world.wars, a, b, 5_000);
+  world.units = world.units.filter((unit) => unit.nationId !== b);
+  updateSurrender(world);
+  assert.equal(world.wars.length, 0);
+  assert.equal(getOwnerByMesoId(world).get(id), a);
+  const [result] = world.diplomacy!.claimOutcomeHistory!;
+  assert.equal(result.route, "surrender");
+  assert.equal(result.outcome, "secured");
 });

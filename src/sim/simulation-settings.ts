@@ -3,6 +3,8 @@ import type { NationId } from "../worldgen/nation";
 import type { WorldState } from "./world-state";
 
 export interface SimulationSettings {
+  /** New game presets enable national war plans. Older worlds may omit this. */
+  warCampaignEnabled?: boolean;
   mobilizationEnabled: boolean;
   diplomacyEnabled: boolean;
   legacyWarDeclarationsEnabled: boolean;

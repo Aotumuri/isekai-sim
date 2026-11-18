@@ -1,4 +1,6 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
+import { formatCampaignDebugLines } from "./war-campaign-debug-summary";
+import { drawCampaignDebugPanel } from "./war-campaign-debug-panel";
 import { WORLD_BALANCE } from "../data/balance";
 import type {
   FrontBorderEdge,
@@ -109,8 +111,12 @@ const CONFIG_WIDTH = 236;
 const CONFIG_ROW_HEIGHT = 24;
 const CONFIG_TAB_WIDTH = 62;
 const CONFIG_TAB_HEIGHT = 28;
+const CONFIG_CONTENT_OFFSET = CONFIG_TAB_HEIGHT + 6;
+const CONFIG_ROWS_START = 46;
+const CONFIG_CONTENT_HEIGHT = CONFIG_ROWS_START + (DEBUG_CATEGORY_LABELS.length + 1) * CONFIG_ROW_HEIGHT + 8;
 
 interface OverlayVersions {
+  campaigns: number;
   fronts: number;
   frontMetrics: number;
   plans: number;
@@ -162,9 +168,11 @@ export function attachFrontDebugOverlay(
   let pointerMoved = false;
   let versions: OverlayVersions | null = null;
   const visibility: DebugVisibility = { ...DEFAULT_DEBUG_VISIBILITY };
+  let campaignPanel: Container | undefined;
 
   const draw = (): void => {
     clearLayer(layer);
+    campaignPanel = drawCampaignDebugPanel(renderer, world, enabled && visibility.strategicSummary);
     if (!enabled) {
       return;
     }
@@ -218,11 +226,16 @@ export function attachFrontDebugOverlay(
       return;
     }
     const next = readVersions(world);
-    if (versions && versionsEqual(versions, next)) {
-      return;
+    if (!versions || !versionsEqual(versions, next)) {
+      versions = next;
+      draw();
     }
-    versions = next;
-    draw();
+    if (campaignPanel) {
+      const settingsShown = configPanel?.getChildByName("FrontDebugConfigContent")?.visible;
+      campaignPanel.y = configPanel && settingsShown
+        ? configPanel.y + CONFIG_CONTENT_OFFSET + CONFIG_CONTENT_HEIGHT + 8
+        : 140;
+    }
   };
 
   const setEnabled = (next: boolean): void => {
@@ -237,6 +250,7 @@ export function attachFrontDebugOverlay(
     } else {
       selectedSectorId = null;
       clearLayer(layer);
+      campaignPanel = drawCampaignDebugPanel(renderer, world, false);
     }
   };
 
@@ -250,7 +264,15 @@ export function attachFrontDebugOverlay(
     update();
   };
 
-  attachDebugConfigPanel(renderer, visibility, setCategory);
+  attachDebugConfigPanel(renderer, visibility, setCategory, {
+    isEnabled: () => !!world.settings?.warCampaignEnabled,
+    toggle: () => {
+      if (!world.settings) return;
+      world.settings.warCampaignEnabled = !world.settings.warCampaignEnabled;
+      versions = null;
+      update();
+    },
+  });
 
   window.addEventListener("keydown", (event) => {
     if (event.code !== FRONT_DEBUG_OVERLAY_SHORTCUT || event.repeat || isEditableTarget(event.target)) {
@@ -415,6 +437,7 @@ function attachDebugConfigPanel(
   renderer: Renderer,
   visibility: DebugVisibility,
   setCategory: (category: DebugCategory, shown: boolean) => void,
+  campaign: { isEnabled: () => boolean; toggle: () => void },
 ): void {
   const existing = renderer.uiContainer.getChildByName("FrontDebugConfig");
   if (existing) {
@@ -428,7 +451,7 @@ function attachDebugConfigPanel(
 
   const content = new Container();
   content.name = "FrontDebugConfigContent";
-  content.position.set(0, CONFIG_TAB_HEIGHT + 6);
+  content.position.set(0, CONFIG_CONTENT_OFFSET);
   content.visible = false;
   content.eventMode = "static";
   content.cursor = "default";
@@ -447,7 +470,7 @@ function attachDebugConfigPanel(
   hint.position.set(10, 26);
   content.addChild(background, title, hint);
 
-  let rowY = 46;
+  let rowY = CONFIG_ROWS_START;
   for (const { key, label } of DEBUG_CATEGORY_LABELS) {
     content.addChild(createDebugConfigRow(
       renderer,
@@ -458,9 +481,10 @@ function attachDebugConfigPanel(
     ));
     rowY += CONFIG_ROW_HEIGHT;
   }
+  content.addChild(createDebugConfigRow(renderer, "National war plans", campaign.isEnabled, campaign.toggle, rowY));
   background.beginFill(CONFIG_BG, 0.96);
   background.lineStyle(1, CONFIG_BORDER, 0.95);
-  background.drawRoundedRect(0, 0, CONFIG_WIDTH, rowY + 8, 6);
+  background.drawRoundedRect(0, 0, CONFIG_WIDTH, CONFIG_CONTENT_HEIGHT, 6);
   background.endFill();
 
   const tab = new Container();
@@ -1332,7 +1356,7 @@ function drawStrategicThreatSummary(layer: Container, world: WorldState): void {
   background.drawRoundedRect(0, 0, bounds.width + padding * 2, bounds.height + padding * 2, 4);
   background.endFill();
   text.position.set(padding, padding);
-  container.position.set(8, 8);
+  container.position.set(8, CONFIG_MARGIN * 2 + CONFIG_TAB_HEIGHT);
   container.addChild(background, text);
   layer.addChild(container);
 }
@@ -1344,6 +1368,7 @@ export function formatStrategicThreatSummary(world: WorldState): string {
     `Land Units ${diagnostics.currentLandUnits} | Land Capacity ${WORLD_BALANCE.production.maxLandUnits}/nation`,
     `Naval Units ${diagnostics.currentNavalUnits} | Naval Capacity ${WORLD_BALANCE.production.maxNavalUnits}/nation`,
   ];
+  lines.push(...formatCampaignDebugLines(world));
   if (world.strategicThreatObservation.observations.length > 0) {
     lines.push("", "STRATEGIC THREAT");
   }
@@ -1542,6 +1567,7 @@ function readVersions(world: WorldState): OverlayVersions {
     coverage: world.frontlineCoverage.version,
     stalemate: world.stalematePressure.version,
     strategicThreat: world.strategicThreatObservation.version,
+    campaigns: world.warCampaigns?.version ?? 0,
     coalitions: world.commonThreatCoalitions.version,
     reserveDeployments: world.strategicReserves.reserves
       .map((reserve) => {
@@ -1558,7 +1584,7 @@ function readVersions(world: WorldState): OverlayVersions {
 }
 
 function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
-  return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
+  return a.campaigns === b.campaigns && a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
     a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment && a.maritimeInterdiction === b.maritimeInterdiction && a.navalStrategy === b.navalStrategy && a.amphibiousOperations === b.amphibiousOperations && a.convoys === b.convoys && a.isolationEffects === b.isolationEffects && a.productionDiagnostics === b.productionDiagnostics && a.supplyCutoffs === b.supplyCutoffs && a.supplyDefense === b.supplyDefense && a.supplyRelief === b.supplyRelief &&
     a.retreats === b.retreats && a.coverage === b.coverage && a.stalemate === b.stalemate &&
     a.strategicThreat === b.strategicThreat && a.coalitions === b.coalitions &&
