@@ -111,6 +111,9 @@ const CONFIG_WIDTH = 236;
 const CONFIG_ROW_HEIGHT = 24;
 const CONFIG_TAB_WIDTH = 62;
 const CONFIG_TAB_HEIGHT = 28;
+const CONFIG_CONTENT_OFFSET = CONFIG_TAB_HEIGHT + 6;
+const CONFIG_ROWS_START = 46;
+const CONFIG_CONTENT_HEIGHT = CONFIG_ROWS_START + (DEBUG_CATEGORY_LABELS.length + 1) * CONFIG_ROW_HEIGHT + 8;
 
 interface OverlayVersions {
   campaigns: number;
@@ -165,10 +168,11 @@ export function attachFrontDebugOverlay(
   let pointerMoved = false;
   let versions: OverlayVersions | null = null;
   const visibility: DebugVisibility = { ...DEFAULT_DEBUG_VISIBILITY };
+  let campaignPanel: Container | undefined;
 
   const draw = (): void => {
     clearLayer(layer);
-    drawCampaignDebugPanel(renderer, world, enabled && visibility.strategicSummary);
+    campaignPanel = drawCampaignDebugPanel(renderer, world, enabled && visibility.strategicSummary);
     if (!enabled) {
       return;
     }
@@ -222,11 +226,16 @@ export function attachFrontDebugOverlay(
       return;
     }
     const next = readVersions(world);
-    if (versions && versionsEqual(versions, next)) {
-      return;
+    if (!versions || !versionsEqual(versions, next)) {
+      versions = next;
+      draw();
     }
-    versions = next;
-    draw();
+    if (campaignPanel) {
+      const settingsShown = configPanel?.getChildByName("FrontDebugConfigContent")?.visible;
+      campaignPanel.y = configPanel && settingsShown
+        ? configPanel.y + CONFIG_CONTENT_OFFSET + CONFIG_CONTENT_HEIGHT + 8
+        : 140;
+    }
   };
 
   const setEnabled = (next: boolean): void => {
@@ -241,7 +250,7 @@ export function attachFrontDebugOverlay(
     } else {
       selectedSectorId = null;
       clearLayer(layer);
-      drawCampaignDebugPanel(renderer, world, false);
+      campaignPanel = drawCampaignDebugPanel(renderer, world, false);
     }
   };
 
@@ -442,7 +451,7 @@ function attachDebugConfigPanel(
 
   const content = new Container();
   content.name = "FrontDebugConfigContent";
-  content.position.set(0, CONFIG_TAB_HEIGHT + 6);
+  content.position.set(0, CONFIG_CONTENT_OFFSET);
   content.visible = false;
   content.eventMode = "static";
   content.cursor = "default";
@@ -461,7 +470,7 @@ function attachDebugConfigPanel(
   hint.position.set(10, 26);
   content.addChild(background, title, hint);
 
-  let rowY = 46;
+  let rowY = CONFIG_ROWS_START;
   for (const { key, label } of DEBUG_CATEGORY_LABELS) {
     content.addChild(createDebugConfigRow(
       renderer,
@@ -473,10 +482,9 @@ function attachDebugConfigPanel(
     rowY += CONFIG_ROW_HEIGHT;
   }
   content.addChild(createDebugConfigRow(renderer, "National war plans", campaign.isEnabled, campaign.toggle, rowY));
-  rowY += CONFIG_ROW_HEIGHT;
   background.beginFill(CONFIG_BG, 0.96);
   background.lineStyle(1, CONFIG_BORDER, 0.95);
-  background.drawRoundedRect(0, 0, CONFIG_WIDTH, rowY + 8, 6);
+  background.drawRoundedRect(0, 0, CONFIG_WIDTH, CONFIG_CONTENT_HEIGHT, 6);
   background.endFill();
 
   const tab = new Container();

@@ -6,7 +6,7 @@ import { formatCampaignDebugLines } from "./war-campaign-debug-summary";
 const NAME = "WarCampaignDebugPanel";
 
 /** Screen-space detail stays visible when the normal map is panned or zoomed. */
-export function drawCampaignDebugPanel(renderer: Renderer, world: WorldState, shown: boolean): void {
+export function drawCampaignDebugPanel(renderer: Renderer, world: WorldState, shown: boolean): Container | undefined {
   const previous = renderer.uiContainer.getChildByName(NAME);
   if (previous) { renderer.uiContainer.removeChild(previous); previous.destroy({ children: true }); }
   if (!shown || !world.settings?.warCampaignEnabled) return;
@@ -25,6 +25,7 @@ export function drawCampaignDebugPanel(renderer: Renderer, world: WorldState, sh
   background.drawRoundedRect(0, 0, bounds.width + 16, bounds.height + 12, 5);
   background.endFill();
   const panel = new Container(); panel.name = NAME; panel.eventMode = "none";
-  panel.position.set(8, 140); panel.addChild(background, text);
+  panel.x = 8; panel.addChild(background, text);
   renderer.uiContainer.addChild(panel);
+  return panel;
 }
