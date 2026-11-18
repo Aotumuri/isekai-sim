@@ -1,0 +1,46 @@
+diff --git a/src/sim/capital-guard.ts b/src/sim/capital-guard.ts
+index 00d8409..c132446 100644
+--- a/src/sim/capital-guard.ts
++++ b/src/sim/capital-guard.ts
+@@ -57,7 +57,7 @@ function canGuardCapital(world: WorldState, assessment: CapitalDefenseAssessment
+   return !!world.settings?.warCampaignEnabled && threatLevel !== "none" &&
+     world.playerNation?.nationId !== nationId &&
+     world.nations.some((nation) => nation.id === nationId && isNationActive(nation) && nation.capitalMesoId === capitalRegionId) &&
+-    world.wars.some((war) => war.nationAId === nationId || war.nationBId === nationId) &&
++    world.wars.some((war) => war.defenderId === nationId) &&
+     getOwnerByMesoId(world).get(capitalRegionId) === nationId && !world.occupation.mesoById.has(capitalRegionId);
+ }
+ 
+diff --git a/test/regression/capital-guard.test.ts b/test/regression/capital-guard.test.ts
+index 922dc90..7359caf 100644
+--- a/test/regression/capital-guard.test.ts
++++ b/test/regression/capital-guard.test.ts
+@@ -4,6 +4,7 @@ import { updateCapitalDefense } from "../../src/sim/capital-defense";
+ import { repositionUnits } from "../../src/sim/nation/reposition-units";
+ import { issuePlayerLandOrder, setPlayerCommandMode } from "../../src/sim/player-land-orders";
+ import { enterPlayerNation } from "../../src/sim/player-nation";
++import { declareWar } from "../../src/sim/war-state";
+ import { assignUnitToStrategicReserve } from "../../src/sim/strategic-reserves";
+ import { createScenarioWorld } from "../scenarios";
+ 
+@@ -101,3 +102,20 @@ test("equally effective eligible guards are selected independently of unit itera
+   assert.equal(choose(false), "unit-85");
+   assert.equal(choose(true), "unit-85");
+ });
++
++test("a nation needs an active defensive war for the role control to reserve its guard", () => {
++  const { world, unit, nation } = threatenedCapital();
++  const defensiveWar = world.wars[0];
++  assert.equal(defensiveWar.defenderId, nation.id);
++  const other = world.nations.find((candidate) =>
++    candidate.id !== nation.id && candidate.id !== defensiveWar.aggressorId)!;
++  assert(declareWar(world.wars, nation.id, other.id, world.time.fastTick));
++  updateCapitalDefense(world);
++  assert.equal(world.capitalDefense.guardByNationId.get(nation.id), unit.id);
++
++  world.wars = world.wars.filter((war) => war !== defensiveWar);
++  repositionUnits(world, 0);
++  assert.equal(world.capitalDefense.guardByNationId.has(nation.id), false);
++  updateCapitalDefense(world);
++  assert.equal(world.capitalDefense.guardByNationId.has(nation.id), false);
++});

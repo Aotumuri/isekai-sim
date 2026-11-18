@@ -111,7 +111,8 @@ replay and ten capital traces. The traces are read-only, sampled after each
 fast tick and any due slow step. Threat refers to the existing assessment.
 A capital is treated as empty when no friendly land unit on the opening
 capital has positive `getUnitCombatStrength`. Fuel is recorded independently
-because that helper does not account for national fuel. Each pair below uses
+because the helper reads unit state rather than the resource balance.
+Fuel-dependent units can already reflect shortages through zero combat power. Each pair below uses
 the shorter opening-war horizon, with an exclusive right endpoint.
 
 | Stalemate seed suffix | Common horizon | Threatened and empty, canonical → R2.21 | First loss of capital, canonical → R2.21 |
@@ -138,5 +139,5 @@ alone cannot attribute the attack regression.
 R2.21 is **rejected for integration**. The local retention mechanism helped
 in the selected replays, with material attacker regressions and extra
 defensive fuel cost in the paired comparison. The source and data are
-preserved. R2.22 isolates the attacker's
+preserved. [R2.22](AI_R2_CAPITAL_GUARD_ROLE_CONTROL.md) isolates the attacker's
 own reservation from the opponent's improved defense to test that tradeoff.
