@@ -1,3 +1,5 @@
+import { getNationalPolitics } from "../../src/sim/politics";
+import { assessWarIntent } from "../../src/sim/war-declaration";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getCampaignDeadline } from "../../src/sim/campaign-deadline";
@@ -243,4 +245,50 @@ test("a deferred legal claim carries its first consideration into a later ultima
   assert.equal(adopted.firstDeferredAtTick, 100);
   assert.equal(adopted.openedAtTick, 200);
   assert.equal(relation.deferredClaims?.has(a.id), false);
+});
+
+test("weak coalition support ahead of an election can defer an otherwise viable territorial ultimatum", () => {
+  for (const [coalitionSupport, system, ticksUntilElection, deferred] of [
+    [20, "democracy", 10, true],
+    [60, "democracy", 10, false],
+    [20, "democracy", 45, false],
+    [20, "monarchy", 10, false],
+  ] as const) {
+    const { world, a, b } = campaign();
+    world.settings!.warCampaignEnabled = true;
+    updateSupplyAssessment(world);
+    updateStrategicThreatObservation(world);
+    const ownedByOpponent = [...getOwnerByMesoId(world)].filter(([, owner]) => owner === b.id).map(([id]) => id);
+    const requested = selectPeaceProvinces(world, b.id, a.id, ownedByOpponent);
+    assert(requested.length);
+    for (const id of requested) getTerritorialClaims(world).history.get(id)!.set(a.id, { heldTicks: 500, attachment: 70 });
+    getDiplomacyState(world).influenceByNationId.set(a.id, 100);
+    world.time.slowTick = 10;
+    const politics = getNationalPolitics(world, a);
+    politics.system = system;
+    politics.nextMandateAt = world.time.slowTick + ticksUntilElection;
+    politics.coalition = [politics.governingIdeologyId];
+    politics.support.set(politics.governingIdeologyId, coalitionSupport);
+    const relation = getRelation(world, a.id, b.id);
+    relation.tension = 45;
+    const { opportunity, expectedCost, existingCommitment } = assessWarIntent(world,
+      { aggressorId: a.id, targetNationId: b.id, route: "land" });
+    const desireWithoutOpinion = a.character!.aggression * 40 + relation.tension * 0.6 +
+      opportunity * 0.3 - expectedCost * 0.3 - existingCommitment;
+    relation.opinion = (desireWithoutOpinion - 50) / 0.35;
+
+    updateDiplomaticCrises(world);
+    const deferral = relation.deferredClaims?.get(a.id);
+    if (deferred) {
+      assert.equal(relation.crisis, null);
+      assert.equal(getDiplomacyState(world).influenceByNationId.get(a.id), 100);
+      assert.equal(deferral?.score, 50);
+      assert.equal(deferral?.minimumScore, 60);
+      assert.deepEqual(deferral?.electoralPressure, { coalitionSupport: 20, electionAtSlowTick: 20, scoreIncrease: 15 });
+      assert(openDiplomaticCrisis(world, a.id, b.id, requested), "an explicit ultimatum retains manual semantics");
+    } else {
+      assert.equal(deferral, undefined);
+      assert.equal(relation.crisis?.demand, "territory");
+    }
+  }
 });

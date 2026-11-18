@@ -1,4 +1,5 @@
 import { adoptTerritorialClaim, deferTerritorialClaim, getWarTerritorialDemand, recordTerritorialClaimOutcome } from "./territorial-claim-objective";
+import { getElectoralClaimPressure } from "./politics";
 import { getManualGovernmentId, getPlayerNation } from "./player-nation";
 import { assessCampaignOpening } from "./war-campaign/opening-intent";
 import { getCrisisDeploymentReadiness } from "./crisis-deployment";
@@ -304,15 +305,18 @@ export function updateDiplomaticCrises(world: WorldState): void {
     const claims = getForeignClaims(world, attacker, candidate.targetNationId);
     const capital = world.nations.find((nation) => nation.id === candidate.targetNationId)?.capitalMesoId;
     const territorialTargets = claims.filter((claim) => claim.strength >= 35 && claim.regionId !== capital).map((claim) => claim.regionId);
-    const crisisThreshold = 45;
-    if (desire < crisisThreshold) {
-      if (world.settings?.warCampaignEnabled && territorialTargets.length) {
-        const requested = selectPeaceProvinces(world, candidate.targetNationId, attacker, territorialTargets);
-        if (requested.length) deferTerritorialClaim(world, relation, attacker, candidate.targetNationId, requested, desire, crisisThreshold);
-      }
+    const baseThreshold = 45;
+    const trackClaims = world.settings?.warCampaignEnabled;
+    if (desire < baseThreshold && (!trackClaims || !territorialTargets.length)) continue;
+    const requested = selectPeaceProvinces(world, candidate.targetNationId, attacker, territorialTargets);
+    const electoralPressure = trackClaims && requested.length
+      ? getElectoralClaimPressure(world, attacker) : undefined;
+    const threshold = baseThreshold + (electoralPressure?.scoreIncrease ?? 0);
+    if (desire < threshold) {
+      if (requested.length) deferTerritorialClaim(world, relation, attacker, candidate.targetNationId, requested, desire,
+        threshold, electoralPressure);
       continue;
     }
-    const requested = selectPeaceProvinces(world, candidate.targetNationId, attacker, territorialTargets);
     if (openDiplomaticCrisis(world, attacker, candidate.targetNationId,
       requested.length ? requested : undefined)) opened.add(attacker);
   }

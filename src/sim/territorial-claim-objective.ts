@@ -1,6 +1,7 @@
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { DiplomaticRelation } from "./diplomacy";
+import type { ElectoralClaimPressure } from "./politics";
 import { getTerritorialClaim, getTerritorialClaims } from "./territorial-claims";
 import type { WarState } from "./war-state";
 import { getOwnerByMesoId } from "./world-cache";
@@ -23,6 +24,7 @@ export interface TerritorialClaimDeferral {
   lastAtTick: number;
   score: number;
   minimumScore: number;
+  electoralPressure?: ElectoralClaimPressure;
 }
 
 export interface TerritorialClaimOutcome {
@@ -40,7 +42,7 @@ const interestId = (claimant: NationId, counterpart: NationId, regions: readonly
 
 export function deferTerritorialClaim(
   world: WorldState, relation: DiplomaticRelation, claimantId: NationId, counterpartId: NationId,
-  regions: MesoRegionId[], score: number, minimumScore: number,
+  regions: MesoRegionId[], score: number, minimumScore: number, electoralPressure?: ElectoralClaimPressure,
 ): void {
   const id = interestId(claimantId, counterpartId, regions);
   const deferrals = relation.deferredClaims ??= new Map();
@@ -48,7 +50,7 @@ export function deferTerritorialClaim(
   const tick = world.time.fastTick;
   deferrals.set(claimantId, { interestId: id, regionIds: [...regions],
     firstAtTick: previous?.interestId === id ? previous.firstAtTick : tick,
-    lastAtTick: tick, score, minimumScore });
+    lastAtTick: tick, score, minimumScore, ...(electoralPressure ? { electoralPressure } : {}) });
 }
 
 export function adoptTerritorialClaim(
