@@ -25,6 +25,8 @@ export interface NationResourceFlow {
   income: NationResources;
   usage: NationResources;
   delta: NationResources;
+  /** Domestic output less production and upkeep, before trade and treaty transfers. */
+  productionSurplus?: Partial<NationResources>;
   lastTick: number;
 }
 

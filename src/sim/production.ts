@@ -643,8 +643,13 @@ function finalizeResourceFlows(
     } else {
       flow.delta = cloneResources(nation.resources);
     }
+    flow.productionSurplus = {
+      steel: Math.max(0, flow.income.steel - flow.usage.steel),
+      fuel: Math.max(0, flow.income.fuel - flow.usage.fuel),
+    };
     for (const resource of STRATEGIC_RESOURCES) {
       if (nation.resources[resource] !== undefined) {
+        flow.productionSurplus[resource] = Math.max(0, (flow.income[resource] ?? 0) - (flow.usage[resource] ?? 0));
         flow.delta[resource] = (nation.resources[resource] ?? 0) - (previous?.[resource] ?? 0);
       }
     }
