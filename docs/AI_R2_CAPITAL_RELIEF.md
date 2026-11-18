@@ -42,3 +42,38 @@ If any loss has such an opportunity, first test the observed mechanism in
 that bounded case with a paired diagnostic before proposing a production
 change. A static route or nominal arrival is insufficient evidence for
 adoption. All final evaluation seeds remain untouched.
+
+## Feasibility result and one-order counterfactual
+
+The canonical audit covers 15 openings. Of 10 with observed first contact
+or loss, five exposed an empty threatened capital at a slow decision.
+Only development Stalemate 790 had a route that passed the existing post
+floors and could reach the capital before contact. Among the selected
+canonical defeats, 780 had 62 and 792 had 90 ready, routed unit/decision
+pairs that could arrive in time on a static map. All failed the post
+release gate. In 790, seven such pairs met the floor. At the first
+opportunity (tick 190), unit-53 had a two-edge route through meso-68
+and a 32-tick estimate. In meso-99 the committed forces staying behind
+had strength 1352.20 against a floor of 1335.35. The first contact was
+at 270 and first loss at 302. The R2.22 replay produced the same feasibility
+observations for 790 before first contact. Three additional release options
+in two diagnostic Reorganization openings had no observed contact deadline.
+
+The four development replays match the frozen matrices' full war outcomes
+and recorded non-CPU end states. The [canonical audit](../diagnostics/war-ai-r2-23-capital-relief-canonical.json.gz)
+and [role-control replay](../diagnostics/war-ai-r2-23-capital-relief-r222.json.gz)
+record the full denominators and input fingerprints.
+
+For a bounded mechanism test, replay the canonical 790 opening twice
+and retarget only unit-53 starting after tick 190 in the intervention arm.
+Use its existing frontline movement, normally validated route and speed,
+with no weapons, manpower, fuel or changes to enemy orders. Keep the
+alternative destination while the original capital is threatened and the
+unit remains effective and eligible for an ordinary frontline assignment.
+Stop the override when a competing mission takes the unit, the capital
+is lost, the threat ends or the war ends. The counterfactual must match
+the unmodified trace through the observation at 190. Compare actual arrival,
+hostile contact and first loss, defenders staying at meso-99, and both
+opening roles' legal outcomes. Do not extrapolate from the selected
+counterfactual or promote a candidate to the general matrix from a route
+estimate alone.

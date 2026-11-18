@@ -171,12 +171,11 @@ function runCase(scenario: BenchmarkScenarioName, seed: number) {
     warOutcomes: outcomes.result(), endWorld: summarizeWorld(world), snapshots };
 }
 
-const results = [];
-for (const [scenario, seed] of registered) {
+const results = registered.map(([scenario, seed]) => {
   const result = withMutedSimulationLogs(() => runCase(scenario, seed));
-  results.push(result);
   console.log(`${scenario} ${seed}: ${result.snapshots.length} exposed decisions`);
-}
+  return result;
+});
 const report = {
   revision: git("rev-parse", "HEAD"), sourceTree: git("rev-parse", "HEAD:src"),
   harnessHash: createHash("sha256").update(await readFile(new URL(import.meta.url))).digest("hex"),
