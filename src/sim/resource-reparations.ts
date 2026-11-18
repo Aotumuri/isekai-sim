@@ -1,5 +1,6 @@
 import { STRATEGIC_RESOURCES } from "../data/strategic-resources";
 import { changeResource } from "./international-trade";
+import type { NationRuntime } from "./nation-runtime";
 import { isNationActive } from "./nation-active";
 import { recordSimulationEvent } from "./simulation-settings";
 import { findWar } from "./war-state";
@@ -22,6 +23,17 @@ export interface ResourceReparationTreaty extends ResourceReparation {
 export function isValidResourceReparation(term: ResourceReparation): boolean {
   return !!term && REPARATION_RESOURCES.includes(term.resource) &&
     Number.isInteger(term.amount) && term.amount >= 1 && term.amount <= 10;
+}
+
+/** Share of the payer's estimated capacity committed through the last scheduled payment. */
+export function resourceReparationBurden(payer: NationRuntime, term: ResourceReparation, truceSeconds: number): number {
+  // The treaty expires before a delivery that falls exactly on its expiry tick.
+  const deliveries = Math.max(0, Math.ceil(truceSeconds / REPARATION_INTERVAL) - 1);
+  if (deliveries === 0) return 0;
+  const stock = payer.resources[term.resource] ?? 0;
+  const surplus = payer.resourceFlow.productionSurplus?.[term.resource] ?? 0;
+  const capacity = stock + surplus * deliveries * REPARATION_INTERVAL;
+  return Math.min(1, term.amount * deliveries / Math.max(1, capacity));
 }
 
 export function updateResourceReparations(world: WorldState): void {

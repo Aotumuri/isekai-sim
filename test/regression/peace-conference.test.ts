@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createUnitForType } from "../../src/sim/create-units";
+import { changeResource } from "../../src/sim/international-trade";
+import { updateProduction } from "../../src/sim/production";
+import { createUnitId } from "../../src/sim/unit";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 import { getRelation, hasTreaty } from "../../src/sim/diplomacy";
 import { createFaction, getFactionState, getNationFaction, leaveFaction } from "../../src/sim/factions";
 import { getNationIdeology } from "../../src/sim/nation-identity";
 import { openPeaceConference, respondToPeaceConference, updatePeaceConferences } from "../../src/sim/peace-conference";
 import { createSimulationSettings } from "../../src/sim/simulation-settings";
-import { acceptPeaceOffer, proposePeaceTerms, whitePeaceTerms } from "../../src/sim/war-negotiations";
+import { acceptPeaceOffer, assessPeaceOffer, proposePeaceTerms, whitePeaceTerms } from "../../src/sim/war-negotiations";
 import { declareWar, findWar } from "../../src/sim/war-state";
 import { createSeededWorld } from "../helpers/seeded-world";
 
@@ -89,4 +94,36 @@ test("signed resource reparations transfer available stock once per interval and
   updateResourceReparations(world);
   assert.equal(b.resources.fuel, 10);
   assert.equal(world.resourceReparations?.length, 0);
+});
+
+test("the same concession costs more in peace talks when the payer has less stock or surplus", () => {
+  const { world, c, b } = scene();
+  const base = whitePeaceTerms();
+  const term = { ...base, resourceReparation: { resource: "fuel" as const, amount: 10 } };
+  const penalty = (truceSeconds: number) => assessPeaceOffer(world, b.id, c.id, { ...base, truceSeconds }).score -
+    assessPeaceOffer(world, b.id, c.id, { ...term, truceSeconds }).score;
+
+  b.resources.fuel = 180;
+  // Nine payments over a 300-second truce, funded entirely from stock.
+  assert(Math.abs(penalty(300) - 12.5) < 1e-9);
+  assert(penalty(600) > penalty(300));
+  b.resourceFlow.productionSurplus = { fuel: 2 };
+  assert(penalty(300) < 4);
+  b.resources.fuel = 0;
+  b.resourceFlow.productionSurplus.fuel = 0;
+  assert(Math.abs(penalty(300) - 25) < 1e-9);
+});
+
+test("the domestic surplus snapshot accounts for fuel upkeep and excludes foreign deliveries", () => {
+  const world = createFixedSocietyWorld();
+  const [payer, exporter] = world.nations;
+  world.units = [createUnitForType(createUnitId(world.unitIdCounter++), payer.id, payer.capitalMesoId, "Tank")];
+  updateProduction(world);
+  assert.equal(payer.resourceFlow.income.fuel, 3);
+  assert.equal(payer.resourceFlow.usage.fuel, 3);
+  assert.equal(payer.resourceFlow.productionSurplus?.fuel, 0);
+  assert.equal(exporter.resourceFlow.productionSurplus?.fuel, 3);
+  changeResource(payer, "fuel", 15);
+  assert.equal(payer.resourceFlow.income.fuel, 18);
+  assert.equal(payer.resourceFlow.productionSurplus?.fuel, 0);
 });
