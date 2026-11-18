@@ -545,6 +545,38 @@ test("campaign coverage keeps a surviving position before placing an incoming de
   assert.equal(world.frontlineCoverage.assignmentByUnitId.get(incoming.id)?.targetRegionId, prior.targetRegionId);
 });
 
+test("campaign defenders follow a newly selected position on the next movement tick", () => {
+  const world = createFrontWorld([
+    { id: "a0", owner: NATION_A }, { id: "a1", owner: NATION_A },
+    { id: "b0", owner: NATION_B }, { id: "b1", owner: NATION_B },
+  ], [["a0", "a1"], ["b0", "b1"], ["a0", "b0"], ["a1", "b1"]]);
+  world.settings = { ...world.settings!, warCampaignEnabled: true };
+  startWar(world, NATION_A, NATION_B);
+  const defender = addLandUnit(world, NATION_A, "a1", "Infantry");
+  const opposing = addLandUnit(world, NATION_B, "b0", "Infantry");
+  setUnitStrength(opposing, 1_000);
+  updateAllocationSystem(world);
+  updateFrontlineCoverage(world);
+  const allocationVersion = world.frontAllocations.membershipVersion;
+  const prior = world.frontlineCoverage.assignmentByUnitId.get(defender.id);
+  assert.equal(prior?.targetRegionId, id("a0"));
+  repositionUnits(world, FAST_TICK_MS);
+  assert.equal(defender.moveTargetId, id("a0"));
+  assert.equal(defender.moveToId, id("a0"));
+
+  opposing.regionId = id("b1");
+  // Only the coverage evaluation sees the changed regional threat in this slice.
+  world.frontAllocations.version += 1;
+  updateFrontlineCoverage(world);
+  assert.equal(world.frontAllocations.membershipVersion, allocationVersion);
+  assert.equal(world.frontlineCoverage.assignmentByUnitId.get(defender.id)?.sectorId, prior?.sectorId);
+  assert.equal(world.frontlineCoverage.assignmentByUnitId.get(defender.id)?.targetRegionId, id("a1"));
+  world.time.fastTick += 1;
+  repositionUnits(world, FAST_TICK_MS);
+  assert.equal(defender.moveTargetId, id("a1"));
+  assert.equal(defender.moveToId, null);
+});
+
 test("unchanged coverage and allocation inputs skip full rebuilds", () => {
   const world = createTestScenario("active-war");
   const metrics = new BenchmarkMetrics();

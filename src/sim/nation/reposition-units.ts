@@ -64,6 +64,7 @@ interface LandAiRuntime {
   warsReference: WorldState["wars"] | null;
   warCount: number;
   frontAllocationMembershipVersion: number;
+  frontlineCoverageMembershipVersion: number;
   offensiveOperationVersion: number;
   retreatPlanVersion: number;
   strategicReserveVersion: number;
@@ -143,6 +144,8 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
   const frontAllocationChanged =
     runtime.frontAllocationMembershipVersion !==
     world.frontAllocations.membershipVersion;
+  const frontlineCoverageChanged = world.settings?.warCampaignEnabled &&
+    runtime.frontlineCoverageMembershipVersion !== world.frontlineCoverage.membershipVersion;
   const offensiveOperationChanged =
     runtime.offensiveOperationVersion !== world.offensiveOperations.version;
   const retreatPlanChanged =
@@ -168,6 +171,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
     unitsChanged ||
     warsChanged ||
     frontAllocationChanged ||
+    frontlineCoverageChanged ||
     offensiveOperationChanged ||
     retreatPlanChanged ||
     strategicReserveChanged ||
@@ -300,6 +304,7 @@ function getLandAiRuntime(world: WorldState): LandAiRuntime {
     warsReference: null,
     warCount: -1,
     frontAllocationMembershipVersion: -1,
+    frontlineCoverageMembershipVersion: -1,
     offensiveOperationVersion: -1,
     retreatPlanVersion: -1,
     strategicReserveVersion: -1,
@@ -341,6 +346,7 @@ function updateAssignmentRuntimeSources(
   runtime.warCount = world.wars.length;
   runtime.frontAllocationMembershipVersion =
     world.frontAllocations.membershipVersion;
+  runtime.frontlineCoverageMembershipVersion = world.frontlineCoverage.membershipVersion;
   runtime.offensiveOperationVersion = world.offensiveOperations.version;
   runtime.retreatPlanVersion = world.retreatPlans.version;
   runtime.strategicReserveVersion = world.strategicReserves.version;
