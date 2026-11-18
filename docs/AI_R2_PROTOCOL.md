@@ -69,7 +69,8 @@ Later isolated controls are recorded in
 [R2.21 capital guard reservation](AI_R2_CAPITAL_GUARD_EXPERIMENT.md),
 [R2.22 capital guard role control](AI_R2_CAPITAL_GUARD_ROLE_CONTROL.md),
 [R2.23 capital relief](AI_R2_CAPITAL_RELIEF.md),
-[R2.24 relief release conditions](AI_R2_CAPITAL_RELIEF_HOLD.md), and
-[R2.25 campaign loss-rate basis](AI_R2_CAMPAIGN_COST_BASIS.md).
+[R2.24 relief release conditions](AI_R2_CAPITAL_RELIEF_HOLD.md),
+[R2.25 campaign loss-rate basis](AI_R2_CAMPAIGN_COST_BASIS.md), and
+[R2.26 factual cost horizons](AI_R2_CAMPAIGN_COST_HORIZONS.md).
 The user's cross-stage national-interest observations remain tracked in
 [AI_NATIONAL_STRATEGY_OBSERVATIONS.md](AI_NATIONAL_STRATEGY_OBSERVATIONS.md).
