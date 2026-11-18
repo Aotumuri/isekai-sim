@@ -507,6 +507,41 @@ test("frontline coverage creates topology-ordered positions and spreads defender
   assert.equal(fullCoverage.gapSegments, 0);
 });
 
+test("campaign coverage keeps a surviving position before placing an incoming defender", () => {
+  const world = createFrontWorld([
+    { id: "a0", owner: NATION_A }, { id: "a1", owner: NATION_A },
+    { id: "b0", owner: NATION_B }, { id: "b1", owner: NATION_B },
+  ], [["a0", "a1"], ["b0", "b1"], ["a0", "b0"], ["a1", "b1"]]);
+  world.settings = { ...world.settings!, warCampaignEnabled: true };
+  startWar(world, NATION_A, NATION_B);
+  const incoming = addLandUnit(world, NATION_A, "a0", "Infantry");
+  const incumbent = addLandUnit(world, NATION_A, "a0", "Infantry");
+  addLandUnit(world, NATION_B, "b1", "Infantry");
+  world.units = world.units.filter((unit) => unit !== incoming);
+
+  function updateHold() {
+    updateAllocationSystem(world);
+    world.frontPlans.plans.find((plan) => plan.nationId === NATION_A)!.posture = "hold";
+    updateFrontlineCoverage(world);
+  }
+
+  updateHold();
+  const prior = world.frontlineCoverage.assignmentByUnitId.get(incumbent.id);
+  assert(prior);
+  incoming.regionId = prior.targetRegionId;
+  world.units.push(incoming);
+  updateHold();
+  const assignments = world.frontlineCoverage.assignmentByUnitId;
+  assert.equal(assignments.get(incumbent.id), prior);
+  assert.notEqual(assignments.get(incoming.id)?.targetRegionId, prior.targetRegionId);
+  assert.equal(getFrontlineCoverage(world, prior.sectorId, NATION_A)?.gapSegments, 0);
+
+  world.units = world.units.filter((unit) => unit !== incumbent);
+  updateHold();
+  assert.equal(world.frontlineCoverage.assignmentByUnitId.get(incumbent.id), undefined);
+  assert.equal(world.frontlineCoverage.assignmentByUnitId.get(incoming.id)?.targetRegionId, prior.targetRegionId);
+});
+
 test("unchanged coverage and allocation inputs skip full rebuilds", () => {
   const world = createTestScenario("active-war");
   const metrics = new BenchmarkMetrics();
