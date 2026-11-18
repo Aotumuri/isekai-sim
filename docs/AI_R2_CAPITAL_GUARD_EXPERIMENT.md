@@ -42,3 +42,25 @@ Guard retention has a real offensive opportunity cost: improved survival by
 indiscriminately ceasing attacks does not pass. Respect existing emergency
 protection and role ownership; no large unrelated refactor. The candidate
 remains isolated/default-off and the PR Draft until full adoption gates pass.
+
+## Frozen candidate
+
+The resumed worktree matched the recovery patch before editing. Candidate
+`8c8f9301b245517bd4843a3332ab129118bade90` (production tree
+`8a863ede0f6fa65ea9665e9e9b82870091c1d124`) extends that implementation.
+It clears a reservation when the last land unit disappears and excludes the
+guard from collapse-advance selection, including its empty-sector fallback.
+The forecast withholds the guard from foreign projection and credits its
+defensive strength only against a threat to that capital. Controlled player
+nations are excluded in every command mode.
+
+[The frozen patch](../diagnostics/war-ai-r2-21-capital-guard.patch) applies to
+`29fa088`. SHA-256 is
+`c1743fe127c9c97d77182fcdd38f3aa372b567020ce5116e3c6ee7f35039be53`.
+The parent fails the primary movement regression because its existing capital
+unit keeps the march order to `meso-94`. The candidate clears that order at
+the next movement pass while other units still move. The four added tests
+cover movement-cache invalidation, reserve exclusion, player override,
+disabled movement, mission/war/threat/capital/unit invalidation and stable
+ties. All 725 regressions, typecheck, build and quick benchmark passed on Node
+24.22.1. The smoke benchmark uses the normal default setting.
