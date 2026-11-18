@@ -82,8 +82,8 @@ The paired probe used the same decision state at tick 190. The control
 matched the frozen matrix's recorded non-CPU end state and war history.
 Unit-53 reached the original capital at 222 as estimated. First hostile
 contact moved from 270 to 330 and first loss from 302 to 386. Meso-99
-remained under the defender's control through both openings, with no
-recorded battle there. The defender still lost the same six legal regions
+remained under the defender's control in the pre-elimination samples.
+Its first recorded battle moved earlier from tick 322 to 254. The defender still lost the same six legal regions
 and was eliminated at 406 rather than 394. The attacker retained its
 goal in both runs. Recorded opening casualties for the defender were
 151.85 and 152.67 respectively. R2.23 supplies evidence of actual relief

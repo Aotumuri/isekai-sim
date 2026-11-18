@@ -32,7 +32,7 @@ const cases: [BenchmarkScenarioName, number][] = [
 ];
 const seedFilter = option("--seed", "");
 const probeArm = option("--order-probe", "");
-if (probeArm && (seedFilter !== "822748319790" || !["control", "retarget"].includes(probeArm))) {
+if (probeArm && (seedFilter !== "822748319790" || !["control", "retarget", "hold"].includes(probeArm))) {
   throw new Error("The paired order probe requires Stalemate 790 and a valid arm");
 }
 const registered = cases.filter(([, seed]) => !seedFilter || String(seed) === seedFilter);
@@ -146,8 +146,10 @@ function runCase(scenario: BenchmarkScenarioName, seed: number) {
   let firstLoss: number | null = null;
   let openingEnded = false;
 
-  const probe = probeArm ? createReliefOrderProbe(world, war, capital, probeArm === "retarget",
-    (unit) => !isSpecial(world, unit) && isReady(unit)) : undefined;
+  const probe = probeArm ? createReliefOrderProbe(world, war, capital, probeArm !== "control",
+    (unit) => !isSpecial(world, unit) && (probeArm === "hold" && unit.regionId === capital
+      ? getUnitCombatStrength(unit) > 0
+      : isReady(unit))) : undefined;
   function observeRelief(current: WorldState) {
     outcomes.observe(current);
     if (openingEnded) return;
