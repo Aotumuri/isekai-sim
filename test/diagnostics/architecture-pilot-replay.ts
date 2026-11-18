@@ -2,10 +2,12 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { WorldState } from "../../src/sim/world-state";
 
-const [root, rawSeed] = process.argv.slice(2);
+const [root, rawSeed, rawTicks = "10000"] = process.argv.slice(2);
 const seed = Number(rawSeed);
-if (!root || ![822_748_319_780, 822_748_319_788, 822_748_319_799].includes(seed) || !global.gc) {
-  throw new Error("Usage: node --expose-gc --import tsx test/diagnostics/architecture-pilot-replay.ts <engine-root> <pilot seed>");
+const ticks = Number(rawTicks);
+if (!root || !Number.isInteger(seed) || seed < 822_748_319_780 || seed > 822_748_319_799 ||
+    !Number.isSafeInteger(ticks) || ticks <= 0 || !global.gc) {
+  throw new Error("Usage: node --expose-gc --import tsx test/diagnostics/architecture-pilot-replay.ts <engine-root> <development seed> [ticks]");
 }
 
 const load = (file: string) => import(pathToFileURL(resolve(root, file)).href);
@@ -24,15 +26,16 @@ if (world.wars.length) throw new Error("The natural replay must start at peace")
 const wars = new Set<string>();
 const claims = new Set<string>();
 const deferred = new Set<string>();
-const electoral = new Set<string>();
-const command = new Map<string, boolean>();
+const electoral = new Map<string, object>();
+const command = new Map<string, object>();
+const waits = new Set<string>();
 const outcomes = new Map<string, string>();
 global.gc();
 const startHeap = process.memoryUsage().heapUsed;
 let peakHeap = startHeap, peakUnits = world.units.length;
 const startCpu = process.cpuUsage();
 withMutedSimulationLogs(() => runSimulation(world, {
-  ticks: 10_000,
+  ticks,
   observe(current: WorldState) {
     const tick = current.time.fastTick;
     if (tick % 10 !== 0) return;
@@ -48,7 +51,7 @@ withMutedSimulationLogs(() => runSimulation(world, {
         const key = `${record.interestId}:${record.firstAtTick}`;
         deferred.add(key);
         if (record.electoralPressure && record.score >= record.minimumScore - record.electoralPressure.scoreIncrease) {
-          electoral.add(key);
+          if (!electoral.has(key)) electoral.set(key, record);
         }
       }
     }
@@ -59,7 +62,13 @@ withMutedSimulationLogs(() => runSimulation(world, {
     }
     for (const operation of [...current.offensiveOperations.operations, ...current.offensiveOperations.history]) {
       if (operation.theaterLaunchDecision) {
-        command.set(operation.id, operation.theaterLaunchDecision.outcome === "wait-for-assembly");
+        const decision = operation.theaterLaunchDecision;
+        if (decision.outcome === "wait-for-assembly") waits.add(operation.id);
+        command.set(operation.id, {
+          id: operation.id, nationId: operation.nationId, target: operation.primaryTargetRegionId,
+          ...decision, phase: operation.phase, phaseStartedAtTick: operation.phaseStartedAtTick,
+          readinessAfterDecision: operation.readinessCompletion,
+        });
       }
     }
   },
@@ -69,9 +78,10 @@ global.gc();
 const endHeap = process.memoryUsage().heapUsed;
 const mib = (bytes: number) => +(bytes / 2 ** 20).toFixed(1);
 console.log(JSON.stringify({
-  seed, cpuMs: Math.round((cpu.user + cpu.system) / 1000),
+  seed, ticks, cpuMs: Math.round((cpu.user + cpu.system) / 1000),
   startHeapMiB: mib(startHeap), peakHeapMiB: mib(peakHeap), endHeapMiB: mib(endHeap), peakUnits,
   warsObserved: wars.size, claims: claims.size, deferred: deferred.size, electoral: electoral.size,
-  commandDecisions: command.size, assemblyWaits: [...command.values()].filter(Boolean).length,
+  commandDecisions: command.size, assemblyWaits: waits.size,
+  electoralDecisions: [...electoral.values()], commandDetails: [...command.values()],
   claimOutcomes: [...outcomes.values()].sort(),
 }));
