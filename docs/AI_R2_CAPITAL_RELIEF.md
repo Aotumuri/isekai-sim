@@ -77,3 +77,29 @@ hostile contact and first loss, defenders staying at meso-99, and both
 opening roles' legal outcomes. Do not extrapolate from the selected
 counterfactual or promote a candidate to the general matrix from a route
 estimate alone.
+
+The paired probe used the same decision state at tick 190. The control
+matched the frozen matrix's recorded non-CPU end state and war history.
+Unit-53 reached the original capital at 222 as estimated. First hostile
+contact moved from 270 to 330 and first loss from 302 to 386. Meso-99
+remained under the defender's control through both openings, with no
+recorded battle there. The defender still lost the same six legal regions
+and was eliminated at 406 rather than 394. The attacker retained its
+goal in both runs. Recorded opening casualties for the defender were
+151.85 and 152.67 respectively. R2.23 supplies evidence of actual relief
+and a local delay. It fails the case-level survival or territory goal
+and supplies insufficient evidence for a general rule.
+
+At tick 330 unit-53 was still on the capital, with organization falling
+from 0.417 to 0.399 on first contact. Crossing the 0.40 admission floor
+ended the override, and ordinary movement sent the unit to meso-21 on
+the next tick. R2.24 tests whether reusing the admission rule as an exit
+rule truncated the defense.
+
+Reproduce the pair using `node --import tsx
+test/diagnostics/war-ai-capital-relief.ts --seed 822748319790 --order-probe
+control` and the same command with `retarget`. Supply distinct
+`--output` paths. The [control](../diagnostics/war-ai-r2-23-order-control-790.json.gz)
+and [retarget](../diagnostics/war-ai-r2-23-order-retarget-790.json.gz)
+artifacts include the decision-state hash, physical arrival and source-post
+samples. Use commit `9a8de64` for the earlier feasibility-only harness.

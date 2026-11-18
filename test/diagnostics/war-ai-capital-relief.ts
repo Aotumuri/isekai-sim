@@ -15,6 +15,7 @@ import type { MesoRegionId } from "../../src/worldgen/meso-region";
 import type { NationId } from "../../src/worldgen/nation";
 import type { BenchmarkScenarioName } from "../benchmark/types";
 import { withMutedSimulationLogs } from "../helpers/muted-logs";
+import { createReliefOrderProbe } from "./capital-relief-order-probe";
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback: string) => {
@@ -30,6 +31,10 @@ const cases: [BenchmarkScenarioName, number][] = [
     .flatMap((scenario) => diagnosticSeeds.map((seed): [typeof scenario, number] => [scenario, seed])),
 ];
 const seedFilter = option("--seed", "");
+const probeArm = option("--order-probe", "");
+if (probeArm && (seedFilter !== "822748319790" || !["control", "retarget"].includes(probeArm))) {
+  throw new Error("The paired order probe requires Stalemate 790 and a valid arm");
+}
 const registered = cases.filter(([, seed]) => !seedFilter || String(seed) === seedFilter);
 if (!registered.length) throw new Error("A registered development or diagnostic seed is required");
 const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
@@ -141,7 +146,9 @@ function runCase(scenario: BenchmarkScenarioName, seed: number) {
   let firstLoss: number | null = null;
   let openingEnded = false;
 
-  runSimulation(world, { ticks, observe(current) {
+  const probe = probeArm ? createReliefOrderProbe(world, war, capital, probeArm === "retarget",
+    (unit) => !isSpecial(world, unit) && isReady(unit)) : undefined;
+  function observeRelief(current: WorldState) {
     outcomes.observe(current);
     if (openingEnded) return;
     openingEnded = !current.wars.includes(war);
@@ -166,9 +173,13 @@ function runCase(scenario: BenchmarkScenarioName, seed: number) {
       !isSpecial(current, unit) && !isReady(unit)).length;
     const options = readReliefOptions(current, defender.id, capital, enemyRegions, friendly, owners);
     snapshots.push({ tick, threat: assessment.threatLevel, readinessBlocked, options });
+  }
+  runSimulation(world, { ticks, metrics: probe?.metrics, observe(current) {
+    observeRelief(current);
+    probe?.observe();
   } });
   return { scenario, seed, capital, defender: defender.id, startFingerprint, firstContact, firstLoss,
-    warOutcomes: outcomes.result(), endWorld: summarizeWorld(world), snapshots };
+    warOutcomes: outcomes.result(), endWorld: summarizeWorld(world), snapshots, orderProbe: probe?.result() };
 }
 
 const results = registered.map(([scenario, seed]) => {
@@ -178,6 +189,8 @@ const results = registered.map(([scenario, seed]) => {
 });
 const report = {
   revision: git("rev-parse", "HEAD"), sourceTree: git("rev-parse", "HEAD:src"),
+  ...(probeArm ? { orderProbeHash: createHash("sha256")
+    .update(await readFile(new URL("./capital-relief-order-probe.ts", import.meta.url))).digest("hex") } : {}),
   harnessHash: createHash("sha256").update(await readFile(new URL(import.meta.url))).digest("hex"),
   runtime: { node: process.version, v8: process.versions.v8, platform: process.platform, arch: process.arch },
   ticks, campaign: true, results,
