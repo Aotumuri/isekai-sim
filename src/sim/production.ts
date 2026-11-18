@@ -2,7 +2,7 @@ import { getOperatingOccupiedDeposits } from "./occupied-deposits";
 import { isStrategicResource, STRATEGIC_RESOURCES, type StrategicResource } from "../data/strategic-resources";
 import { isMilitaryFunded } from "./military-funding";
 import { annexedOutputFactor } from "./annexation";
-import { allFieldUnits, getArmyLimits, getMobilization } from "./mobilization";
+import { allMobilizedUnits, getArmyLimits, getMobilization } from "./mobilization";
 import { equipNewUnit, getDevelopedUnitWeaponCost } from "./equipment-development";
 import { getNationalDesign, type WeaponDesign } from "./research";
 import { getCampaignRecoveryStock, campaignProductionResources } from "./war-campaign/production-budget";
@@ -201,8 +201,9 @@ function updateProductionInternal(world: WorldState): void {
   const cityTargetsByNation = getCityTargetsByNation(world);
   const portTargetsByNation = getPortTargetsByNation(world);
   const capacityCountStartedAt = world.instrumentation ? performance.now() : 0;
-  const unitCountsByNation = collectUnitCountsByNation(allFieldUnits(world));
-  updateCapacityDiagnostics(world, unitCountsByNation);
+  const mobilized = allMobilizedUnits(world);
+  const unitCountsByNation = collectUnitCountsByNation(mobilized);
+  updateCapacityDiagnostics(world, unitCountsByNation, mobilized);
   if (world.instrumentation) {
     world.instrumentation.recordDuration(
       "production.capacityCounting",
@@ -522,7 +523,7 @@ function updateProductionInternal(world: WorldState): void {
   if (newUnits.length > 0) {
     world.units.push(...newUnits);
     registerNewCombatShipsAsReserve(world, newUnits);
-    updateCapacityDiagnostics(world, unitCountsByNation);
+    updateCapacityDiagnostics(world, unitCountsByNation, mobilized);
   }
   finalizeResourceFlows(world, flowByNation, previousResources);
   applyFuelStatus(world.units, fuelAvailableByNation);
@@ -976,6 +977,7 @@ function collectUnitCountsByNation(units: readonly UnitState[]): Map<NationId, D
 function updateCapacityDiagnostics(
   world: WorldState,
   countsByNation: ReadonlyMap<NationId, DomainUnitCounts>,
+  mobilized: readonly UnitState[],
 ): void {
   let currentLandUnits = 0;
   let currentNavalUnits = 0;
@@ -984,7 +986,7 @@ function updateCapacityDiagnostics(
     currentNavalUnits += counts.naval;
   }
   // Capacity is charged to both countries; the global headcount still counts each soldier once.
-  if (world.volunteers) for (const unit of allFieldUnits(world)) if (unit.volunteerOriginId && unit.volunteerOriginId !== unit.nationId) {
+  if (world.volunteers) for (const unit of mobilized) if (unit.volunteerOriginId && unit.volunteerOriginId !== unit.nationId) {
     if (unit.domain === "land") currentLandUnits--; else currentNavalUnits--;
   }
   const diagnostics = world.productionDiagnostics;

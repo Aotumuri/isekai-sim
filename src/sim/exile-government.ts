@@ -1,5 +1,5 @@
 import { WORLD_BALANCE } from "../data/balance";
-import { allFieldUnits } from "./mobilization";
+import { allMobilizedUnits } from "./mobilization";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { UnitState } from "./unit";
@@ -88,7 +88,7 @@ export function establishExileGovernment(world: WorldState, nationId: NationId, 
   const hostId = pickHost(world, nationId, enemies, excludedHosts); if (!hostId) return null;
   const owners = getOwnerByMesoId(world);
   const limit = world.settings?.mobilizationEnabled ? WORLD_BALANCE.production.maxMobilizedLandUnits : WORLD_BALANCE.production.maxLandUnits;
-  const room = Math.max(0, limit - allFieldUnits(world).filter((unit) => unit.nationId === hostId && unit.domain === "land").length);
+  const room = Math.max(0, limit - allMobilizedUnits(world).filter((unit) => unit.nationId === hostId && unit.domain === "land").length);
   const candidates = world.units.filter((unit) => unit.nationId === nationId && unit.domain === "land" && unit.manpower > 0 &&
     !unit.volunteerOriginId && !unit.exileOriginId && freeToRelocate(world, unit))
     .map((unit) => ({ unit, distance: escapeDistance(world, unit.regionId, nationId, hostId) }))
@@ -111,6 +111,9 @@ export function establishExileGovernment(world: WorldState, nationId: NationId, 
 function dissolve(world: WorldState, record: ExileGovernment): void {
   record.status = "dissolved"; record.endedAtSlowTick = world.time.slowTick; record.reserveUnits = [];
   for (const unit of world.units) if (unit.exileOriginId === record.nationId) delete unit.exileOriginId;
+  for (const { unit } of world.defeatedFormations?.withdrawals.values() ?? []) {
+    if (unit.exileOriginId === record.nationId) delete unit.exileOriginId;
+  }
   getExileState(world).version++;
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [record.nationId, record.hostId],
     message: `${getNationName(world, record.nationId)}'s government in exile dissolved: no trusted ally can continue the liberation war.` });

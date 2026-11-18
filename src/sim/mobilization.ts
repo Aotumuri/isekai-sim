@@ -8,6 +8,7 @@ import type { WorldState } from "./world-state";
 import { getNationCharacter } from "./nation-character";
 import { getOwnerByMesoId } from "./world-cache";
 import { getDevelopedUnitWeaponCost } from "./equipment-development";
+import { getUnitEquipmentFulfillment } from "./reorganization";
 import { isNationRegionSupplied } from "./supply-assessment";
 import { recordSimulationEvent } from "./simulation-settings";
 
@@ -46,6 +47,12 @@ export function allFieldUnits(world: WorldState): UnitState[] {
   for (const record of world.exileGovernments?.byNationId.values() ?? []) for (const unit of record.reserveUnits) visit(unit);
   return result;
 }
+export function allMobilizedUnits(world: WorldState): UnitState[] {
+  const units = allFieldUnits(world);
+  for (const { unit } of world.defeatedFormations?.withdrawals.values() ?? []) units.push(unit);
+  return units;
+}
+
 export function getMobilizationThreat(world: WorldState, nationId: NationId): number {
   if (world.wars.some((war) => war.nationAId === nationId || war.nationBId === nationId)) return 1;
   const owners = getOwnerByMesoId(world), nearby = new Set<NationId>();
@@ -92,7 +99,7 @@ export function updateMobilization(world: WorldState): void {
     for (const item of world.mobilization?.byNationId.values() ?? []) { item.lastSlowTick = world.time.slowTick; item.quietSinceSlowTick = world.time.slowTick; }
     return;
   }
-  const units = allFieldUnits(world);
+  const units = allMobilizedUnits(world);
   const threats = new Map(world.nations.map((nation) => [nation.id, getMobilizationThreat(world, nation.id)]));
   for (const nation of world.nations) {
     if (!nation.macroRegionIds.length) continue;
@@ -151,7 +158,7 @@ export function updateDemobilization(world: WorldState): void {
     const item = world.mobilization?.byNationId.get(nation.id);
     if (!item || !nation.macroRegionIds.length || item.threat >= 0.7 || world.time.slowTick - item.quietSinceSlowTick < 30 ||
       world.time.slowTick - item.lastDemobilizationTick < 5 || world.wars.some((war) => war.nationAId === nation.id || war.nationBId === nation.id)) continue;
-    const ownUnits = allFieldUnits(world).filter((unit) => unit.nationId === nation.id);
+    const ownUnits = allMobilizedUnits(world).filter((unit) => unit.nationId === nation.id);
     const actual = ownUnits.filter((unit) => unit.domain === "land").length;
     const excess = Math.max(0, actual - item.authorizedArmy), batch = Math.min(excess, Math.max(2, Math.ceil(actual * 0.05)));
     const candidates = world.units.filter((unit) => unit.nationId === nation.id && unit.domain === "land" && unit.manpower > 0 && unit.cargoUnits.length === 0 && !unit.volunteerOriginId && !unit.exileOriginId && !world.militaryAccess?.orders.has(unit.id) &&
@@ -163,7 +170,7 @@ export function updateDemobilization(world: WorldState): void {
     let count = 0;
     for (const unit of candidates.slice(0, batch)) {
       const manpower = Math.max(0, unit.manpower), health = clamp(manpower / WORLD_BALANCE.unit.types[unit.type].manpower);
-      const weapons = getDevelopedUnitWeaponCost(unit.type, unit.design) * health * 0.6;
+      const weapons = getDevelopedUnitWeaponCost(unit.type, unit.design) * health * getUnitEquipmentFulfillment(unit) * 0.6;
       nation.resources.manpower += manpower; nation.resources.weapons += weapons;
       nation.resourceFlow.income.manpower += manpower; nation.resourceFlow.delta.manpower += manpower;
       nation.resourceFlow.income.weapons += weapons; nation.resourceFlow.delta.weapons += weapons;

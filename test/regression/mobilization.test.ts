@@ -73,6 +73,24 @@ test("automatic demobilization returns only surviving personnel and partial equi
   assert.equal(events.length, 2);
 });
 
+test("demobilization cannot recover equipment that a formation no longer carries", () => {
+  const world = createSocietyWorld(), nation = world.nations[0];
+  world.units = world.units.filter((unit) => unit.nationId !== nation.id);
+  addArmy(world, 20);
+  for (const unit of world.units.filter((unit) => unit.nationId === nation.id)) {
+    for (const slot of unit.equipment) slot.fill = 0;
+  }
+  const item = getMobilization(world, nation.id);
+  item.authorizedArmy = 3;
+  world.time.slowTick = 40;
+  updateSupplyAssessment(world);
+  const { manpower, weapons } = nation.resources;
+  updateDemobilization(world);
+  assert.equal(item.demobilized, 2);
+  assert.equal(nation.resources.manpower - manpower, 2400);
+  assert.equal(nation.resources.weapons, weapons);
+});
+
 test("embarked troops count toward mobilization and cannot be demobilized from transport holds", () => {
   const world = createSocietyWorld(), a = world.nations[0], item = getMobilization(world, a.id);
   world.units = world.units.filter((unit) => unit.nationId !== a.id);
