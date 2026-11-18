@@ -8,6 +8,7 @@ import type { WorldState } from "./world-state";
 import { getNationCharacter } from "./nation-character";
 import { getOwnerByMesoId } from "./world-cache";
 import { getDevelopedUnitWeaponCost } from "./equipment-development";
+import { getUnitEquipmentFulfillment } from "./reorganization";
 import { isNationRegionSupplied } from "./supply-assessment";
 import { recordSimulationEvent } from "./simulation-settings";
 
@@ -169,7 +170,7 @@ export function updateDemobilization(world: WorldState): void {
     let count = 0;
     for (const unit of candidates.slice(0, batch)) {
       const manpower = Math.max(0, unit.manpower), health = clamp(manpower / WORLD_BALANCE.unit.types[unit.type].manpower);
-      const weapons = getDevelopedUnitWeaponCost(unit.type, unit.design) * health * 0.6;
+      const weapons = getDevelopedUnitWeaponCost(unit.type, unit.design) * health * getUnitEquipmentFulfillment(unit) * 0.6;
       nation.resources.manpower += manpower; nation.resources.weapons += weapons;
       nation.resourceFlow.income.manpower += manpower; nation.resourceFlow.delta.manpower += manpower;
       nation.resourceFlow.income.weapons += weapons; nation.resourceFlow.delta.weapons += weapons;
