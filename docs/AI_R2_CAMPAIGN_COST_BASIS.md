@@ -53,3 +53,20 @@ registered 60 cases against canonical, R1 and Legacy, with cost/government
 replays if any outcomes change. Verify the correction in the reproduced
 exposure and report paired opening-war outcomes and decision/trajectory
 differences separately.
+
+## Frozen forecast candidate
+
+Isolated `de5fbf459a910b3930f98ab742d5e174259d1362`, source tree
+`cd761ef200c300278eb1a935c621b2042e643049`, applies to `82a7ee3` via
+[the archived patch](../diagnostics/war-ai-r2-25-cost-basis.patch).
+Patch SHA-256 is
+`f369ba8237f9d7fe388c47cd63e62a4bdb4122c74d636aca2e44e9bcb44da598`.
+The integrated concurrent-war regression fails the canonical forecast.
+The candidate passes 729 regressions, typecheck, build and quick benchmark.
+
+The isolated candidate reproduces both denominator transitions of
+Stalemate 788, with zero physical loss on each. At tick 6200 its clipped
+30-second projection is 0.00369%, rather than the canonical 100%. The
+[replay](../diagnostics/war-ai-r2-25-basis-rebased-788.json.gz) records the
+actual candidate observation. The established 60-case development
+comparison determines whether the accounting correction influences quality.

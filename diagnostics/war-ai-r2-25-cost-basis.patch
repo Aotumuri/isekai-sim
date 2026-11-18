@@ -1,0 +1,167 @@
+diff --git a/src/sim/war-campaign/battle-costs.ts b/src/sim/war-campaign/battle-costs.ts
+index 7c11424..c9119ae 100644
+--- a/src/sim/war-campaign/battle-costs.ts
++++ b/src/sim/war-campaign/battle-costs.ts
+@@ -1,5 +1,6 @@
+ import type { NationId } from "../../worldgen/nation";
+ import type { UnitState } from "../unit";
++import type { CampaignObjective } from "./state";
+ import { WORLD_BALANCE } from "../../data/balance";
+ 
+ /** Removed formations are unavailable force, not a count of people killed.
+@@ -41,3 +42,7 @@ export function recordFormationRemoval(costs: CampaignBattleCosts, unit: UnitSta
+ export function unavailableManpower(cost: CampaignBattleCost | undefined): number {
+   return cost ? cost.directManpowerDamage + cost.removedManpower : 0;
+ }
++
++export function getCampaignOpeningInvestment(goals: readonly CampaignObjective[]): number {
++  return Math.max(1, ...goals.map((goal) => goal.openingManpower ?? goal.openingStrength));
++}
+diff --git a/src/sim/war-campaign/forecast.ts b/src/sim/war-campaign/forecast.ts
+index 55d46b4..6f2b1b6 100644
+--- a/src/sim/war-campaign/forecast.ts
++++ b/src/sim/war-campaign/forecast.ts
+@@ -17,15 +17,21 @@ import { canNegotiateCampaignBilateralPeace, hasReadyCampaignSettlement } from "
+ import type { PeaceAssessmentContext } from "../peace-assessment-context";
+ import { forecastCampaignForceShares } from "./forecast-force";
+ import { getCampaignObjectiveDistances } from "./forecast-distances";
++import { getCampaignOpeningInvestment } from "./battle-costs";
+ 
+ export interface CampaignObservation { tick: number; casualtyFraction: number; lossRate: number }
+ 
+-export function observeCampaignCost(world: WorldState, casualtyFraction: number, previous?: WarCampaign): CampaignObservation {
++export function observeCampaignCost(
++  world: WorldState, casualtyFraction: number, openingInvestment: number, previous?: WarCampaign,
++): CampaignObservation {
+   const old = previous?.observation;
+-  const elapsed = old ? (world.time.fastTick - old.tick) / 10 : 0;
+-  const rate = elapsed > 0 ? Math.max(0, casualtyFraction - old!.casualtyFraction) / elapsed : 0;
+-  return { tick: world.time.fastTick, casualtyFraction,
+-    lossRate: old ? old.lossRate * 0.8 + rate * 0.2 : 0 };
++  if (!old) return { tick: world.time.fastTick, casualtyFraction, lossRate: 0 };
++  // The next decision may drop or add an opponent with a different opening
++  // investment. Express both observations and the carried rate in today's units.
++  const basisScale = getCampaignOpeningInvestment(previous.objectives) / openingInvestment;
++  const elapsed = (world.time.fastTick - old.tick) / 10;
++  const rate = elapsed > 0 ? Math.max(0, casualtyFraction - old.casualtyFraction * basisScale) / elapsed : 0;
++  return { tick: world.time.fastTick, casualtyFraction, lossRate: old.lossRate * basisScale * 0.8 + rate * 0.2 };
+ }
+ 
+ /** Adapter collects observable state; the alternative evaluator is pure.
+@@ -36,7 +42,7 @@ export function forecastCampaignOpportunities(
+   peaceContext?: PeaceAssessmentContext,
+ ): CampaignOpportunity[] {
+   const own = Math.max(1, strengths.get(nation.id) ?? 0);
+-  const investment = Math.max(1, ...goals.map((goal) => goal.openingManpower ?? goal.openingStrength));
++  const investment = getCampaignOpeningInvestment(goals);
+   const infantry = WORLD_BALANCE.unit.types.Infantry;
+   const strengthPerWeapon = infantry.manpower / Math.max(1, infantry.weaponCost ?? 1);
+   const totalValue = getNationalTerritorialValue(world, nation.id);
+diff --git a/src/sim/war-campaign/update.ts b/src/sim/war-campaign/update.ts
+index ac60d84..29bfd1c 100644
+--- a/src/sim/war-campaign/update.ts
++++ b/src/sim/war-campaign/update.ts
+@@ -16,7 +16,7 @@ import { buildCampaignObjectives } from "./objectives";
+ import { recordCompletedCampaignGoals } from "./lifecycle";
+ import { observeCampaignCost, forecastCampaignOpportunities } from "./forecast";
+ import { evaluateCampaignAlternatives, hasClearCampaignImprovement, selectCampaignMilitaryEffort } from "./alternatives";
+-import { unavailableManpower } from "./battle-costs";
++import { getCampaignOpeningInvestment, unavailableManpower } from "./battle-costs";
+ import { createPeaceAssessmentContext } from "../peace-assessment-context";
+ import { beginCampaignDistancePass, clearCampaignDistanceFields, pruneCampaignDistanceFields } from "./forecast-distances";
+ 
+@@ -48,8 +48,9 @@ export function updateWarCampaigns(world: WorldState): void {
+     const previous = state.byNationId.get(nation.id);
+     const objectives = buildCampaignObjectives(world, nation.id, wars, strengths.get(nation.id) ?? 0, previous,
+       (manpower.get(nation.id) ?? 0) + unavailableManpower(state.battleCosts?.get(nation.id)));
+-    const constraints = assessCampaignConstraints(world, nation, wars, objectives, strengths);
+-    const observation = observeCampaignCost(world, constraints.casualtyFraction, previous);
++    const openingInvestment = getCampaignOpeningInvestment(objectives);
++    const constraints = assessCampaignConstraints(world, nation, wars, objectives, strengths, openingInvestment);
++    const observation = observeCampaignCost(world, constraints.casualtyFraction, openingInvestment, previous);
+     const opportunities = forecastCampaignOpportunities(world, nation, wars, objectives, strengths, observation, peaceContext);
+     const alternatives = evaluateCampaignAlternatives(opportunities, constraints.aggression, previous);
+     const settlementReadyOpponentIds = opportunities.filter((option) => option.settlementReady).map((option) => option.opponentId).sort();
+@@ -120,7 +121,7 @@ function selectPrimaryOpponent(
+ 
+ function assessCampaignConstraints(
+   world: WorldState, nation: NationRuntime, wars: WarState[],
+-  objectives: CampaignObjective[], strengths: Map<NationId, number>,
++  objectives: CampaignObjective[], strengths: Map<NationId, number>, openingInvestment: number,
+ ): CampaignConstraints {
+     const enemyStrength = [...new Set(objectives.map((goal) => goal.opponentId))]
+       .reduce((sum, id) => sum + (strengths.get(id) ?? 0), 0);
+@@ -130,7 +131,7 @@ function assessCampaignConstraints(
+       strengthRatio: (strengths.get(nation.id) ?? 0) / Math.max(1, enemyStrength),
+       casualtyFraction: (Math.max(battleCost?.directManpowerDamage ?? 0,
+         wars.reduce((sum, war) => sum + getWarCasualties(war, nation.id), 0)) + (battleCost?.removedManpower ?? 0)) /
+-        Math.max(1, ...objectives.map((goal) => goal.openingManpower ?? goal.openingStrength)),
++        openingInvestment,
+       costTolerance: 0.5 + character.aggression,
+       foodSeconds: nation.food ? foodReserveSeconds(nation.food) : Infinity,
+       replacementConstrained: nation.resources.weapons <= 0 && nation.resources.manpower <= 0,
+diff --git a/test/regression/campaign-cost-basis.test.ts b/test/regression/campaign-cost-basis.test.ts
+new file mode 100644
+index 0000000..f9c3df8
+--- /dev/null
++++ b/test/regression/campaign-cost-basis.test.ts
+@@ -0,0 +1,46 @@
++import assert from "node:assert/strict";
++import test from "node:test";
++import { createUnitForType } from "../../src/sim/create-units";
++import { createUnitId } from "../../src/sim/unit";
++import { recordDirectBattleDamage } from "../../src/sim/war-campaign/battle-costs";
++import { updateWarCampaigns } from "../../src/sim/war-campaign/update";
++import { declareWar } from "../../src/sim/war-state";
++import { createTestScenario } from "../helpers/test-scenario";
++
++test("campaign decay and newly recorded battle losses use the continuing war's opening basis", () => {
++  const world = createTestScenario("matched-war");
++  world.settings!.warCampaignEnabled = true;
++  const [first] = world.wars;
++  const nation = world.nations.find((item) => item.id === first.aggressorId)!;
++  const opponent = world.nations.find((item) => item.id !== first.aggressorId && item.id !== first.defenderId)!;
++  const plan = () => world.warCampaigns!.byNationId.get(nation.id)!;
++  const step = () => {
++    world.time.fastTick += 10;
++    updateWarCampaigns(world);
++    return plan();
++  };
++
++  const firstBasis = step().objectives[0].openingManpower!;
++  const losses = world.warCampaigns!.battleCosts ??= new Map();
++  recordDirectBattleDamage(losses, nation.id, 600);
++  step();
++  world.units.push(createUnitForType(createUnitId(world.unitIdCounter++), nation.id, nation.capitalMesoId, "Infantry"));
++  const second = declareWar(world.wars, nation.id, opponent.id, world.time.fastTick)!;
++  assert(second);
++  const concurrent = step();
++  const secondBasis = Math.max(...concurrent.objectives.map((goal) => goal.openingManpower!));
++  assert(secondBasis > firstBasis);
++  const carry = concurrent.observation!.lossRate;
++
++  world.wars = world.wars.filter((war) => war !== second);
++  const after = step();
++  assert.equal(after.objectives.length, 1);
++  assert(after.constraints.casualtyFraction > concurrent.constraints.casualtyFraction);
++  assert(Math.abs(after.observation!.lossRate - carry * (secondBasis / firstBasis) * 0.8) < 1e-12,
++    "continuing-war forecast must not differentiate fractions on different scales");
++
++  recordDirectBattleDamage(losses, nation.id, 125);
++  const next = step();
++  assert(Math.abs(next.observation!.lossRate - (after.observation!.lossRate * 0.8 + (125 / firstBasis) * 0.2)) < 1e-12,
++    "new real losses still enter both observations on the same scale");
++});
+diff --git a/test/regression/campaign-political-objectives.test.ts b/test/regression/campaign-political-objectives.test.ts
+index 712c3d1..1d9a087 100644
+--- a/test/regression/campaign-political-objectives.test.ts
++++ b/test/regression/campaign-political-objectives.test.ts
+@@ -47,7 +47,7 @@ test("forecasting does not initialize negotiations, consume randomness or create
+   const random = world.simRng.fork().nextFloat();
+   const oldNegotiations = world.warNegotiations;
+   const forecast = () => forecastCampaignOpportunities(world, nation, [war], campaign.objectives,
+-    new Map(), observeCampaignCost(world, 0));
++    new Map(), observeCampaignCost(world, 0, 1));
+   assert.deepEqual(forecast(), forecast());
+   assert.equal(world.warNegotiations, oldNegotiations);
+   assert.deepEqual(nation.resources, resources);

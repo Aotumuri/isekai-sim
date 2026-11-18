@@ -1,6 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile, rename, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { gzipSync } from "node:zlib";
 import { getWarCasualties } from "../../src/sim/war-state";
 import type { WarCampaign } from "../../src/sim/war-campaign/state";
@@ -9,19 +11,35 @@ import { BenchmarkMetrics } from "../benchmark/metrics";
 import type { BenchmarkScenarioName } from "../benchmark/types";
 import { createWarOutcomeObserver } from "../benchmark/war-outcome-observer";
 import { withMutedSimulationLogs } from "../helpers/muted-logs";
-import { runSimulation } from "../helpers/simulation-driver";
-import { summarizeWorld } from "../helpers/world-summary";
-import { createScenarioWorld } from "../scenarios";
 
 const scenario = process.argv[2] as BenchmarkScenarioName;
 if (!["matched-war", "stalemate-breaker", "reorganization-heavy"].includes(scenario)) {
   throw new Error("Supply a registered development scenario");
 }
 const output = process.argv[3] ?? `diagnostics/war-ai-r2-25-basis-${scenario}.json.gz`;
-const git = (...args: string[]) => execFileSync("git", args, { encoding: "utf8" }).trim();
+const args = process.argv.slice(4);
+const option = (name: string) => {
+  const index = args.indexOf(name);
+  if (index === -1) return undefined;
+  const value = args[index + 1];
+  if (!value || value.startsWith("--")) throw new Error(`${name} requires a value`);
+  return value;
+};
+const engine = option("--engine-root");
+const root = resolve(engine ?? ".");
+const onlySeed = option("--seed");
+const seedStart = 822_748_319_780;
+const seeds = Array.from({ length: 20 }, (_, offset) => seedStart + offset)
+  .filter((seed) => onlySeed === undefined || String(seed) === onlySeed);
+if (!seeds.length) throw new Error("Use a registered development seed");
+const git = (...args: string[]) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
 if (git("status", "--porcelain", "--", "src")) throw new Error("Commit the engine source first");
 const sourceTree = git("rev-parse", "HEAD:src");
-if (sourceTree !== git("rev-parse", "29fa088:src")) throw new Error("Use the canonical source");
+if (!engine && sourceTree !== git("rev-parse", "29fa088:src")) throw new Error("Use the canonical source");
+const load = (path: string) => import(pathToFileURL(resolve(root, path)).href);
+const { createScenarioWorld } = await load("test/scenarios/index.ts") as typeof import("../scenarios");
+const { runSimulation } = await load("test/helpers/simulation-driver.ts") as typeof import("../helpers/simulation-driver");
+const { summarizeWorld } = await load("test/helpers/world-summary.ts") as typeof import("../helpers/world-summary");
 const ticks = 10_000;
 
 function snapshot(world: WorldState, plan: WarCampaign) {
@@ -88,10 +106,8 @@ function run(seed: number) {
     warOutcomes: outcomes.result(), endWorld: summarizeWorld(world) };
 }
 
-const seedStart = 822_748_319_780;
 const results: ReturnType<typeof run>[] = [];
-for (let offset = 0; offset < 20; offset++) {
-  const seed = seedStart + offset;
+for (const seed of seeds) {
   const result = withMutedSimulationLogs(() => run(seed));
   results.push(result);
   console.log(`${scenario} ${seed}: ${result.transitions.length} denominator transitions`);
