@@ -1,0 +1,37 @@
+# WarCampaign R2 引き継ぎ — 2026-11-18 JST
+
+再開先: GPT-6.2 Sol Medium。目標は、架空のゲーム内で国家が目的・制約を持ち、開戦から戦後まで一貫した行動を取ること。既存AIに対する品質優位は未達。実験を一つ終えたことを開発完了としない。
+
+## 作業状態
+
+- 主作業ツリー: `/Users/kazuhidemura2/github/isekai-sim`、`codex/war-campaign-strategy`。引き継ぎの記録を加える直前のローカル HEAD・追跡先・[Draft PR #2](https://github.com/Aotumuri/isekai-sim/pull/2) の HEAD はすべて `6544d9ddd48f0e281563fb2ae40a68b480110b1f`。PR は open、base は `main`。当時メインの開発ブランチに未プッシュコミットはなかった。この文書のコミット後の状態は `git status --short --branch` と `gh pr view 2 --json headRefOid,isDraft,state` で確認する。
+- 引き継ぎ前のステージ済み変更は、新規 [R2.21事前登録](AI_R2_CAPITAL_GUARD_EXPERIMENT.md)、[R2.19/20の追跡追記](AI_R2_MARCH_CONTROLLER_CONTROL.md)、`diagnostics/war-ai-r2-20-loss-window-{r1,fuel}-{790,792}.json.gz` の4観測と `war-ai-r2-20-loss-window-validation.json.gz`。既存の証拠であり、この引き継ぎで新たに実験を実行したものではない。主ツリーの `src/` は canonical `29fa088` と同一。R2.14行軍継続と現在のキャンペーン制御を含む。R2.20以降の候補は統合していない。
+- ローカル実験ブランチ `codex/r2-20-fuel-feasible` (`3aa0ba7`) と `codex/r2-20-peace-observation` (`9cc335e`) は比較・観測用で、PRの未プッシュ差分ではない。R2.20候補は[保存済みパッチ](../diagnostics/war-ai-r2-20-fuel-feasible.patch)から復元可能。他の隔離コミットは `git worktree list` と各報告を参照。`prunable` の一時ツリーは現存を前提にせず、必要なものだけ固定コミット・保存パッチから復元する。
+- **R2.21は途中**。`/private/tmp/isekai-r2-21-capital-guard` は detached `29fa088689ac600d269a096fda85adf3418cf4bd`。`src/` の追跡済み9ファイルに未ステージ変更、`src/sim/capital-guard.ts` は新規未追跡。共有の守備予約、移動キャッシュの無効化、戦線配分・攻勢・予備・上陸・予測への接続まで仮実装。直前の候補で型検査は成功。回帰テストの追加・実行、build、quick、候補固定、比較は未実施。該当する実験プロセスは引き継ぎ時の `ps` で見つからなかった。
+- [R2.21の作業差分](../diagnostics/war-ai-r2-21-capital-guard-wip.patch) は未追跡の新規ファイルも含む復旧用スナップショット。評価済み候補ではなく、本体には適用されていない。現存作業ツリーに二重適用しない。
+
+## 確認済みの結論
+
+- [R2.16](AI_R2_POLICY_EXPERIMENTS.md) は元の3群×60件で完了、採用なし。[R2.17](AI_R2_POLICY_CAUSAL_FOLLOWUP.md) は防衛側の救済の多くに敵側方針が関与することを確認。[R2.18](AI_R2_OPERATION_SIZE_EXPERIMENTS.md) の作戦規模案も不採用。比較条件・元データを変更しない。
+- [R2.19](AI_R2_MARCH_CONTROLLER_CONTROL.md) のR1＋行軍継続は、同一戦線で無駄になった移動を減らす一方、膠着シナリオの防衛側存続が対R1で75%→60%。[R2.20](AI_R2_FUEL_FEASIBLE_PRODUCTION.md) は最新の完了済み介入実験。canonical＋燃料実行可能性だけを変えた。3条件×20件と費用・政体再生60件が完了し、非CPUの終了結果と戦争履歴が一致。canonical比の防衛存続は80/55/60%→80/60/65%、攻撃目標は35/50/45%→30/45/40%。R1に対する一部の領土維持・燃料面の利点はあるが、膠着の存続問題が残り、採用しなかった。
+- 膠着の `780/790/792` はR2.19・20ともR1に対して追加敗北。780は燃料不足で守備・救援の有効戦力がゼロ。790はR2.20の最初の首都喪失の方が遅いが、安全な退避先がなく滅亡。792は両群とも200 tickに首都に有効な3部隊、R2.20は226以降に空き、361に確認した救援は376の滅亡に間に合わない。進捗リセットの繰り返しは観測されなかった。守備割当、敵側の行動、物資、到達可能性、退避先を分ける。単一原因とは未確定で、792の直接比較はR1対R2.20でありcanonical対R2.21ではない。
+- 最新の完了済み診断は上記790/792の再生と[費用較正](AI_CAMPAIGN_COST_CALIBRATION.md)。後者はcanonical 12件で元結果と一致し、防衛の比較可能な区間で戦力離脱の費用を過小推定。攻勢は適格区間ゼロで、その係数や個別講和への一般化はできない。主ツリーの最新確認は728回帰テストと型検査、canonicalのbuild・quick。R2.20隔離候補は727回帰テスト・型検査・build・quick。
+- [講和観測](AI_PEACE_DECISION_OBSERVATION.md)では旧AI/R1にも相互評価の不一致があり、[1回の公表遅延](AI_PEACE_REVISION_COUNTERFACTUAL.md)では同じ白紙和平が410→510になり、双方の損害が増えた。継戦強制の根拠にはならない。[国家戦略の3観察](AI_NATIONAL_STRATEGY_OBSERVATIONS.md)は、持続目標と機会主義的開戦、即時和平と継戦・維持費の比較、傀儡政権の生存。観察時の実験AI設定・シードは不明。[傀儡の観測](AI_R2_POLITICAL_OBSERVATION.md)では親国の休戦が参戦を阻む実例があり、支援能力や優先度の不足とは区別する。個別パッチや大規模な新戦略層を先行させず、既存品質課題と比較して独立検証する。
+
+## 評価と採否
+
+[プロトコル](AI_R2_PROTOCOL.md)を正とする。[旧継続記録](AI_R2_CONTINUATION.md)の進行中パイプライン、通信状態、委任方針は当時の記録。Legacy `394d4bd`（R1でcampaign無効との既存同等性は260軌跡。共有実行コードの変更後は再確認）、R1 `e6245a1`（campaign有効）、R2.21親 canonical `29fa088`、R2.19 R1＋行軍 `a8510bb`、R2.20 `3aa0ba7`。同一の初期状態・外部開戦目標・ルール。現在の限定比較は `matched-war,stalemate-breaker,reorganization-heavy`、開発20種、全システム・政治変動・通常戦争・640×360 quick・10,000 fast ticks。
+
+開発 `822748319780–822748319799`、別診断 `1022748319780–1022748319799`。**最終 `1122748319780–1122748319819` は40種/条件を未使用のまま確保。開発中は見ない・使わない。** 先に固定した指標・開戦戦争・攻守別で比較し、正式な領土利益と一時占領を分ける。LegacyとR1の両方に対し、少なくとも2系列で事前指定指標の改善が必要（paired 95% seed bootstrap、固定RNG、10,000反復）。各系列の目標・存続悪化が5 pp超、損害・資源費増が15%超なら精査。中央値の総CPUが20%超増加なら品質改善の実測と最適化が必要。同一状態の判断費用と異なる経過が生むCPU差を分け、無制限のメモリ増加は不可。決定性、手動操作、合法性、緊急防衛、終了時の解除、全13系列・通常マップ・長時間試験を省かない。
+
+## 再開順序
+
+1. まず守備予約仮説を終える。**首都にすでにいる有効・未拘束の一部隊を共有予約すると、脅威下で首都が空く時間が減り、到達が遅い救援への依存を減らせるか。** 最優先の品質リスクは膠着での防衛側滅亡。燃料切れの戦力や不存在の守備隊を予約で救えるという仮説ではない。
+2. 候補の `capital-guard.ts`、`capital-defense.ts`、`nation/reposition-units.ts` と `update.ts` の実行順を確認。作戦・予備・上陸・補給救援・collapse advanceの例外経路、移動グループの再構築、既存の撤退・再編成優先、手動/プレイヤーの扱い、守備の予測寄与と対外攻勢に使える兵力を点検。候補は現状プレイヤー国家をすべて除外する。旅程・特別命令を誤って消さないか、脅威消失・和平・首都変更/占領・部隊消耗/消滅で予約が解除されるか、既定オフで経過が同一かは未検証。
+3. 最初は小さい回帰シナリオ。親で失敗する「有効な既存部隊が首都に残る」実挙動と、他部隊の移動、手動・オフ・特殊任務・解除・決定性を確認。期待どおりでなければ比較前に原因を切り分ける。全回帰・型検査・build・quick後にソースを隔離して固定し、事前登録どおり同じ60件と費用・政体再生60件を走らせる。選択した再生で割当・首都滞在・敵側の行動を確認。局所的な滞在改善がなく、または攻勢を広く止めた代償で存続が改善するだけなら棄却。通過しても限定比較であり採用ではない。
+
+## 実行環境と制約
+
+- `/opt/homebrew/opt/node@24/bin/node`（24.22.1）を使用。Homebrew既定Node 26は欠落したsimdjsonライブラリで起動失敗。npmはNode 24のbinを `PATH` の先頭にする。隔離ツリーの `node_modules` は主ツリーへsymlink。復元時は `git worktree add --detach <新しいパス> 29fa088`、symlink、候補内で `git apply --check <保存パッチの絶対パス>` → `git apply`。既存ツリーは先に状態確認し、上書きや削除をしない。`.git` への書き込み・ネットワークがサンドボックスで拒まれた場合は、必要な操作のみ正規の承認経路を使う。
+- `npm test` / `npm run typecheck` / `npm run build` / `npm run benchmark:quick`。診断はNode 24の `--import tsx` で `test/diagnostics/war-ai-matrix.ts`（`--partition development --full-systems --political-turbulence --campaign --observe-wars --normal-wars --seeds 20 --ticks 10000` と上記3系列）を固定候補から実行。`war-ai-cost-audit.ts` は主ツリーから `--engine-root <固定候補>`、明示した開発 seed、同系列で実行。`war-ai-replay-validation.ts` で非CPU結果・戦争履歴、`war-ai-report.ts` と既存の政体比較で対比較。コマンド実例は[旧継続記録](AI_R2_CONTINUATION.md)、凍結参照・生データは[R2.20報告](AI_R2_FUEL_FEASIBLE_PRODUCTION.md)および `diagnostics/war-ai-{,government-}r2-20-*.json.gz`。並行実行時の壁時計時間を性能比較に流用しない。
+- 作業は原則自分で進める。独立した小さな作業で必要な場合だけGPT-6 Luna Highを最大1体、利用不可なら無断代替なし。最新のユーザー指示が旧継続記録のLuna-low指示に優先する。UI変更がなければ不要な対話確認をしない。プレイヤーへの自動命令や外交ルールの無断変更を避ける。既定オフ、PR #2 Draft、マージ・強制プッシュ禁止。既存の比較と保存済み証拠を保持する。

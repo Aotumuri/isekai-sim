@@ -1,0 +1,352 @@
+diff --git a/src/sim/amphibious.ts b/src/sim/amphibious.ts
+index e2819a5..c3235fc 100644
+--- a/src/sim/amphibious.ts
++++ b/src/sim/amphibious.ts
+@@ -2299,6 +2299,7 @@ function selectLandingForce(
+   const candidates = world.units.filter((unit) =>
+     unit.domain === "land" && unit.nationId === nationId &&
+     !(player?.nationId === nationId && player.landOrders.has(unit.id)) &&
++    !isCapitalGuard(world, unit) &&
+     getUnitCombatStrength(unit) > 0 && !unavailable.has(unit.id) &&
+     !world.amphibiousOperations.operationByUnitId.has(unit.id) &&
+     (!world.amphibiousOperations.capabilityDemandByUnitId.has(unit.id) || previousIds.has(unit.id)) &&
+@@ -2532,3 +2533,4 @@ function selectLandingReason(factors: { capitalCoast: boolean; strategicCity: bo
+   return "best value-to-reaction balance";
+ }
+ function clamp(value: number, min: number, max: number): number { return Math.min(max, Math.max(min, value)); }
++import { isCapitalGuard } from "./capital-guard";
+diff --git a/src/sim/capital-defense.ts b/src/sim/capital-defense.ts
+index 9903731..7393ccb 100644
+--- a/src/sim/capital-defense.ts
++++ b/src/sim/capital-defense.ts
+@@ -1,4 +1,5 @@
+ import { WORLD_BALANCE } from "../data/balance";
++import { updateCapitalGuards } from "./capital-guard";
+ import type { MesoRegionId } from "../worldgen/meso-region";
+ import type { NationId } from "../worldgen/nation";
+ import {
+@@ -48,6 +49,7 @@ export interface CapitalDefenseEvent {
+ export interface CapitalDefenseState {
+   assessments: CapitalDefenseAssessment[];
+   assessmentsByNationId: Map<NationId, CapitalDefenseAssessment>;
++  guardByNationId: Map<NationId, UnitId>;
+   timeline: CapitalDefenseEvent[];
+   version: number;
+   emergencyCount: number;
+@@ -73,6 +75,7 @@ export function createCapitalDefenseState(): CapitalDefenseState {
+   return {
+     assessments: [],
+     assessmentsByNationId: new Map(),
++    guardByNationId: new Map(),
+     timeline: [],
+     version: 0,
+     emergencyCount: 0,
+@@ -191,6 +194,7 @@ export function updateCapitalDefense(world: WorldState): void {
+   state.assessmentsByNationId = new Map(
+     assessments.map((assessment) => [assessment.nationId, assessment]),
+   );
++  updateCapitalGuards(world);
+   state.lastEvaluationTick = now;
+   state.version += 1;
+   if (world.instrumentation) {
+diff --git a/src/sim/nation-front-allocations.ts b/src/sim/nation-front-allocations.ts
+index 8dbd793..32a5f86 100644
+--- a/src/sim/nation-front-allocations.ts
++++ b/src/sim/nation-front-allocations.ts
+@@ -167,6 +167,7 @@ export function updateNationFrontAllocations(world: WorldState): void {
+     }
+     const units = (unitsByNationId.get(nationId) ?? []).filter(
+       (unit) =>
++        !isCapitalGuard(world, unit) &&
+         !world.retreatPlans.retreatIdByUnitId.has(unit.id) &&
+         !world.strategicReserves.reserveNationByUnitId.has(unit.id) &&
+         !world.reorganization.planIdByUnitId.has(unit.id) &&
+@@ -1021,3 +1022,4 @@ function compareUnits(a: UnitState, b: UnitState): number {
+ function compareIds(a: string, b: string): number {
+   return a < b ? -1 : a > b ? 1 : 0;
+ }
++import { isCapitalGuard } from "./capital-guard";
+diff --git a/src/sim/nation/reposition-units.ts b/src/sim/nation/reposition-units.ts
+index d07b3de..c4585ca 100644
+--- a/src/sim/nation/reposition-units.ts
++++ b/src/sim/nation/reposition-units.ts
+@@ -1,4 +1,5 @@
+ import { isAmphibiousOwnedUnit } from "../amphibious";
++import { isCapitalGuard, pruneCapitalGuards } from "../capital-guard";
+ import { captureCampaignMarchLegs, clearCampaignMarchMissions, discardChangedMarchMissions, retainedRetargetProgress, type MovementLeg } from "./movement-continuity";
+ import { getPlayerNation, type PlayerNation } from "../player-nation";
+ import { isPlayerDirectedLandUnit } from "../player-land-orders";
+@@ -73,6 +74,7 @@ interface LandAiRuntime {
+   warAdjacency: WarAdjacency;
+   player: PlayerNation | undefined;
+   playerCommandRevision: number | undefined;
++  capitalGuards: WorldState["capitalDefense"]["guardByNationId"] | undefined;
+   movementGroups: LandMovementGroup[];
+   unitsExpectedToHaveTarget: Set<UnitState["id"]>;
+   forceReassignment: boolean;
+@@ -108,6 +110,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
+     return;
+   }
+   const landUnits = world.units.filter((unit) => unit.domain === "land");
++  pruneCapitalGuards(world, landUnits);
+   if (landUnits.length === 0) {
+     clearCampaignMarchMissions(world);
+     return;
+@@ -160,6 +163,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
+     LAND_TARGET_REASSIGN_INTERVAL_TICKS;
+   const shouldReassign =
+     runtime.forceReassignment ||
++    runtime.capitalGuards !== world.capitalDefense.guardByNationId ||
+     runtime.player !== player || runtime.playerCommandRevision !== player?.commandRevision ||
+     expectedTargetWasCleared ||
+     territoryChanged ||
+@@ -219,6 +223,7 @@ export function repositionUnits(world: WorldState, dtMs: number): void {
+     updateAssignmentRuntimeSources(runtime, world, landUnits);
+     runtime.player = player;
+     runtime.playerCommandRevision = player?.commandRevision;
++    runtime.capitalGuards = world.capitalDefense.guardByNationId;
+   }
+ 
+   applyCrisisDeployments(world);
+@@ -309,6 +314,7 @@ function getLandAiRuntime(world: WorldState): LandAiRuntime {
+     warAdjacency: new Map(),
+     player: undefined,
+     playerCommandRevision: undefined,
++    capitalGuards: undefined,
+     movementGroups: [],
+     unitsExpectedToHaveTarget: new Set(),
+     forceReassignment: true,
+@@ -472,6 +478,10 @@ function rebuildLandAssignments(
+   const unitsByNation = new Map<NationId, UnitState[]>();
+   for (const unit of landUnits) {
+     if (isPlayerDirectedLandUnit(player, unit) && !isAmphibiousOwnedUnit(world, unit.id)) continue;
++    if (isCapitalGuard(world, unit)) {
++      resetMovement(unit);
++      continue;
++    }
+     const list = unitsByNation.get(unit.nationId);
+     if (list) {
+       list.push(unit);
+diff --git a/src/sim/offensive-operations.ts b/src/sim/offensive-operations.ts
+index ab2a4e5..c3df9bd 100644
+--- a/src/sim/offensive-operations.ts
++++ b/src/sim/offensive-operations.ts
+@@ -1167,7 +1167,8 @@ function buildOperationCandidate(
+   const unitById = new Map(world.units.map((unit) => [unit.id, unit]));
+   const allocationUnits = allocation.unitIds
+     .map((unitId) => unitById.get(unitId))
+-    .filter(isOperationalLandUnit);
++    .filter(isOperationalLandUnit)
++    .filter((unit) => !isCapitalGuard(world, unit));
+   const defensiveIds = new Set(
+     getFrontlineCoverage(world, plan.frontId, plan.nationId)?.positions.flatMap(
+       (position) => position.defenderUnitIds,
+@@ -1305,7 +1306,8 @@ function selectReliefForce(
+     .reduce((sum, unit) => sum + getUnitCombatStrength(unit), 0);
+   const requested = Math.max(1, defender * 1.1, Math.min(relief.expectedRestoredStrength * 0.2, 2_000));
+   const sources = new Map<UnitId, import("./supply-relief").SupplyReliefForceSource>();
+-  const insideUnits = relief.insideForceUnitIds.map((id) => world.units.find((unit) => unit.id === id)).filter(isOperationalLandUnit);
++  const insideUnits = relief.insideForceUnitIds.map((id) => world.units.find((unit) => unit.id === id))
++    .filter(isOperationalLandUnit).filter((unit) => !isCapitalGuard(world, unit));
+   for (const unit of insideUnits) sources.set(unit.id, "inside-breakout");
+   const outsideUnits: UnitState[] = [];
+   const add = (units: UnitState[], source: import("./supply-relief").SupplyReliefForceSource) => {
+@@ -3966,3 +3968,4 @@ function clamp(value: number, min: number, max: number): number {
+ function compareIds(a: string, b: string): number {
+   return a < b ? -1 : a > b ? 1 : 0;
+ }
++import { isCapitalGuard } from "./capital-guard";
+diff --git a/src/sim/strategic-reserves.ts b/src/sim/strategic-reserves.ts
+index 70d351a..ffb79c8 100644
+--- a/src/sim/strategic-reserves.ts
++++ b/src/sim/strategic-reserves.ts
+@@ -353,6 +353,7 @@ export function assignUnitToStrategicReserve(
+   const unit = world.units.find((candidate) => candidate.id === unitId);
+   if (!unit || unit.domain !== "land") return false;
+   if (
++    isCapitalGuard(world, unit) ||
+     world.reorganization.planIdByUnitId.has(unitId) ||
+     world.retreatPlans.retreatIdByUnitId.has(unitId) ||
+     world.offensiveOperations.operationIdByUnitId.has(unitId) ||
+@@ -530,6 +531,7 @@ function reconcileReserveMembership(
+       .filter(
+         (unit) =>
+           !memberIds.has(unit.id) &&
++          !isCapitalGuard(world, unit) &&
+           !world.retreatPlans.retreatIdByUnitId.has(unit.id) &&
+           !world.offensiveOperations.operationIdByUnitId.has(unit.id) &&
+           !world.collapseAdvances.advanceNationByUnitId.has(unit.id) &&
+@@ -1474,3 +1476,4 @@ function compareNations(
+ function compareIds(a: string, b: string): number {
+   return a < b ? -1 : a > b ? 1 : 0;
+ }
++import { isCapitalGuard } from "./capital-guard";
+diff --git a/src/sim/war-campaign/alternatives.ts b/src/sim/war-campaign/alternatives.ts
+index a74da0e..20f8656 100644
+--- a/src/sim/war-campaign/alternatives.ts
++++ b/src/sim/war-campaign/alternatives.ts
+@@ -20,6 +20,7 @@ export interface CampaignAlternative {
+ export interface CampaignOpportunity {
+   opponentId: NationId;
+   availableStrength: number;
++  capitalGuardStrength?: number;
+   opposition: number;
+   arrivalSeconds: number;
+   objectiveValue: number;
+@@ -74,6 +75,8 @@ function localCampaignAlternatives(
+ ): CampaignAlternative[] {
+   const alternatives: CampaignAlternative[] = [];
+   const ratio = input.availableStrength / Math.max(1, input.opposition);
++  const defensiveStrength = input.availableStrength + (input.capitalGuardStrength ?? 0);
++  const defensiveRatio = defensiveStrength / Math.max(1, input.opposition);
+   const arrival = Number.isFinite(input.arrivalSeconds)
+     ? clamp(1 - input.arrivalSeconds / HORIZON_SECONDS) : 0;
+   // A bounded relative-power estimate; terrain and hidden future commitments
+@@ -87,7 +90,7 @@ function localCampaignAlternatives(
+       resourceCost: attackCost, failureRisk: input.homelandAtRisk * (1 - success),
+       uncertainty: input.uncertainty * input.objectiveValue },
+     { mode: "defend", benefit: input.securedValue,
+-      resourceCost: loss * 0.5, failureRisk: input.homelandAtRisk * clamp(1 - ratio),
++      resourceCost: loss * 0.5, failureRisk: input.homelandAtRisk * clamp(1 - defensiveRatio),
+       uncertainty: input.uncertainty * input.homelandAtRisk },
+   ];
+   if (input.peaceProbability > 0) options.push({
+@@ -113,7 +116,7 @@ function localCampaignAlternatives(
+       (option.failureRisk + replacementRisk) * riskAversion - option.uncertainty * 0.25 - changeCost;
+     alternatives.push({ ...option, opponentId: input.opponentId, changeCost, securedValue: input.securedValue,
+       opponentContinuationValue: score - input.securedValue,
+-      defensiveExposure: input.homelandAtRisk * input.opposition / Math.max(1, input.availableStrength + input.opposition), score });
++      defensiveExposure: input.homelandAtRisk * input.opposition / Math.max(1, defensiveStrength + input.opposition), score });
+   }
+   return alternatives;
+ }
+diff --git a/src/sim/war-campaign/forecast-force.ts b/src/sim/war-campaign/forecast-force.ts
+index e878ad3..434f4aa 100644
+--- a/src/sim/war-campaign/forecast-force.ts
++++ b/src/sim/war-campaign/forecast-force.ts
+@@ -33,7 +33,7 @@ export function forecastCampaignForceShares(
+ }
+ 
+ function canProjectCampaignUnit(world: WorldState, unit: UnitState, opponentId: NationId): boolean {
+-  if (world.playerNation?.landOrders.has(unit.id) ||
++  if (isCapitalGuard(world, unit) || world.playerNation?.landOrders.has(unit.id) ||
+     world.retreatPlans.retreatIdByUnitId.has(unit.id) || world.reorganization.planIdByUnitId.has(unit.id) ||
+     world.amphibiousOperations.operationByUnitId.has(unit.id) || world.amphibiousOperations.capabilityDemandByUnitId.has(unit.id)) return false;
+   const operationId = world.offensiveOperations.operationIdByUnitId.get(unit.id);
+@@ -45,3 +45,4 @@ function canProjectCampaignUnit(world: WorldState, unit: UnitState, opponentId:
+   return !!deployment && deployment.status !== "returning" && deployment.unitIds.includes(unit.id) &&
+     !!front && getOpposingFrontSide(front, unit.nationId)?.nationId === opponentId;
+ }
++import { isCapitalGuard } from "../capital-guard";
+diff --git a/src/sim/war-campaign/forecast.ts b/src/sim/war-campaign/forecast.ts
+index 55d46b4..1caef53 100644
+--- a/src/sim/war-campaign/forecast.ts
++++ b/src/sim/war-campaign/forecast.ts
+@@ -82,6 +82,7 @@ export function forecastCampaignOpportunities(
+       1 / (1 + Math.exp(-peace.score / 10)) * 0.5 : 0 : 0;
+     const settlingGain = securedValue || (terms.demandedRegionIds.length || terms.demandedWeapons > 0 ? politicalValue : 0);
+     return { opponentId: goal.opponentId, availableStrength: available,
++      capitalGuardStrength: getCapitalGuardDefenseStrength(world, nation.id, goal.opponentId, units),
+       opposition: strengths.get(goal.opponentId) ?? 0, arrivalSeconds: arrival,
+       objectiveValue: Math.max(0, politicalValue - securedValue), securedValue,
+       homelandAtRisk: atRisk, lossFractionPerSecond: observation.lossRate,
+@@ -93,3 +94,4 @@ export function forecastCampaignOpportunities(
+         .reduce((sum, u) => sum + getUnitCombatStrength(u), 0) / own };
+   });
+ }
++import { getCapitalGuardDefenseStrength } from "../capital-guard";
+diff --git a/src/sim/capital-guard.ts b/src/sim/capital-guard.ts
+new file mode 100644
+index 0000000..db39e18
+--- /dev/null
++++ b/src/sim/capital-guard.ts
+@@ -0,0 +1,89 @@
++import { WORLD_BALANCE } from "../data/balance";
++import type { NationId } from "../worldgen/nation";
++import type { CapitalDefenseAssessment } from "./capital-defense";
++import { getOpposingFrontSide } from "./land-fronts";
++import { isNationActive } from "./nation-active";
++import { getUnitEquipmentFulfillment, getUnitManpowerRatio } from "./reorganization";
++import type { UnitId, UnitState } from "./unit";
++import { getUnitCombatStrength } from "./unit-strength";
++import { getOwnerByMesoId } from "./world-cache";
++import type { WorldState } from "./world-state";
++
++export function updateCapitalGuards(world: WorldState): void {
++  const previous = world.capitalDefense.guardByNationId;
++  const next = new Map<NationId, UnitId>();
++  if (world.settings?.warCampaignEnabled) {
++    for (const assessment of world.capitalDefense.assessments) {
++      if (!canGuardCapital(world, assessment)) continue;
++      const guard = chooseCapitalGuard(world, assessment, previous.get(assessment.nationId));
++      if (guard) next.set(assessment.nationId, guard.id);
++    }
++  }
++  if (next.size !== previous.size || [...next].some(([nationId, id]) => previous.get(nationId) !== id)) {
++    world.capitalDefense.guardByNationId = next;
++  }
++}
++
++export function pruneCapitalGuards(world: WorldState, landUnits: UnitState[]): void {
++  const previous = world.capitalDefense.guardByNationId;
++  if (!previous.size) return;
++  const next = new Map<NationId, UnitId>();
++  for (const unit of landUnits) {
++    if (isCapitalGuard(world, unit)) next.set(unit.nationId, unit.id);
++  }
++  if (next.size !== previous.size) world.capitalDefense.guardByNationId = next;
++}
++
++export function isCapitalGuard(world: WorldState, unit: UnitState): boolean {
++  if (world.capitalDefense.guardByNationId.get(unit.nationId) !== unit.id) return false;
++  const assessment = world.capitalDefense.assessmentsByNationId.get(unit.nationId);
++  return !!assessment && canGuardCapital(world, assessment) && canHoldCapital(world, assessment, unit);
++}
++
++export function getCapitalGuardDefenseStrength(world: WorldState, nationId: NationId, opponentId: NationId, units: UnitState[]): number {
++  const id = world.capitalDefense.guardByNationId.get(nationId);
++  if (!id) return 0;
++  const guard = units.find((unit) => unit.id === id);
++  const assessment = world.capitalDefense.assessmentsByNationId.get(nationId);
++  if (!guard || !assessment || !isCapitalGuard(world, guard)) return 0;
++  const threatensCapital = assessment.threatenedFrontIds.some((frontId) => {
++    const front = world.landFronts.operationalSectorsById.get(frontId);
++    return front && getOpposingFrontSide(front, nationId)?.nationId === opponentId;
++  }) || world.units.some((unit) => unit.nationId === opponentId && assessment.enemyUnitIds.includes(unit.id));
++  return threatensCapital ? getUnitCombatStrength(guard) : 0;
++}
++
++function canGuardCapital(world: WorldState, assessment: CapitalDefenseAssessment): boolean {
++  const { nationId, capitalRegionId, threatLevel } = assessment;
++  return !!world.settings?.warCampaignEnabled && threatLevel !== "none" &&
++    world.playerNation?.nationId !== nationId &&
++    world.nations.some((nation) => nation.id === nationId && isNationActive(nation) && nation.capitalMesoId === capitalRegionId) &&
++    world.wars.some((war) => war.nationAId === nationId || war.nationBId === nationId) &&
++    getOwnerByMesoId(world).get(capitalRegionId) === nationId && !world.occupation.mesoById.has(capitalRegionId);
++}
++
++function chooseCapitalGuard(world: WorldState, assessment: CapitalDefenseAssessment, previousId?: UnitId): UnitState | undefined {
++  let strongest: UnitState | undefined;
++  let strength = 0;
++  for (const unit of world.units) {
++    if (!canHoldCapital(world, assessment, unit)) continue;
++    if (unit.id === previousId) return unit;
++    const candidate = getUnitCombatStrength(unit);
++    if (!strongest || candidate > strength || (candidate === strength && unit.id < strongest.id)) {
++      strongest = unit;
++      strength = candidate;
++    }
++  }
++  return strongest;
++}
++
++function canHoldCapital(world: WorldState, assessment: CapitalDefenseAssessment, unit: UnitState): boolean {
++  const recovery = WORLD_BALANCE.war.landFront.reorganization;
++  return unit.domain === "land" && unit.nationId === assessment.nationId && unit.regionId === assessment.capitalRegionId &&
++    unit.org >= recovery.organizationStartRatio && getUnitManpowerRatio(unit) >= recovery.manpowerStartRatio &&
++    getUnitEquipmentFulfillment(unit) >= recovery.equipmentStartRatio && getUnitCombatStrength(unit) > 0 &&
++    !world.retreatPlans.retreatIdByUnitId.has(unit.id) && !world.reorganization.planIdByUnitId.has(unit.id) &&
++    !world.strategicReserves.reserveNationByUnitId.has(unit.id) && !world.offensiveOperations.operationIdByUnitId.has(unit.id) &&
++    !world.amphibiousOperations.operationByUnitId.has(unit.id) && !world.amphibiousOperations.capabilityDemandByUnitId.has(unit.id) &&
++    !world.collapseAdvances.advanceNationByUnitId.has(unit.id) && !world.militaryAccess?.orders.has(unit.id);
++}

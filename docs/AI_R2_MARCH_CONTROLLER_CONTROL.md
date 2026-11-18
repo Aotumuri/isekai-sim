@@ -153,3 +153,19 @@ capital during this window. Do not infer a universal maintenance failure,
 change fuel/combat rules, or restore discarded travel to conceal the shortage.
 Further improvement should compare national resource feasibility and reachable
 relief before introducing another capital-defense exception.
+
+The later paired R2.20 windows distinguish the other shared survival losses.
+Seed 790 loses its first capital at 242 under R1 and 302 under R2.20, but
+only the latter loses its safe fallback and becomes extinct at 394. Seed 792
+has no capital-loss event under R1 in the window; R2.20 loses its capital and
+government at 376 without a safe fallback. These are not all earlier first
+capital falls or instances of a zero-combat-power guard.
+
+In seed 792, both armies have three effective units on the defender capital
+at 200. R2.20 has none there after 226; R1 has none from 246 until retreating
+unit-66 arrives at 328. R2.20's unit-71 first targets the capital within the
+window at 361, via a multi-edge route; its progress is not repeatedly reset,
+and it cannot arrive before extinction. The original guard's favorable retreat
+route is not proof of a deliberate protection plan. A shared omission in
+guard-role ownership is a hypothesis for the next independent control, not
+an established sole cause of these selected defeats.
