@@ -1,3 +1,5 @@
+import { decideTheaterLaunch } from "../../src/sim/theater-command";
+import { enterPlayerNation } from "../../src/sim/player-nation";
 import { updateWarCampaigns } from "../../src/sim/war-campaign/update";
 import { createSimulationSettings } from "../../src/sim/simulation-settings";
 import assert from "node:assert/strict";
@@ -2274,6 +2276,57 @@ test("staged operation force transitions from preparing to attacking", () => {
   );
   assert.notEqual(operation.preparationLeaseEndedAtTick, null);
   assert.equal(world.offensiveOperations.preparationLeaseLifetimeCount, 1);
+});
+
+test("the theater commander can wait once for more assembly without rewriting the operation", () => {
+  for (const [preference, enabled, manual, waits] of [
+    ["deliberate", true, false, true],
+    ["prompt", true, false, false],
+    ["deliberate", false, false, false],
+    ["deliberate", true, true, false],
+  ] as const) {
+    const world = createOperationWorld();
+    updateOffensiveOperations(world);
+    const operation = onlyOperation(world, NATION_A);
+    const nation = world.nations.find((item) => item.id === NATION_A)!;
+    world.settings = { ...world.settings!, warCampaignEnabled: enabled };
+    updateWarCampaigns(world);
+    const commander = { id: "incumbent", appointment: 1, preference, appointedAtTick: 0,
+      appointingIdeologyId: nation.politics?.governingIdeologyId ?? nation.ideologyId };
+    nation.theaterCommander = commander;
+    if (manual) assert(enterPlayerNation(world, NATION_A));
+
+    const approach = operation.plannedApproachRegionIds[0];
+    const arrived = world.units.filter((unit) => operation.assignedUnitIds.includes(unit.id))
+      .reduce((sum, unit) => sum + getUnitCombatStrength(unit), 0);
+    operation.plannedStrengthByApproach.set(approach, arrived / 0.65);
+    const target = operation.primaryTargetRegionId;
+    const units = [...operation.assignedUnitIds];
+
+    advanceOperationEvaluation(world, WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks);
+    if (!waits) {
+      assert.equal(operation.phase, "attacking");
+      assert.equal(operation.theaterLaunchDecision?.outcome, enabled && !manual ? "proceed" : undefined);
+      continue;
+    }
+    assert.equal(operation.phase, "preparing");
+    assert.equal(operation.theaterLaunchDecision?.commanderId, commander.id);
+    assert.equal(operation.theaterLaunchDecision?.outcome, "wait-for-assembly");
+    nation.ideologyId = "new-government";
+    advanceOperationEvaluation(world, 10);
+    assert.equal(operation.phase, "attacking");
+    assert.equal(operation.primaryTargetRegionId, target);
+    assert.deepEqual(operation.assignedUnitIds, units);
+    assert.equal(operation.theaterLaunchDecision?.commanderId, commander.id);
+
+    const nextOperation = { ...operation, theaterLaunchDecision: undefined };
+    const nextDecision = decideTheaterLaunch(world, nextOperation,
+      WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks, 1, 0.6);
+    assert.notEqual(nextDecision?.commanderId, commander.id);
+    assert.equal(nation.theaterCommander?.appointment, 2);
+    assert.equal(nation.theaterCommander?.appointingIdeologyId, "new-government");
+    assert.equal(operation.theaterLaunchDecision?.commanderId, commander.id);
+  }
 });
 
 test("a preparing Approach replaces lost strength instead of preserving unit identity", () => {

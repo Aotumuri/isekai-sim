@@ -1,3 +1,4 @@
+import { decideTheaterLaunch, type TheaterLaunchDecision } from "./theater-command";
 import { campaignShouldStandDown } from "./war-campaign/peace-guidance";
 import { campaignCostLimitReached } from "./war-campaign/policy";
 import { getWarCampaign } from "./war-campaign/state";
@@ -202,6 +203,7 @@ export interface OperationCandidate {
 }
 
 export interface OffensiveOperation {
+  theaterLaunchDecision?: TheaterLaunchDecision;
   id: OperationId;
   nationId: NationId;
   enemyNationId: NationId;
@@ -1057,6 +1059,12 @@ function advanceOperation(
       if (operation.isMajorOffensive && localRatio < majorSettings.majorLocalOvermatchRatio) {
         finishOperation(world, operation, "failure", "strength-collapsed");
         return { keep: true, changed: true };
+      }
+      const command = decideTheaterLaunch(world, operation, preparationTicks,
+        approachReadiness.operationCompletion, requiredCompletion);
+      if (command) {
+        operation.theaterLaunchDecision = command;
+        if (command.outcome === "wait-for-assembly") return { keep: true, changed: true };
       }
       transitionToAttacking(world, operation);
       return { keep: true, changed: true };
