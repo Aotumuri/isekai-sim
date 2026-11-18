@@ -16,7 +16,7 @@ import { buildCampaignObjectives } from "./objectives";
 import { recordCompletedCampaignGoals } from "./lifecycle";
 import { observeCampaignCost, forecastCampaignOpportunities } from "./forecast";
 import { evaluateCampaignAlternatives, hasClearCampaignImprovement, selectCampaignMilitaryEffort } from "./alternatives";
-import { unavailableManpower } from "./battle-costs";
+import { getCampaignOpeningInvestment, unavailableManpower } from "./battle-costs";
 import { createPeaceAssessmentContext } from "../peace-assessment-context";
 import { beginCampaignDistancePass, clearCampaignDistanceFields, pruneCampaignDistanceFields } from "./forecast-distances";
 
@@ -48,8 +48,9 @@ export function updateWarCampaigns(world: WorldState): void {
     const previous = state.byNationId.get(nation.id);
     const objectives = buildCampaignObjectives(world, nation.id, wars, strengths.get(nation.id) ?? 0, previous,
       (manpower.get(nation.id) ?? 0) + unavailableManpower(state.battleCosts?.get(nation.id)));
-    const constraints = assessCampaignConstraints(world, nation, wars, objectives, strengths);
-    const observation = observeCampaignCost(world, constraints.casualtyFraction, previous);
+    const openingInvestment = getCampaignOpeningInvestment(objectives);
+    const constraints = assessCampaignConstraints(world, nation, wars, objectives, strengths, openingInvestment);
+    const observation = observeCampaignCost(world, constraints.casualtyFraction, openingInvestment, previous);
     const opportunities = forecastCampaignOpportunities(world, nation, wars, objectives, strengths, observation, peaceContext);
     const alternatives = evaluateCampaignAlternatives(opportunities, constraints.aggression, previous);
     const settlementReadyOpponentIds = opportunities.filter((option) => option.settlementReady).map((option) => option.opponentId).sort();
@@ -120,7 +121,7 @@ function selectPrimaryOpponent(
 
 function assessCampaignConstraints(
   world: WorldState, nation: NationRuntime, wars: WarState[],
-  objectives: CampaignObjective[], strengths: Map<NationId, number>,
+  objectives: CampaignObjective[], strengths: Map<NationId, number>, openingInvestment: number,
 ): CampaignConstraints {
     const enemyStrength = [...new Set(objectives.map((goal) => goal.opponentId))]
       .reduce((sum, id) => sum + (strengths.get(id) ?? 0), 0);
@@ -130,7 +131,7 @@ function assessCampaignConstraints(
       strengthRatio: (strengths.get(nation.id) ?? 0) / Math.max(1, enemyStrength),
       casualtyFraction: (Math.max(battleCost?.directManpowerDamage ?? 0,
         wars.reduce((sum, war) => sum + getWarCasualties(war, nation.id), 0)) + (battleCost?.removedManpower ?? 0)) /
-        Math.max(1, ...objectives.map((goal) => goal.openingManpower ?? goal.openingStrength)),
+        openingInvestment,
       costTolerance: 0.5 + character.aggression,
       foodSeconds: nation.food ? foodReserveSeconds(nation.food) : Infinity,
       replacementConstrained: nation.resources.weapons <= 0 && nation.resources.manpower <= 0,

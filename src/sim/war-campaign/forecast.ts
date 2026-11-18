@@ -17,15 +17,21 @@ import { canNegotiateCampaignBilateralPeace, hasReadyCampaignSettlement } from "
 import type { PeaceAssessmentContext } from "../peace-assessment-context";
 import { forecastCampaignForceShares } from "./forecast-force";
 import { getCampaignObjectiveDistances } from "./forecast-distances";
+import { getCampaignOpeningInvestment } from "./battle-costs";
 
 export interface CampaignObservation { tick: number; casualtyFraction: number; lossRate: number }
 
-export function observeCampaignCost(world: WorldState, casualtyFraction: number, previous?: WarCampaign): CampaignObservation {
+export function observeCampaignCost(
+  world: WorldState, casualtyFraction: number, openingInvestment: number, previous?: WarCampaign,
+): CampaignObservation {
   const old = previous?.observation;
-  const elapsed = old ? (world.time.fastTick - old.tick) / 10 : 0;
-  const rate = elapsed > 0 ? Math.max(0, casualtyFraction - old!.casualtyFraction) / elapsed : 0;
-  return { tick: world.time.fastTick, casualtyFraction,
-    lossRate: old ? old.lossRate * 0.8 + rate * 0.2 : 0 };
+  if (!old) return { tick: world.time.fastTick, casualtyFraction, lossRate: 0 };
+  // The next decision may drop or add an opponent with a different opening
+  // investment. Express both observations and the carried rate in today's units.
+  const basisScale = getCampaignOpeningInvestment(previous.objectives) / openingInvestment;
+  const elapsed = (world.time.fastTick - old.tick) / 10;
+  const rate = elapsed > 0 ? Math.max(0, casualtyFraction - old.casualtyFraction * basisScale) / elapsed : 0;
+  return { tick: world.time.fastTick, casualtyFraction, lossRate: old.lossRate * basisScale * 0.8 + rate * 0.2 };
 }
 
 /** Adapter collects observable state; the alternative evaluator is pure.
@@ -36,7 +42,7 @@ export function forecastCampaignOpportunities(
   peaceContext?: PeaceAssessmentContext,
 ): CampaignOpportunity[] {
   const own = Math.max(1, strengths.get(nation.id) ?? 0);
-  const investment = Math.max(1, ...goals.map((goal) => goal.openingManpower ?? goal.openingStrength));
+  const investment = getCampaignOpeningInvestment(goals);
   const infantry = WORLD_BALANCE.unit.types.Infantry;
   const strengthPerWeapon = infantry.manpower / Math.max(1, infantry.weaponCost ?? 1);
   const totalValue = getNationalTerritorialValue(world, nation.id);

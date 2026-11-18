@@ -1,5 +1,6 @@
 import type { NationId } from "../../worldgen/nation";
 import type { UnitState } from "../unit";
+import type { CampaignObjective } from "./state";
 import { WORLD_BALANCE } from "../../data/balance";
 
 /** Removed formations are unavailable force, not a count of people killed.
@@ -40,4 +41,8 @@ export function recordFormationRemoval(costs: CampaignBattleCosts, unit: UnitSta
 
 export function unavailableManpower(cost: CampaignBattleCost | undefined): number {
   return cost ? cost.directManpowerDamage + cost.removedManpower : 0;
+}
+
+export function getCampaignOpeningInvestment(goals: readonly CampaignObjective[]): number {
+  return Math.max(1, ...goals.map((goal) => goal.openingManpower ?? goal.openingStrength));
 }

@@ -47,7 +47,7 @@ test("forecasting does not initialize negotiations, consume randomness or create
   const random = world.simRng.fork().nextFloat();
   const oldNegotiations = world.warNegotiations;
   const forecast = () => forecastCampaignOpportunities(world, nation, [war], campaign.objectives,
-    new Map(), observeCampaignCost(world, 0));
+    new Map(), observeCampaignCost(world, 0, 1));
   assert.deepEqual(forecast(), forecast());
   assert.equal(world.warNegotiations, oldNegotiations);
   assert.deepEqual(nation.resources, resources);
