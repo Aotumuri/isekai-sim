@@ -1,5 +1,5 @@
 import { formatTerritorialClaimObjective } from "../../src/render/territorial-claim-summary";
-import { getNationalPolitics } from "../../src/sim/politics";
+import { getNationalPolitics, updateNationalPolitics } from "../../src/sim/politics";
 import { assessWarIntent } from "../../src/sim/war-declaration";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -249,11 +249,14 @@ test("a deferred legal claim carries its first consideration into a later ultima
 });
 
 test("weak coalition support ahead of an election can defer an otherwise viable territorial ultimatum", () => {
-  for (const [coalitionSupport, system, ticksUntilElection, deferred] of [
-    [20, "democracy", 10, true],
-    [60, "democracy", 10, false],
-    [20, "democracy", 45, false],
-    [20, "monarchy", 10, false],
+  for (const [coalitionSupport, system, ticksUntilElection, deferred, blocker] of [
+    [40, "democracy", 10, true, undefined],
+    [60, "democracy", 10, false, undefined],
+    [40, "democracy", 45, false, undefined],
+    [40, "monarchy", 10, false, undefined],
+    [40, "democracy", 10, true, "manual"],
+    [40, "democracy", 10, false, "truce"],
+    [40, "democracy", 10, false, "influence"],
   ] as const) {
     const { world, a, b } = campaign();
     world.settings!.warCampaignEnabled = true;
@@ -269,29 +272,51 @@ test("weak coalition support ahead of an election can defer an otherwise viable 
     politics.system = system;
     politics.nextMandateAt = world.time.slowTick + ticksUntilElection;
     politics.coalition = [politics.governingIdeologyId];
-    politics.support.set(politics.governingIdeologyId, coalitionSupport);
+    const incumbent = politics.governingIdeologyId;
+    const opposition = [...politics.support.keys()].filter((party) => party !== incumbent);
+    politics.support = new Map([[incumbent, coalitionSupport],
+      [opposition[0], 34], [opposition[1], 66 - coalitionSupport]]);
+    politics.seats = new Map([[incumbent, 52], [opposition[0], 30], [opposition[1], 18]]);
+    a.ideologyId = incumbent;
     const relation = getRelation(world, a.id, b.id);
     relation.tension = 45;
+    if (blocker === "truce") relation.treaties.push({ type: "truce", expiresAtSlowTick: 40 });
+    if (blocker === "influence") getDiplomacyState(world).influenceByNationId.set(a.id, 11);
     const { opportunity, expectedCost, existingCommitment } = assessWarIntent(world,
       { aggressorId: a.id, targetNationId: b.id, route: "land" });
     const desireWithoutOpinion = a.character!.aggression * 40 + relation.tension * 0.6 +
       opportunity * 0.3 - expectedCost * 0.3 - existingCommitment;
-    relation.opinion = (desireWithoutOpinion - 50) / 0.35;
+    relation.opinion = (desireWithoutOpinion - 48) / 0.35;
 
     updateDiplomaticCrises(world);
     const deferral = relation.deferredClaims?.get(a.id);
     if (deferred) {
       assert.equal(relation.crisis, null);
       assert.equal(getDiplomacyState(world).influenceByNationId.get(a.id), 100);
-      assert.equal(deferral?.score, 50);
-      assert.equal(deferral?.minimumScore, 60);
-      assert.deepEqual(deferral?.electoralPressure, { coalitionSupport: 20, electionAtSlowTick: 20, scoreIncrease: 15 });
+      assert.equal(deferral?.score, 48);
+      assert.equal(deferral?.minimumScore, 50);
+      assert.deepEqual(deferral?.electoralPressure, { coalitionSupport: 40, electionAtSlowTick: 20, scoreIncrease: 5 });
       assert.match(formatTerritorialClaimObjective(world, relation, String).join("\n"),
-        /Coalition support was 20%.+raised the required score by 15.0/);
-      assert(openDiplomaticCrisis(world, a.id, b.id, requested), "an explicit ultimatum retains manual semantics");
+        /Coalition support was 40%.+raised the required score by 5.0/);
+      if (blocker === "manual") {
+        assert(openDiplomaticCrisis(world, a.id, b.id, requested));
+        continue;
+      }
+      world.time.fastTick = 200;
+      world.time.slowTick = 20;
+      updateNationalPolitics(world);
+      assert.equal(politics.governingIdeologyId, incumbent);
+      assert.deepEqual(politics.coalition, [incumbent, opposition[0]]);
+      updateDiplomaticCrises(world);
+      const objective = getRelation(world, a.id, b.id).crisis?.claimObjective;
+      assert.equal(objective?.interestId, deferral?.interestId);
+      assert.equal(objective?.firstDeferredAtTick, 0);
+      assert.equal(objective?.openedAtTick, 200);
+      assert.equal(relation.deferredClaims?.has(a.id), false);
+      assert.equal(getDiplomacyState(world).influenceByNationId.get(a.id), 88);
     } else {
       assert.equal(deferral, undefined);
-      assert.equal(relation.crisis?.demand, "territory");
+      assert.equal(relation.crisis?.demand, blocker ? undefined : "territory");
     }
   }
 });

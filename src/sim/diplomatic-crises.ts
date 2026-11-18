@@ -15,7 +15,7 @@ import { canTransferTerritories, transferTerritories } from "./territory-transfe
 import { getOwnerByMesoId } from "./world-cache";
 import { areFactionPartners, getFactionDefenders } from "./factions";
 import type { NationId } from "../worldgen/nation";
-import { getDefensePact, getDiplomacyState, getRelation, hasTreaty, relationKey, isDiplomaticallyProtected, spendInfluence } from "./diplomacy";
+import { getDefensePact, getDiplomacyState, getInfluence, getRelation, hasTreaty, relationKey, isDiplomaticallyProtected, spendInfluence } from "./diplomacy";
 import { getNationCharacter } from "./nation-character";
 import { isNationActive } from "./nation-active";
 import { getWarDeclarationMode, recordSimulationEvent } from "./simulation-settings";
@@ -34,25 +34,32 @@ function canSettleTerritorialDemand(world: WorldState, from: NationId, to: Natio
   return canTransferTerritories(world, transfers) && !getPeaceBorderIssue(world, transfers);
 }
 
-export function openDiplomaticCrisis(world: WorldState, aggressorId: NationId, targetId: NationId, requestedRegions?: MesoRegionId[]): boolean {
-  if (getWarDeclarationMode(world) !== "diplomacy" || aggressorId === targetId) return false;
-  if (![aggressorId, targetId].every((id) => world.nations.some((nation) => nation.id === id && isNationActive(nation)))) return false;
-  if (getSubjectOverlord(world, aggressorId)) return false;
-  if (findWar(world.wars, aggressorId, targetId) || isDiplomaticallyProtected(world, aggressorId, targetId)) return false;
-  const regionIds = requestedRegions ? [...requestedRegions] : undefined;
+const ULTIMATUM_INFLUENCE_COST = 12;
+
+function getEligibleCrisisRelation(world: WorldState, aggressorId: NationId, targetId: NationId, regionIds?: MesoRegionId[]) {
+  if (getWarDeclarationMode(world) !== "diplomacy" || aggressorId === targetId) return;
+  if (![aggressorId, targetId].every((id) => world.nations.some((nation) => nation.id === id && isNationActive(nation)))) return;
+  if (getSubjectOverlord(world, aggressorId)) return;
+  if (findWar(world.wars, aggressorId, targetId) || isDiplomaticallyProtected(world, aggressorId, targetId)) return;
   if (regionIds) {
     const provinces = getWholeProvinces(world, targetId, regionIds);
     const hasClaim = (id: MesoRegionId) => getTerritorialClaim(world, aggressorId, id) >= 20;
     const validClaim = provinces ? provinces.every(({ mesoRegionIds }) => mesoRegionIds.some(hasClaim)) : regionIds.every(hasClaim);
-    if (!regionIds.length || !validClaim || !canSettleTerritorialDemand(world, targetId, aggressorId, regionIds)) return false;
+    if (!regionIds.length || !validClaim || !canSettleTerritorialDemand(world, targetId, aggressorId, regionIds)) return;
   }
   const relation = getRelation(world, aggressorId, targetId);
-  if (relation.crisis || world.time.slowTick < relation.cooldownUntilSlowTick) return false;
+  if (relation.crisis || world.time.slowTick < relation.cooldownUntilSlowTick) return;
   const exposure = world.strategicThreatObservation.exposures.find((item) =>
     item.observerNationId === aggressorId && item.threatNationId === targetId && (item.landAdjacent || item.sharedSeaComponent));
-  if (!exposure || !hasWarApproach(world, aggressorId, targetId) || getNationalMilitaryStrength(world, aggressorId) < Math.max(1, getNationalMilitaryStrength(world, targetId)) * 0.65) return false;
-  if ([...getDiplomacyState(world).relations.values()].some((item) => item.crisis?.aggressorId === aggressorId)) return false;
-  if (!spendInfluence(world, aggressorId, 12)) return false;
+  if (!exposure || !hasWarApproach(world, aggressorId, targetId) || getNationalMilitaryStrength(world, aggressorId) < Math.max(1, getNationalMilitaryStrength(world, targetId)) * 0.65) return;
+  if ([...getDiplomacyState(world).relations.values()].some((item) => item.crisis?.aggressorId === aggressorId)) return;
+  return relation;
+}
+
+export function openDiplomaticCrisis(world: WorldState, aggressorId: NationId, targetId: NationId, requestedRegions?: MesoRegionId[]): boolean {
+  const regionIds = requestedRegions ? [...requestedRegions] : undefined;
+  const relation = getEligibleCrisisRelation(world, aggressorId, targetId, regionIds);
+  if (!relation || !spendInfluence(world, aggressorId, ULTIMATUM_INFLUENCE_COST)) return false;
   relation.crisis = { aggressorId, openedAtSlowTick: world.time.slowTick,
     deadlineSlowTick: world.time.slowTick + 30, demand: regionIds ? "territory" : relation.grievance > 30 ? "containment" : "concessions", regionIds };
   if (regionIds && world.settings?.warCampaignEnabled) {
@@ -313,8 +320,11 @@ export function updateDiplomaticCrises(world: WorldState): void {
       ? getElectoralClaimPressure(world, attacker) : undefined;
     const threshold = baseThreshold + (electoralPressure?.scoreIncrease ?? 0);
     if (desire < threshold) {
-      if (requested.length) deferTerritorialClaim(world, relation, attacker, candidate.targetNationId, requested, desire,
-        threshold, electoralPressure);
+      if (requested.length && getEligibleCrisisRelation(world, attacker, candidate.targetNationId, requested) &&
+          getInfluence(world, attacker) >= ULTIMATUM_INFLUENCE_COST) {
+        deferTerritorialClaim(world, relation, attacker, candidate.targetNationId, requested, desire,
+          threshold, electoralPressure);
+      }
       continue;
     }
     if (openDiplomaticCrisis(world, attacker, candidate.targetNationId,
