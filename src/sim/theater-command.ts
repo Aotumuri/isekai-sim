@@ -52,8 +52,29 @@ export function decideTheaterLaunch(
     };
   }
   const preferredReadiness = commander.preference === "deliberate" ? Math.min(1, minimumReadiness + 0.1) : minimumReadiness;
+  const waitForAssembly = readiness < preferredReadiness &&
+    canReachPreferredReadinessAtNextReview(world, operation, preferredReadiness);
   return {
     commanderId: commander.id, preference: commander.preference, evaluatedAtTick: world.time.fastTick,
-    readiness, preferredReadiness, outcome: readiness < preferredReadiness ? "wait-for-assembly" : "proceed",
+    readiness, preferredReadiness, outcome: waitForAssembly ? "wait-for-assembly" : "proceed",
   };
+}
+
+function canReachPreferredReadinessAtNextReview(
+  world: WorldState, operation: OffensiveOperation, preferredReadiness: number,
+): boolean {
+  const nextReview = world.time.fastTick + SLOW_TICK_MS / FAST_TICK_MS;
+  return operation.approachGroups.length > 0 && operation.approachGroups.every((group) => {
+    const required = (operation.plannedStrengthByApproach.get(group.regionId) ?? 0) * preferredReadiness;
+    if (required <= 0) return false;
+    let expected = group.readyStrength;
+    if (expected >= required) return true;
+    for (const unit of operation.committedManifest) {
+      if (unit.approachRegionId === group.regionId && unit.arrivedAtTick === null &&
+          unit.estimatedTravelTicks > 0 && unit.estimatedArrivalTick <= nextReview) {
+        expected += unit.strength;
+      }
+    }
+    return expected >= required;
+  });
 }

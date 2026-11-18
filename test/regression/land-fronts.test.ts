@@ -2279,14 +2279,17 @@ test("staged operation force transitions from preparing to attacking", () => {
   assert.equal(world.offensiveOperations.preparationLeaseLifetimeCount, 1);
 });
 
-test("the theater commander can wait once for more assembly without rewriting the operation", () => {
-  for (const [preference, enabled, manual, waits] of [
-    ["deliberate", true, false, true],
-    ["prompt", true, false, false],
-    ["deliberate", false, false, false],
-    ["deliberate", true, true, false],
+test("the theater commander waits once for reachable reinforcements and preserves the order through succession", () => {
+  for (const [preference, enabled, manual, arrivalTicks, waits, arrivalDisrupted] of [
+    ["deliberate", true, false, 5, true, false],
+    ["deliberate", true, false, 5, true, true],
+    ["deliberate", true, false, 20, false],
+    ["deliberate", true, false, 0, false],
+    ["prompt", true, false, 5, false],
+    ["deliberate", false, false, 5, false],
+    ["deliberate", true, true, 5, false],
   ] as const) {
-    const world = createOperationWorld();
+    const world = createOperationWorld(true);
     updateOffensiveOperations(world);
     const operation = onlyOperation(world, NATION_A);
     const nation = world.nations.find((item) => item.id === NATION_A)!;
@@ -2298,7 +2301,16 @@ test("the theater commander can wait once for more assembly without rewriting th
     if (manual) assert(enterPlayerNation(world, NATION_A));
 
     const approach = operation.plannedApproachRegionIds[0];
-    const arrived = world.units.filter((unit) => operation.assignedUnitIds.includes(unit.id))
+    const assigned = world.units.filter((unit) => operation.assignedUnitIds.includes(unit.id));
+    const reinforcement = assigned[0];
+    if (arrivalTicks) {
+      reinforcement.regionId = id("rear2");
+      reinforcement.moveFromId = reinforcement.regionId;
+      reinforcement.moveToId = id("rear1");
+      reinforcement.moveTargetId = approach;
+      reinforcement.moveTicksPerRegion = arrivalTicks;
+    }
+    const arrived = assigned.filter((unit) => unit.regionId === approach)
       .reduce((sum, unit) => sum + getUnitCombatStrength(unit), 0);
     operation.plannedStrengthByApproach.set(approach, arrived / 0.65);
     const target = operation.primaryTargetRegionId;
@@ -2307,6 +2319,7 @@ test("the theater commander can wait once for more assembly without rewriting th
     advanceOperationEvaluation(world, WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks);
     if (!waits) {
       assert.equal(operation.phase, "attacking");
+      assert.equal(operation.phaseStartedAtTick, WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks);
       assert.equal(operation.theaterLaunchDecision?.outcome, enabled && !manual ? "proceed" : undefined);
       continue;
     }
@@ -2315,8 +2328,13 @@ test("the theater commander can wait once for more assembly without rewriting th
     assert.equal(operation.theaterLaunchDecision?.outcome, "wait-for-assembly");
     assert.match(formatCampaignDebugLines(world).join("\n"), /deliberate commander waited for assembly.*65% ready, preferred 70%/);
     nation.ideologyId = "new-government";
+    if (arrivalDisrupted) reinforcement.moveTicksPerRegion = 40;
+    for (let tick = 0; tick < 10; tick++) repositionUnits(world, FAST_TICK_MS);
+    assert.equal(reinforcement.regionId === id("rear2"), arrivalDisrupted);
     advanceOperationEvaluation(world, 10);
     assert.equal(operation.phase, "attacking");
+    assert.equal(operation.phaseStartedAtTick, WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks + 10);
+    assert.equal(operation.readinessCompletion >= 0.7, !arrivalDisrupted);
     assert.equal(operation.primaryTargetRegionId, target);
     assert.deepEqual(operation.assignedUnitIds, units);
     assert.equal(operation.theaterLaunchDecision?.commanderId, commander.id);
@@ -3988,13 +4006,14 @@ function moveRetreatingForceToFallback(
   }
 }
 
-function createOperationWorld(): WorldState {
+function createOperationWorld(withRear = false): WorldState {
   const world = createFrontWorld(
     [
       { id: "a", owner: NATION_A },
       { id: "b", owner: NATION_B },
+      ...(withRear ? [{ id: "rear1", owner: NATION_A }, { id: "rear2", owner: NATION_A }] : []),
     ],
-    [["a", "b"]],
+    withRear ? [["a", "b"], ["a", "rear1"], ["rear1", "rear2"]] : [["a", "b"]],
   );
   startWar(world, NATION_A, NATION_B);
   for (let index = 0; index < 6; index += 1) {
