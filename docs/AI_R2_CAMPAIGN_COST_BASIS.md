@@ -66,7 +66,56 @@ The candidate passes 729 regressions, typecheck, build and quick benchmark.
 
 The isolated candidate reproduces both denominator transitions of
 Stalemate 788, with zero physical loss on each. At tick 6200 its clipped
-30-second projection is 0.00369%, rather than the canonical 100%. The
+30-second projection is 0.00369%. The canonical value is 100%. The
 [replay](../diagnostics/war-ai-r2-25-basis-rebased-788.json.gz) records the
 actual candidate observation. The established 60-case development
 comparison determines whether the accounting correction influences quality.
+
+## Development result
+
+The 60 cost/government replays matched the candidate matrix's recorded
+non-CPU end states and full war histories. The matrix retained every
+recorded opening-war outcome exactly,
+including timings and losses. Fixed opening attacker objective rates
+remain 35/50/45% and defender survival rates remain 80/55/60% across the
+three families. Stalemate defender survival is 20 pp below R1
+([−40, −5], paired 95% interval). The forecast correction does not resolve
+the recurring opening survival regression.
+
+Two rows changed later-war history. In Matched 791, the war opened at
+5710 ended at 6010 instead of 6910. Both sides retained the same legal
+territorial results (+5/−5), and recorded casualties fell from 1293.09
+to 792.16 for nation-0 and 880.47 to 441.10 for nation-2. Other later
+wars in that row also shifted. In Reorganization 784, nation-2 retained
+the same outcome against nation-0 and won 21 ticks sooner, with recorded
+losses of 750.73 versus 786.35. Those are selected realized effects with
+later geopolitical divergence. Across the paired families, intervals for
+mean active-war duration include zero. For the opening Matched aggressors,
+whole-episode production-recorded fuel is 2.4% lower on average and
+unavailable field manpower is 5.1% lower against canonical. Opening-war
+government preservation is identical in every family. The paired reports
+include legal outcomes, casualties and costs. Median process CPU for the
+three families is 7.6–9.6% lower in these runs. This comparison does not
+isolate same-state CPU cost.
+
+Decision traces show where changes first appeared in the selected windows.
+In Reorganization 784, nation-2 switched military effort to limited
+offense at 2050 in the candidate, while the canonical plan remained
+defensive. At the canonical denominator contraction (2110), its cumulative
+casualty fraction was still below hard tolerance (1.005 vs 1.400).
+In Matched 791, nation-0's pattern first diverged at 5270, after the
+rebasing exposure on scope change at 5230. It adopted defense while the
+canonical campaign retained limited offense. These records support a
+forecast-ranking mechanism and give no direct evidence for changing the
+cumulative casualty budget.
+
+R2.25 is **not adopted** under the strategic quality protocol. It
+corrects a reproducible accounting error and resolves two late-episode
+trajectories differently. The primary opening results are identical in
+all 60 cases and the broader improvements remain unestablished. The
+patch and two-arm late decision traces are retained. The final evaluation
+partition remains unused.
+
+The [validation record](../diagnostics/war-ai-r2-25-validation.json.gz)
+links all replays. The full inputs and bootstrap reports use the
+established matrix and government scripts.

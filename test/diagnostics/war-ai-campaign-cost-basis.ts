@@ -28,6 +28,12 @@ const option = (name: string) => {
 const engine = option("--engine-root");
 const root = resolve(engine ?? ".");
 const onlySeed = option("--seed");
+const rawWindow = option("--decision-window");
+const match = rawWindow?.match(/^(\d+):(\d+)$/);
+if (rawWindow && (!match || Number(match[1]) > Number(match[2]) || onlySeed === undefined)) {
+  throw new Error("A decision window requires ordered tick bounds and a single seed");
+}
+const window = match ? [Number(match[1]), Number(match[2])] as const : undefined;
 const seedStart = 822_748_319_780;
 const seeds = Array.from({ length: 20 }, (_, offset) => seedStart + offset)
   .filter((seed) => onlySeed === undefined || String(seed) === onlySeed);
@@ -55,6 +61,8 @@ function snapshot(world: WorldState, plan: WarCampaign) {
     activeCasualties, lossRate: observation.lossRate,
     wars: plan.objectives.map((goal) => goal.warKey).sort(),
     mode: plan.mode, militaryMode: plan.militaryMode, primaryOpponentId: plan.primaryOpponentId,
+    reason: plan.reason, costTolerance: plan.constraints.costTolerance,
+    capitalCritical: plan.constraints.capitalCritical, foodSeconds: plan.constraints.foodSeconds,
   };
 }
 
@@ -72,6 +80,7 @@ function run(seed: number) {
   })).digest("hex");
   const outcomes = createWarOutcomeObserver();
   const transitions: object[] = [];
+  const decisions: object[] = [];
   let previous = new Map<string, ReturnType<typeof snapshot>>();
   let comparedDecisions = 0;
   class CostBasisMetrics extends BenchmarkMetrics {
@@ -83,6 +92,12 @@ function run(seed: number) {
         if (!plan.observation) continue;
         const after = snapshot(world, plan);
         next.set(plan.nationId, after);
+        if (window && after.tick >= window[0] && after.tick <= window[1]) {
+          decisions.push({ ...after, alternatives: plan.alternatives?.map((alternative) => ({
+            opponentId: alternative.opponentId, mode: alternative.mode, score: alternative.score,
+            resourceCost: alternative.resourceCost,
+          })) });
+        }
         const before = previous.get(plan.nationId);
         if (!before || after.tick <= before.tick) continue;
         comparedDecisions++;
@@ -103,7 +118,7 @@ function run(seed: number) {
   }
   runSimulation(world, { ticks, metrics: new CostBasisMetrics(), observe: outcomes.observe });
   return { scenario, seed, startFingerprint, comparedDecisions, transitions,
-    warOutcomes: outcomes.result(), endWorld: summarizeWorld(world) };
+    warOutcomes: outcomes.result(), endWorld: summarizeWorld(world), ...(window ? { decisions } : {}) };
 }
 
 const results: ReturnType<typeof run>[] = [];
@@ -116,7 +131,7 @@ const report = {
   revision: git("rev-parse", "HEAD"), sourceTree,
   harnessHash: createHash("sha256").update(await readFile(new URL(import.meta.url))).digest("hex"),
   runtime: { node: process.version, v8: process.versions.v8, platform: process.platform, arch: process.arch },
-  ticks, campaign: true, results,
+  ticks, campaign: true, ...(window ? { decisionWindow: window } : {}), results,
 };
 await writeFile(`${output}.tmp`, gzipSync(JSON.stringify(report)));
 await rename(`${output}.tmp`, output);

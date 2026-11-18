@@ -66,7 +66,10 @@ Later isolated controls are recorded in
 [R2.18 operation sizing](AI_R2_OPERATION_SIZE_EXPERIMENTS.md),
 [R2.19 controller/march interaction](AI_R2_MARCH_CONTROLLER_CONTROL.md),
 [R2.20 fuel-feasible recruitment](AI_R2_FUEL_FEASIBLE_PRODUCTION.md),
-[R2.21 capital guard reservation](AI_R2_CAPITAL_GUARD_EXPERIMENT.md), and
-[R2.22 capital guard role control](AI_R2_CAPITAL_GUARD_ROLE_CONTROL.md).
+[R2.21 capital guard reservation](AI_R2_CAPITAL_GUARD_EXPERIMENT.md),
+[R2.22 capital guard role control](AI_R2_CAPITAL_GUARD_ROLE_CONTROL.md),
+[R2.23 capital relief](AI_R2_CAPITAL_RELIEF.md),
+[R2.24 relief release conditions](AI_R2_CAPITAL_RELIEF_HOLD.md), and
+[R2.25 campaign loss-rate basis](AI_R2_CAMPAIGN_COST_BASIS.md).
 The user's cross-stage national-interest observations remain tracked in
 [AI_NATIONAL_STRATEGY_OBSERVATIONS.md](AI_NATIONAL_STRATEGY_OBSERVATIONS.md).
