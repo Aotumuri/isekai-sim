@@ -1,4 +1,5 @@
 import { getPlayerNation } from "./player-nation";
+import { observeCampaignBattleDamage, observeCampaignFormationRemoval } from "./war-campaign/battle-cost-observation";
 import { getRiverCrossingPressure } from "./river-crossings";
 import { getUnitProtection } from "./unit-strength";
 import { getCoastalSupportModifier } from "./coastal-support";
@@ -141,6 +142,18 @@ export function updateBattles(world: WorldState): void {
   }
 
   if (removedUnitIds.size > 0) {
+    const campaignEnabled = world.settings?.warCampaignEnabled;
+    const instrumentation = world.instrumentation;
+    if (campaignEnabled || instrumentation?.recordLandUnitLifecycle) {
+      for (const unit of world.units) {
+        if (!removedUnitIds.has(unit.id)) continue;
+        if (campaignEnabled) observeCampaignFormationRemoval(world, unit);
+        if (unit.domain === "land") instrumentation?.recordLandUnitLifecycle?.({
+          tick: now, unitId: unit.id, nationId: unit.nationId, regionId: unit.regionId,
+          reason: "battle-removal", remainingManpower: unit.manpower, remainingOrganization: unit.org,
+        });
+      }
+    }
     world.units = world.units.filter((unit) => !removedUnitIds.has(unit.id));
     landBattleIndexByWorld.delete(world);
   }
@@ -208,6 +221,8 @@ function updateLandBattles(
             getRiverCrossingPressure(getMesoById(world).get(mesoId), attackers, defenders),
         );
         if (outcome) {
+          observeCampaignBattleDamage(world, battle.attackerNationId, outcome.attackerManpowerLoss);
+          observeCampaignBattleDamage(world, battle.defenderNationId, outcome.defenderManpowerLoss);
           battle.attackerManpowerLoss += outcome.attackerManpowerLoss;
           battle.defenderManpowerLoss += outcome.defenderManpowerLoss;
           battle.attackerOrganizationLoss += outcome.attackerOrganizationLoss;
@@ -340,6 +355,8 @@ function updateNavalBattles(
           now,
         );
         if (outcome) {
+          observeCampaignBattleDamage(world, battle.attackerNationId, outcome.attackerManpowerLoss);
+          observeCampaignBattleDamage(world, battle.defenderNationId, outcome.defenderManpowerLoss);
           addWarContribution(
             world.wars,
             battle.attackerNationId,

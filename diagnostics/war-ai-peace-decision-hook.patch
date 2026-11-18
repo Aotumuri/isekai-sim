@@ -1,0 +1,12 @@
+diff --git a/src/sim/war-negotiations.ts b/src/sim/war-negotiations.ts
+index 72b893f..71ee8b3 100644
+--- a/src/sim/war-negotiations.ts
++++ b/src/sim/war-negotiations.ts
+@@ -347,6 +347,7 @@ export function acceptPeaceOffer(world: WorldState, recipient: NationId, propose
+   const terms = offer.terms;
+   if (expectedRevision !== undefined && expectedRevision !== offer.revision) return false;
+   if (getSeparatePeaceIssue(world, proposer, recipient) || getPeaceTermsIssue(world, proposer, recipient, terms)) return false;
++  world.instrumentation?.recordDuration(`diagnostic.peaceOffer.${recipient}.${proposer}`, 0);
+   const defeated = world.nations.find((nation) => nation.id === recipient)!;
+   const localPlan = terms.localSubject ? planLocalSubject(world, proposer, recipient, terms.demandedRegionIds) : undefined;
+   const plan = localPlan ?? terms.partition;

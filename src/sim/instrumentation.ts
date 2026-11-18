@@ -1,4 +1,10 @@
+import type { MesoRegionId } from "../worldgen/meso-region";
+import type { NationId } from "../worldgen/nation";
+import type { MobilizationPhase } from "./mobilization";
+import type { UnitId } from "./unit";
+
 export type SimulationMetricName =
+  | "warCampaign.evaluation"
   | "production.evaluation"
   | "production.capacityCounting"
   | "production.supplyLookup"
@@ -137,6 +143,7 @@ export type SimulationCounterName =
   | "battle.attackerManpowerLoss"
   | "battle.defenderManpowerLoss"
   | "movement.regionArrivals"
+  | "movement.retainedRetargetProgressMs"
   | "occupation.fullRegionScans"
   | "occupation.regionsScanned"
   | "capitals.activeNationScans"
@@ -216,6 +223,7 @@ export type SimulationCounterName =
   | "offensiveOperation.exploitationStop.local-strength-disadvantage"
   | "offensiveOperation.exploitationStop.enemy-reserve-arrival"
   | "offensiveOperation.exploitationStop.retreat-started"
+  | "offensiveOperation.exploitationStop.campaign-settlement"
   | "offensiveOperation.exploitationStop.capital-emergency"
   | "offensiveOperation.exploitationStop.front-disappeared"
   | "offensiveOperation.exploitationStop.timeout"
@@ -549,7 +557,20 @@ export type SimulationCounterName =
  * Optional benchmark observer. Production worlds do not install one, so hot paths
  * only pay for an undefined property check and never call performance.now().
  */
+/** Emitted at the mutation site for opt-in unit-level diagnostics. */
+export type LandUnitLifecycleEvent = {
+  tick: number;
+  unitId: UnitId;
+  nationId: NationId;
+  regionId: MesoRegionId;
+} & (
+  | { reason: "battle-removal"; remainingManpower: number; remainingOrganization: number }
+  | { reason: "demobilization"; returnedManpower: number; recoveredWeapons: number }
+  | { reason: "production"; facility: "capital" | "city"; mobilizationPhase: MobilizationPhase | null }
+);
+
 export interface SimulationInstrumentation {
+  recordLandUnitLifecycle?(event: LandUnitLifecycleEvent): void;
   recordDuration(name: SimulationMetricName, durationMs: number): void;
   incrementCounter(name: SimulationCounterName, amount?: number): void;
 }

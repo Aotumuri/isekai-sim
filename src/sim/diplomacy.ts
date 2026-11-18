@@ -1,3 +1,4 @@
+import type { TerritorialClaimDeferral, TerritorialClaimObjective, TerritorialClaimOutcome } from "./territorial-claim-objective";
 import { getManualGovernmentId } from "./player-nation";
 import { areSubjectPartners, getSubjectOverlord } from "./subject-governments";
 import { getIdeologicalAffinity } from "./ideology-relations";
@@ -20,6 +21,7 @@ export interface DiplomaticCrisis {
   deadlineSlowTick: number;
   demand: "concessions" | "containment" | "territory";
   regionIds?: MesoRegionId[];
+  claimObjective?: TerritorialClaimObjective;
 }
 export interface DiplomaticRelation {
   nationAId: NationId;
@@ -30,6 +32,7 @@ export interface DiplomaticRelation {
   grievance: number;
   treaties: Treaty[];
   crisis: DiplomaticCrisis | null;
+  deferredClaims?: Map<NationId, TerritorialClaimDeferral>;
   cooldownUntilSlowTick: number;
   nextBorderIncidentAt?: number;
   factionSanctionsUntil?: number;
@@ -39,6 +42,7 @@ export interface DiplomaticRelation {
 }
 export interface DiplomacyState {
   relations: Map<string, DiplomaticRelation>;
+  claimOutcomeHistory?: TerritorialClaimOutcome[];
   influenceByNationId: Map<NationId, number>;
   fatigueByWarId: Map<string, number>;
   lastRelationsSlowTick: number;

@@ -407,7 +407,22 @@ function assignDefenders(world: WorldState, sectorId: SectorId, units: UnitState
   const remaining = [...targets];
   let reusedAssignments = 0;
   let createdAssignments = 0;
-  for (const unit of [...units].sort((a, b) => compareIds(a.id, b.id))) {
+  const orderedUnits = [...units].sort((a, b) => compareIds(a.id, b.id));
+  const unplaced = world.settings?.warCampaignEnabled
+    ? orderedUnits.filter((unit) => {
+      const prior = previous.get(unit.id);
+      if (prior?.sectorId !== sectorId) return true;
+      const slot = remaining.findIndex((position) =>
+        position.id === prior.defensivePositionId && position.friendlyRegionId === prior.targetRegionId);
+      if (slot === -1) return true;
+      // A still-selected position belongs to its incumbent before free placement.
+      remaining.splice(slot, 1);
+      next.set(unit.id, prior);
+      reusedAssignments += 1;
+      return false;
+    })
+    : orderedUnits;
+  for (const unit of unplaced) {
     const prior = previous.get(unit.id);
     let target = remaining.find((position) => position.id === prior?.defensivePositionId);
     if (!target) target = remaining.sort((a, b) => positionDistance(unit, a, meso) - positionDistance(unit, b, meso) || b.threat - a.threat || a.segmentIndex - b.segmentIndex)[0];

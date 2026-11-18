@@ -1,0 +1,31 @@
+diff --git a/src/sim/war-campaign/update.ts b/src/sim/war-campaign/update.ts
+index ac60d84..e0c3a0f 100644
+--- a/src/sim/war-campaign/update.ts
++++ b/src/sim/war-campaign/update.ts
+@@ -53,7 +53,9 @@ export function updateWarCampaigns(world: WorldState): void {
+     const opportunities = forecastCampaignOpportunities(world, nation, wars, objectives, strengths, observation, peaceContext);
+     const alternatives = evaluateCampaignAlternatives(opportunities, constraints.aggression, previous);
+     const settlementReadyOpponentIds = opportunities.filter((option) => option.settlementReady).map((option) => option.opponentId).sort();
+-    const decision = evaluateCampaignPolicy(constraints, alternatives);
++    // Diagnostic control: use the unscored single-war rule only for the defender.
++    const scoredSelection = objectives.length !== 1 || wars[0].aggressorId === nation.id;
++    const decision = evaluateCampaignPolicy(constraints, scoredSelection ? alternatives : undefined);
+     const topologyChanged = !previous || previous.objectives.map((goal) => goal.warKey).sort().join("|") !==
+       objectives.map((goal) => goal.warKey).sort().join("|");
+     const emergency = constraints.capitalCritical || constraints.foodSeconds < 45;
+@@ -62,12 +64,13 @@ export function updateWarCampaigns(world: WorldState): void {
+       (negotiating || option.opponentId === previous.primaryOpponentId));
+     const military = alternatives.filter((option) => option.mode === "defend" || option.mode === "limited-offensive");
+     const currentMilitary = military.find((option) => option.mode === previous?.militaryMode && option.opponentId === previous.primaryOpponentId);
+-    const clearImprovement = hasClearCampaignImprovement(alternatives[0], current) || hasClearCampaignImprovement(military[0], currentMilitary);
++    const clearImprovement = scoredSelection && (hasClearCampaignImprovement(alternatives[0], current) || hasClearCampaignImprovement(military[0], currentMilitary));
+     const readinessChanged = settlementReadyOpponentIds.join("|") !== previous?.settlementReadyOpponentIds?.join("|");
+     const reassess = readinessChanged || clearImprovement || requiresCampaignReview(constraints, previous?.constraints,
+       world.time.fastTick - (previous?.adoptedAtTick ?? world.time.fastTick), topologyChanged);
+     const mode = reassess ? decision.mode : previous!.mode;
+-    const effort = selectCampaignMilitaryEffort(alternatives, mode, campaignCostLimitReached(constraints));
++    const effortMode = scoredSelection ? mode : mode === "limited-offensive" ? "limited-offensive" : "defend";
++    const effort = selectCampaignMilitaryEffort(alternatives, effortMode, campaignCostLimitReached(constraints));
+     const militaryMode = reassess ? effort.mode : previous!.militaryMode ?? effort.mode;
+     const primary = reassess
+       ? constraints.capitalCritical ? selectPrimaryOpponent(world, nation.id, objectives, previous?.primaryOpponentId, strengths)

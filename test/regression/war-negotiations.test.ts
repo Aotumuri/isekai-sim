@@ -1,3 +1,4 @@
+import { updateWarCampaigns } from "../../src/sim/war-campaign/update";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
@@ -98,4 +99,91 @@ test("a changed offer cannot silently replace the conditions displayed by the ac
   assert(proposePeaceTerms(world, a.id, b.id, { ...whitePeaceTerms(), demandedWeapons: 40 }));
   assert(!acceptPeaceOffer(world, b.id, a.id, displayedRevision));
   assert.equal(a.resources.weapons, 100); assert.equal(b.resources.weapons, 100); assert(findWar(world.wars, a.id, b.id));
+});
+
+test("campaign settlement concedes weapons before its military goal and preserves manual offers", () => {
+  const { world, a, b, negotiation, parcel } = scene();
+  const goal = parcel(b.id);
+  world.settings!.warCampaignEnabled = true;
+  updateWarCampaigns(world);
+  const campaign = world.warCampaigns!.byNationId.get(a.id)!;
+  campaign.mode = "consolidate";
+  campaign.objectives.find((item) => item.opponentId === b.id)!.regionIds = [goal];
+  const terms = { ...whitePeaceTerms(), demandedRegionIds: [goal], demandedWeapons: 50 };
+  assert.equal(getPeaceTermsIssue(world, a.id, b.id, terms), null);
+  negotiation.offers.get(a.id)!.terms = terms;
+  negotiation.offers.get(b.id)!.revisedAtSlowTick = 30;
+  negotiation.automatic.set(b.id, false);
+  world.time.slowTick = 30;
+  world.time.fastTick = 300;
+  updateWarNegotiations(world);
+  const revised = negotiation.offers.get(a.id)!.terms;
+  assert.deepEqual(revised.demandedRegionIds, [goal]);
+  assert.equal(revised.demandedWeapons, 35);
+  assert(proposePeaceTerms(world, a.id, b.id, terms));
+  world.time.slowTick = 60;
+  world.time.fastTick = 600;
+  updateWarNegotiations(world);
+  assert.deepEqual(negotiation.offers.get(a.id)!.terms, terms);
+  assert.equal(negotiation.offers.get(a.id)!.source, "manual");
+});
+
+test("a secured legal campaign goal enters automatic peace terms even when absent from the opening offer", () => {
+  const { world, a, b, negotiation, parcel } = scene();
+  const goal = parcel(b.id);
+  world.settings!.warCampaignEnabled = true;
+  updateWarCampaigns(world);
+  const campaign = world.warCampaigns!.byNationId.get(a.id)!;
+  campaign.objectives.find((item) => item.opponentId === b.id)!.regionIds = [goal];
+  campaign.mode = "consolidate";
+  campaign.constraints.foodSeconds = Infinity;
+  campaign.constraints.casualtyFraction = 0;
+  campaign.constraints.objectivesSecured = true;
+  world.occupation.mesoById.set(goal, a.id);
+  world.occupation.version++;
+  negotiation.offers.get(a.id)!.terms = { ...whitePeaceTerms(), demandedWeapons: 50 };
+  negotiation.offers.get(b.id)!.revisedAtSlowTick = 30;
+  negotiation.automatic.set(b.id, false);
+  world.time.slowTick = 30;
+  world.time.fastTick = 300;
+  updateWarNegotiations(world);
+  const terms = negotiation.offers.get(a.id)!.terms;
+  assert.deepEqual(terms.demandedRegionIds, [goal]);
+  assert.equal(terms.demandedWeapons, 0);
+  assert.equal(getPeaceTermsIssue(world, a.id, b.id, terms), null);
+});
+
+test("mutually accepted goal recognition respects maturity and yields to urgent exit", () => {
+  for (const urgent of [false, true]) {
+    const { world, a, b, war, negotiation, parcel } = scene();
+    const goal = parcel(b.id);
+    world.settings!.warCampaignEnabled = true;
+    updateWarCampaigns(world);
+    const campaign = world.warCampaigns!.byNationId.get(a.id)!;
+    campaign.objectives.find((item) => item.opponentId === b.id)!.regionIds = [goal];
+    campaign.mode = "consolidate";
+    Object.assign(campaign.constraints, { foodSeconds: urgent ? 0 : Infinity, casualtyFraction: 0, objectivesSecured: true });
+    world.occupation.mesoById.set(goal, a.id); world.occupation.version++;
+    for (const nation of [a, b]) {
+      nation.warCooperation = 0;
+      nation.character = { doctrine: "merchant", aggression: 0.25, cooperation: 0.9, innovation: 0.5, thrift: 0.8 };
+      getDomesticUnrest(world, nation.id).pressure = 95;
+      negotiation.lastRevisionSlowTick.set(nation.id, 90);
+    }
+    const recognition = { ...whitePeaceTerms(), demandedRegionIds: [goal], truceSeconds: 600 };
+    negotiation.offers.get(a.id)!.terms = recognition;
+    negotiation.offers.get(a.id)!.revisedAtSlowTick = 88;
+    negotiation.offers.get(b.id)!.terms = { ...whitePeaceTerms(), truceSeconds: 600 };
+    negotiation.offers.get(b.id)!.revisedAtSlowTick = 70;
+    world.time.slowTick = 90; world.time.fastTick = 900;
+    assert(assessPeaceOffer(world, b.id, a.id, recognition).accepts);
+    updateWarNegotiations(world);
+    if (!urgent) {
+      assert(findWar(world.wars, a.id, b.id), "recognition offer must mature before settlement");
+      world.time.slowTick = 100; world.time.fastTick = 1000;
+      updateWarNegotiations(world);
+      assert.equal(getOwnerByMesoId(world).get(goal), a.id);
+    } else assert.equal(getOwnerByMesoId(world).get(goal), b.id);
+    assert(!world.wars.includes(war));
+  }
 });

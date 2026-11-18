@@ -1,0 +1,131 @@
+diff --git a/src/sim/offensive-operations.ts b/src/sim/offensive-operations.ts
+index ab2a4e5..8910053 100644
+--- a/src/sim/offensive-operations.ts
++++ b/src/sim/offensive-operations.ts
+@@ -3,7 +3,7 @@ import { campaignCostLimitReached } from "./war-campaign/policy";
+ import { getWarCampaign } from "./war-campaign/state";
+ import { getCampaignDeadline } from "./campaign-deadline";
+ import { getCampaignObjectives } from "./campaign-objectives";
+-import { campaignOperationRank } from "./war-campaign/operation-guidance";
++import { campaignOperationRank, campaignOperationForceFraction } from "./war-campaign/operation-guidance";
+ import { getMoveTicksPerRegion } from "./movement";
+ import { WORLD_BALANCE } from "../data/balance";
+ import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
+@@ -1186,9 +1186,7 @@ function buildOperationCandidate(
+   if (!targets) {
+     return null;
+   }
+-  const forceFraction = isSchwerpunktOperation
+-    ? WORLD_BALANCE.war.landFront.stalemate.majorOperationForceFraction
+-    : settings.forceFraction;
++  const forceFraction = campaignOperationForceFraction(world, plan.nationId, plan.frontId, isSchwerpunktOperation);
+   const requiredOperationStrength = relief
+     ? reliefForce!.requested
+     : targets.pocketReduction
+diff --git a/src/sim/war-campaign/operation-guidance.ts b/src/sim/war-campaign/operation-guidance.ts
+index 4068b4f..116efc3 100644
+--- a/src/sim/war-campaign/operation-guidance.ts
++++ b/src/sim/war-campaign/operation-guidance.ts
+@@ -1,3 +1,5 @@
++import { WORLD_BALANCE } from "../../data/balance";
++import type { FrontId } from "../land-fronts";
+ import type { NationId } from "../../worldgen/nation";
+ import type { NationFrontPlan } from "../nation-front-plans";
+ import type { WorldState } from "../world-state";
+@@ -10,3 +12,15 @@ export function campaignOperationRank(world: WorldState, nationId: NationId, pla
+   if (!campaign || !plan.reasonFlags.includes("campaign-primary")) return 0;
+   return plan.reasonFlags.includes("declared-war-objective") ? 2 : 1;
+ }
++
++/** Early strategic focus prioritizes a front without itself authorizing the
++ * larger mature-focus operation share. Natural focus keeps its existing size. */
++export function campaignOperationForceFraction(
++  world: WorldState, nationId: NationId, frontId: FrontId, focused: boolean,
++): number {
++  const ordinary = WORLD_BALANCE.war.landFront.offensiveOperation.forceFraction;
++  if (!focused) return ordinary;
++  const early = getWarCampaign(world, nationId) && world.stalematePressure.assessments.some((assessment) =>
++    assessment.nationId === nationId && assessment.schwerpunktSectorId === frontId && assessment.campaignRequested);
++  return early ? ordinary : WORLD_BALANCE.war.landFront.stalemate.majorOperationForceFraction;
++}
+diff --git a/test/regression/campaign-concentration.test.ts b/test/regression/campaign-concentration.test.ts
+index 64a3835..ebfcfb3 100644
+--- a/test/regression/campaign-concentration.test.ts
++++ b/test/regression/campaign-concentration.test.ts
+@@ -1,3 +1,4 @@
++import { campaignOperationForceFraction } from "../../src/sim/war-campaign/operation-guidance";
+ import test from "node:test";
+ import assert from "node:assert/strict";
+ import { createScenarioWorld } from "../scenarios";
+@@ -71,3 +72,30 @@ test("other theaters keep local defense but cannot request competing discretiona
+   world.settings!.warCampaignEnabled = false;
+   assert.equal(campaignConcentrationDirective(world, nation, opponent), "legacy");
+ });
++
++test("early strategic focus keeps ordinary operation size until natural pressure takes over", () => {
++  const { world, nation, opponent } = fixture();
++  updateStalematePressure(world);
++  const focus = getStalemateAssessment(world, nation, opponent)!;
++  const front = focus.schwerpunktSectorId!;
++  assert.ok(front);
++  assert.equal(focus.campaignRequested, true);
++  assert.equal(campaignOperationForceFraction(world, nation, front, true),
++    WORLD_BALANCE.war.landFront.offensiveOperation.forceFraction);
++  focus.pressure = WORLD_BALANCE.war.landFront.stalemate.maximumPressure;
++  updateStalematePressure(world);
++  assert.equal(getStalemateAssessment(world, nation, opponent)!.campaignRequested, false);
++  assert.equal(campaignOperationForceFraction(world, nation, front, true),
++    WORLD_BALANCE.war.landFront.stalemate.majorOperationForceFraction);
++});
++
++test("disabled campaigns ignore stale early-focus sizing and ordinary fronts retain their share", () => {
++  const { world, nation, opponent } = fixture();
++  updateStalematePressure(world);
++  const front = getStalemateAssessment(world, nation, opponent)!.schwerpunktSectorId!;
++  assert.equal(campaignOperationForceFraction(world, nation, front, false),
++    WORLD_BALANCE.war.landFront.offensiveOperation.forceFraction);
++  world.settings!.warCampaignEnabled = false;
++  assert.equal(campaignOperationForceFraction(world, nation, front, true),
++    WORLD_BALANCE.war.landFront.stalemate.majorOperationForceFraction);
++});
+diff --git a/test/regression/campaign-operation-size.test.ts b/test/regression/campaign-operation-size.test.ts
+new file mode 100644
+index 0000000..62cc505
+--- /dev/null
++++ b/test/regression/campaign-operation-size.test.ts
+@@ -0,0 +1,35 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { createScenarioWorld } from "../scenarios";
++import { runSimulation } from "../helpers/simulation-driver";
++import { BenchmarkMetrics } from "../benchmark/metrics";
++import { withMutedSimulationLogs } from "../helpers/muted-logs";
++import { WORLD_BALANCE } from "../../src/data/balance";
++
++test("early national concentration creates a focused ordinary-size operation through the real planner", () => {
++  const world = createScenarioWorld("stalemate-breaker", {
++    seed: 822748319794, quick: true, width: 640, height: 360,
++    config: { systems: { warCampaignEnabled: true } },
++  });
++  const attacker = world.wars[0].aggressorId;
++  class EarlyFocusMetrics extends BenchmarkMetrics {
++    override recordDuration(name: string, ms: number) {
++      super.recordDuration(name, ms);
++      if (name !== "warCampaign.evaluation") return;
++      // Hold the national decision fixed; test the downstream allocation and
++      // operation planner, without changing local eligibility or unit orders.
++      const campaign = world.warCampaigns!.byNationId.get(attacker)!;
++      campaign.mode = "limited-offensive";
++      campaign.militaryMode = "limited-offensive";
++    }
++  }
++  withMutedSimulationLogs(() => runSimulation(world, { ticks: 10, metrics: new EarlyFocusMetrics() }));
++  const operation = world.offensiveOperations.operations.find((op) => op.nationId === attacker);
++  assert.ok(operation, "the locally eligible operation must still launch preparation");
++  assert.equal(operation.isSchwerpunktOperation, true);
++  assert.equal(operation.isMajorOffensive, false);
++  const requested = [...operation.plannedStrengthByApproach.values()].reduce((sum, n) => sum + n, 0);
++  assert.ok(Math.abs(requested - operation.offensiveSurplusAvailable *
++    WORLD_BALANCE.war.landFront.offensiveOperation.forceFraction) < 1e-6,
++    "early focus must preserve ordinary requested force before discrete unit assignment");
++});

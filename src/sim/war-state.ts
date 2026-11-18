@@ -1,10 +1,14 @@
+import type { TerritorialClaimObjective } from "./territorial-claim-objective";
 import type { MesoRegionId } from "../worldgen/meso-region";
+import type { CampaignOpeningIntent } from "./war-campaign/opening-intent";
 import type { NationId } from "../worldgen/nation";
 import type { MacroRegionId } from "../worldgen/macro-region";
 
 export type WarId = string & { __brand: "WarId" };
 
 export interface WarState {
+  campaignIntent?: CampaignOpeningIntent;
+  claimObjective?: TerritorialClaimObjective;
   cause?: "player-declaration" | "diplomatic-crisis" | "defensive-alliance" | "faction-obligation" | "allied-request" | "subject-uprising";
   ultimatumRegionIds?: MesoRegionId[];
   uprisingProvinces?: MacroRegionId[];
