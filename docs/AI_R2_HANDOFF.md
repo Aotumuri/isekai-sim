@@ -2,7 +2,12 @@
 
 再開先: GPT-6.2 Sol Medium。目標は、架空のゲーム内で国家が目的・制約を持ち、開戦から戦後まで一貫した行動を取ること。既存AIに対する品質優位は未達。実験を一つ終えたことを開発完了としない。
 
-## 作業状態
+## 最新の進捗
+
+- [R2.21](AI_R2_CAPITAL_GUARD_EXPERIMENT.md) は完了し、不採用。候補 `8c8f930`、復元パッチの記録 `2fb0626`。開発比較60件・費用政体再生60件、観測の一致を確認。canonical比で膠着の防衛側存続が55%→75%、再編成が60%→85%。対R1で攻撃目標保持が膠着60%→30%、再編成60%→35%。膠着792では首都の既存部隊の出発を抑止し、共通376 tickまでの脅威下・無守備の時間を198→48 tickに短縮。
+- 攻撃側自身の守備予約が初回目標未到達の3件で観測された。R2.22 で防衛側に限定する比較を実施する。R2.21の変更は隔離済み。主ブランチの本番ソースと最終評価用シードは従来のまま。
+
+## R2.21再開時の記録（履歴）
 
 - 主作業ツリー: `/Users/kazuhidemura2/github/isekai-sim`、`codex/war-campaign-strategy`。引き継ぎの記録を加える直前のローカル HEAD・追跡先・[Draft PR #2](https://github.com/Aotumuri/isekai-sim/pull/2) の HEAD はすべて `6544d9ddd48f0e281563fb2ae40a68b480110b1f`。PR は open、base は `main`。当時メインの開発ブランチに未プッシュコミットはなかった。この文書のコミット後の状態は `git status --short --branch` と `gh pr view 2 --json headRefOid,isDraft,state` で確認する。
 - 引き継ぎ前のステージ済み変更は、新規 [R2.21事前登録](AI_R2_CAPITAL_GUARD_EXPERIMENT.md)、[R2.19/20の追跡追記](AI_R2_MARCH_CONTROLLER_CONTROL.md)、`diagnostics/war-ai-r2-20-loss-window-{r1,fuel}-{790,792}.json.gz` の4観測と `war-ai-r2-20-loss-window-validation.json.gz`。既存の証拠であり、この引き継ぎで新たに実験を実行したものではない。主ツリーの `src/` は canonical `29fa088` と同一。R2.14行軍継続と現在のキャンペーン制御を含む。R2.20以降の候補は統合していない。
