@@ -1,3 +1,4 @@
+import type { LandUnitLifecycleEvent } from "../../src/sim/instrumentation";
 import { getAdjacentNationPairs } from "../../src/sim/world-cache";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -55,12 +56,21 @@ test("automatic demobilization returns only surviving personnel and partial equi
   world.units = world.units.filter((unit) => unit.nationId !== a.id); addArmy(world, 20);
   for (const unit of world.units.filter((unit) => unit.nationId === a.id)) { unit.manpower = 600; unit.org = 0.2; }
   updateSupplyAssessment(world); item.authorizedArmy = 3; item.threat = 0; item.quietSinceSlowTick = 0; world.time.slowTick = 40;
+  const events: LandUnitLifecycleEvent[] = [];
+  world.instrumentation = { recordDuration() {}, incrementCounter() {}, recordLandUnitLifecycle(event) { events.push(event); } };
   const before = a.resources.manpower, weapons = a.resources.weapons;
   updateDemobilization(world); assert.equal(item.demobilized, 2);
   assert.equal(a.initialUnitCount, 18);
+  assert.equal(events.length, 2);
+  for (const event of events) {
+    assert.equal(event.reason, "demobilization");
+    assert.equal(event.nationId, a.id);
+    assert(!world.units.some((unit) => unit.id === event.unitId));
+  }
   assert.equal(a.resources.manpower - before, 1200); assert.equal(a.resources.weapons - weapons, 6);
   const count = world.units.length; updateDemobilization(world); assert.equal(world.units.length, count);
   declareWar(world.wars, a.id, b.id, 0); world.time.slowTick += 10; updateDemobilization(world); assert.equal(world.units.length, count);
+  assert.equal(events.length, 2);
 });
 
 test("embarked troops count toward mobilization and cannot be demobilized from transport holds", () => {
@@ -82,6 +92,28 @@ test("production respects standing-army authorization, keeps resources real and 
   world.units.push(ship); a.resources.manpower = 100000; a.resources.weapons = 10000; a.resources.steel = 10000;
   a.nextUnitProductionTick = 0; updateSupplyAssessment(world); updateProduction(world);
   assert.equal(allFieldUnits(world).filter((unit) => unit.nationId === a.id && unit.domain === "land").length, cap);
+});
+
+test("land production reports the new unit and its actual recruitment site", () => {
+  const world = createSocietyWorld();
+  const [nation] = world.nations;
+  world.units = world.units.filter((unit) => unit.nationId !== nation.id);
+  nation.resources.weapons = 10000;
+  nation.resources.manpower = 100000;
+  nation.resources.steel = 10000;
+  nation.nextUnitProductionTick = 0;
+  const events: LandUnitLifecycleEvent[] = [];
+  world.instrumentation = { recordDuration() {}, incrementCounter() {}, recordLandUnitLifecycle(event) { events.push(event); } };
+  updateSupplyAssessment(world);
+  updateProduction(world);
+  const produced = events.filter((event) => event.reason === "production").filter((event) => event.nationId === nation.id);
+  assert(produced.length);
+  for (const event of produced) {
+    const unit = world.units.find((candidate) => candidate.id === event.unitId);
+    assert.equal(unit?.domain, "land");
+    assert.equal(unit?.regionId, event.regionId);
+    assert.equal(world.mesoRegions.find((region) => region.id === event.regionId)?.building, event.facility);
+  }
 });
 
 test("new worlds begin with a smaller standing army and disabling mobilization freezes strain without catch-up", () => {

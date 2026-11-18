@@ -142,8 +142,17 @@ export function updateBattles(world: WorldState): void {
   }
 
   if (removedUnitIds.size > 0) {
-    if (world.settings?.warCampaignEnabled) {
-      for (const unit of world.units) if (removedUnitIds.has(unit.id)) observeCampaignFormationRemoval(world, unit);
+    const campaignEnabled = world.settings?.warCampaignEnabled;
+    const instrumentation = world.instrumentation;
+    if (campaignEnabled || instrumentation?.recordLandUnitLifecycle) {
+      for (const unit of world.units) {
+        if (!removedUnitIds.has(unit.id)) continue;
+        if (campaignEnabled) observeCampaignFormationRemoval(world, unit);
+        if (unit.domain === "land") instrumentation?.recordLandUnitLifecycle?.({
+          tick: now, unitId: unit.id, nationId: unit.nationId, regionId: unit.regionId,
+          reason: "battle-removal", remainingManpower: unit.manpower, remainingOrganization: unit.org,
+        });
+      }
     }
     world.units = world.units.filter((unit) => !removedUnitIds.has(unit.id));
     landBattleIndexByWorld.delete(world);

@@ -319,7 +319,7 @@ function updateProductionInternal(world: WorldState): void {
     world.instrumentation?.incrementCounter("production.naval.requests.reserve", requestedReserves);
     for (const reason of combatShipReasons) recordCombatShipRequest(world, reason);
 
-    const addUnit = (regionId: MesoRegionId): boolean => {
+    const addUnit = (regionId: MesoRegionId, facility: "capital" | "city"): boolean => {
       if (recruited >= recruitmentBatch) return false;
       if (currentLandCount >= landCapacity) {
         recordCapacityBlock("land");
@@ -383,7 +383,12 @@ function updateProductionInternal(world: WorldState): void {
         recordResourceBlock(world, nation.resources);
         return false;
       }
-      newUnits.push(createUnitForWorld(world, nation.id, regionId, unitType));
+      const unit = createUnitForWorld(world, nation.id, regionId, unitType);
+      newUnits.push(unit);
+      world.instrumentation?.recordLandUnitLifecycle?.({
+        tick: world.time.fastTick, unitId: unit.id, nationId: nation.id, regionId,
+        reason: "production", facility, mobilizationPhase: mobilization?.phase ?? null,
+      });
       currentLandCount += 1; recruited++;
       if (mobilization) mobilization.recruited++;
       diagnostics.successfulProductions += 1;
@@ -451,7 +456,7 @@ function updateProductionInternal(world: WorldState): void {
         Math.round(ownedMacroCount * production.capitalUnitsPerOwnedMacro),
       );
       for (let i = 0; i < capitalUnits; i += 1) {
-        if (!addUnit(capitalId)) {
+        if (!addUnit(capitalId, "capital")) {
           break;
         }
       }
@@ -461,7 +466,7 @@ function updateProductionInternal(world: WorldState): void {
     if (cityUnitsPerCycle > 0) {
       for (const cityId of cityTargets) {
         for (let i = 0; i < cityUnitsPerCycle; i += 1) {
-          if (!addUnit(cityId)) {
+          if (!addUnit(cityId, "city")) {
             break;
           }
         }

@@ -168,6 +168,10 @@ export function updateDemobilization(world: WorldState): void {
       nation.resourceFlow.income.manpower += manpower; nation.resourceFlow.delta.manpower += manpower;
       nation.resourceFlow.income.weapons += weapons; nation.resourceFlow.delta.weapons += weapons;
       item.returnedManpower += manpower; item.recoveredWeapons += weapons; item.demobilized++; removed.add(unit.id); count++;
+      world.instrumentation?.recordLandUnitLifecycle?.({
+        tick: world.time.fastTick, unitId: unit.id, nationId: nation.id, regionId: unit.regionId,
+        reason: "demobilization", returnedManpower: manpower, recoveredWeapons: weapons,
+      });
     }
     if (!count) continue;
     item.lastDemobilizationTick = world.time.slowTick; item.landUnits = actual - count;

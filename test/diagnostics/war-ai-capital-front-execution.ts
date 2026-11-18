@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
+import { BenchmarkMetrics } from "../benchmark/metrics";
 import { createWarOutcomeObserver } from "../benchmark/war-outcome-observer";
 import { createCapitalFrontExecutionObserver } from "../helpers/capital-front-execution";
 import { semanticWorldSignature } from "../helpers/invariants";
@@ -27,12 +28,14 @@ function run(trace: boolean) {
   war.isTest = false;
   const defender = world.nations.find((nation) => nation.id === war.defenderId)!;
   const observer = trace && createCapitalFrontExecutionObserver(defender.id, defender.capitalMesoId);
+  const metrics = new BenchmarkMetrics();
+  if (observer) Object.assign(metrics, { recordLandUnitLifecycle: observer.recordLandUnitLifecycle });
   const outcomes = createWarOutcomeObserver();
   const hash = createHash("sha256");
   let observerMs = 0;
   const startCpu = process.cpuUsage();
   withMutedSimulationLogs(() => runSimulation(world, {
-    ticks: 600,
+    ticks: 600, metrics,
     observe(current) {
       if (observer) {
         const start = performance.now();

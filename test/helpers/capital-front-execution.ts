@@ -1,3 +1,4 @@
+import type { LandUnitLifecycleEvent } from "../../src/sim/instrumentation";
 import type { MesoRegionId } from "../../src/worldgen/meso-region";
 import type { NationId } from "../../src/worldgen/nation";
 import { getFrontlineAssignment } from "../../src/sim/frontline-coverage";
@@ -16,6 +17,7 @@ import type { WorldState } from "../../src/sim/world-state";
 type MissionState = ReturnType<typeof describeMission>["state"];
 type UnitEvidence = ReturnType<typeof describeUnit>;
 type Event = { tick: number } & (
+  | { kind: "lifecycle"; event: LandUnitLifecycleEvent }
   | { kind: "mission"; state: MissionState & { status: string; capitalUnits: number; capitalStrength: number;
       inPositionStrength: number; fieldAssignedCount: number }; previousSectorPresent: boolean | null }
   | { kind: "unit"; id: UnitId; before: UnitEvidence | null; after: UnitEvidence | null;
@@ -32,12 +34,19 @@ export function createCapitalFrontExecutionObserver(nationId: NationId, capitalI
   let lastTick = -1;
   const ticksByState = { inactive: 0, noSector: 0, noPlan: 0, noAllocation: 0, noUnits: 0, noStrengthInPosition: 0,
     partiallyFilled: 0, filled: 0 };
+  const lifecycleCounts = { "battle-removal": 0, demobilization: 0, production: 0 };
   let threatenedVacantTicks = 0;
   let threatenedZeroStrengthTicks = 0;
 
   function add(event: Event) {
     if (events.length < limit) events.push(event);
     else omittedEvents++;
+  }
+
+  function recordLandUnitLifecycle(event: LandUnitLifecycleEvent) {
+    if (event.nationId !== nationId) return;
+    lifecycleCounts[event.reason]++;
+    add({ kind: "lifecycle", tick: event.tick, event });
   }
 
   function observe(world: WorldState) {
@@ -116,9 +125,9 @@ export function createCapitalFrontExecutionObserver(nationId: NationId, capitalI
   }
 
   return {
-    observe,
+    observe, recordLandUnitLifecycle,
     result: () => ({ nationId, capitalId, samples, lastTick, ticksByState: { ...ticksByState },
-      threatenedVacantTicks, threatenedZeroStrengthTicks, omittedEvents, events: [...events] }),
+      threatenedVacantTicks, threatenedZeroStrengthTicks, omittedEvents, lifecycleCounts: { ...lifecycleCounts }, events: [...events] }),
   };
 }
 
