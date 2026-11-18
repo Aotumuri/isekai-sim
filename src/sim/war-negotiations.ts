@@ -1,4 +1,5 @@
 import { getManualGovernmentId } from "./player-nation";
+import { isPeaceNegotiationMature } from "./peace-maturity";
 import { isValidResourceReparation, REPARATION_INTERVAL, REPARATION_RESOURCES, type ResourceReparation } from "./resource-reparations";
 import { foodReserveSeconds } from "./food-supply";
 import { getNationalTerritorialValue, getTerritorialValue } from "./territorial-value";
@@ -291,7 +292,7 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
   const score = pressure + disposition + landBenefit + paymentBenefit + truceValue - landCost - paymentCost - resolve - sacrificeCost - (terms.partition ? 38 : terms.puppetTarget ? 25 : terms.localSubject ? 8 : 0);
   const exchangedBlows = casualties + getWarCasualties(war, proposer) > 0 ||
     occupationRatio(world, proposer, recipient) + occupationRatio(world, recipient, proposer) > 0;
-  const matureEnough = ageSeconds >= 90 || (ageSeconds >= 30 && (exchangedBlows || urgency >= 0.8));
+  const matureEnough = isPeaceNegotiationMature(ageSeconds, exchangedBlows, urgency);
   if (!matureEnough) return { accepts: false, score, reason: "The government is waiting for battlefield evidence before accepting terms." };
   const reason = score >= 0 ? foodPressure >= 10 ? "The food emergency makes continued fighting too costly."
     : "Ending the war now is preferable to continued losses and domestic danger."
