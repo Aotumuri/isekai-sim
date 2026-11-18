@@ -1,5 +1,6 @@
 import { getManualPlayerNationId } from "./player-nation";
 import { canReachCoast, getCoastalSeaRegions, getCoastalSupportTargets } from "./coastal-support";
+import { applyCampaignNavalGuidance } from "./war-campaign/naval-guidance";
 import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
@@ -192,7 +193,7 @@ export function updateNavalStrategy(world: WorldState): void {
     const ships = shipsByNation.get(nationId) ?? [];
     const operationalShips = ships.filter((ship) =>
       isOperationalCombatShip(ship) && !isAmphibiousOwnedUnit(world, ship.id));
-    const candidates = buildCandidates(world, nationId);
+    const candidates = applyCampaignNavalGuidance(world, nationId, buildCandidates(world, nationId));
     const desiredForce = assessDesiredNavalForce(world, nationId, ships,
       (portsByNation.get(nationId)?.length ?? 0) > 0);
     const bestRaid = candidates.find((candidate) => candidate.type === "RAID");

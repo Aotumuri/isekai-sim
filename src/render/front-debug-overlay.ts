@@ -1,4 +1,6 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
+import { formatCampaignDebugLines } from "./war-campaign-debug-summary";
+import { drawCampaignDebugPanel } from "./war-campaign-debug-panel";
 import { WORLD_BALANCE } from "../data/balance";
 import type {
   FrontBorderEdge,
@@ -111,6 +113,7 @@ const CONFIG_TAB_WIDTH = 62;
 const CONFIG_TAB_HEIGHT = 28;
 
 interface OverlayVersions {
+  campaigns: number;
   fronts: number;
   frontMetrics: number;
   plans: number;
@@ -165,6 +168,7 @@ export function attachFrontDebugOverlay(
 
   const draw = (): void => {
     clearLayer(layer);
+    drawCampaignDebugPanel(renderer, world, enabled && visibility.strategicSummary);
     if (!enabled) {
       return;
     }
@@ -237,6 +241,7 @@ export function attachFrontDebugOverlay(
     } else {
       selectedSectorId = null;
       clearLayer(layer);
+      drawCampaignDebugPanel(renderer, world, false);
     }
   };
 
@@ -250,7 +255,15 @@ export function attachFrontDebugOverlay(
     update();
   };
 
-  attachDebugConfigPanel(renderer, visibility, setCategory);
+  attachDebugConfigPanel(renderer, visibility, setCategory, {
+    isEnabled: () => !!world.settings?.warCampaignEnabled,
+    toggle: () => {
+      if (!world.settings) return;
+      world.settings.warCampaignEnabled = !world.settings.warCampaignEnabled;
+      versions = null;
+      update();
+    },
+  });
 
   window.addEventListener("keydown", (event) => {
     if (event.code !== FRONT_DEBUG_OVERLAY_SHORTCUT || event.repeat || isEditableTarget(event.target)) {
@@ -415,6 +428,7 @@ function attachDebugConfigPanel(
   renderer: Renderer,
   visibility: DebugVisibility,
   setCategory: (category: DebugCategory, shown: boolean) => void,
+  campaign: { isEnabled: () => boolean; toggle: () => void },
 ): void {
   const existing = renderer.uiContainer.getChildByName("FrontDebugConfig");
   if (existing) {
@@ -458,6 +472,8 @@ function attachDebugConfigPanel(
     ));
     rowY += CONFIG_ROW_HEIGHT;
   }
+  content.addChild(createDebugConfigRow(renderer, "Experimental national plans", campaign.isEnabled, campaign.toggle, rowY));
+  rowY += CONFIG_ROW_HEIGHT;
   background.beginFill(CONFIG_BG, 0.96);
   background.lineStyle(1, CONFIG_BORDER, 0.95);
   background.drawRoundedRect(0, 0, CONFIG_WIDTH, rowY + 8, 6);
@@ -1332,7 +1348,7 @@ function drawStrategicThreatSummary(layer: Container, world: WorldState): void {
   background.drawRoundedRect(0, 0, bounds.width + padding * 2, bounds.height + padding * 2, 4);
   background.endFill();
   text.position.set(padding, padding);
-  container.position.set(8, 8);
+  container.position.set(8, CONFIG_MARGIN * 2 + CONFIG_TAB_HEIGHT);
   container.addChild(background, text);
   layer.addChild(container);
 }
@@ -1344,6 +1360,7 @@ export function formatStrategicThreatSummary(world: WorldState): string {
     `Land Units ${diagnostics.currentLandUnits} | Land Capacity ${WORLD_BALANCE.production.maxLandUnits}/nation`,
     `Naval Units ${diagnostics.currentNavalUnits} | Naval Capacity ${WORLD_BALANCE.production.maxNavalUnits}/nation`,
   ];
+  lines.push(...formatCampaignDebugLines(world));
   if (world.strategicThreatObservation.observations.length > 0) {
     lines.push("", "STRATEGIC THREAT");
   }
@@ -1542,6 +1559,7 @@ function readVersions(world: WorldState): OverlayVersions {
     coverage: world.frontlineCoverage.version,
     stalemate: world.stalematePressure.version,
     strategicThreat: world.strategicThreatObservation.version,
+    campaigns: world.warCampaigns?.version ?? 0,
     coalitions: world.commonThreatCoalitions.version,
     reserveDeployments: world.strategicReserves.reserves
       .map((reserve) => {
@@ -1558,7 +1576,7 @@ function readVersions(world: WorldState): OverlayVersions {
 }
 
 function versionsEqual(a: OverlayVersions, b: OverlayVersions): boolean {
-  return a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
+  return a.campaigns === b.campaigns && a.fronts === b.fronts && a.frontMetrics === b.frontMetrics &&
     a.plans === b.plans && a.operations === b.operations && a.collapseAdvances === b.collapseAdvances && a.battlefieldTopology === b.battlefieldTopology && a.supplyAssessment === b.supplyAssessment && a.maritimeInterdiction === b.maritimeInterdiction && a.navalStrategy === b.navalStrategy && a.amphibiousOperations === b.amphibiousOperations && a.convoys === b.convoys && a.isolationEffects === b.isolationEffects && a.productionDiagnostics === b.productionDiagnostics && a.supplyCutoffs === b.supplyCutoffs && a.supplyDefense === b.supplyDefense && a.supplyRelief === b.supplyRelief &&
     a.retreats === b.retreats && a.coverage === b.coverage && a.stalemate === b.stalemate &&
     a.strategicThreat === b.strategicThreat && a.coalitions === b.coalitions &&

@@ -5,6 +5,7 @@ import { annexedOutputFactor } from "./annexation";
 import { allFieldUnits, getArmyLimits, getMobilization } from "./mobilization";
 import { equipNewUnit, getDevelopedUnitWeaponCost } from "./equipment-development";
 import { getNationalDesign, type WeaponDesign } from "./research";
+import { getCampaignRecoveryStock, campaignProductionResources } from "./war-campaign/production-budget";
 import { WORLD_BALANCE } from "../data/balance";
 import type { MacroRegion } from "../worldgen/macro-region";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
@@ -299,6 +300,7 @@ function updateProductionInternal(world: WorldState): void {
       world.productionDiagnostics.version += 1;
     };
     const amphibiousTransports = amphibiousTransportDemandByNation.get(nation.id) ?? 0;
+    const recoveryStock = getCampaignRecoveryStock(world, nation.id);
     const amphibiousEscorts = amphibiousEscortDemandByNation.get(nation.id) ?? 0;
     const requestedTransports = (logisticsTransportDemandByNation.get(nation.id) ?? 0) +
       amphibiousTransports;
@@ -317,7 +319,7 @@ function updateProductionInternal(world: WorldState): void {
     world.instrumentation?.incrementCounter("production.naval.requests.reserve", requestedReserves);
     for (const reason of combatShipReasons) recordCombatShipRequest(world, reason);
 
-    const addUnit = (regionId: MesoRegionId): boolean => {
+    const addUnit = (regionId: MesoRegionId, facility: "capital" | "city"): boolean => {
       if (recruited >= recruitmentBatch) return false;
       if (currentLandCount >= landCapacity) {
         recordCapacityBlock("land");
@@ -371,7 +373,7 @@ function updateProductionInternal(world: WorldState): void {
           performance.now() - supplyStartedAt,
         );
       }
-      const unitType = pickAffordableUnitType(nation.resources, world.simRng, designs);
+      const unitType = pickAffordableUnitType(campaignProductionResources(nation.resources, recoveryStock), world.simRng, designs);
       if (!unitType) {
         recordResourceBlock(world, nation.resources);
         return false;
@@ -381,7 +383,12 @@ function updateProductionInternal(world: WorldState): void {
         recordResourceBlock(world, nation.resources);
         return false;
       }
-      newUnits.push(createUnitForWorld(world, nation.id, regionId, unitType));
+      const unit = createUnitForWorld(world, nation.id, regionId, unitType);
+      newUnits.push(unit);
+      world.instrumentation?.recordLandUnitLifecycle?.({
+        tick: world.time.fastTick, unitId: unit.id, nationId: nation.id, regionId,
+        reason: "production", facility, mobilizationPhase: mobilization?.phase ?? null,
+      });
       currentLandCount += 1; recruited++;
       if (mobilization) mobilization.recruited++;
       diagnostics.successfulProductions += 1;
@@ -401,7 +408,7 @@ function updateProductionInternal(world: WorldState): void {
       const diagnostics = world.productionDiagnostics;
       diagnostics.attemptedProductions += 1;
       world.instrumentation?.incrementCounter("production.attempted");
-      const unitType = pickNavalUnitType(nation.resources, forcedType, designs[forcedType]);
+      const unitType = pickNavalUnitType(campaignProductionResources(nation.resources, recoveryStock), forcedType, designs[forcedType]);
       if (!unitType) {
         recordResourceBlock(world, nation.resources, "naval");
         return false;
@@ -449,7 +456,7 @@ function updateProductionInternal(world: WorldState): void {
         Math.round(ownedMacroCount * production.capitalUnitsPerOwnedMacro),
       );
       for (let i = 0; i < capitalUnits; i += 1) {
-        if (!addUnit(capitalId)) {
+        if (!addUnit(capitalId, "capital")) {
           break;
         }
       }
@@ -459,7 +466,7 @@ function updateProductionInternal(world: WorldState): void {
     if (cityUnitsPerCycle > 0) {
       for (const cityId of cityTargets) {
         for (let i = 0; i < cityUnitsPerCycle; i += 1) {
-          if (!addUnit(cityId)) {
+          if (!addUnit(cityId, "city")) {
             break;
           }
         }

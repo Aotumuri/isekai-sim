@@ -1,5 +1,10 @@
+import { decideTheaterLaunch, type TheaterLaunchDecision } from "./theater-command";
+import { campaignShouldStandDown } from "./war-campaign/peace-guidance";
+import { campaignCostLimitReached } from "./war-campaign/policy";
+import { getWarCampaign } from "./war-campaign/state";
 import { getCampaignDeadline } from "./campaign-deadline";
 import { getCampaignObjectives } from "./campaign-objectives";
+import { campaignOperationRank } from "./war-campaign/operation-guidance";
 import { getMoveTicksPerRegion } from "./movement";
 import { WORLD_BALANCE } from "../data/balance";
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
@@ -72,6 +77,7 @@ export type OffensiveOperationPhase =
   | "recovering";
 
 export type ExploitationStopReason =
+  | "campaign-settlement"
   | "target-occupied"
   | "covered-frontline"
   | "local-strength-disadvantage"
@@ -110,6 +116,7 @@ export type OffensiveOperationReason =
   | "weak-enemy-presence";
 
 export type OffensiveOperationCompletionReason =
+  | "campaign-settlement"
   | "primary-target-occupied"
   | "supporting-targets-occupied"
   | "attack-expired"
@@ -196,6 +203,7 @@ export interface OperationCandidate {
 }
 
 export interface OffensiveOperation {
+  theaterLaunchDecision?: TheaterLaunchDecision;
   id: OperationId;
   nationId: NationId;
   enemyNationId: NationId;
@@ -557,6 +565,7 @@ export function updateOffensiveOperations(world: WorldState): void {
       .sort((a, b) =>
         Number(!!getSupplyReliefPlanForFront(world, nationId, b.frontId)) -
           Number(!!getSupplyReliefPlanForFront(world, nationId, a.frontId)) ||
+        campaignOperationRank(world, nationId, b) - campaignOperationRank(world, nationId, a) ||
         bestSupplyCutoffScore(world, nationId, b.frontId) -
           bestSupplyCutoffScore(world, nationId, a.frontId) ||
         bestPocketClosureScore(world, nationId, b.frontId) -
@@ -914,6 +923,13 @@ function advanceOperation(
     finishOperation(world, operation, "cancelled", "war-ended");
     return { keep: true, changed: true };
   }
+  const campaign = getWarCampaign(world, operation.nationId);
+  if (!operation.supplyReliefPlanId && campaign &&
+    campaignShouldStandDown(world, operation.nationId, operation.enemyNationId) &&
+    (operation.phase === "preparing" || campaign.mode === "seek-peace" || campaignCostLimitReached(campaign.constraints))) {
+    finishOperation(world, operation, "cancelled", "campaign-settlement");
+    return { keep: true, changed: true };
+  }
   let front = world.landFronts.operationalSectorsById.get(operation.frontId);
   if (front && !world.landFronts.physicalFrontsById.has(front.physicalFrontId)) {
     front = undefined;
@@ -1043,6 +1059,12 @@ function advanceOperation(
       if (operation.isMajorOffensive && localRatio < majorSettings.majorLocalOvermatchRatio) {
         finishOperation(world, operation, "failure", "strength-collapsed");
         return { keep: true, changed: true };
+      }
+      const command = decideTheaterLaunch(world, operation, preparationTicks,
+        approachReadiness.operationCompletion, requiredCompletion);
+      if (command) {
+        operation.theaterLaunchDecision = command;
+        if (command.outcome === "wait-for-assembly") return { keep: true, changed: true };
       }
       transitionToAttacking(world, operation);
       return { keep: true, changed: true };
@@ -2276,7 +2298,8 @@ function tryStartExploitation(
   operation: OffensiveOperation,
   successReason: OffensiveOperationCompletionReason,
 ): boolean {
-  if (!world.offensiveOperations.exploitationEnabled) return false;
+  if (!world.offensiveOperations.exploitationEnabled ||
+    campaignShouldStandDown(world, operation.nationId, operation.enemyNationId)) return false;
   if (!isRegionControlledBy(world, operation.primaryTargetRegionId, operation.nationId)) {
     return false;
   }
@@ -2395,6 +2418,7 @@ function advanceExploitation(
   if (getCapitalDefenseAssessment(world, operation.nationId)?.threatLevel === "critical") {
     return finish("capital-emergency");
   }
+  if (campaignShouldStandDown(world, operation.nationId, operation.enemyNationId)) return finish("campaign-settlement");
   if (world.time.fastTick >= operation.expiresAtTick) return finish("timeout");
 
   let front = findExploitationFrontForTarget(world, operation, targetId);
@@ -2894,7 +2918,7 @@ function preparationLeaseOverrideForCompletion(
     reason === "allocation-lost" ||
     reason === "war-ended"
   ) return "front-invalid";
-  if (reason === "posture-changed") return "operation-cancelled";
+  if (reason === "posture-changed" || reason === "campaign-settlement") return "operation-cancelled";
   return null;
 }
 
@@ -3458,6 +3482,7 @@ function recordSupplyCutoffFollowups(
 
 function createExploitationStopCounts(): Record<ExploitationStopReason, number> {
   return {
+    "campaign-settlement": 0,
     "target-occupied": 0,
     "covered-frontline": 0,
     "local-strength-disadvantage": 0,
@@ -3721,6 +3746,9 @@ function isOperationPlanEligible(
 ): boolean {
   if (getSupplyReliefPlanForFront(world, nationId, plan.frontId)) return true;
   if (getCapitalDefenseAssessment(world, nationId)?.threatLevel === "critical") return false;
+  const front = world.landFronts.operationalSectorsById.get(plan.frontId);
+  const enemy = front && getOpposingFrontSide(front, nationId);
+  if (enemy && campaignShouldStandDown(world, nationId, enemy.nationId)) return false;
   if (plan.posture === "attack") return true;
   const closure = bestPocketClosure(world, nationId, plan.frontId);
   if (closure?.tacticallyFeasible &&

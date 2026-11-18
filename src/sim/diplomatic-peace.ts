@@ -1,3 +1,4 @@
+import { recordTerritorialClaimOutcome } from "./territorial-claim-objective";
 import { getManualGovernmentId } from "./player-nation";
 import { relieveUnrestAfterPeace } from "./domestic-unrest";
 import { proposePeaceTerms, whitePeaceTerms, assessPeaceOffer, acceptPeaceOffer, updateWarNegotiations } from "./war-negotiations";
@@ -29,6 +30,7 @@ export function concludePeace(world: WorldState, a: NationId, b: NationId, reaso
   const ownerById = getOwnerByMesoId(world);
   withdrawAmphibiousOperationsForPeace(world, a, b);
   world.wars = world.wars.filter((item) => item !== war);
+  recordTerritorialClaimOutcome(world, war.claimObjective, "peace", reason);
   world.battles = world.battles.filter((battle) => !(
     (battle.attackerNationId === a && battle.defenderNationId === b) ||
     (battle.attackerNationId === b && battle.defenderNationId === a)));

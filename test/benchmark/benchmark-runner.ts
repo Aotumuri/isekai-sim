@@ -1,4 +1,5 @@
 import { createScenarioWorld } from "../scenarios";
+import { createWarOutcomeObserver } from "./war-outcome-observer";
 import { runSimulation } from "../helpers/simulation-driver";
 import { summarizeWorld } from "../helpers/world-summary";
 import type { BenchmarkOptions, BenchmarkResult } from "./types";
@@ -8,14 +9,20 @@ export function runBenchmark(options: BenchmarkOptions): BenchmarkResult {
   console.info = () => undefined;
   try {
     const world = createScenarioWorld(options.scenario, options);
+    if (options.normalWars) world.wars.forEach((war) => { war.isTest = false; });
     const startWorld = summarizeWorld(world);
+    const simulationSettings = world.settings ? { ...world.settings } : undefined;
     const cpuStart = process.cpuUsage();
-    const run = runSimulation(world, options);
+    if (options.observeWarOutcomes && options.mode !== "throughput") throw new Error("War observer requires throughput mode");
+    const observer = options.observeWarOutcomes ? createWarOutcomeObserver() : undefined;
+    const run = runSimulation(world, { ...options, observe: observer?.observe });
     const cpu = process.cpuUsage(cpuStart);
     const memory = process.memoryUsage();
 
     return {
       schemaVersion: 1,
+      simulationSettings,
+      warOutcomes: observer?.result(),
       generatedAt: new Date().toISOString(),
       scenario: options.scenario,
       seed: options.seed,

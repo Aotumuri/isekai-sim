@@ -26,6 +26,23 @@ export interface NationalPolitics {
 const ELECTION_INTERVAL = 420;
 const SUCCESSION_INTERVAL = 900;
 const SUPPORT_REVIEW_INTERVAL = 30;
+export interface ElectoralClaimPressure {
+  coalitionSupport: number;
+  electionAtSlowTick: number;
+  scoreIncrease: number;
+}
+
+export function getElectoralClaimPressure(world: WorldState, nationId: NationRuntime["id"]): ElectoralClaimPressure | undefined {
+  const politics = world.nations.find((nation) => nation.id === nationId)?.politics;
+  if (politics?.system !== "democracy") return;
+  const ticksRemaining = politics.nextMandateAt - world.time.slowTick;
+  if (ticksRemaining <= 0 || ticksRemaining > SUPPORT_REVIEW_INTERVAL) return;
+  const coalitionSupport = politics.coalition.reduce((sum, partyId) => sum + (politics.support.get(partyId) ?? 0), 0);
+  if (coalitionSupport < 50) {
+    return { coalitionSupport, electionAtSlowTick: politics.nextMandateAt, scoreIncrease: (50 - coalitionSupport) / 2 };
+  }
+}
+
 const POLICY_PROFILES: Record<string, NationCharacter> = {
   capitalism: { doctrine: "merchant", aggression: 0.25, cooperation: 0.85, innovation: 0.7, thrift: 0.85 },
   communism: { doctrine: "guardian", aggression: 0.45, cooperation: 0.65, innovation: 0.65, thrift: 0.55 },

@@ -1,3 +1,8 @@
+import { formatCampaignDebugLines } from "../../src/render/war-campaign-debug-summary";
+import { decideTheaterLaunch } from "../../src/sim/theater-command";
+import { enterPlayerNation } from "../../src/sim/player-nation";
+import { updateWarCampaigns } from "../../src/sim/war-campaign/update";
+import { createSimulationSettings } from "../../src/sim/simulation-settings";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { WORLD_BALANCE } from "../../src/data/balance";
@@ -503,6 +508,73 @@ test("frontline coverage creates topology-ordered positions and spreads defender
   assert(fullCoverage);
   assert(fullCoverage.positions.every((position) => position.defenderUnitIds.length > 0));
   assert.equal(fullCoverage.gapSegments, 0);
+});
+
+test("campaign coverage keeps a surviving position before placing an incoming defender", () => {
+  const world = createFrontWorld([
+    { id: "a0", owner: NATION_A }, { id: "a1", owner: NATION_A },
+    { id: "b0", owner: NATION_B }, { id: "b1", owner: NATION_B },
+  ], [["a0", "a1"], ["b0", "b1"], ["a0", "b0"], ["a1", "b1"]]);
+  world.settings = { ...world.settings!, warCampaignEnabled: true };
+  startWar(world, NATION_A, NATION_B);
+  const incoming = addLandUnit(world, NATION_A, "a0", "Infantry");
+  const incumbent = addLandUnit(world, NATION_A, "a0", "Infantry");
+  addLandUnit(world, NATION_B, "b1", "Infantry");
+  world.units = world.units.filter((unit) => unit !== incoming);
+
+  function updateHold() {
+    updateAllocationSystem(world);
+    world.frontPlans.plans.find((plan) => plan.nationId === NATION_A)!.posture = "hold";
+    updateFrontlineCoverage(world);
+  }
+
+  updateHold();
+  const prior = world.frontlineCoverage.assignmentByUnitId.get(incumbent.id);
+  assert(prior);
+  incoming.regionId = prior.targetRegionId;
+  world.units.push(incoming);
+  updateHold();
+  const assignments = world.frontlineCoverage.assignmentByUnitId;
+  assert.equal(assignments.get(incumbent.id), prior);
+  assert.notEqual(assignments.get(incoming.id)?.targetRegionId, prior.targetRegionId);
+  assert.equal(getFrontlineCoverage(world, prior.sectorId, NATION_A)?.gapSegments, 0);
+
+  world.units = world.units.filter((unit) => unit !== incumbent);
+  updateHold();
+  assert.equal(world.frontlineCoverage.assignmentByUnitId.get(incumbent.id), undefined);
+  assert.equal(world.frontlineCoverage.assignmentByUnitId.get(incoming.id)?.targetRegionId, prior.targetRegionId);
+});
+
+test("campaign defenders follow a newly selected position on the next movement tick", () => {
+  const world = createFrontWorld([
+    { id: "a0", owner: NATION_A }, { id: "a1", owner: NATION_A },
+    { id: "b0", owner: NATION_B }, { id: "b1", owner: NATION_B },
+  ], [["a0", "a1"], ["b0", "b1"], ["a0", "b0"], ["a1", "b1"]]);
+  world.settings = { ...world.settings!, warCampaignEnabled: true };
+  startWar(world, NATION_A, NATION_B);
+  const defender = addLandUnit(world, NATION_A, "a1", "Infantry");
+  const opposing = addLandUnit(world, NATION_B, "b0", "Infantry");
+  setUnitStrength(opposing, 1_000);
+  updateAllocationSystem(world);
+  updateFrontlineCoverage(world);
+  const allocationVersion = world.frontAllocations.membershipVersion;
+  const prior = world.frontlineCoverage.assignmentByUnitId.get(defender.id);
+  assert.equal(prior?.targetRegionId, id("a0"));
+  repositionUnits(world, FAST_TICK_MS);
+  assert.equal(defender.moveTargetId, id("a0"));
+  assert.equal(defender.moveToId, id("a0"));
+
+  opposing.regionId = id("b1");
+  // Only the coverage evaluation sees the changed regional threat in this slice.
+  world.frontAllocations.version += 1;
+  updateFrontlineCoverage(world);
+  assert.equal(world.frontAllocations.membershipVersion, allocationVersion);
+  assert.equal(world.frontlineCoverage.assignmentByUnitId.get(defender.id)?.sectorId, prior?.sectorId);
+  assert.equal(world.frontlineCoverage.assignmentByUnitId.get(defender.id)?.targetRegionId, id("a1"));
+  world.time.fastTick += 1;
+  repositionUnits(world, FAST_TICK_MS);
+  assert.equal(defender.moveTargetId, id("a1"));
+  assert.equal(defender.moveToId, null);
 });
 
 test("unchanged coverage and allocation inputs skip full rebuilds", () => {
@@ -2239,6 +2311,76 @@ test("staged operation force transitions from preparing to attacking", () => {
   assert.equal(world.offensiveOperations.preparationLeaseLifetimeCount, 1);
 });
 
+test("the theater commander waits once for reachable reinforcements and preserves the order through succession", () => {
+  for (const [preference, enabled, manual, arrivalTicks, waits, arrivalDisrupted] of [
+    ["deliberate", true, false, 5, true, false],
+    ["deliberate", true, false, 5, true, true],
+    ["deliberate", true, false, 20, false],
+    ["deliberate", true, false, 0, false],
+    ["prompt", true, false, 5, false],
+    ["deliberate", false, false, 5, false],
+    ["deliberate", true, true, 5, false],
+  ] as const) {
+    const world = createOperationWorld(true);
+    updateOffensiveOperations(world);
+    const operation = onlyOperation(world, NATION_A);
+    const nation = world.nations.find((item) => item.id === NATION_A)!;
+    world.settings = { ...world.settings!, warCampaignEnabled: enabled };
+    updateWarCampaigns(world);
+    const commander = { id: "incumbent", appointment: 1, preference, appointedAtTick: 0,
+      appointingIdeologyId: nation.politics?.governingIdeologyId ?? nation.ideologyId };
+    nation.theaterCommander = commander;
+    if (manual) assert(enterPlayerNation(world, NATION_A));
+
+    const approach = operation.plannedApproachRegionIds[0];
+    const assigned = world.units.filter((unit) => operation.assignedUnitIds.includes(unit.id));
+    const reinforcement = assigned[0];
+    if (arrivalTicks) {
+      reinforcement.regionId = id("rear2");
+      reinforcement.moveFromId = reinforcement.regionId;
+      reinforcement.moveToId = id("rear1");
+      reinforcement.moveTargetId = approach;
+      reinforcement.moveTicksPerRegion = arrivalTicks;
+    }
+    const arrived = assigned.filter((unit) => unit.regionId === approach)
+      .reduce((sum, unit) => sum + getUnitCombatStrength(unit), 0);
+    operation.plannedStrengthByApproach.set(approach, arrived / 0.65);
+    const target = operation.primaryTargetRegionId;
+    const units = [...operation.assignedUnitIds];
+
+    advanceOperationEvaluation(world, WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks);
+    if (!waits) {
+      assert.equal(operation.phase, "attacking");
+      assert.equal(operation.phaseStartedAtTick, WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks);
+      assert.equal(operation.theaterLaunchDecision?.outcome, enabled && !manual ? "proceed" : undefined);
+      continue;
+    }
+    assert.equal(operation.phase, "preparing");
+    assert.equal(operation.theaterLaunchDecision?.commanderId, commander.id);
+    assert.equal(operation.theaterLaunchDecision?.outcome, "wait-for-assembly");
+    assert.match(formatCampaignDebugLines(world).join("\n"), /deliberate commander waited for assembly.*65% ready, preferred 70%/);
+    nation.ideologyId = "new-government";
+    if (arrivalDisrupted) reinforcement.moveTicksPerRegion = 40;
+    for (let tick = 0; tick < 10; tick++) repositionUnits(world, FAST_TICK_MS);
+    assert.equal(reinforcement.regionId === id("rear2"), arrivalDisrupted);
+    advanceOperationEvaluation(world, 10);
+    assert.equal(operation.phase, "attacking");
+    assert.equal(operation.phaseStartedAtTick, WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks + 10);
+    assert.equal(operation.readinessCompletion >= 0.7, !arrivalDisrupted);
+    assert.equal(operation.primaryTargetRegionId, target);
+    assert.deepEqual(operation.assignedUnitIds, units);
+    assert.equal(operation.theaterLaunchDecision?.commanderId, commander.id);
+
+    const nextOperation = { ...operation, theaterLaunchDecision: undefined };
+    const nextDecision = decideTheaterLaunch(world, nextOperation,
+      WORLD_BALANCE.war.landFront.offensiveOperation.minimumPreparationTicks, 1, 0.6);
+    assert.notEqual(nextDecision?.commanderId, commander.id);
+    assert.equal(nation.theaterCommander?.appointment, 2);
+    assert.equal(nation.theaterCommander?.appointingIdeologyId, "new-government");
+    assert.equal(operation.theaterLaunchDecision?.commanderId, commander.id);
+  }
+});
+
 test("a preparing Approach replaces lost strength instead of preserving unit identity", () => {
   const world = createOperationWorld();
   updateOffensiveOperations(world);
@@ -2432,17 +2574,25 @@ test("a gap toward the capital beats a weaker city route", () => {
   assert(Math.abs(operation.exploitationTargetScore - 174.525) < 0.001);
 });
 
-test("a disappearing Front cancels its offensive operation", () => {
-  const world = createOperationWorld();
-  updateOffensiveOperations(world);
-  const operation = onlyOperation(world, NATION_A);
-  world.landFronts.physicalFronts = [];
-  world.landFronts.physicalFrontsById.clear();
-
-  updateOffensiveOperations(world);
-
-  assert.equal(operation.outcome, "cancelled");
-  assert.equal(operation.completionReason, "front-disappeared");
+test("a disappearing Front cancels its offensive operation with or without a campaign", () => {
+  for (const enabled of [false, true]) {
+    const world = createOperationWorld();
+    if (enabled) {
+      world.settings = createSimulationSettings({ warCampaignEnabled: true });
+      updateWarCampaigns(world);
+    }
+    updateOffensiveOperations(world);
+    const operation = onlyOperation(world, NATION_A);
+    world.landFronts.physicalFronts = [];
+    world.landFronts.physicalFrontsById.clear();
+    updateOffensiveOperations(world);
+    assert.equal(operation.outcome, "cancelled");
+    assert.equal(operation.completionReason, "front-disappeared");
+    if (enabled) {
+      updateWarCampaigns(world);
+      assert.equal(world.warCampaigns!.byNationId.size, 2);
+    }
+  }
 });
 
 test("ending the war cancels its offensive operation", () => {
@@ -3888,13 +4038,14 @@ function moveRetreatingForceToFallback(
   }
 }
 
-function createOperationWorld(): WorldState {
+function createOperationWorld(withRear = false): WorldState {
   const world = createFrontWorld(
     [
       { id: "a", owner: NATION_A },
       { id: "b", owner: NATION_B },
+      ...(withRear ? [{ id: "rear1", owner: NATION_A }, { id: "rear2", owner: NATION_A }] : []),
     ],
-    [["a", "b"]],
+    withRear ? [["a", "b"], ["a", "rear1"], ["rear1", "rear2"]] : [["a", "b"]],
   );
   startWar(world, NATION_A, NATION_B);
   for (let index = 0; index < 6; index += 1) {
@@ -4570,3 +4721,111 @@ function id(value: string): MesoRegionId {
 function ids(...values: string[]): MesoRegionId[] {
   return values.map(id).sort();
 }
+
+// These exercise the real operation lifecycle, including posture bypasses.
+function settleCampaign(world: WorldState): void {
+  world.settings = createSimulationSettings({ warCampaignEnabled: true, diplomacyEnabled: true });
+  world.wars[0]!.isTest = false;
+  updateWarCampaigns(world);
+  const campaign = world.warCampaigns!.byNationId.get(NATION_A)!;
+  campaign.mode = "consolidate";
+  campaign.settlementReadyOpponentIds = campaign.objectives.map((goal) => goal.opponentId);
+  campaign.constraints.objectivesSecured = true;
+  world.time.fastTick = Math.max(world.time.fastTick, 300);
+}
+
+test("an available settlement prevents a dedicated pocket operation from bypassing hold posture", () => {
+  const control = createPocketClosureWorld();
+  updateBattlefieldTopology(control);
+  for (const assessment of control.battlefieldTopology.assessments) {
+    for (const opportunity of assessment.pocketClosureOpportunities) opportunity.score = 100;
+  }
+  planFor(control, NATION_A).posture = "hold";
+  updateOffensiveOperations(control);
+  assert(onlyOperation(control, NATION_A).pocketClosureObjective);
+  const world = createPocketClosureWorld();
+  updateBattlefieldTopology(world);
+  for (const assessment of world.battlefieldTopology.assessments) {
+    for (const opportunity of assessment.pocketClosureOpportunities) opportunity.score = 100;
+  }
+  settleCampaign(world);
+  planFor(world, NATION_A).posture = "hold";
+  updateOffensiveOperations(world);
+  assert.equal(getOffensiveOperations(world).filter((item) => item.nationId === NATION_A).length, 0);
+});
+
+test("settlement cancels preparation with an explicit reason and releases its lease", () => {
+  const world = createOperationWorld();
+  updateFrontlineCoverage(world);
+  updateOffensiveOperations(world);
+  const operation = onlyOperation(world, NATION_A);
+  assert.equal(operation.phase, "preparing");
+  settleCampaign(world);
+  updateOffensiveOperations(world);
+  assert.equal(operation.phase, "recovering");
+  assert.equal(operation.completionReason, "campaign-settlement");
+  assert.notEqual(operation.preparationLeaseEndedAtTick, null);
+  const version = world.frontPlans.version;
+  updateNationFrontPlans(world);
+  assert.equal(planFor(world, NATION_A).posture, "hold");
+  assert.ok(world.frontPlans.version > version);
+});
+
+test("settlement preserves an achieved attack as success without starting exploitation", () => {
+  const { world, operation } = prepareStrategicExploitationWorld();
+  assert.equal(operation.phase, "attacking");
+  settleCampaign(world);
+  updateOffensiveOperations(world);
+  assert.equal(operation.phase, "recovering");
+  assert.equal(operation.completionReason, "primary-target-occupied");
+  assert.equal(operation.outcome, "success");
+  assert.equal(operation.exploitationStartedAtTick, null);
+});
+
+test("settlement ends active exploitation while retaining the successful attack", () => {
+  const { world, operation } = prepareStrategicExploitationWorld();
+  const metrics = new BenchmarkMetrics();
+  world.instrumentation = metrics;
+  updateOffensiveOperations(world);
+  assert.equal(operation.phase, "exploiting");
+  settleCampaign(world);
+  updateOffensiveOperations(world);
+  assert.equal(operation.phase, "recovering");
+  assert.equal(operation.exploitationStopReason, "campaign-settlement");
+  assert.equal(world.offensiveOperations.exploitationStopCounts["campaign-settlement"], 1);
+  assert.equal(metrics.getCounter("offensiveOperation.exploitationStop.campaign-settlement"), 1);
+  assert.equal(operation.outcome, "success");
+});
+
+test("consolidation retains a military exit before peace can mature and invalidates the readiness cache", () => {
+  const world = createOperationWorld();
+  world.settings = createSimulationSettings({ warCampaignEnabled: true, diplomacyEnabled: true });
+  world.wars[0]!.isTest = false;
+  updateWarCampaigns(world);
+  const campaign = world.warCampaigns!.byNationId.get(NATION_A)!;
+  campaign.mode = "consolidate";
+  campaign.settlementReadyOpponentIds = campaign.objectives.map((goal) => goal.opponentId);
+  campaign.constraints.objectivesSecured = true;
+  updateNationFrontPlans(world);
+  assert.equal(planFor(world, NATION_A).posture, "attack");
+  assert(planFor(world, NATION_A).reasonFlags.includes("campaign-military-exit"));
+  const version = world.frontPlans.version;
+  world.time.fastTick = 300;
+  updateNationFrontPlans(world);
+  assert.equal(planFor(world, NATION_A).posture, "hold");
+  assert(world.frontPlans.version > version);
+});
+
+test("a binding cost limit still blocks discretionary attacks before peace can mature", () => {
+  const world = createOperationWorld();
+  world.settings = createSimulationSettings({ warCampaignEnabled: true, diplomacyEnabled: true });
+  world.wars[0]!.isTest = false;
+  updateWarCampaigns(world);
+  const campaign = world.warCampaigns!.byNationId.get(NATION_A)!;
+  campaign.mode = "consolidate";
+  campaign.constraints.objectivesSecured = true;
+  campaign.constraints.foodSeconds = 0;
+  updateNationFrontPlans(world);
+  assert.equal(planFor(world, NATION_A).posture, "hold");
+  assert(!planFor(world, NATION_A).reasonFlags.includes("campaign-military-exit"));
+});

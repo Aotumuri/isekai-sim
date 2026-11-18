@@ -1,3 +1,4 @@
+import { recordTerritorialClaimOutcome, type TerritorialClaimObjective } from "./territorial-claim-objective";
 import { updateFactionGovernments } from "./factions";
 import { establishExileGovernment, updateExileGovernments } from "./exile-government";
 import { updateTerritorialClaims } from "./territorial-claims";
@@ -126,6 +127,7 @@ export function updateSurrender(world: WorldState): void {
   let territoryChanged = false;
   let buildingChanged = false;
   const surrenderedThisTick: NationId[] = [];
+  let endedClaims: TerritorialClaimObjective[] | undefined;
   const eliminatedNationIds = new Set<NationId>();
 
   for (const surrenderNationId of surrendering) {
@@ -186,10 +188,11 @@ export function updateSurrender(world: WorldState): void {
       if (remainingMacroIds.length === 0) {
         eliminatedNationIds.add(surrenderNationId);
       }
-      world.wars = world.wars.filter(
-        (war) =>
-          war.nationAId !== surrenderNationId && war.nationBId !== surrenderNationId,
-      );
+      world.wars = world.wars.filter((war) => {
+        const continues = war.nationAId !== surrenderNationId && war.nationBId !== surrenderNationId;
+        if (!continues && war.claimObjective) (endedClaims ??= []).push(war.claimObjective);
+        return continues;
+      });
       world.battles = world.battles.filter(
         (battle) =>
           battle.attackerNationId !== surrenderNationId &&
@@ -222,6 +225,9 @@ export function updateSurrender(world: WorldState): void {
       new Set(surrenderedThisTick),
     );
     world.territoryVersion += 1;
+    if (endedClaims) {
+      for (const claim of endedClaims) recordTerritorialClaimOutcome(world, claim, "surrender", "territorial settlement after surrender");
+    }
     updateTerritorialClaims(world);
     updateExileGovernments(world);
     updateFactionGovernments(world);

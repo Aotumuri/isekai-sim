@@ -15,6 +15,7 @@ import type { WorldState } from "./world-state";
 import { getUnitCombatStrength } from "./unit-strength";
 import { getStrategicProgressAssessment } from "./strategic-progress";
 import { getMesoById, getOwnerByMesoId } from "./world-cache";
+import { campaignConcentrationDirective } from "./war-campaign/concentration-guidance";
 
 export type StalemateReason =
   | "no-strategic-progress"
@@ -22,7 +23,8 @@ export type StalemateReason =
   | "repeated-operation-cancel"
   | "balanced-strength"
   | "continuous-coverage"
-  | "artificial-inactivity";
+  | "artificial-inactivity"
+  | "campaign-concentration";
 export type ArtificialInactivityBlocker = "posture" | "allocation" | "target-validity" | null;
 export type TargetValidityFailureReason = "no-enemy-influence-target" | "no-valid-frontline-position" | "target-outside-current-sector" | "target-already-occupied" | "ownership-mismatch" | "unreachable-target" | "geometry-invalidated" | "depth-radius-restriction" | "no-candidate-after-filtering" | "other";
 export type InactivityCategory = "healthy-waiting" | "expected-waiting" | "natural-stalemate" | "artificial-inactivity" | "unknown";
@@ -57,6 +59,8 @@ export interface StalemateAssessment {
   targetValidityFailureReason: TargetValidityFailureReason | null;
   targetValidityOtherReason: keyof StalematePressureState["targetValidityOtherCounts"] | null;
   schwerpunktSectorId: FrontId | null;
+  /** This focus was requested by the national plan before natural stalemate. */
+  campaignRequested?: boolean;
   selectedAtTick: number | null;
   cooldownUntilTick: number;
   lastOperationSuccessCount: number;
@@ -230,11 +234,17 @@ export function updateStalematePressure(world: WorldState): void {
       : inactivity.reason === "allocation-deadlock" ? "allocation" : "target-validity";
     if (artificial) reasons.push("artificial-inactivity");
     let schwerpunktSectorId = before?.schwerpunktSectorId ?? null;
+    let campaignRequested = before?.campaignRequested ?? false;
+    const concentration = campaignConcentrationDirective(world, nationId, enemyNationId);
+    const naturalFocus = pressure >= settings.selectionThreshold;
+    if (naturalFocus) campaignRequested = false;
     let selectedAtTick = before?.selectedAtTick ?? null;
     const cooldownUntilTick = before?.cooldownUntilTick ?? 0;
     const selectedStillExists = !!schwerpunktSectorId && sectors.some((sector) => sector.id === schwerpunktSectorId);
-    if (critical || retreating) {
+    if (critical || retreating || concentration === "withhold" ||
+      campaignRequested && concentration !== "request" && !naturalFocus) {
       schwerpunktSectorId = null; selectedAtTick = null;
+      campaignRequested = false;
     } else if (selectedStillExists) {
       const bestSectorId = selectSector(world, sectors, nationId);
       const selectedSector = sectors.find((sector) => sector.id === schwerpunktSectorId)!;
@@ -251,14 +261,16 @@ export function updateStalematePressure(world: WorldState): void {
         state.selectionChanges += 1;
       }
     } else if (
-      pressure >= settings.selectionThreshold &&
+      (naturalFocus || concentration === "request") &&
       world.time.fastTick >= cooldownUntilTick
     ) {
       schwerpunktSectorId = selectSector(world, sectors, nationId);
+      campaignRequested = concentration === "request" && !naturalFocus;
       selectedAtTick = world.time.fastTick;
       state.selections += 1;
       if (before?.schwerpunktSectorId) state.selectionChanges += 1;
     }
+    if (schwerpunktSectorId && campaignRequested) reasons.push("campaign-concentration");
     const assessment: StalemateAssessment = {
       nationId, enemyNationId, pressure, staticTicks, reasonFlags: reasons,
       artificialInactivity: artificial, artificialInactivityBlocker: artificialBlocker,
@@ -267,7 +279,7 @@ export function updateStalematePressure(world: WorldState): void {
       nextEvaluationTick: inactivity.nextEvaluationTick,
       targetValidityFailureReason: targetDiagnostic?.reason ?? null,
       targetValidityOtherReason: targetDiagnostic?.other ?? null,
-      schwerpunktSectorId, selectedAtTick,
+      schwerpunktSectorId, selectedAtTick, campaignRequested: !!schwerpunktSectorId && campaignRequested,
       cooldownUntilTick, lastOperationSuccessCount: success,
       lastOperationFailureCount: failure, releasedSecondaryStrength: before?.releasedSecondaryStrength ?? 0,
     };
@@ -486,6 +498,7 @@ export function recordMajorOffensiveOutcome(
   assessment.pressure = Math.max(0, assessment.pressure - settings.pressureDecayOnFailure);
   assessment.cooldownUntilTick = world.time.fastTick + settings.failedOffensiveCooldownTicks;
   assessment.schwerpunktSectorId = null; assessment.selectedAtTick = null;
+  assessment.campaignRequested = false;
   if (countAsMajor) {
     if (success) world.stalematePressure.majorOffensiveSuccesses += 1;
     else world.stalematePressure.majorOffensiveFailures += 1;
