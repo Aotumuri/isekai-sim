@@ -1,3 +1,4 @@
+import { getWarTerritorialDemand } from "./territorial-claim-objective";
 import { isPeaceNegotiationMature } from "./peace-maturity";
 import { readPeaceAssessmentFact, type PeaceAssessmentContext } from "./peace-assessment-context";
 import { campaignRecognitionRegions, campaignRecognitionWeapons, campaignCanHoldRecognition, reciprocalRecognitionTerms } from "./war-campaign/peace-recognition";
@@ -149,8 +150,9 @@ function openingTerms(world: WorldState, war: WarState, proposer: NationId, targ
   const terms = whitePeaceTerms();
   const treasury = world.nations.find((nation) => nation.id === target)!.resources.weapons;
   terms.demandedWeapons = Math.min(60, Math.floor(treasury * 0.3));
-  if (war.aggressorId === proposer && war.ultimatumRegionIds?.length) {
-    terms.demandedRegionIds = [...war.ultimatumRegionIds];
+  const requested = getWarTerritorialDemand(war);
+  if (war.aggressorId === proposer && requested?.length) {
+    terms.demandedRegionIds = [...requested];
     if (!getPeaceTermsIssue(world, proposer, target, terms)) return terms;
   }
   const candidates = candidateDistricts(world, proposer, target);

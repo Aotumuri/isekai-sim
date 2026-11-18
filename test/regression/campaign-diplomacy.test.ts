@@ -211,3 +211,36 @@ test("a collapsing food reserve makes fighting on less attractive at the same mi
   b.food.rationCoverage = 0.3;
   assert(assessPeaceOffer(world, b.id, a.id, whitePeaceTerms()).score > supplied);
 });
+
+test("a deferred legal claim carries its first consideration into a later ultimatum", () => {
+  const { world, a, b } = campaign();
+  world.settings!.warCampaignEnabled = true;
+  updateSupplyAssessment(world);
+  updateStrategicThreatObservation(world);
+  const regions = [...getOwnerByMesoId(world)].filter(([, owner]) => owner === b.id).map(([id]) => id);
+  const requested = selectPeaceProvinces(world, b.id, a.id, regions);
+  assert(requested.length);
+  for (const id of requested) getTerritorialClaims(world).history.get(id)!.set(a.id, { heldTicks: 500, attachment: 70 });
+  getDiplomacyState(world).influenceByNationId.set(a.id, 100);
+  const relation = getRelation(world, a.id, b.id);
+  relation.tension = 45;
+  relation.opinion = 100;
+  world.time.fastTick = 100;
+  world.time.slowTick = 10;
+  updateDiplomaticCrises(world);
+  assert.equal(relation.crisis, null);
+  const deferred = relation.deferredClaims?.get(a.id);
+  assert(deferred);
+  assert(deferred.score < deferred.minimumScore);
+
+  relation.opinion = -100;
+  world.time.fastTick = 200;
+  world.time.slowTick = 20;
+  updateDiplomaticCrises(world);
+  const adopted = getRelation(world, a.id, b.id).crisis?.claimObjective;
+  assert(adopted);
+  assert.equal(adopted.interestId, deferred.interestId);
+  assert.equal(adopted.firstDeferredAtTick, 100);
+  assert.equal(adopted.openedAtTick, 200);
+  assert.equal(relation.deferredClaims?.has(a.id), false);
+});

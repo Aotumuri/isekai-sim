@@ -1,3 +1,4 @@
+import { getWarTerritorialDemand } from "../territorial-claim-objective";
 import type { NationId } from "../../worldgen/nation";
 import type { WorldState } from "../world-state";
 import type { WarState } from "../war-state";
@@ -19,7 +20,7 @@ export function buildCampaignObjectives(
     // Compute once; neither opening intent nor a live negotiating offer may
     // replace an adopted objective after the campaign has started.
     const opening = !old && offensivePurpose
-      ? war.campaignIntent ?? assessCampaignOpening(world, nationId, opponentId, war.ultimatumRegionIds)
+      ? war.campaignIntent ?? assessCampaignOpening(world, nationId, opponentId, getWarTerritorialDemand(war))
       : undefined;
     const kind = old?.kind ?? (offensivePurpose && opening?.objectiveRegionIds.length
       ? "limited-occupation" : "preserve-sovereignty");
@@ -28,7 +29,9 @@ export function buildCampaignObjectives(
       : world.mesoRegions.filter((region) => owners.get(region.id) === nationId).map((region) => region.id));
     const achieved = regionIds.length > 0 && regionIds.every((id) =>
       (world.occupation.mesoById.get(id) ?? owners.get(id)) === nationId);
+    const claimInterestId = offensivePurpose ? war.claimObjective?.interestId : undefined;
     return { warKey, opponentId, kind: old?.kind ?? kind, regionIds,
+      ...(claimInterestId ? { claimInterestId } : {}),
       rationale: old?.rationale ?? (opening?.rationale === "no-access" ? "no-access-defense" : opening?.rationale) ?? "preserve-sovereignty",
       openingStrength: old?.openingStrength ?? strength, achieved,
       openingManpower: old?.openingManpower ?? manpower,

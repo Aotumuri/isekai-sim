@@ -18,6 +18,7 @@ export interface CampaignObjective {
   openingManpower?: number;
   achieved: boolean;
   political?: PoliticalObjective;
+  claimInterestId?: string;
 }
 export interface WarCampaign {
   nationId: NationId;

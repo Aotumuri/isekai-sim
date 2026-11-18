@@ -1,3 +1,4 @@
+import { adoptTerritorialClaim, deferTerritorialClaim, getWarTerritorialDemand, recordTerritorialClaimOutcome } from "./territorial-claim-objective";
 import { getManualGovernmentId, getPlayerNation } from "./player-nation";
 import { assessCampaignOpening } from "./war-campaign/opening-intent";
 import { getCrisisDeploymentReadiness } from "./crisis-deployment";
@@ -53,6 +54,9 @@ export function openDiplomaticCrisis(world: WorldState, aggressorId: NationId, t
   if (!spendInfluence(world, aggressorId, 12)) return false;
   relation.crisis = { aggressorId, openedAtSlowTick: world.time.slowTick,
     deadlineSlowTick: world.time.slowTick + 30, demand: regionIds ? "territory" : relation.grievance > 30 ? "containment" : "concessions", regionIds };
+  if (regionIds && world.settings?.warCampaignEnabled) {
+    relation.crisis.claimObjective = adoptTerritorialClaim(world, relation, aggressorId, targetId, regionIds);
+  }
   relation.tension = Math.max(60, relation.tension);
   relation.opinion = Math.max(-100, relation.opinion - 10);
   getDiplomacyState(world).crisesOpened += 1;
@@ -123,6 +127,7 @@ function counterTerritorialDemand(world: WorldState, attacker: NationId, defende
 export function resolveCrisisPeacefully(world: WorldState, a: NationId, b: NationId, reason: string): void {
   const relation = getRelation(world, a, b);
   if (!relation.crisis) return;
+  recordTerritorialClaimOutcome(world, relation.crisis.claimObjective, "diplomacy", reason);
   relation.crisis = null;
   relation.tension = Math.max(0, relation.tension - 40);
   relation.cooldownUntilSlowTick = world.time.slowTick + 120;
@@ -173,8 +178,9 @@ function createDiplomaticWar(world: WorldState, aggressorId: NationId, targetId:
   const relation = getRelation(world, aggressorId, targetId);
   if (relation.crisis?.aggressorId === aggressorId && relation.crisis.regionIds) {
     war.ultimatumRegionIds = [...relation.crisis.regionIds];
+    if (relation.crisis.claimObjective) war.claimObjective = relation.crisis.claimObjective;
   }
-  if (world.settings?.warCampaignEnabled) war.campaignIntent = assessCampaignOpening(world, aggressorId, targetId, war.ultimatumRegionIds);
+  if (world.settings?.warCampaignEnabled) war.campaignIntent = assessCampaignOpening(world, aggressorId, targetId, getWarTerritorialDemand(war));
   relation.crisis = null; relation.treaties = [];
   relation.opinion = -80; relation.trust = Math.max(0, relation.trust - 30); relation.tension = 100;
   getDiplomacyState(world).declarations += 1;
@@ -201,6 +207,8 @@ export function updateDiplomaticCrises(world: WorldState): void {
     const attacker = crisis.aggressorId;
     const defender = relation.nationAId === attacker ? relation.nationBId : relation.nationAId;
     if (!active.has(attacker) || !active.has(defender) || isDiplomaticallyProtected(world, attacker, defender)) {
+      recordTerritorialClaimOutcome(world, crisis.claimObjective, "diplomacy",
+        !active.has(attacker) || !active.has(defender) ? "government no longer active" : "diplomatic protection");
       relation.crisis = null; continue;
     }
     if (crisis.demand === "territory" && (!crisis.regionIds?.length ||
@@ -296,7 +304,14 @@ export function updateDiplomaticCrises(world: WorldState): void {
     const claims = getForeignClaims(world, attacker, candidate.targetNationId);
     const capital = world.nations.find((nation) => nation.id === candidate.targetNationId)?.capitalMesoId;
     const territorialTargets = claims.filter((claim) => claim.strength >= 35 && claim.regionId !== capital).map((claim) => claim.regionId);
-    if (desire < 45) continue;
+    const crisisThreshold = 45;
+    if (desire < crisisThreshold) {
+      if (world.settings?.warCampaignEnabled && territorialTargets.length) {
+        const requested = selectPeaceProvinces(world, candidate.targetNationId, attacker, territorialTargets);
+        if (requested.length) deferTerritorialClaim(world, relation, attacker, candidate.targetNationId, requested, desire, crisisThreshold);
+      }
+      continue;
+    }
     const requested = selectPeaceProvinces(world, candidate.targetNationId, attacker, territorialTargets);
     if (openDiplomaticCrisis(world, attacker, candidate.targetNationId,
       requested.length ? requested : undefined)) opened.add(attacker);
