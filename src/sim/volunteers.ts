@@ -43,6 +43,14 @@ function freeToLeave(world: WorldState, unit: UnitState): boolean {
     !world.offensiveOperations.operationIdByUnitId.has(unit.id) && !world.retreatPlans.retreatIdByUnitId.has(unit.id) &&
     !world.reorganization.planIdByUnitId.has(unit.id) && !world.battles.some((battle) => battle.mesoId === unit.regionId);
 }
+function countRecipientLandUnits(world: WorldState, recipientId: NationId): number {
+  const fielded = world.units.flatMap((unit) => [unit, ...unit.cargoUnits])
+    .filter((unit) => unit.nationId === recipientId && unit.domain === "land").length;
+  const rallying = [...(world.defeatedFormations?.withdrawals.values() ?? [])]
+    .filter(({ unit }) => unit.nationId === recipientId).length;
+  return fielded + rallying;
+}
+
 export function sendVolunteers(world: WorldState, donorId: NationId, recipientId: NationId, count = 2): VolunteerMission | null {
   if (!Number.isInteger(count) || count < 1 || count > 5 || !canSendVolunteers(world, donorId, recipientId)) return null;
   const state = getVolunteerState(world), outstanding = state.missions.filter((mission) => ["outbound", "active", "recall-requested", "returning"].includes(mission.status));
@@ -56,7 +64,7 @@ export function sendVolunteers(world: WorldState, donorId: NationId, recipientId
     !world.militaryAccess?.orders.has(unit.id) && freeToLeave(world, unit) && isNationRegionSupplied(world, donorId, unit.regionId));
   if (candidates.length < count) return null;
   const incoming = outstanding.filter((mission) => mission.recipientId === recipientId && mission.status === "outbound").reduce((sum, mission) => sum + mission.transitUnits.length, 0);
-  const fielded = world.units.flatMap((unit) => [unit, ...unit.cargoUnits]).filter((unit) => unit.nationId === recipientId && unit.domain === "land").length;
+  const fielded = countRecipientLandUnits(world, recipientId);
   if (fielded + incoming + count > (world.settings?.mobilizationEnabled ? WORLD_BALANCE.production.maxMobilizedLandUnits : WORLD_BALANCE.production.maxLandUnits)) return null;
   const route = findTradeRoute(world, donorId, recipientId); if (!route) return null;
   const fuel = route.maritime ? Math.max(2, Math.ceil(route.regionIds.length * 0.1)) : 0;
@@ -89,12 +97,21 @@ export function dismissVolunteers(world: WorldState, recipientId: NationId, miss
 }
 export function updateVolunteers(world: WorldState): void {
   const state = world.volunteers ?? (getWarDeclarationMode(world) === "diplomacy" ? getVolunteerState(world) : undefined); if (!state) return;
+  const withdrawing = new Map<number, UnitState[]>();
+  const withdrawals = [...(world.defeatedFormations?.withdrawals.values() ?? [])];
+  for (const { unit } of withdrawals) {
+    if (unit.volunteerMissionId === undefined) continue;
+    const group = withdrawing.get(unit.volunteerMissionId) ?? [];
+    group.push(unit);
+    withdrawing.set(unit.volunteerMissionId, group);
+  }
   for (const mission of state.missions) {
+    const withdrawn = withdrawing.get(mission.id) ?? [];
     if (["completed", "lost", "integrated"].includes(mission.status)) continue;
     const donor = world.nations.find((nation) => nation.id === mission.donorId && nation.macroRegionIds.length);
     const recipient = world.nations.find((nation) => nation.id === mission.recipientId && nation.macroRegionIds.length);
     if (!donor) {
-      const survivors = [...world.units.flatMap((unit) => [unit, ...unit.cargoUnits]).filter((unit) => unit.volunteerMissionId === mission.id), ...mission.transitUnits];
+      const survivors = [...world.units.flatMap((unit) => [unit, ...unit.cargoUnits]).filter((unit) => unit.volunteerMissionId === mission.id), ...mission.transitUnits, ...withdrawn];
       for (const unit of survivors) { delete unit.volunteerOriginId; delete unit.volunteerMissionId; if (recipient && mission.transitUnits.includes(unit)) { unit.nationId = recipient.id; unit.regionId = recipient.capitalMesoId; world.units.push(unit); } }
       mission.transitUnits = []; mission.status = recipient ? "integrated" : "lost"; mission.endedAtSlowTick = world.time.slowTick; continue;
     }
@@ -106,7 +123,7 @@ export function updateVolunteers(world: WorldState): void {
       mission.status = "returning"; mission.arrivesAtSlowTick = world.time.slowTick + 5;
     }
     if (mission.status === "outbound" && world.time.slowTick >= mission.arrivesAtSlowTick && recipient) {
-      const fielded = world.units.flatMap((unit) => [unit, ...unit.cargoUnits]).filter((unit) => unit.nationId === recipient.id && unit.domain === "land").length;
+      const fielded = countRecipientLandUnits(world, recipient.id);
       const limit = world.settings?.mobilizationEnabled ? WORLD_BALANCE.production.maxMobilizedLandUnits : WORLD_BALANCE.production.maxLandUnits;
       if (fielded + mission.transitUnits.length > limit) { mission.status = "returning"; mission.arrivesAtSlowTick = world.time.slowTick + 5; continue; }
       for (const unit of mission.transitUnits) { unit.nationId = recipient.id; unit.regionId = recipient.capitalMesoId; unit.org = Math.max(0.4, unit.org - 0.1); world.units.push(unit); }
@@ -122,12 +139,12 @@ export function updateVolunteers(world: WorldState): void {
         unit.nationId = mission.donorId; clearMove(unit); mission.transitUnits.push(unit);
       }
       if (returning.length) { const ids = new Set(returning.map((unit) => unit.id)); world.units = world.units.filter((unit) => !ids.has(unit.id)); }
-      if (returning.length === survivors.length && !embarked) {
+      if (returning.length === survivors.length && !embarked && !withdrawn.length) {
         mission.status = mission.transitUnits.length ? "returning" : "lost";
         mission.arrivesAtSlowTick = world.time.slowTick + Math.max(5, Math.ceil(mission.route.regionIds.length * 1.5));
       }
     }
-    if (mission.status === "active" && !world.units.some((unit) => unit.volunteerMissionId === mission.id || unit.cargoUnits.some((cargo) => cargo.volunteerMissionId === mission.id))) mission.status = "lost";
+    if (mission.status === "active" && !withdrawn.length && !world.units.some((unit) => unit.volunteerMissionId === mission.id || unit.cargoUnits.some((cargo) => cargo.volunteerMissionId === mission.id))) mission.status = "lost";
     if (mission.status === "returning" && world.time.slowTick >= mission.arrivesAtSlowTick) {
       for (const unit of mission.transitUnits) {
         unit.nationId = donor.id; unit.regionId = donor.capitalMesoId; clearMove(unit); delete unit.volunteerOriginId; delete unit.volunteerMissionId;

@@ -63,6 +63,7 @@ import {
   cancelOffensiveOperationsForCapitalEmergency,
   updateOffensiveOperations,
 } from "./offensive-operations";
+import { advanceDefeatedWithdrawals, recoverDefeatedFormations, repatriatePrisoners } from "./defeated-formations";
 import { updateRetreatPlans } from "./retreat-plans";
 import { updateCapitalDefense } from "./capital-defense";
 import { updateStrategicReserves } from "./strategic-reserves";
@@ -170,6 +171,7 @@ export function stepFastTick(world: WorldState, dtMs: number): void {
 
   startedAt = instrumentation ? performance.now() : 0;
   updateOccupation(world);
+  advanceDefeatedWithdrawals(world);
   if (instrumentation) {
     instrumentation.recordDuration("updateOccupation", performance.now() - startedAt);
     instrumentation.incrementCounter("occupation.fullRegionScans");
@@ -233,7 +235,9 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateSupplyAssessment(world);
   updateAnnexations(world);
   updateTerritorialGovernance(world);
+  recoverDefeatedFormations(world);
   updateProduction(world);
+  repatriatePrisoners(world);
   updateResourceReparations(world);
   updateSubjectAutonomy(world);
   updateDemobilization(world);

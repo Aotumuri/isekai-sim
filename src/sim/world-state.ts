@@ -1,3 +1,4 @@
+import type { DefeatedFormations } from "./defeated-formations";
 import type { WarCampaignState } from "./war-campaign/state";
 import type { PlayerNation } from "./player-nation";
 import type { ResourceReparationTreaty } from "./resource-reparations";
@@ -63,6 +64,7 @@ import type { WarIntentState } from "./war-intent";
 import type { CommonThreatCoalitionState } from "./common-threat-coalitions";
 
 export interface WorldState {
+  defeatedFormations?: DefeatedFormations;
   warCampaigns?: WarCampaignState;
   playerNation?: PlayerNation;
   domesticUnrest?: DomesticUnrestState;

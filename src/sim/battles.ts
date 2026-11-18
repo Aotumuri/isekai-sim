@@ -1,3 +1,4 @@
+import { beginDefeatedWithdrawals } from "./defeated-formations";
 import { getPlayerNation } from "./player-nation";
 import { observeCampaignBattleDamage, observeCampaignFormationRemoval } from "./war-campaign/battle-cost-observation";
 import { getRiverCrossingPressure } from "./river-crossings";
@@ -115,6 +116,9 @@ export function updateBattles(world: WorldState): void {
   const now = world.time.fastTick;
   const removedUnitIds = new Set<UnitId>();
 
+  const routed = world.settings?.defeatedFormationsEnabled && landIndex.attackersByTarget.size > 0
+    ? new Map<UnitState, NationId | undefined>()
+    : undefined;
   const landUnits = landIndex.landUnits;
   if (landUnits.length >= 2) {
     updateLandBattles(
@@ -126,6 +130,7 @@ export function updateBattles(world: WorldState): void {
       now,
       landIndex.unitsByMesoId,
       landIndex.attackersByTarget,
+      routed,
     );
   }
 
@@ -147,7 +152,7 @@ export function updateBattles(world: WorldState): void {
     if (campaignEnabled || instrumentation?.recordLandUnitLifecycle) {
       for (const unit of world.units) {
         if (!removedUnitIds.has(unit.id)) continue;
-        if (campaignEnabled) observeCampaignFormationRemoval(world, unit);
+        if (campaignEnabled && !routed?.has(unit)) observeCampaignFormationRemoval(world, unit);
         if (unit.domain === "land") instrumentation?.recordLandUnitLifecycle?.({
           tick: now, unitId: unit.id, nationId: unit.nationId, regionId: unit.regionId,
           reason: "battle-removal", remainingManpower: unit.manpower, remainingOrganization: unit.org,
@@ -156,6 +161,7 @@ export function updateBattles(world: WorldState): void {
     }
     world.units = world.units.filter((unit) => !removedUnitIds.has(unit.id));
     landBattleIndexByWorld.delete(world);
+    if (routed) beginDefeatedWithdrawals(world, routed);
   }
 
   if (world.battles.length > 0) {
@@ -172,6 +178,7 @@ function updateLandBattles(
   now: number,
   unitsByMesoId: Map<MesoRegionId, Map<NationId, UnitState[]>>,
   attackersByTarget: Map<MesoRegionId, Map<NationId, UnitState[]>>,
+  routed?: Map<UnitState, NationId | undefined>,
 ): void {
   for (const [mesoId, attackersByNation] of attackersByTarget.entries()) {
     const defendersByNation = unitsByMesoId.get(mesoId);
@@ -219,6 +226,7 @@ function updateLandBattles(
           directions.modifier * getCoastalSupportModifier(world, attackerNation, mesoId),
           getCoastalSupportModifier(world, defenderNation, mesoId) *
             getRiverCrossingPressure(getMesoById(world).get(mesoId), attackers, defenders),
+          routed,
         );
         if (outcome) {
           observeCampaignBattleDamage(world, battle.attackerNationId, outcome.attackerManpowerLoss);
@@ -563,6 +571,7 @@ export function resolveBattle(
   now: number,
   defenderOrganizationPressure = 1,
   attackerOrganizationPressure = 1,
+  routed?: Map<UnitState, NationId | undefined>,
 ): {
   attackerManpowerLoss: number;
   defenderManpowerLoss: number;
@@ -592,6 +601,7 @@ export function resolveBattle(
 
   const damageWeightA = sumDamageWeight(aliveA);
   const damageWeightB = sumDamageWeight(aliveB);
+  const removedBefore = removedUnitIds.size;
   const lossA = applyDamage(aliveA, damageWeightA, damageToA, orgDamageToA, removedUnitIds);
   const lossB = applyDamage(aliveB, damageWeightB, damageToB, orgDamageToB, removedUnitIds);
 
@@ -600,6 +610,15 @@ export function resolveBattle(
 
   const remainingA = aliveA.some((unit) => isUnitAlive(unit, removedUnitIds));
   const remainingB = aliveB.some((unit) => isUnitAlive(unit, removedUnitIds));
+
+  if (routed && removedUnitIds.size > removedBefore) {
+    for (const unit of aliveA) {
+      if (unit.org === 0 && unit.manpower > 0) routed.set(unit, remainingB ? battle.defenderNationId : undefined);
+    }
+    for (const unit of aliveB) {
+      if (unit.org === 0 && unit.manpower > 0) routed.set(unit, remainingA ? battle.attackerNationId : undefined);
+    }
+  }
 
   if (!remainingA && !remainingB) {
     console.info(
