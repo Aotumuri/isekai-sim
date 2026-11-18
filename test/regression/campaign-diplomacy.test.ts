@@ -1,3 +1,4 @@
+import { formatTerritorialClaimObjective } from "../../src/render/territorial-claim-summary";
 import { getNationalPolitics } from "../../src/sim/politics";
 import { assessWarIntent } from "../../src/sim/war-declaration";
 import assert from "node:assert/strict";
@@ -285,6 +286,8 @@ test("weak coalition support ahead of an election can defer an otherwise viable 
       assert.equal(deferral?.score, 50);
       assert.equal(deferral?.minimumScore, 60);
       assert.deepEqual(deferral?.electoralPressure, { coalitionSupport: 20, electionAtSlowTick: 20, scoreIncrease: 15 });
+      assert.match(formatTerritorialClaimObjective(world, relation, String).join("\n"),
+        /Coalition support was 20%.+raised the required score by 15.0/);
       assert(openDiplomaticCrisis(world, a.id, b.id, requested), "an explicit ultimatum retains manual semantics");
     } else {
       assert.equal(deferral, undefined);

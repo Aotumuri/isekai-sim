@@ -1,3 +1,4 @@
+import { formatTerritorialClaimObjective } from "../../src/render/territorial-claim-summary";
 import { updateSurrender } from "../../src/sim/surrender";
 import { addWarContribution } from "../../src/sim/war-state";
 import { updateWarCampaigns } from "../../src/sim/war-campaign/update";
@@ -106,18 +107,25 @@ test("a claimed district keeps one objective from ultimatum through legal settle
 });
 
 test("occupation alone cannot complete a territorial claim after white peace", () => {
-  const { world, a, b, id } = scene();
+  const { world, a, b, id, relation } = scene();
   world.settings!.warCampaignEnabled = true;
   assert(openDiplomaticCrisis(world, a, b, [id]));
+  assert.match(formatTerritorialClaimObjective(world, relation, String)[0], /Diplomatic demand/);
   assert(startDiplomaticWar(world, a, b));
   world.occupation.mesoById.set(id, a);
   world.occupation.version++;
+  const during = formatTerritorialClaimObjective(world, relation, String);
+  assert.match(during[0], /War aim/);
+  assert.match(during[1], /Legally held 0 of 1 · under occupation 1/);
   assert(proposePeaceTerms(world, a, b, whitePeaceTerms()));
   assert(acceptPeaceOffer(world, b, a));
   assert.equal(getOwnerByMesoId(world).get(id), b);
   const [result] = world.diplomacy!.claimOutcomeHistory!;
   assert.equal(result.outcome, "unmet");
   assert.deepEqual(result.retainedRegionIds, []);
+  assert.match(formatTerritorialClaimObjective(world, relation, String)[0], /Claim unmet/);
+  world.settings!.warCampaignEnabled = false;
+  assert.deepEqual(formatTerritorialClaimObjective(world, relation, String), []);
 });
 
 test("an amicable concession and an invalidated claim record distinct outcomes", () => {

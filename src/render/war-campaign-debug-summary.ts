@@ -1,3 +1,5 @@
+import { getFrontAllocation } from "../sim/nation-front-allocations";
+import { getFrontPlan } from "../sim/nation-front-plans";
 import type { WorldState } from "../sim/world-state";
 
 /** Bounded detail in the existing optional strategic overlay, not the main UI. */
@@ -12,14 +14,27 @@ export function formatCampaignDebugLines(world: WorldState, nationLimit = 3): st
     if (plan.militaryMode) lines.push(`  MILITARY ${plan.militaryMode} | available agreements ${plan.settlementReadyOpponentIds?.join(",") || "none"}`);
     lines.push(`  ${plan.reason} | cost ${plan.constraints.casualtyFraction.toFixed(2)}/${plan.constraints.costTolerance.toFixed(2)}`);
     for (const option of plan.alternatives?.slice(0, 3) ?? []) {
-      lines.push(`  ALT ${option.mode} vs ${option.opponentId}: ${(option.score * 100).toFixed(1)} | benefit ${(option.benefit * 100).toFixed(1)} cost ${(option.resourceCost * 100).toFixed(1)} risk ${(option.failureRisk * 100).toFixed(1)}`);
+      lines.push(`  CURRENT ALT ${option.mode} vs ${option.opponentId}: ${(option.score * 100).toFixed(1)} | benefit ${(option.benefit * 100).toFixed(1)} cost ${(option.resourceCost * 100).toFixed(1)} risk ${(option.failureRisk * 100).toFixed(1)}`);
     }
     for (const goal of plan.objectives.slice(0, 3)) {
       lines.push(`  ${goal.opponentId}: ${goal.kind} ${goal.achieved ? "military held" : "military pending"} | ${goal.rationale ?? "opening goal"} | ${goal.regionIds.slice(0, 3).join(",")}${goal.regionIds.length > 3 ? "..." : ""}`);
       if (goal.political) lines.push(`    POLITICAL ${goal.political.purpose}${goal.political.weaponTarget ? ` | weapons ${goal.political.weaponTarget}` : ""} | military ${goal.achieved ? "held" : "pending"}`);
     }
     const operations = world.offensiveOperations.operationsByNationId.get(plan.nationId) ?? [];
-    for (const operation of operations) lines.push(`  OP ${operation.phase}: ${operation.capturedRegionIds.length} captured | ${operation.completionReason ?? "in progress"}`);
+    for (const operation of operations) {
+      lines.push(`  OP ${operation.phase}: ${operation.capturedRegionIds.length} captured | ${operation.completionReason ?? "in progress"}`);
+      const command = operation.theaterLaunchDecision;
+      if (command) {
+        const action = command.outcome === "wait-for-assembly" ? "waited for assembly" : "approved launch";
+        lines.push(`    ${command.preference} commander ${action} at tick ${command.evaluatedAtTick} · ${Math.round(command.readiness * 100)}% ready, preferred ${Math.round(command.preferredReadiness * 100)}%`);
+      }
+    }
+    const defense = world.capitalDefense.assessmentsByNationId.get(plan.nationId);
+    if (defense?.primaryFrontId && defense.threatLevel !== "none") {
+      const frontPlan = getFrontPlan(world, defense.primaryFrontId, plan.nationId);
+      const allocation = getFrontAllocation(world, defense.primaryFrontId, plan.nationId);
+      if (frontPlan) lines.push(`  CAPITAL FRONT ${frontPlan.posture} · priority ${Math.round(frontPlan.priority)} · ${allocation?.unitIds.length ?? 0} assigned | ${frontPlan.reasonFlags.join(", ")}`);
+    }
     const last = [...world.offensiveOperations.history].reverse().find((operation) => operation.nationId === plan.nationId);
     if (last) lines.push(`  LAST ${last.outcome}: ${last.completionReason}`);
   }

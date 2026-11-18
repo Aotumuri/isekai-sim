@@ -11,6 +11,7 @@ import { getTerritorialDeals, proposeTerritorialExchange, respondToTerritorialOf
 import { constructPort, getPortConstructionIssue, PORT_CONSTRUCTION_COST } from "../sim/port-construction";
 import { splitProvince } from "../sim/territory-transfer";
 import { getWarDeclarationMode } from "../sim/simulation-settings";
+import { formatTerritorialClaimObjective } from "../render/territorial-claim-summary";
 import { getMapView } from "../render/map-view-state";
 
 const esc = (value: string) => value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
@@ -18,6 +19,7 @@ export function districtName(id: MesoRegionId): string { return `District ${id.r
 export function attachTerritoryControls(root: HTMLElement, world: WorldState, selected: () => NationId, partner: () => NationId,
   feedback: (message: string) => void): { update: () => void; clearPreview: () => void } {
   root.innerHTML = `<h2>Territorial claims</h2><p class="society-note">Long ownership strengthens attachment. Resources make neighboring districts desirable. Claims persist after loss; they do not grant ownership.</p><div data-territory-view="claims"></div>
+    <section data-territory-view="claim-objective" hidden><h3>Claim objective</h3><ul class="society-note"></ul></section>
     <h2>Territorial settlement</h2><p class="society-note">Choose individual districts or entire provinces below. Gold highlights show the selected parcels on the map. A cession automatically divides a province when necessary. Each nation must retain at least one district.</p>
     <div class="territory-parcels"><section><h3>Your offer / administrative split</h3><div data-territory-view="offered"></div></section><section><h3>Requested from partner</h3><div data-territory-view="requested"></div></section></div>
     <p class="society-note" data-territory-view="valuation"></p>
@@ -50,9 +52,18 @@ export function attachTerritoryControls(root: HTMLElement, world: WorldState, se
     }
     const offers = getTerritorialDeals(world).offers.filter((offer) => offer.proposerId === a || offer.targetId === a).slice(-8).reverse();
     const claims = getForeignClaims(world, a, b), relation = getRelation(world, a, b), crisis = relation.crisis;
-    const detail = JSON.stringify([a, b, world.time.slowTick, world.territoryVersion, picked("offered"), picked("requested"), offers.map((offer) => [offer.id, offer.status]), crisis]);
+    const objectiveLines = formatTerritorialClaimObjective(world, relation, districtName);
+    const detail = JSON.stringify([a, b, world.time.slowTick, world.territoryVersion, picked("offered"), picked("requested"),
+      offers.map((offer) => [offer.id, offer.status]), crisis, objectiveLines]);
     if (detail === detailKey) return; detailKey = detail;
     view("claims").innerHTML = `<p class="society-note">Claims against ${esc(getNationName(world, b))}: ${claims.length}</p>${claims.slice(0, 10).map((claim) => `<p class="society-note"><button type="button" data-territory-action="select-claim" data-region-id="${esc(claim.regionId)}">Select ${districtName(claim.regionId)}</button> · Claim ${Math.round(claim.strength)}/100 · Previously owned for ${claim.heldTicks}s</p>`).join("") || '<p class="society-note">No significant claims against this partner.</p>'}`;
+    const objectiveView = view("claim-objective");
+    objectiveView.hidden = objectiveLines.length === 0;
+    objectiveView.querySelector("ul")!.replaceChildren(...objectiveLines.map((line) => {
+      const item = document.createElement("li");
+      item.textContent = line;
+      return item;
+    }));
     const offered = picked("offered"), requested = picked("requested");
     view("valuation").textContent = `Selected: ${offered.length} offered / ${requested.length} requested. Partner values: receives ${territorialValue(world, b, offered).toFixed(0)} / cedes ${territorialValue(world, b, requested).toFixed(0)}. Your claims on requested districts: ${requested.map((id) => `${districtName(id)} ${Math.round(getTerritorialClaim(world, a, id))}`).join(", ") || "none"}.`;
     const portIssue = offered.length === 1

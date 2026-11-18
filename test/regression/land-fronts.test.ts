@@ -1,3 +1,4 @@
+import { formatCampaignDebugLines } from "../../src/render/war-campaign-debug-summary";
 import { decideTheaterLaunch } from "../../src/sim/theater-command";
 import { enterPlayerNation } from "../../src/sim/player-nation";
 import { updateWarCampaigns } from "../../src/sim/war-campaign/update";
@@ -2312,6 +2313,7 @@ test("the theater commander can wait once for more assembly without rewriting th
     assert.equal(operation.phase, "preparing");
     assert.equal(operation.theaterLaunchDecision?.commanderId, commander.id);
     assert.equal(operation.theaterLaunchDecision?.outcome, "wait-for-assembly");
+    assert.match(formatCampaignDebugLines(world).join("\n"), /deliberate commander waited for assembly.*65% ready, preferred 70%/);
     nation.ideologyId = "new-government";
     advanceOperationEvaluation(world, 10);
     assert.equal(operation.phase, "attacking");
