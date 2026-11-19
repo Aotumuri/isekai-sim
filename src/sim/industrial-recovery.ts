@@ -1,5 +1,6 @@
 import type { MesoRegion, MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
+import { seekReconstructionGrant } from "./financial-aid";
 import { changeResource, resourceReserve } from "./international-trade";
 import { getManualGovernmentId } from "./player-nation";
 import { PUBLIC_WORKS } from "./public-works";
@@ -53,11 +54,13 @@ export function updateIndustrialRecovery(world: WorldState): void {
     if (!prior || score > prior.score || score === prior.score && id < prior.id) priorities.set(state.owner, { id, state, score });
   }
   const manual = priorities.size ? getManualGovernmentId(world) : undefined;
+  const rebuilding = new Set(priorities.keys());
   for (const nation of world.nations) {
     const project = priorities.get(nation.id);
     if (!project || nation.id === manual || !nation.treasury ||
-      nation.treasury.balance < RESTORATION_COST.cash + resourceReserve(nation, "cash") ||
       nation.resources.steel < RESTORATION_COST.steel + resourceReserve(nation, "steel")) continue;
+    const cashNeeded = RESTORATION_COST.cash + resourceReserve(nation, "cash");
+    if (nation.treasury.balance < cashNeeded && !seekReconstructionGrant(world, nation.id, rebuilding)) continue;
     if (!spendTreasury(nation.treasury, "construction", RESTORATION_COST.cash)) continue;
     changeResource(nation, "steel", -RESTORATION_COST.steel);
     project.state.funded = true;

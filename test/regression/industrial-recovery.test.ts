@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { concludePeace } from "../../src/sim/diplomatic-peace";
+import { getRelation } from "../../src/sim/diplomacy";
 import { industrialRecoveryFactor, updateIndustrialRecovery } from "../../src/sim/industrial-recovery";
 import { enterPlayerNation } from "../../src/sim/player-nation";
 import { updateProduction } from "../../src/sim/production";
@@ -52,4 +53,24 @@ test("manual budgets are preserved, contested districts pause, and recovery reco
   updateIndustrialRecovery(world);
   assert.equal(world.industrialRecovery?.size, 0);
   assert.equal(industrialRecoveryFactor(world, owner.id, fuel), 1);
+});
+
+test("a solvent ally can fund reconstruction when the former belligerent lacks cash", () => {
+  for (const donorType of ["ally", "neutral", "manual", "short of reserves"] as const) {
+    const { world, owner, city } = scene();
+    const donor = world.nations[2];
+    owner.treasury!.balance = 0;
+    donor.treasury!.balance = donorType === "short of reserves" ? 35 : 85;
+    donor.treasury!.lastRevenue = 15;
+    if (donorType !== "neutral") {
+      getRelation(world, donor.id, owner.id).treaties.push({ type: "alliance", expiresAtSlowTick: 300 });
+    }
+    if (donorType === "manual") assert(enterPlayerNation(world, donor.id));
+    const before = donor.treasury!.balance;
+    world.time.slowTick = 10;
+    updateIndustrialRecovery(world);
+    assert.equal(world.industrialRecovery?.get(city)?.funded ?? false, donorType === "ally", donorType);
+    assert.equal(donor.treasury!.balance, before - (donorType === "ally" ? 25 : 0), donorType);
+    assert.equal(owner.treasury!.balance, donorType === "ally" ? 16 : 0, donorType);
+  }
 });
