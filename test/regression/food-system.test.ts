@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { canRevolt, getDomesticUnrest, updateDomesticUnrest } from "../../src/sim/domestic-unrest";
 import { getRelation } from "../../src/sim/diplomacy";
-import { FOOD_INTERVAL, updateFoodSupply } from "../../src/sim/food-supply";
+import { FAMINE_THRESHOLD, FOOD_INTERVAL, updateFoodSupply } from "../../src/sim/food-supply";
 import { updateFoodTrade } from "../../src/sim/food-trade";
 import { findTradeRoute, proposeResourceTrade, sendGrainAid, updateInternationalTrade } from "../../src/sim/international-trade";
+import { enterPlayerNation } from "../../src/sim/player-nation";
 import { createSimulationSettings } from "../../src/sim/simulation-settings";
 import { installSubjectGovernment } from "../../src/sim/subject-governments";
 import { setSubjectFoodLevy } from "../../src/sim/subject-food-levy";
@@ -101,11 +102,76 @@ test("a food deficit triggers an automatic cash purchase", () => {
   assert.equal(shipment?.offeredResource, "food");
   assert.equal(shipment?.requestedResource, "cash");
   assert.equal(shipment?.status, "in-transit");
+  assert(!shipment.humanitarian);
   const previous = buyer.food!.stock;
   world.time.slowTick = shipment.arrivesAtSlowTick;
   updateInternationalTrade(world);
   assert.equal(shipment.status, "delivered");
   assert.equal(buyer.food!.stock, previous + shipment.offeredAmount);
+});
+
+function reliefScene() {
+  const { world, seller, buyer } = tradingScene();
+  getRelation(world, seller.id, buyer.id).treaties.push({ type: "alliance", expiresAtSlowTick: 300 });
+  buyer.treasury!.balance = buyer.food!.stock = buyer.food!.harvest = 0;
+  seller.food!.stock = seller.food!.demand * 10 + buyer.food!.demand * FAMINE_THRESHOLD;
+  for (const [id, owner] of getOwnerByMesoId(world)) {
+    if (owner === buyer.id) world.agriculturalLand?.set(id, { arableShare: 0, harvest: 0 });
+  }
+  return { world, seller, buyer };
+}
+
+test("AI relief sustains rations in a cashless ally and conserves dispatched grain", () => {
+  const { world, seller, buyer } = reliefScene();
+  const stock = seller.food!.stock;
+  world.time.slowTick = FOOD_INTERVAL;
+  updateFoodTrade(world);
+  updateFoodTrade(world);
+  const deals = world.internationalTrade?.deals.filter((deal) => deal.buyerId === buyer.id);
+  assert.equal(deals?.length, 1);
+  const shipment = deals![0]!;
+  assert(shipment.humanitarian);
+  assert.equal(shipment.sellerId, seller.id);
+  assert.equal(shipment.offeredAmount, buyer.food!.demand * FAMINE_THRESHOLD);
+  assert.equal(seller.food!.stock + shipment.offeredAmount, stock);
+  const cash = seller.treasury!.balance;
+  world.time.slowTick = shipment.arrivesAtSlowTick;
+  updateInternationalTrade(world);
+  assert.equal(buyer.food!.stock, shipment.offeredAmount);
+  assert.equal(seller.treasury!.balance, cash);
+  assert.equal(buyer.treasury!.balance, 0);
+
+  const control = reliefScene();
+  const start = Math.ceil(shipment.arrivesAtSlowTick / FOOD_INTERVAL) * FOOD_INTERVAL;
+  for (let offset = 0; offset < FAMINE_THRESHOLD; offset++) {
+    world.time.slowTick = control.world.time.slowTick = start + offset * FOOD_INTERVAL;
+    updateFoodSupply(world);
+    updateFoodSupply(control.world);
+    assert.equal(buyer.food!.rationCoverage, 1);
+  }
+  assert.equal(buyer.food!.deaths, 0);
+  assert(control.buyer.food!.deaths > 0);
+});
+
+test("AI relief respects a protected grain reserve, embargoes and manual donor control", () => {
+  for (const restriction of ["protected reserve", "embargo", "manual", "trade only"] as const) {
+    const { world, seller, buyer } = reliefScene();
+    if (restriction === "protected reserve") {
+      seller.food!.protectGrainExports = true;
+      seller.food!.stock = seller.food!.demand * 6;
+    } else if (restriction === "embargo") assert(setTradeEmbargo(world, seller.id, buyer.id, true));
+    else if (restriction === "manual") assert(enterPlayerNation(world, seller.id));
+    else {
+      const relation = getRelation(world, seller.id, buyer.id);
+      relation.treaties = relation.treaties.filter((treaty) => treaty.type !== "alliance");
+      relation.opinion = 25;
+    }
+    const stock = seller.food!.stock;
+    world.time.slowTick = FOOD_INTERVAL;
+    updateFoodTrade(world);
+    assert.equal(seller.food!.stock, stock, restriction);
+    assert(!world.internationalTrade?.deals.some((deal) => deal.humanitarian && deal.sellerId === seller.id), restriction);
+  }
 });
 
 test("subject requisitions transfer a share of the harvest and stop under embargo", () => {

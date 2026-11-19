@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getDiplomacyState, getRelation, proposeTreaty } from "../../src/sim/diplomacy";
-import { findTradeRoute, getInternationalTradeState, proposeResourceTrade, updateInternationalTrade } from "../../src/sim/international-trade";
+import { findTradeRoute, getInternationalTradeState, proposeResourceTrade, sendGrainAid, updateInternationalTrade } from "../../src/sim/international-trade";
 import { getAdjacentNationPairs } from "../../src/sim/world-cache";
 import { updateSupplyAssessment } from "../../src/sim/supply-assessment";
 import { declareWar } from "../../src/sim/war-state";
@@ -88,6 +88,13 @@ test("maritime trade pays charter fuel and returns cargo when a third-party navy
   updateSupplyAssessment(world);
   const relation = getRelation(world, a.id, b.id); relation.opinion = 80; relation.trust = 80;
   assert(proposeTreaty(world, a.id, b.id, "trade"));
+  assert(findTradeRoute(world, a.id, b.id)?.maritime);
+  a.food!.stock = a.food!.demand * 10 + 5;
+  a.resources.fuel = 0;
+  b.resources.fuel = 100;
+  assert(!sendGrainAid(world, a.id, b.id, 5));
+  assert.equal(b.resources.fuel, 100);
+  a.resources.fuel = 100;
   assert(proposeResourceTrade(world, a.id, b.id, "steel", 12, "weapons", 5));
   assert(a.resources.fuel < 100);
   const paidFuel = a.resources.fuel;

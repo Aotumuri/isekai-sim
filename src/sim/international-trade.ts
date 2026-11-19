@@ -163,7 +163,8 @@ function dispatchTrade(world: WorldState, sellerId: NationId, buyerId: NationId,
   const route = findTradeRoute(world, sellerId, buyerId);
   if (!route) return false;
   const shippingFuel = shippingFuelFor(route);
-  const carrier = [seller, buyer].find((nation) => nation.resources.fuel -
+  const carriers = humanitarian ? [seller] : [seller, buyer];
+  const carrier = carriers.find((nation) => nation.resources.fuel -
     (nation.id === sellerId && offeredResource === "fuel" ? offeredAmount : nation.id === buyerId && requestedResource === "fuel" ? requestedAmount : 0) >= shippingFuel);
   if (shippingFuel > 0 && !carrier) return false;
   changeTradeStock(seller, offeredResource, -offeredAmount); changeTradeStock(buyer, requestedResource, -requestedAmount);
@@ -180,7 +181,8 @@ function rerouteTrade(world: WorldState, deal: TradeDeal, seller: NationRuntime,
   const route = findTradeRoute(world, seller.id, buyer.id);
   if (!route || !isTradeRouteOpen(world, seller.id, buyer.id, route)) return false;
   const fuel = shippingFuelFor(route);
-  const carrier = [seller, buyer].find((nation) => nation.resources.fuel >= fuel);
+  const carriers = deal.humanitarian ? [seller] : [seller, buyer];
+  const carrier = carriers.find((nation) => nation.resources.fuel >= fuel);
   if (fuel > 0 && !carrier) return false;
   if (fuel > 0 && carrier) {
     changeResource(carrier, "fuel", -fuel);
