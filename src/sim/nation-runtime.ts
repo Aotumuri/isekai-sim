@@ -49,6 +49,7 @@ export function createNationResourceFlow(): NationResourceFlow {
 }
 
 export type NationRuntime = Nation & {
+  treatyCredibility?: { risk: number; lastIncidentAt: number };
   food?: NationalFoodSupply;
   treasury?: NationalTreasury;
   displacementOrder?: DisplacementOrder;

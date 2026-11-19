@@ -4,6 +4,7 @@ import { changeResource, resourceReserve } from "./international-trade";
 import type { NationRuntime } from "./nation-runtime";
 import { isNationActive } from "./nation-active";
 import { recordSimulationEvent } from "./simulation-settings";
+import { recordTreatyIncident } from "./treaty-credibility";
 import { findWar } from "./war-state";
 import type { WorldState } from "./world-state";
 import type { NationId } from "../worldgen/nation";
@@ -103,6 +104,7 @@ function settlePayments(world: WorldState, { payer, resource, stock, due }: Paym
       const relation = getRelation(world, payer.id, recipient.id);
       relation.trust = Math.max(0, relation.trust - 3 * missed);
       relation.grievance = Math.min(100, relation.grievance + 2 * missed);
+      recordTreatyIncident(payer, now, 1.5 * missed);
     }
     recordSimulationEvent(world, { category: "diplomacy", nationIds: [payer.id, recipient.id],
       message: `${payer.id} delivered ${paid.toFixed(1)} / ${treaty.amount} ${resource} in reparations to ${recipient.id}.${missed > 1e-8 ? " The shortfall damaged trust." : ""}` });

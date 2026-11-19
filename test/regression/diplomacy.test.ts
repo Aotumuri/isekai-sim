@@ -3,6 +3,7 @@ import test from "node:test";
 import { breakTreaty, getDiplomacyState, getInfluence, getRelation, hasTreaty,
   improveRelations, isDiplomaticallyProtected, proposeTreaty, updateDiplomaticRelations } from "../../src/sim/diplomacy";
 import { declareWar } from "../../src/sim/war-state";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 import { createSocietyWorld } from "../helpers/society-world";
 
 function friendlyWorld() {
@@ -37,6 +38,25 @@ test("breaking a treaty damages trust and creates a diplomatic cooling period", 
   assert(relation.grievance > 0);
   assert(relation.cooldownUntilSlowTick > world.time.slowTick);
   assert.equal(hasTreaty(world, a, b, "trade"), false);
+});
+
+test("new partners demand more trust after a treaty breach, then relax as it ages", () => {
+  const world = createFixedSocietyWorld();
+  const [a, b, c] = world.nations.map(({ id }) => id);
+  assert(a && b && c);
+  Object.assign(getRelation(world, a, b), { opinion: 80, trust: 80 });
+  getDiplomacyState(world).influenceByNationId.set(c, 50);
+  assert(proposeTreaty(world, a, b, "alliance"));
+  assert(breakTreaty(world, a, b, "alliance"));
+  const newcomer = getRelation(world, a, c);
+  Object.assign(newcomer, { opinion: 80, trust: 62 });
+  const influence = getInfluence(world, c);
+  assert(!proposeTreaty(world, c, a, "alliance"));
+  assert.equal(getInfluence(world, c), influence);
+  assert(proposeTreaty(world, c, a, "non-aggression"));
+  newcomer.trust = 62;
+  world.time.slowTick = 600;
+  assert(proposeTreaty(world, c, a, "alliance"));
 });
 
 test("diplomatic missions cannot improve wartime relations or spend nonexistent influence", () => {

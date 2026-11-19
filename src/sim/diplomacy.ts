@@ -9,6 +9,8 @@ import type { NationId } from "../worldgen/nation";
 import { getNationCharacter } from "./nation-character";
 import { isNationPresent } from "./nation-active";
 import { getWarDeclarationMode, hasPoliticalTurbulence, recordSimulationEvent } from "./simulation-settings";
+import type { NationRuntime } from "./nation-runtime";
+import { recordTreatyIncident, treatyRisk } from "./treaty-credibility";
 import { getAdjacentNationPairs } from "./world-cache";
 import { buildWarAdjacency, findWar, isAtWar, normalizeWarPair } from "./war-state";
 import type { WorldState } from "./world-state";
@@ -120,17 +122,25 @@ export function spendInfluence(world: WorldState, nationId: NationId, amount: nu
   return true;
 }
 
+function requiredTreatyTrust(type: Exclude<TreatyType, "truce">, a: NationRuntime, b: NationRuntime, now: number): number {
+  const risk = Math.max(treatyRisk(a, now), treatyRisk(b, now));
+  return type === "alliance" ? 55 + risk / 2 : type === "trade" ? 30 + risk / 4 : 30;
+}
+
 export function proposeTreaty(world: WorldState, proposerId: NationId, partnerId: NationId,
   type: Exclude<TreatyType, "truce">): boolean {
   if (getWarDeclarationMode(world) !== "diplomacy" || proposerId === partnerId) return false;
-  if (![proposerId, partnerId].every((id) => world.nations.some((nation) => nation.id === id && isNationPresent(world, nation)))) return false;
+  const proposer = world.nations.find(({ id }) => id === proposerId);
+  const partner = world.nations.find(({ id }) => id === partnerId);
+  if (!proposer || !partner || !isNationPresent(world, proposer) || !isNationPresent(world, partner)) return false;
   if (isAtWar(proposerId, partnerId, buildWarAdjacency(world.wars)) || hasExileConflict(world, proposerId, partnerId) || hasTreaty(world, proposerId, partnerId, type)) return false;
   if (type === "alliance" && (getSubjectOverlord(world, proposerId) || getSubjectOverlord(world, partnerId))) return false;
   const relation = getRelation(world, proposerId, partnerId);
   if (type !== "non-aggression" && Math.max(getPublicOutrage(world, proposerId, partnerId), getPublicOutrage(world, partnerId, proposerId)) >= 55) return false;
   const threshold = type === "alliance" ? 55 : type === "non-aggression" ? 20 : 10;
   const cost = type === "alliance" ? 20 : type === "non-aggression" ? 12 : 8;
-  if (relation.crisis || relation.opinion < threshold || relation.trust < (type === "alliance" ? 55 : 30) ||
+  const trustNeeded = requiredTreatyTrust(type, proposer, partner, world.time.slowTick);
+  if (relation.crisis || relation.opinion < threshold || relation.trust < trustNeeded ||
     !spendInfluence(world, proposerId, cost)) return false;
   relation.treaties.push({ type, expiresAtSlowTick: world.time.slowTick + (type === "alliance" ? 600 : 400) });
   relation.trust = clamp(relation.trust + 5, 0, 100);
@@ -186,12 +196,14 @@ export function breakTreaty(world: WorldState, breakerId: NationId, partnerId: N
   relation.grievance = Math.min(100, relation.grievance + 20);
   relation.tension = Math.min(100, relation.tension + 15);
   relation.cooldownUntilSlowTick = world.time.slowTick + 40;
+  const breaker = world.nations.find(({ id }) => id === breakerId);
+  if (breaker) recordTreatyIncident(breaker, world.time.slowTick, type === "alliance" ? 25 : 15);
   // Breaking a promise is visible to other partners too.
   for (const other of getDiplomacyState(world).relations.values()) {
     if (other !== relation && (other.nationAId === breakerId || other.nationBId === breakerId)) other.trust = Math.max(0, other.trust - 5);
   }
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [breakerId, partnerId],
-    message: `${breakerId} broke the ${type} treaty with ${partnerId}.` });
+    message: `${breakerId} broke the ${type} treaty with ${partnerId}, damaging its credibility with other governments.` });
   return true;
 }
 
@@ -214,8 +226,8 @@ export function updateDiplomaticRelations(world: WorldState): void {
   const state = getDiplomacyState(world), now = world.time.slowTick;
   if (now - state.lastRelationsSlowTick < 10) return;
   state.lastRelationsSlowTick = now;
-  const active = new Set(world.nations.filter((nation) => isNationPresent(world, nation)).map((nation) => nation.id));
-  for (const id of active) state.influenceByNationId.set(id, Math.min(100, getInfluence(world, id) + 3));
+  const active = new Map(world.nations.filter((nation) => isNationPresent(world, nation)).map((nation) => [nation.id, nation]));
+  for (const id of active.keys()) state.influenceByNationId.set(id, Math.min(100, getInfluence(world, id) + 3));
   const contacts = [...getAdjacentNationPairs(world), ...world.strategicThreatObservation.exposures.map((exposure) =>
     [exposure.observerNationId, exposure.threatNationId] as [NationId, NationId])];
   for (const [a, b] of contacts) if (active.has(a) && active.has(b) && a !== b) getRelation(world, a, b);
@@ -225,7 +237,8 @@ export function updateDiplomaticRelations(world: WorldState): void {
   const player = getManualGovernmentId(world);
   for (const [key, relation] of state.relations) {
     const a = relation.nationAId, b = relation.nationBId;
-    if (!active.has(a) || !active.has(b)) { state.relations.delete(key); continue; }
+    const nationA = active.get(a), nationB = active.get(b);
+    if (!nationA || !nationB) { state.relations.delete(key); continue; }
     const expired = relation.treaties.filter((treaty) => treaty.expiresAtSlowTick <= now);
     for (const treaty of expired) recordSimulationEvent(world, { category: "diplomacy", nationIds: [a, b],
       message: `${a} and ${b}: ${treaty.type} expired.` });
@@ -252,8 +265,9 @@ export function updateDiplomaticRelations(world: WorldState): void {
       (relation.opinion > 20 ? 1.5 : 0) + relation.grievance * 0.03 + distrust * 0.35, 0, 100);
     if (relation.crisis) continue;
     if (a === player || b === player) continue;
-    if (relation.opinion >= 55 && relation.trust >= 55) proposeTreaty(world, a, b, "alliance");
-    else if (cooperation > 0.6 && relation.opinion >= 20) proposeTreaty(world, a, b, "non-aggression");
+    if (relation.opinion >= 55 && relation.trust >= requiredTreatyTrust("alliance", nationA, nationB, now)) {
+      proposeTreaty(world, a, b, "alliance");
+    } else if (cooperation > 0.6 && relation.opinion >= 20) proposeTreaty(world, a, b, "non-aggression");
     const otherCommitments = (wars.has(a) || rebuilding.has(a)) && (wars.has(b) || rebuilding.has(b));
     if ((commonEnemy || otherCommitments) && !areSubjectPartners(world, a, b) &&
       relation.treaties.some((treaty) => treaty.type === "truce" && treaty.negotiatedPeace && treaty.expiresAtSlowTick - now <= TRUCE_EXTENSION.negotiationWindow) &&
