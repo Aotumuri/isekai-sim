@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { updateBattles } from "../../src/sim/battles";
 import { createUnitForType } from "../../src/sim/create-units";
-import { advanceDefeatedWithdrawals, recoverDefeatedFormations, repatriatePrisoners } from "../../src/sim/defeated-formations";
+import { advanceDefeatedWithdrawals, prisonerGroupKey, recoverDefeatedFormations, repatriatePrisoners } from "../../src/sim/defeated-formations";
 import { startPlayerWar } from "../../src/sim/diplomatic-crises";
 import { allMobilizedUnits } from "../../src/sim/mobilization";
 import { repositionUnits } from "../../src/sim/nation/reposition-units";
 import { updateOccupation } from "../../src/sim/occupation";
 import { issuePlayerLandOrder } from "../../src/sim/player-land-orders";
-import { enterPlayerNation } from "../../src/sim/player-nation";
+import { enterPlayerNation, leavePlayerNation } from "../../src/sim/player-nation";
+import { updatePrisonerExchanges } from "../../src/sim/prisoner-exchange";
 import { createUnitId } from "../../src/sim/unit";
 import { acceptPeaceOffer, proposePeaceTerms, whitePeaceTerms } from "../../src/sim/war-negotiations";
 import { createFixedSocietyWorld, fixedSocietyDistrict } from "../helpers/fixed-society-world";
@@ -34,6 +35,39 @@ function createBattlefield(blocked: boolean, mutual = false, enabled = true) {
   }
   return { world, home, enemy, front, rally, defender, attacker };
 }
+
+test("wartime exchanges need both governments' consent and return equal manpower once", () => {
+  const { world, home, enemy } = createBattlefield(true);
+  updateBattles(world);
+  const state = world.defeatedFormations!, war = world.wars[0]!;
+  const homeKey = prisonerGroupKey(home.id, enemy.id, enemy.id);
+  state.prisoners.set(homeKey, { captor: home.id, belligerent: enemy.id, home: enemy.id, manpower: 300 });
+  state.capturedManpower += 300;
+  const third = world.nations[2];
+  const volunteerKey = prisonerGroupKey(home.id, enemy.id, third.id);
+  state.prisoners.set(volunteerKey, { captor: home.id, belligerent: enemy.id, home: third.id, manpower: 50 });
+  state.capturedManpower += 50;
+  home.character = { doctrine: "merchant", aggression: 0.3, cooperation: 0.8, innovation: 0.5, thrift: 0.5 };
+  enemy.character = { ...home.character, cooperation: 0.2 };
+  world.time.fastTick = 300;
+  world.time.slowTick = 30;
+  const before = [home.resources.manpower, enemy.resources.manpower];
+  updatePrisonerExchanges(world);
+  assert.equal(state.repatriatedManpower, 0);
+  leavePlayerNation(world);
+  updatePrisonerExchanges(world);
+  assert.equal(state.repatriatedManpower, 0);
+  war.exhaustionByNationId = new Map([[enemy.id, { fatigue: 45, countedCasualties: 0 }]]);
+  updatePrisonerExchanges(world);
+  updatePrisonerExchanges(world);
+  assert.equal(world.wars[0], war);
+  assert.equal(state.repatriatedManpower, 600);
+  assert.deepEqual([home.resources.manpower, enemy.resources.manpower], before.map((manpower) => manpower + 300));
+  assert.equal(state.prisoners.get(volunteerKey)?.manpower, 50);
+  assert.equal(state.prisoners.has(homeKey), false);
+  assert.equal(state.capturedManpower, state.repatriatedManpower +
+    [...state.prisoners.values()].reduce((sum, group) => sum + group.manpower, 0));
+});
 
 test("defeat allows occupation while survivors take time to withdraw and regain manual control", () => {
   const { world, home, enemy, front, rally, defender, attacker } = createBattlefield(false);

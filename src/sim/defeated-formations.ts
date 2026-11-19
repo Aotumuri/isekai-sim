@@ -3,6 +3,7 @@ import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { getMoveTicksPerRegion } from "./movement";
 import { isNationActive } from "./nation-active";
+import type { NationRuntime } from "./nation-runtime";
 import { recordSimulationEvent } from "./simulation-settings";
 import type { UnitId, UnitState } from "./unit";
 import { observeCampaignFormationRemoval } from "./war-campaign/battle-cost-observation";
@@ -23,6 +24,10 @@ interface PrisonerGroup {
   home: NationId;
   manpower: number;
   releaseAt?: number;
+}
+
+export function prisonerGroupKey(captor: NationId, belligerent: NationId, home: NationId): string {
+  return `${captor}:${belligerent}:${home}`;
 }
 
 export interface DefeatedFormations {
@@ -92,7 +97,7 @@ function recordLoss(world: WorldState, unit: UnitState, captor?: NationId): void
     return;
   }
   const home = unit.volunteerOriginId ?? unit.exileOriginId ?? unit.nationId;
-  const key = `${captor}:${unit.nationId}:${home}`;
+  const key = prisonerGroupKey(captor, unit.nationId, home);
   const group = state.prisoners.get(key) ?? { captor, belligerent: unit.nationId, home, manpower: 0 };
   group.manpower += unit.manpower;
   group.releaseAt = undefined;
@@ -168,6 +173,13 @@ export function recoverDefeatedFormations(world: WorldState): void {
   if (ready.length) world.units = [...world.units, ...ready];
 }
 
+export function creditReturnedPrisoners(state: DefeatedFormations, nation: NationRuntime, manpower: number): void {
+  nation.resources.manpower += manpower;
+  nation.resourceFlow.income.manpower += manpower;
+  nation.resourceFlow.delta.manpower += manpower;
+  state.repatriatedManpower += manpower;
+}
+
 export function repatriatePrisoners(world: WorldState): void {
   const state = world.defeatedFormations;
   if (!state?.prisoners.size) return;
@@ -183,10 +195,7 @@ export function repatriatePrisoners(world: WorldState): void {
     if (now < group.releaseAt) continue;
     const home = active.get(group.home) ?? active.get(group.belligerent);
     if (home) {
-      home.resources.manpower += group.manpower;
-      home.resourceFlow.income.manpower += group.manpower;
-      home.resourceFlow.delta.manpower += group.manpower;
-      state.repatriatedManpower += group.manpower;
+      creditReturnedPrisoners(state, home, group.manpower);
       recordSimulationEvent(world, { category: "military", nationIds: [group.captor, home.id],
         message: `${Math.round(group.manpower)} prisoners returned from ${group.captor} to the manpower pool of ${home.id}.` });
     } else {
