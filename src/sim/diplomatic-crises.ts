@@ -1,5 +1,6 @@
 import { adoptTerritorialClaim, deferTerritorialClaim, getWarTerritorialDemand, recordTerritorialClaimOutcome } from "./territorial-claim-objective";
 import { getElectoralClaimPressure } from "./politics";
+import { getNationIdeology } from "./nation-identity";
 import { getManualGovernmentId, getPlayerNation } from "./player-nation";
 import { assessCampaignOpening } from "./war-campaign/opening-intent";
 import { getCrisisDeploymentReadiness } from "./crisis-deployment";
@@ -183,6 +184,9 @@ function createDiplomaticWar(world: WorldState, aggressorId: NationId, targetId:
   const war = declareWar(world.wars, aggressorId, targetId, world.time.fastTick);
   if (!war) return false;
   war.cause = cause;
+  if (cause === "diplomatic-crisis" || cause === "player-declaration") {
+    war.openingAggressorIdeologyId = getNationIdeology(world, aggressorId).id;
+  }
   const relation = getRelation(world, aggressorId, targetId);
   if (relation.crisis?.aggressorId === aggressorId && relation.crisis.regionIds) {
     war.ultimatumRegionIds = [...relation.crisis.regionIds];

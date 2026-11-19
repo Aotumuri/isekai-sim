@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { startPlayerWar } from "../../src/sim/diplomatic-crises";
+import { concludePeace } from "../../src/sim/diplomatic-peace";
 import { getDomesticUnrest } from "../../src/sim/domestic-unrest";
 import { updateCivilWar } from "../../src/sim/civil-war";
 import { declareWar } from "../../src/sim/war-state";
@@ -7,7 +9,34 @@ import { withMutedSimulationLogs } from "../helpers/muted-logs";
 import { getIdeologicalAffinity } from "../../src/sim/ideology-relations";
 import { getNationCharacter } from "../../src/sim/nation-character";
 import { getNationalPolitics, increasePoliticalSupport, updateNationalPolitics } from "../../src/sim/politics";
+import { enterPlayerNation } from "../../src/sim/player-nation";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 import { createSocietyWorld } from "../helpers/society-world";
+
+test("an expensive failed offensive can change the next election without replacing the sitting government", () => {
+  const world = createFixedSocietyWorld();
+  world.settings!.politicalTurbulenceEnabled = true;
+  const [attacker, defender] = world.nations;
+  attacker.ideologyId = "communism";
+  const politics = getNationalPolitics(world, attacker);
+  politics.system = "democracy";
+  politics.coalition = ["communism", "cohesionism"];
+  politics.support = new Map([["communism", 46], ["capitalism", 44], ["cohesionism", 10]]);
+  politics.seats = new Map(politics.support);
+  assert(enterPlayerNation(world, attacker.id));
+  assert(startPlayerWar(world, defender.id));
+  const war = world.wars[0]!;
+  assert.equal(war.openingAggressorIdeologyId, "communism");
+  war.contributionByNationId.set(defender.id, 4_800);
+  assert(concludePeace(world, attacker.id, defender.id));
+  assert(!concludePeace(world, attacker.id, defender.id));
+  assert.deepEqual([...politics.support.values()], [42, 48, 10]);
+  assert.deepEqual([...politics.seats.values()], [46, 44, 10]);
+  assert.equal(attacker.ideologyId, "communism");
+  world.time.slowTick = politics.nextMandateAt;
+  updateNationalPolitics(world);
+  assert.equal(attacker.ideologyId, "capitalism");
+});
 
 test("elections turn support into a 100-seat majority coalition and change national policy", () => {
   const world = createSocietyWorld();

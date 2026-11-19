@@ -11,6 +11,7 @@ import { isNationActive } from "./nation-active";
 import { updateOccupation } from "./occupation";
 import { getWarDeclarationMode, recordSimulationEvent } from "./simulation-settings";
 import { getOwnerByMesoId } from "./world-cache";
+import { recordWarAccountability } from "./war-accountability";
 import { buildWarAdjacency, findWar, getWarCasualties, isAtWar, type WarState } from "./war-state";
 import type { WorldState } from "./world-state";
 
@@ -23,7 +24,8 @@ export function getWarFatigue(world: WorldState, a: NationId, b: NationId): numb
 }
 
 /** Status-quo peace: occupied land and embarked troops are returned by agreement. */
-export function concludePeace(world: WorldState, a: NationId, b: NationId, reason = "negotiated settlement"): boolean {
+export function concludePeace(world: WorldState, a: NationId, b: NationId, reason = "negotiated settlement",
+  aggressorSecuredGains = false): boolean {
   if (getWarDeclarationMode(world) !== "diplomacy") return false;
   const war = findWar(world.wars, a, b);
   if (!war) return false;
@@ -66,6 +68,7 @@ export function concludePeace(world: WorldState, a: NationId, b: NationId, reaso
   getDiplomacyState(world).peaceAgreements += 1;
   world.warNegotiations?.active.delete(warFatigueKey(war));
   relieveUnrestAfterPeace(world, a); relieveUnrestAfterPeace(world, b);
+  recordWarAccountability(world, war, aggressorSecuredGains);
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [a, b],
     message: `${a} and ${b} signed peace (${reason}); occupations and expeditionary troops returned.` });
   return true;

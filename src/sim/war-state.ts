@@ -7,6 +7,7 @@ import type { MacroRegionId } from "../worldgen/macro-region";
 export type WarId = string & { __brand: "WarId" };
 
 export interface WarState {
+  openingAggressorIdeologyId?: string;
   campaignIntent?: CampaignOpeningIntent;
   claimObjective?: TerritorialClaimObjective;
   cause?: "player-declaration" | "diplomatic-crisis" | "defensive-alliance" | "faction-obligation" | "allied-request" | "subject-uprising";
