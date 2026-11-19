@@ -6,7 +6,7 @@ import { getCampaignObjectives } from "./campaign-objectives";
 import { campaignContinuationPressure, campaignPeaceValue, campaignPrefersSettlement } from "./war-campaign/peace-guidance";
 import { PEACE_OUTLOOK_LIMIT, PEACE_OUTLOOK_WEIGHT } from "./peace-outlook";
 import { getManualGovernmentId } from "./player-nation";
-import { isValidResourceReparation, REPARATION_INTERVAL, REPARATION_RESOURCES, resourceReparationBurden, type ResourceReparation } from "./resource-reparations";
+import { chooseResourceReparation, isValidResourceReparation, REPARATION_INTERVAL, resourceReparationBurden, type ResourceReparation } from "./resource-reparations";
 import { foodReserveSeconds } from "./food-supply";
 import { getNationalTerritorialValue, getTerritorialValue } from "./territorial-value";
 import { getSeparatePeaceIssue } from "./separate-peace";
@@ -242,9 +242,8 @@ function reviseTerms(world: WorldState, negotiation: WarNegotiation, proposer: N
     }
   }
   if (advantage > 0.3 && !terms.resourceReparation && !terms.offeredWeapons && !terms.offeredRegionIds.length) {
-    const resource = REPARATION_RESOURCES.find((key) =>
-      (country.resources[key] ?? Infinity) < 12 && (opponent.resources[key] ?? 0) >= 20);
-    if (resource) return { ...terms, resourceReparation: { resource, amount: 3 } };
+    const reparation = chooseResourceReparation(world, country, opponent, terms.truceSeconds);
+    if (reparation) return { ...terms, resourceReparation: reparation };
   }
   return terms;
 }

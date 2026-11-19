@@ -9,7 +9,7 @@ import { getRelation, hasTreaty } from "../../src/sim/diplomacy";
 import { createFaction, getFactionState, getNationFaction, leaveFaction } from "../../src/sim/factions";
 import { getNationIdeology } from "../../src/sim/nation-identity";
 import { openPeaceConference, respondToPeaceConference, updatePeaceConferences } from "../../src/sim/peace-conference";
-import { REPARATION_INTERVAL, updateResourceReparations } from "../../src/sim/resource-reparations";
+import { chooseResourceReparation, REPARATION_INTERVAL, updateResourceReparations } from "../../src/sim/resource-reparations";
 import { createSimulationSettings } from "../../src/sim/simulation-settings";
 import { acceptPeaceOffer, assessPeaceOffer, proposePeaceTerms, whitePeaceTerms } from "../../src/sim/war-negotiations";
 import { declareWar, findWar } from "../../src/sim/war-state";
@@ -164,4 +164,18 @@ test("an existing resource pledge raises the AI's cost of a second peace deal", 
   assert(proposePeaceTerms(world, a.id, c.id, term));
   assert(acceptPeaceOffer(world, c.id, a.id));
   assert(Math.abs(penalty() - 25) < 1e-9);
+});
+
+test("reparations planners choose a useful installment and scale it down for existing claims", () => {
+  const { world, a, b, c } = scene();
+  Object.assign(b.resources, { steel: 100, copper: 100, tungsten: 100, rubber: 100, fuel: 0 });
+  c.resources.fuel = 180;
+  b.resourceFlow.usage.fuel = 5;
+  const proposed = chooseResourceReparation(world, b, c, 300);
+  assert.deepEqual(proposed, { resource: "fuel", amount: 10 });
+  assert(proposePeaceTerms(world, a.id, c.id, { ...whitePeaceTerms(), resourceReparation: proposed }));
+  assert(acceptPeaceOffer(world, c.id, a.id));
+  assert.deepEqual(chooseResourceReparation(world, b, c, 300), { resource: "fuel", amount: 5 });
+  b.resourceFlow.productionSurplus = { fuel: 1 };
+  assert.equal(chooseResourceReparation(world, b, c, 300), undefined);
 });
