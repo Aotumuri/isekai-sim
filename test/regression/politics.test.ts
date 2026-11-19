@@ -99,7 +99,7 @@ test("a monarchy's revolutionary opposition establishes its own parliamentary go
   parent.warCooperation = 0;
   const unrest = getDomesticUnrest(world, parent.id);
   unrest.pressure = 100;
-  unrest.lowSupportSeconds = 300;
+  unrest.lowSupportSlowTicks = 300;
 
   const count = world.nations.length;
   withMutedSimulationLogs(() => updateCivilWar(world));

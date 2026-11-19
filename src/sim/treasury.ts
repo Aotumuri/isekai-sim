@@ -1,3 +1,4 @@
+import { daysToSlowTicks } from "./time";
 import { getManualGovernmentId } from "./player-nation";
 import type { NationId } from "../worldgen/nation";
 import { isNationActive } from "./nation-active";
@@ -23,7 +24,7 @@ export interface NationalTreasury {
   spent: Record<SpendingCategory, number>;
 }
 
-export const TAX_COLLECTION_INTERVAL = 10;
+export const TAX_COLLECTION_INTERVAL = daysToSlowTicks(100);
 
 function populationByNation(world: WorldState) {
   const totals = new Map<NationId, { population: number; taxablePopulation: number }>();

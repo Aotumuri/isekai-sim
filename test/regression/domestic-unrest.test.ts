@@ -30,7 +30,7 @@ test("parent and rebel governments receive a ten-minute revolution cooldown", ()
 test("time spent inside a revolution cooldown cannot count toward a new crisis", () => {
   const { world, nation, enemy } = scene(); recordRevolution(world, nation.id, enemy.id);
   world.time.slowTick = 899; updateDomesticUnrest(world);
-  assert.equal(getDomesticUnrest(world, nation.id).lowSupportSeconds, 299); assert(!canRevolt(world, nation.id));
+  assert.equal(getDomesticUnrest(world, nation.id).lowSupportSlowTicks, 299); assert(!canRevolt(world, nation.id));
   world.time.slowTick = 900; updateDomesticUnrest(world); assert(canRevolt(world, nation.id));
 });
 

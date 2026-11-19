@@ -1,8 +1,9 @@
+import { slowTicksToDays } from "../sim/time";
 import { expandGrainStorage, grainStorageCost, GRAIN_STORAGE_MAX } from "../sim/grain-storage";
 import { canIrrigate, installIrrigation, IRRIGATION_COST } from "../sim/irrigation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import { RATION_POLICIES, setFoodAsylum, setGrainExportProtection, setRationPolicy, type RationPolicy } from "../sim/ration-policy";
-import { FAMINE_THRESHOLD, FOOD_INTERVAL, foodReserveSeconds, foodStorageLimit } from "../sim/food-supply";
+import { FAMINE_THRESHOLD, FOOD_INTERVAL, foodReserveDays, foodStorageLimit } from "../sim/food-supply";
 import { hasTradeAgreement, proposeResourceTrade, resourceReserve, sendGrainAid, TRADE_RESOURCE_VALUES } from "../sim/international-trade";
 import { isNationActive } from "../sim/nation-active";
 import type { NationRuntime } from "../sim/nation-runtime";
@@ -30,7 +31,7 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
     <h2>Irrigation</h2><label>Farm district <select data-food-control="irrigation"></select></label>
     <button type="button" data-food-action="irrigate">Build irrigation</button>
     <p class="society-note">${IRRIGATION_COST.cash} cash and ${IRRIGATION_COST.steel} steel · +40% harvest in the selected district. Requires workable land, control and supply.</p>
-    <label><input type="checkbox" data-food-control="export-protection"> Protect 60 seconds of grain from export</label>
+    <label><input type="checkbox" data-food-control="export-protection"> Protect 600 days of grain from export</label>
     <h2>Grain trade with selected partner</h2>
     <p class="society-note">Governments with a looming shortage look for suppliers automatically. Shipments require an agreement, open route and exportable stock.</p>
     <label>Grain quantity <input type="number" min="1" max="1000" step="1" value="20" data-food-control="amount"></label>
@@ -64,7 +65,7 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
     storage.disabled = !domestic || level >= GRAIN_STORAGE_MAX || (nation.treasury?.balance ?? 0) < storageCost.cash ||
       nation.resources.steel < storageCost.steel;
     view("storage").textContent = level >= GRAIN_STORAGE_MAX ? "Strategic grain storage fully expanded."
-      : `Level ${level}/${GRAIN_STORAGE_MAX} · ${storageCost.cash} cash + ${storageCost.steel} steel for 60 more seconds of full-ration capacity.`;
+      : `Level ${level}/${GRAIN_STORAGE_MAX} · ${storageCost.cash} cash + ${storageCost.steel} steel for 60 more days of full-ration capacity.`;
     const key = `${nation.id}:${world.territoryVersion}:${world.irrigatedDistricts?.size ?? 0}`;
     if (key !== irrigationKey) {
       irrigationKey = key;
@@ -85,10 +86,10 @@ export function attachFoodControls(root: HTMLElement, world: WorldState, selecte
     rations.value = food?.rationPolicy ?? "normal";
     if (domestic) {
       const transfer = food.levy ?? 0;
-      const seconds = foodReserveSeconds(food);
-      view("balance").textContent = `Per ${FOOD_INTERVAL}s · Harvest ${quantity(food.harvest)} · Rations ${quantity(food.demand)} · Net requisitions ${transfer >= 0 ? "+" : ""}${quantity(transfer)}.`;
-      const status = food.shortageCycles >= FAMINE_THRESHOLD ? "Famine" : food.rationCoverage + 1e-8 < RATION_POLICIES[food.rationPolicy ?? "normal"] ? "Food shortage" : Number.isFinite(seconds) ? "Using reserves" : "Rations met";
-      view("status").textContent = `${status} · Last ration coverage ${Math.round(food.rationCoverage * 100)}%${Number.isFinite(seconds) ? ` · Reserves last about ${seconds}s at the current deficit` : ""}.`;
+      const days = foodReserveDays(food);
+      view("balance").textContent = `Per ${slowTicksToDays(FOOD_INTERVAL)} days · Harvest ${quantity(food.harvest)} · Rations ${quantity(food.demand)} · Net requisitions ${transfer >= 0 ? "+" : ""}${quantity(transfer)}.`;
+      const status = food.shortageCycles >= FAMINE_THRESHOLD ? "Famine" : food.rationCoverage + 1e-8 < RATION_POLICIES[food.rationPolicy ?? "normal"] ? "Food shortage" : Number.isFinite(days) ? "Using reserves" : "Rations met";
+      view("status").textContent = `${status} · Last ration coverage ${Math.round(food.rationCoverage * 100)}%${Number.isFinite(days) ? ` · Reserves last about ${days} days at the current deficit` : ""}.`;
       view("deaths").textContent = food.deaths > 0 ? `Famine deaths to date: ${food.deaths.toFixed(2)} population units.` : "";
     } else for (const key of ["balance", "status", "deaths"]) view(key).textContent = "";
     const trade = !!target && target !== nation && isNationActive(nation) && isNationActive(target) &&

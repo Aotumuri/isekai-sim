@@ -1,3 +1,4 @@
+import { daysToSlowTicks } from "./time";
 import { getRegionalPopulations } from "./regional-population";
 import { isMilitaryFunded } from "./military-funding";
 import { WORLD_BALANCE } from "../data/balance";
@@ -23,6 +24,9 @@ export interface NationalMobilization {
   recruited: number; demobilized: number; returnedManpower: number; recoveredWeapons: number; strainBand: number;
 }
 export interface MobilizationState { byNationId: Map<NationId, NationalMobilization> }
+export const DEMOBILIZATION_GRACE_DAYS = 300;
+const DEMOBILIZATION_GRACE = daysToSlowTicks(DEMOBILIZATION_GRACE_DAYS);
+const DEMOBILIZATION_INTERVAL = daysToSlowTicks(50);
 const clamp = (value: number, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 export function getMobilization(world: WorldState, nationId: NationId): NationalMobilization {
   const state = world.mobilization ??= { byNationId: new Map() };
@@ -30,7 +34,7 @@ export function getMobilization(world: WorldState, nationId: NationId): National
   if (!item) {
     item = { policy: "automatic", phase: "standing", readiness: 0, threat: 0, burden: 0, continuousDeployment: 0,
       appliedSupportPenalty: 0, standingArmy: 0, maximumArmy: 0, authorizedArmy: 0, landUnits: 0, deployedManpower: 0,
-      quietSinceSlowTick: world.time.slowTick, lastSlowTick: world.time.slowTick, lastDemobilizationTick: -5,
+      quietSinceSlowTick: world.time.slowTick, lastSlowTick: world.time.slowTick, lastDemobilizationTick: -DEMOBILIZATION_INTERVAL,
       recruited: 0, demobilized: 0, returnedManpower: 0, recoveredWeapons: 0, strainBand: 0 };
     state.byNationId.set(nationId, item);
   }
@@ -112,6 +116,7 @@ export function updateMobilization(world: WorldState): void {
     let desired = item.policy === "limited" && !atWar ? Math.min(0.4, item.threat) : item.threat;
     // Ambiguous warnings do not justify permanent mass conscription against civilian opposition.
     if (!atWar && item.threat < 0.7) desired *= 1 - item.burden * 0.008;
+    // At maximum threat readiness takes 40 ten-day cycles to rise from zero.
     const direction = desired - item.readiness;
     item.readiness = clamp(item.readiness + Math.sign(direction) * Math.min(Math.abs(direction), elapsed * (direction > 0 ? 0.025 : 0.012)));
     if (item.threat >= 0.7) item.quietSinceSlowTick = world.time.slowTick;
@@ -156,8 +161,8 @@ export function updateDemobilization(world: WorldState): void {
   const owners = getOwnerByMesoId(world), removed = new Set<string>();
   for (const nation of world.nations) {
     const item = world.mobilization?.byNationId.get(nation.id);
-    if (!item || !nation.macroRegionIds.length || item.threat >= 0.7 || world.time.slowTick - item.quietSinceSlowTick < 30 ||
-      world.time.slowTick - item.lastDemobilizationTick < 5 || world.wars.some((war) => war.nationAId === nation.id || war.nationBId === nation.id)) continue;
+    if (!item || !nation.macroRegionIds.length || item.threat >= 0.7 || world.time.slowTick - item.quietSinceSlowTick < DEMOBILIZATION_GRACE ||
+      world.time.slowTick - item.lastDemobilizationTick < DEMOBILIZATION_INTERVAL || world.wars.some((war) => war.nationAId === nation.id || war.nationBId === nation.id)) continue;
     const ownUnits = allMobilizedUnits(world).filter((unit) => unit.nationId === nation.id);
     const actual = ownUnits.filter((unit) => unit.domain === "land").length;
     const excess = Math.max(0, actual - item.authorizedArmy), batch = Math.min(excess, Math.max(2, Math.ceil(actual * 0.05)));

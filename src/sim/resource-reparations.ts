@@ -1,3 +1,4 @@
+import { daysToSlowTicks } from "./time";
 import { STRATEGIC_RESOURCES } from "../data/strategic-resources";
 import { getRelation } from "./diplomacy";
 import { changeResource, resourceReserve } from "./international-trade";
@@ -10,7 +11,7 @@ import type { WorldState } from "./world-state";
 import type { NationId } from "../worldgen/nation";
 
 export const REPARATION_RESOURCES = ["steel", "fuel", ...STRATEGIC_RESOURCES] as const;
-export const REPARATION_INTERVAL = 30;
+export const REPARATION_INTERVAL = daysToSlowTicks(300);
 const MAX_INSTALLMENT = 10;
 export interface ResourceReparation {
   resource: typeof REPARATION_RESOURCES[number];
@@ -42,20 +43,20 @@ function paymentCapacity(world: WorldState, payer: NationRuntime, resource: Reso
   return Math.max(0, stock + surplus * deliveries * REPARATION_INTERVAL - committed);
 }
 
-function deliveryCount(truceSeconds: number): number {
+function deliveryCount(truceDays: number): number {
   // A delivery scheduled exactly at expiry is canceled.
-  return Math.max(0, Math.ceil(truceSeconds / REPARATION_INTERVAL) - 1);
+  return Math.max(0, Math.ceil(daysToSlowTicks(truceDays) / REPARATION_INTERVAL) - 1);
 }
 
 /** Share of the payer's estimated capacity committed through the last scheduled payment. */
-export function resourceReparationBurden(world: WorldState, payer: NationRuntime, term: ResourceReparation, truceSeconds: number): number {
-  const deliveries = deliveryCount(truceSeconds);
+export function resourceReparationBurden(world: WorldState, payer: NationRuntime, term: ResourceReparation, truceDays: number): number {
+  const deliveries = deliveryCount(truceDays);
   return Math.min(1, term.amount * deliveries / Math.max(1, paymentCapacity(world, payer, term.resource, deliveries)));
 }
 
 export function chooseResourceReparation(world: WorldState, creditor: NationRuntime, payer: NationRuntime,
-  truceSeconds: number): ResourceReparation | undefined {
-  const deliveries = deliveryCount(truceSeconds);
+  truceDays: number): ResourceReparation | undefined {
+  const deliveries = deliveryCount(truceDays);
   if (!deliveries) return;
   let choice: ResourceReparation | undefined;
   let usefulness = 0;

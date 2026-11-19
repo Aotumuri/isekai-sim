@@ -1,3 +1,5 @@
+import { DEFAULT_TRUCE_DAYS, EXTENDED_PEACE_DAYS, MAX_TRUCE_DAYS } from "../sim/diplomatic-time";
+import { DAYS_PER_YEAR, slowTicksToDays, remainingDaysUntilSlowTick } from "../sim/time";
 import { getManualGovernmentId } from "../sim/player-nation";
 import { REPARATION_INTERVAL, REPARATION_RESOURCES, type ResourceReparation } from "../sim/resource-reparations";
 import { getSeparatePeaceIssue } from "../sim/separate-peace";
@@ -8,7 +10,7 @@ import { getWholeProvinces } from "../sim/peace-borders";
 import type { NationId } from "../worldgen/nation";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { WorldState } from "../sim/world-state";
-import { getCampaignDeadline } from "../sim/campaign-deadline";
+import { CAMPAIGN_URGENCY_DAYS, getCampaignDeadlineDays } from "../sim/campaign-deadline";
 import { getWarFatigue } from "../sim/diplomatic-peace";
 import { findWar, getWarCasualties } from "../sim/war-state";
 import { getNationName } from "../sim/nation-identity";
@@ -28,13 +30,13 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     <p class="society-note">Both governments maintain standing terms from the start of war. Battle losses, occupation, fatigue and domestic unrest change willingness to accept. Publishing your own terms switches this government's negotiations to manual control.</p>
     <div class="society-selectors"><label>Demand provinces<select multiple size="4" data-peace-control="demand" aria-label="Peace demanded provinces"></select></label><label>Offer provinces<select multiple size="4" data-peace-control="offer" aria-label="Peace offered provinces"></select></label></div>
     <div class="society-selectors"><label>Demand weapons<input type="number" min="0" max="100" step="1" value="0" data-peace-control="demand-weapons" aria-label="Peace demanded weapons"></label><label>Offer weapons<input type="number" min="0" max="100" step="1" value="0" data-peace-control="offer-weapons" aria-label="Peace offered weapons"></label></div>
-    <div class="society-selectors"><label>Resource reparations<select data-peace-control="reparation-resource"><option value="">None</option>${REPARATION_RESOURCES.map((resource) => `<option value="${resource}">${resource}</option>`).join("")}</select></label><label>Units per ${REPARATION_INTERVAL}s<input type="number" min="1" max="10" step="1" value="3" data-peace-control="reparation-amount"></label></div>
+    <div class="society-selectors"><label>Resource reparations<select data-peace-control="reparation-resource"><option value="">None</option>${REPARATION_RESOURCES.map((resource) => `<option value="${resource}">${resource}</option>`).join("")}</select></label><label>Units per ${slowTicksToDays(REPARATION_INTERVAL)} days<input type="number" min="1" max="10" step="1" value="3" data-peace-control="reparation-amount"></label></div>
     <label><input type="checkbox" data-peace-control="puppet"> Install a puppet government in the opposing country</label>
     <label><input type="checkbox" data-peace-control="partition"> Divide the remainder into two puppet governments</label>
     ${hasPoliticalTurbulence(world) ? '<label><input type="checkbox" data-peace-control="local-subject"> Establish a local subject in the demanded provinces instead of annexing them</label>' : ""}
     <p class="society-note" data-peace-view="puppet"></p>
     <p class="society-note" data-peace-view="governance"></p>
-    <label>Truce duration<select data-peace-control="truce" aria-label="Peace truce duration"><option value="300">5 minutes</option><option value="600">10 minutes</option><option value="900">15 minutes</option></select></label>
+    <label>Truce duration<select data-peace-control="truce" aria-label="Peace truce duration">${[DEFAULT_TRUCE_DAYS, EXTENDED_PEACE_DAYS, MAX_TRUCE_DAYS].map((days) => `<option value="${days}">${days / DAYS_PER_YEAR} years</option>`).join("")}</select></label>
     <p class="society-note" data-peace-view="preview"></p><div class="society-actions"><button type="button" data-peace-action="propose">Propose peace terms</button><button type="button" data-peace-action="accept">Accept their terms</button><button type="button" data-peace-action="map">Show selected provinces on the map</button></div>
     <p class="society-note">Select provinces on either side with Ctrl / Command. Ceded territory must connect to existing territory or form a complete island. Ordinary cessions preserve remaining borders. Use partition terms to found a second government. Both signatories retain territory. Third-party occupations require a separate settlement. Resources and land change only when an offer is accepted; unrelated wars continue.</p></div></details>`;
   const control = (name: string) => root.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-peace-control="${name}"]`)!;
@@ -71,13 +73,13 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     }
     const resource = control("reparation-resource").value as ResourceReparation["resource"];
     return { demandedRegionIds, resourceReparation: resource ? { resource, amount: Number(control("reparation-amount").value) } : undefined, offeredRegionIds: values("offer"), demandedWeapons: Number(control("demand-weapons").value),
-      offeredWeapons: Number(control("offer-weapons").value), truceSeconds: Number(control("truce").value),
+      offeredWeapons: Number(control("offer-weapons").value), truceDays: Number(control("truce").value),
       puppetTarget: split || (control("puppet") as HTMLInputElement).checked || undefined,
       localSubject: root.querySelector<HTMLInputElement>('[data-peace-control="local-subject"]')?.checked || undefined,
       partition: split ? cachedPartition ?? { capitalId: "" as MesoRegionId, districtIds: [] } : undefined };
   };
   const summary = (offer: PeaceOffer) => `<article class="peace-offer"><strong>${esc(getNationName(world, offer.proposerId))}'s conditions</strong><p>Demands: ${describe(offer.terms.demandedRegionIds)} · ${offer.terms.demandedWeapons} weapons${offer.terms.resourceReparation
-    ? ` · ${offer.terms.resourceReparation.amount} ${esc(offer.terms.resourceReparation.resource)} every ${REPARATION_INTERVAL}s during the truce` : ""}</p><p>Offers: ${describe(offer.terms.offeredRegionIds)} · ${offer.terms.offeredWeapons} weapons</p>${offer.terms.partition ? `<p><strong>Two puppet governments</strong> · New capital at ${esc(districtName(offer.terms.partition.capitalId))} · ${offer.terms.partition.districtIds.length} districts in the new state</p>` : offer.terms.puppetTarget ? "<p><strong>Install a puppet government in the opposing country</strong></p>" : offer.terms.localSubject ? "<p><strong>Establish a local subject in the demanded provinces</strong></p>" : ""}<small>Truce ${offer.terms.truceSeconds / 60} min · ${offer.source === "opening" ? "Opening terms" : offer.source === "manual" ? "Manually proposed" : "Revised by government"}</small></article>`;
+    ? ` · ${offer.terms.resourceReparation.amount} ${esc(offer.terms.resourceReparation.resource)} every ${slowTicksToDays(REPARATION_INTERVAL)} days during the truce` : ""}</p><p>Offers: ${describe(offer.terms.offeredRegionIds)} · ${offer.terms.offeredWeapons} weapons</p>${offer.terms.partition ? `<p><strong>Two puppet governments</strong> · New capital at ${esc(districtName(offer.terms.partition.capitalId))} · ${offer.terms.partition.districtIds.length} districts in the new state</p>` : offer.terms.puppetTarget ? "<p><strong>Install a puppet government in the opposing country</strong></p>" : offer.terms.localSubject ? "<p><strong>Establish a local subject in the demanded provinces</strong></p>" : ""}<small>Truce ${offer.terms.truceDays} days · ${offer.source === "opening" ? "Opening terms" : offer.source === "manual" ? "Manually proposed" : "Revised by government"}</small></article>`;
   const update = () => {
     const a = selected(), b = partner(), war = findWar(world.wars, a, b);
     const enabled = !!war && (war.cause === "player-declaration" || getWarDeclarationMode(world) === "diplomacy");
@@ -85,11 +87,11 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     const delivery = (world.resourceReparations ?? []).find((term) =>
       (term.payerId === a && term.recipientId === b) || (term.payerId === b && term.recipientId === a));
     const nextDelivery = delivery && delivery.nextPaymentAt < delivery.expiresAt
-      ? `Next delivery in ${Math.max(0, delivery.nextPaymentAt - world.time.slowTick)}s, subject to available stock.` : "";
+      ? `Next delivery in ${remainingDaysUntilSlowTick(world.time.fastTick, delivery.nextPaymentAt)} days, subject to available stock.` : "";
     const lastDelivery = delivery?.lastPayment
       ? ` Last delivery: ${delivery.lastPayment.paid.toFixed(1)} / ${delivery.amount} ${delivery.resource}.` : "";
     view("deliveries").textContent = delivery
-      ? `${getNationName(world, delivery.payerId)} owes ${delivery.amount} ${delivery.resource} every ${REPARATION_INTERVAL}s. ${nextDelivery}${lastDelivery}` : "";
+      ? `${getNationName(world, delivery.payerId)} owes ${delivery.amount} ${delivery.resource} every ${slowTicksToDays(REPARATION_INTERVAL)} days. ${nextDelivery}${lastDelivery}` : "";
     const ownOverlord = getSubjectOverlord(world, a);
     const partnerOverlord = getSubjectOverlord(world, b);
     const subjectPolicy = world.nations.find((nation) => nation.id === b)?.governance;
@@ -106,16 +108,16 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     if (!enabled || !war) {
       const signed = [...(world.warNegotiations?.settlements ?? [])].reverse().find((item) =>
         (item.a === a && item.b === b) || (item.a === b && item.b === a));
-      view("outlook").textContent = signed ? `Peace signed · ${signed.terms.truceSeconds / 60}-minute truce. Domestic unrest: ${Math.round(getDomesticUnrest(world, a).pressure)}/100. ${world.wars.some((item) => item.nationAId === a || item.nationBId === a) ? "Other wars continue." : "The government can recover in peacetime."}` : getWarDeclarationMode(world) !== "diplomacy" ? "Enable diplomacy to negotiate peace conditions." : "Select a nation currently at war with the diplomatic partner to review peace conditions.";
+      view("outlook").textContent = signed ? `Peace signed · ${signed.terms.truceDays}-day truce. Domestic unrest: ${Math.round(getDomesticUnrest(world, a).pressure)}/100. ${world.wars.some((item) => item.nationAId === a || item.nationBId === a) ? "Other wars continue." : "The government can recover in peacetime."}` : getWarDeclarationMode(world) !== "diplomacy" ? "Enable diplomacy to negotiate peace conditions." : "Select a nation currently at war with the diplomatic partner to review peace conditions.";
       view("offers").innerHTML = signed ? summary({ proposerId: signed.proposerId, terms: signed.terms, source: "manual", revisedAtSlowTick: signed.atSlowTick, revision: 0 }) : "";
       key = ""; return;
     }
     const negotiation = getWarNegotiation(world, war), own = negotiation.offers.get(a)!, opponent = negotiation.offers.get(b)!;
     const unrest = getDomesticUnrest(world, a), advantage = getWarAdvantage(world, a, b);
-    const trend = getWarTrend(negotiation, a), deadline = getCampaignDeadline(world, a, b);
+    const trend = getWarTrend(negotiation, a), deadline = getCampaignDeadlineDays(world, a, b);
     const position = advantage > 0.15 ? "Favorable" : advantage < -0.15 ? "Unfavorable" : "Balanced";
     const direction = trend > 0.08 ? "improving" : trend < -0.08 ? "deteriorating" : "steady";
-    const window = deadline <= 75 ? ` · Campaign window ~${Math.ceil(deadline)}s` : "";
+    const window = deadline <= CAMPAIGN_URGENCY_DAYS ? ` · Campaign window ~${Math.ceil(deadline)} days` : "";
     view("outlook").textContent = `War outlook: ${position}, ${direction}${window} · Domestic unrest ${Math.round(unrest.pressure)}/100 · War fatigue ${Math.round(getWarFatigue(world, a, b))}/100 · Battle casualties ${Math.round(getWarCasualties(war, a)).toLocaleString()}. ${isFightOnGovernment(world, a) ? "Government favors fighting on despite unrest." : "Government weighs compromise against domestic danger."}`;
     const incoming = assessPeaceOffer(world, a, b, opponent.terms);
     view("offers").innerHTML = summary(own) + summary(opponent) + `<p class="society-note peace-assessment">Your government’s assessment of their terms: ${esc(incoming.reason)}</p>`;
@@ -152,7 +154,7 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
       control("demand-weapons").value = String(own.terms.demandedWeapons); control("offer-weapons").value = String(own.terms.offeredWeapons);
       control("reparation-resource").value = own.terms.resourceReparation?.resource ?? "";
       control("reparation-amount").value = String(own.terms.resourceReparation?.amount ?? 3);
-      control("truce").value = String(own.terms.truceSeconds);
+      control("truce").value = String(own.terms.truceDays);
       (control("puppet") as HTMLInputElement).checked = !!own.terms.puppetTarget && !own.terms.partition;
       (control("partition") as HTMLInputElement).checked = !!own.terms.partition;
       if (hasPoliticalTurbulence(world)) (control("local-subject") as HTMLInputElement).checked = !!own.terms.localSubject;

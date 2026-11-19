@@ -1,3 +1,4 @@
+import { DEFAULT_TRUCE_DAYS, EXTENDED_PEACE_DAYS, MAX_TRUCE_DAYS } from "./diplomatic-time";
 import { getWarTerritorialDemand } from "./territorial-claim-objective";
 import { isPeaceNegotiationMature } from "./peace-maturity";
 import { readPeaceAssessmentFact, type PeaceAssessmentContext } from "./peace-assessment-context";
@@ -7,7 +8,7 @@ import { campaignContinuationPressure, campaignPeaceValue, campaignPrefersSettle
 import { PEACE_OUTLOOK_LIMIT, PEACE_OUTLOOK_WEIGHT } from "./peace-outlook";
 import { getManualGovernmentId } from "./player-nation";
 import { chooseResourceReparation, isValidResourceReparation, REPARATION_INTERVAL, resourceReparationBurden, type ResourceReparation } from "./resource-reparations";
-import { foodReserveSeconds } from "./food-supply";
+import { foodReserveDays } from "./food-supply";
 import { getNationalTerritorialValue, getTerritorialValue } from "./territorial-value";
 import { getSeparatePeaceIssue } from "./separate-peace";
 import { hasConferenceWar } from "./peace-conference";
@@ -21,7 +22,7 @@ import type { MesoRegionId } from "../worldgen/meso-region";
 import type { WorldState } from "./world-state";
 import type { WarState } from "./war-state";
 import { findWar, getWarCasualties } from "./war-state";
-import { FAST_TICK_MS } from "./time";
+import { daysToSlowTicks, fastTicksToDays, yearsToDays } from "./time";
 import { getNationCharacter } from "./nation-character";
 import { getNationName } from "./nation-identity";
 import { getRevolutionRisk } from "./domestic-unrest";
@@ -36,7 +37,7 @@ import { concludePeace, getWarFatigue, warFatigueKey } from "./diplomatic-peace"
 
 export interface PeaceTerms {
   demandedRegionIds: MesoRegionId[]; offeredRegionIds: MesoRegionId[];
-  demandedWeapons: number; offeredWeapons: number; truceSeconds: number;
+  demandedWeapons: number; offeredWeapons: number; truceDays: number;
   resourceReparation?: ResourceReparation;
   puppetTarget?: boolean;
   partition?: PuppetPartition;
@@ -50,7 +51,7 @@ export interface WarNegotiation {
 }
 export interface PeaceSettlement { a: NationId; b: NationId; proposerId: NationId; terms: PeaceTerms; atSlowTick: number }
 export interface WarNegotiationState { active: Map<string, WarNegotiation>; settlements: PeaceSettlement[]; lastAISlowTick: number }
-export function whitePeaceTerms(): PeaceTerms { return { demandedRegionIds: [], offeredRegionIds: [], demandedWeapons: 0, offeredWeapons: 0, truceSeconds: 300 }; }
+export function whitePeaceTerms(): PeaceTerms { return { demandedRegionIds: [], offeredRegionIds: [], demandedWeapons: 0, offeredWeapons: 0, truceDays: DEFAULT_TRUCE_DAYS }; }
 export function getWarNegotiationState(world: WorldState): WarNegotiationState {
   return world.warNegotiations ??= { active: new Map(), settlements: [], lastAISlowTick: -10 };
 }
@@ -98,7 +99,7 @@ export function getPeaceTermsIssue(world: WorldState, proposer: NationId, target
   if (!war || (war.cause !== "player-declaration" && getWarDeclarationMode(world) !== "diplomacy")) return "These nations are not negotiating an active war.";
   if (!Array.isArray(terms.demandedRegionIds) || !Array.isArray(terms.offeredRegionIds)) return "Select valid territories.";
   if (![terms.demandedWeapons, terms.offeredWeapons].every((amount) => Number.isInteger(amount) && amount >= 0 && amount <= 100) ||
-    (terms.demandedWeapons > 0 && terms.offeredWeapons > 0) || !Number.isInteger(terms.truceSeconds) || terms.truceSeconds < 180 || terms.truceSeconds > 900) return "Check reparations and the truce duration.";
+    (terms.demandedWeapons > 0 && terms.offeredWeapons > 0) || !Number.isInteger(terms.truceDays) || terms.truceDays < DEFAULT_TRUCE_DAYS || terms.truceDays > MAX_TRUCE_DAYS) return "Check reparations and the truce duration.";
   if (terms.resourceReparation !== undefined && !isValidResourceReparation(terms.resourceReparation)) {
     return "Select a resource and demand between 1 and 10 units per delivery.";
   }
@@ -186,7 +187,7 @@ function reviseTerms(world: WorldState, negotiation: WarNegotiation, proposer: N
   if (campaignCanHoldRecognition(world, proposer) && (recognition.length || recognitionWeapons > 0) &&
     (!recognition.every((id) => terms.demandedRegionIds.includes(id)) || terms.demandedWeapons !== recognitionWeapons)) {
     const recognized = { ...whitePeaceTerms(), demandedRegionIds: recognition,
-      demandedWeapons: recognitionWeapons, truceSeconds: terms.truceSeconds };
+      demandedWeapons: recognitionWeapons, truceDays: terms.truceDays };
     if (!getPeaceTermsIssue(world, proposer, target, recognized)) return recognized;
   }
   if (campaignCanHoldRecognition(world, proposer) && recognitionWeapons > 0 && terms.demandedWeapons === recognitionWeapons) return terms;
@@ -217,7 +218,7 @@ function reviseTerms(world: WorldState, negotiation: WarNegotiation, proposer: N
     if (terms.demandedWeapons > 0) return { ...terms, demandedWeapons: Math.max(0, terms.demandedWeapons - 15) };
     if (exitValue >= 0 && (advantage < -0.15 || urgency >= 0.65)) {
       return { ...terms, offeredWeapons: Math.min(25, Math.floor(country.resources.weapons * 0.15), terms.offeredWeapons + 5),
-        truceSeconds: 600 };
+        truceDays: EXTENDED_PEACE_DAYS };
     }
     return terms;
   }
@@ -242,7 +243,7 @@ function reviseTerms(world: WorldState, negotiation: WarNegotiation, proposer: N
     }
   }
   if (advantage > 0.3 && !terms.resourceReparation && !terms.offeredWeapons && !terms.offeredRegionIds.length) {
-    const reparation = chooseResourceReparation(world, country, opponent, terms.truceSeconds);
+    const reparation = chooseResourceReparation(world, country, opponent, terms.truceDays);
     if (reparation) return { ...terms, resourceReparation: reparation };
   }
   return terms;
@@ -286,20 +287,20 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
   const pair = `${recipient}:${proposer}`;
   const advantage = readPeaceAssessmentFact(context?.advantage, pair, () => getWarAdvantage(world, recipient, proposer));
   const fatigue = getWarFatigue(world, recipient, proposer);
-  const ageSeconds = Math.max(0, world.time.fastTick - war.startedAtFastTick) * FAST_TICK_MS / 1000;
+  const ageDays = fastTicksToDays(Math.max(0, world.time.fastTick - war.startedAtFastTick));
   const urgency = readPeaceAssessmentFact(context?.urgency, recipient, () => getPeaceUrgency(world, recipient));
   const domestic = urgency * 42;
   const forecast = campaignContinuationPressure(world, recipient, proposer) ??
     -getWarTrend(negotiation, recipient) * PEACE_OUTLOOK_WEIGHT;
   const competingWars = readPeaceAssessmentFact(context?.competingPressure, pair, () => competingWarPressure(world, recipient, proposer));
-  const foodRunway = nation.food ? foodReserveSeconds(nation.food) : Infinity;
-  const foodPressure = nation.food ? Math.max(0, 1 - foodRunway / 90) * 10 +
+  const foodRunway = nation.food ? foodReserveDays(nation.food) : Infinity;
+  const foodPressure = nation.food ? Math.max(0, 1 - foodRunway / 900) * 10 +
     (1 - nation.food.rationCoverage) * 10 : 0;
   const totalValue = readPeaceAssessmentFact(context?.territorialValue, recipient, () => getNationalTerritorialValue(world, recipient));
   const occupied = readPeaceAssessmentFact(context?.occupied, pair,
     () => ownedLand(world, recipient).filter((id) => world.occupation.mesoById.get(id) === proposer));
   const occupiedValue = getTerritorialValue(world, recipient, occupied) / totalValue;
-  const pressure = fatigue * 0.7 + Math.min(18, ageSeconds * 0.025) + occupiedValue * 45 + militaryLoss * 15 + Math.max(0, -advantage) * 30 + (1 - nation.warCooperation) * 12 + domestic + forecast + competingWars + foodPressure;
+  const pressure = fatigue * 0.7 + Math.min(18, ageDays * 0.0025) + occupiedValue * 45 + militaryLoss * 15 + Math.max(0, -advantage) * 30 + (1 - nation.warCooperation) * 12 + domestic + forecast + competingWars + foodPressure;
   const occupiedSet = new Set(occupied);
   const securedDemands = terms.demandedRegionIds.filter((id) => occupiedSet.has(id));
   const landCost = (getTerritorialValue(world, recipient, terms.demandedRegionIds) -
@@ -307,7 +308,7 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
     (terms.demandedRegionIds.includes(nation.capitalMesoId) ? 25 : 0);
   const landBenefit = getTerritorialValue(world, recipient, terms.offeredRegionIds) / totalValue * 80;
   const reparation = terms.resourceReparation;
-  const resourceShare = reparation ? resourceReparationBurden(world, nation, reparation, terms.truceSeconds) : 0;
+  const resourceShare = reparation ? resourceReparationBurden(world, nation, reparation, terms.truceDays) : 0;
   const weaponsShare = terms.demandedWeapons / Math.max(10, nation.resources.weapons);
   const paymentCost = (weaponsShare + resourceShare) * 25;
   const paymentBenefit = Math.min(18, terms.offeredWeapons * 0.5);
@@ -319,11 +320,11 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
   const recognition = Math.max(0, landBenefit + paymentBenefit - landCost - paymentCost);
   const sacrificeCost = Math.max(0, politicalInvestment - recognition) * (1 - Math.min(0.85, urgency));
   // A longer truce secures the rear while forces move to other theaters.
-  const truceValue = (terms.truceSeconds - 300) / 100 * (1 + competingWars / 12);
+  const truceValue = (terms.truceDays - DEFAULT_TRUCE_DAYS) / yearsToDays(2) * (1 + competingWars / 12);
   const score = pressure + disposition + landBenefit + paymentBenefit + truceValue + campaignPeaceValue(world, recipient, proposer, terms) - landCost - paymentCost - resolve - sacrificeCost - (terms.partition ? 38 : terms.puppetTarget ? 25 : terms.localSubject ? 8 : 0);
   const exchangedBlows = casualties + getWarCasualties(war, proposer) > 0 ||
     occupationRatio(world, proposer, recipient) + occupationRatio(world, recipient, proposer) > 0;
-  const matureEnough = isPeaceNegotiationMature(ageSeconds, exchangedBlows, urgency);
+  const matureEnough = isPeaceNegotiationMature(ageDays, exchangedBlows, urgency);
   if (!matureEnough) return { accepts: false, score, reason: "The government is waiting for battlefield evidence before accepting terms." };
   const reason = score >= 0 ? foodPressure >= 10 ? "The food emergency makes continued fighting too costly."
     : "Ending the war now is preferable to continued losses and domestic danger."
@@ -366,7 +367,7 @@ export function acceptPeaceOffer(world: WorldState, recipient: NationId, propose
   const payment = terms.demandedWeapons - terms.offeredWeapons;
   changeResource(a, "weapons", payment); changeResource(b, "weapons", -payment);
   const relation = getRelation(world, proposer, recipient);
-  const truce = relation.treaties.find((treaty) => treaty.type === "truce")!; truce.expiresAtSlowTick = world.time.slowTick + terms.truceSeconds;
+  const truce = relation.treaties.find((treaty) => treaty.type === "truce")!; truce.expiresAtSlowTick = world.time.slowTick + daysToSlowTicks(terms.truceDays);
   relation.cooldownUntilSlowTick = truce.expiresAtSlowTick;
   if (terms.resourceReparation) {
     (world.resourceReparations ??= []).push({ ...terms.resourceReparation, payerId: recipient, recipientId: proposer,
@@ -418,7 +419,7 @@ function tryMutualCompromise(world: WorldState, negotiation: WarNegotiation): bo
     const stock = world.nations.find(({ id }) => id === recipient)!.resources.weapons;
     // Seek a face-saving payment against the announced demand, with a longer truce for both sides.
     for (const payment of new Set([0, Math.min(15, requested, Math.floor(stock))])) {
-      const terms = { ...whitePeaceTerms(), demandedWeapons: payment, truceSeconds: 600 };
+      const terms = { ...whitePeaceTerms(), demandedWeapons: payment, truceDays: EXTENDED_PEACE_DAYS };
       const theirs = assessPeaceOffer(world, recipient, proposer, terms);
       const ours = assessPeaceOffer(world, proposer, recipient, { ...terms, demandedWeapons: 0, offeredWeapons: payment });
       if (theirs.accepts && ours.accepts) candidates.push({ proposer, recipient, terms, value: Math.min(theirs.score, ours.score) });

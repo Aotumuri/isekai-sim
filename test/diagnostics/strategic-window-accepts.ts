@@ -3,7 +3,7 @@ import { WORLD_BALANCE } from "../../src/data/balance";
 import { setAmphibiousDiagnosticObserver, type AmphibiousLaunchFeasibilityDiagnostic, type AmphibiousOperation } from "../../src/sim/amphibious";
 import { getCapitalDefenseAssessment } from "../../src/sim/capital-defense";
 import { getUnitCombatStrength } from "../../src/sim/unit-strength";
-import { FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
+import { completedSlowTicks, FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
 import { stepFastTick, stepSlowTick } from "../../src/sim/update";
 import { getMesoById } from "../../src/sim/world-cache";
 import type { WorldState } from "../../src/sim/world-state";
@@ -157,7 +157,7 @@ function runSeed(seed: number, destination: AcceptedEvaluation[]): void {
     trackWars(world, knownWars, outcomes, priorCounts);
     priorCounts = nationLandCounts(world);
     if (world.time.fastTick % HISTORY_SAMPLE_INTERVAL_TICKS === 0) sampleHistory(world, history);
-    const dueSlowTicks = Math.floor(world.time.elapsedMs / SLOW_TICK_MS);
+    const dueSlowTicks = completedSlowTicks(world.time.fastTick);
     while (world.time.slowTick < dueSlowTicks) {
       stepSlowTick(world, SLOW_TICK_MS);
       trackWars(world, knownWars, outcomes, priorCounts);

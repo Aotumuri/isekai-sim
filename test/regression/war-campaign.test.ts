@@ -40,12 +40,12 @@ function campaignWorld() {
 
 const affordable: CampaignConstraints = {
   strengthRatio: 1.5, casualtyFraction: 0, costTolerance: 1,
-  foodSeconds: Infinity, replacementConstrained: false,
+  foodDays: Infinity, replacementConstrained: false,
   capitalCritical: false, objectivesSecured: false, aggression: 0.6,
 };
 
 test("an ongoing emergency does not continuously bypass campaign commitment", () => {
-  const crisis = { ...affordable, foodSeconds: 10 };
+  const crisis = { ...affordable, foodDays: 10 };
   assert.equal(requiresCampaignReview(crisis, affordable, 1, false), true);
   assert.equal(requiresCampaignReview(crisis, crisis, 1, false), false);
   assert.equal(requiresCampaignReview(crisis, crisis, 80, false), true);
@@ -57,7 +57,7 @@ test("an ongoing emergency does not continuously bypass campaign commitment", ()
 test("campaign policy is deterministic and emergency defense precedes peace pressure", () => {
   assert.deepEqual(evaluateCampaignPolicy(affordable), evaluateCampaignPolicy(affordable));
   assert.equal(evaluateCampaignPolicy(affordable).mode, "limited-offensive");
-  assert.equal(evaluateCampaignPolicy({ ...affordable, capitalCritical: true, foodSeconds: 0 }).mode, "defend");
+  assert.equal(evaluateCampaignPolicy({ ...affordable, capitalCritical: true, foodDays: 0 }).mode, "defend");
   assert.equal(evaluateCampaignPolicy({ ...affordable, casualtyFraction: 2 }).mode, "seek-peace");
   assert.equal(evaluateCampaignPolicy({ ...affordable, objectivesSecured: true }).mode, "consolidate");
   assert.equal(evaluateCampaignPolicy({ ...affordable, replacementConstrained: true }).mode, "defend");

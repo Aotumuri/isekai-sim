@@ -1,3 +1,4 @@
+import { EXTENDED_PEACE_DAYS } from "/src/sim/diplomatic-time.ts";
 import "../../src/style.css";
 import { createGame } from "../../src/app/create-game";
 import { createSeededWorld } from "../helpers/seeded-world";
@@ -20,13 +21,13 @@ const war = declareWar(world.wars, b, a, 0); const negotiation = getWarNegotiati
 for (const unit of world.units) if (unit.nationId === a) unit.manpower *= 0.25;
 nation.warCooperation = 0.05; enemy.warCooperation = 0.8;
 world.time.fastTick = 3600; world.time.slowTick = 360; world.time.elapsedMs = 360000;
-const unrest = getDomesticUnrest(world, a); unrest.pressure = 85; unrest.lowSupportSeconds = 250; unrest.phase = "crisis";
+const unrest = getDomesticUnrest(world, a); unrest.pressure = 85; unrest.lowSupportSlowTicks = 250; unrest.phase = "crisis";
 const owners = getOwnerByMesoId(world);
 const target = world.mesoRegions.find((region) => region.type !== "sea" && owners.get(region.id) === a && region.id !== nation.capitalMesoId && region.neighbors.some((neighbor) => owners.get(neighbor.id) === b));
 if (!target) throw new Error("Peace scene requires a contested border");
 world.occupation.mesoById.set(target.id, b); world.occupation.version++;
 getDiplomacyState(world).fatigueByWarId.set(warFatigueKey(war), 70);
-proposePeaceTerms(world, b, a, { ...whitePeaceTerms(), demandedRegionIds: [target.id], demandedWeapons: 20, truceSeconds: 600 });
+proposePeaceTerms(world, b, a, { ...whitePeaceTerms(), demandedRegionIds: [target.id], demandedWeapons: 20, truceDays: EXTENDED_PEACE_DAYS });
 negotiation.automatic.set(a, false);
 selectMapNation(world, a); getMapView(world).targetNationId = b;
 createGame(document.getElementById("app"), { world, paused: true });

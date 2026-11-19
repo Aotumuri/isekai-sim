@@ -21,11 +21,12 @@ export interface CampaignOpportunity {
   opponentId: NationId;
   availableStrength: number;
   opposition: number;
-  arrivalSeconds: number;
+  arrivalDays: number;
   objectiveValue: number;
   securedValue: number;
   homelandAtRisk: number;
-  lossFractionPerSecond: number;
+  lossFractionPerDay: number;
+  /** Available manpower and equipment stocks as a share of opening investment. */
   replacementFraction: number;
   peaceProbability: number;
   settlementValue: number;
@@ -34,7 +35,7 @@ export interface CampaignOpportunity {
   committedFraction: number;
   settlementReady?: boolean;
 }
-const HORIZON_SECONDS = 30;
+export const CAMPAIGN_HORIZON_DAYS = 300;
 const clamp = (n: number) => Math.max(0, Math.min(1, n));
 
 export function evaluateCampaignAlternatives(
@@ -74,12 +75,12 @@ function localCampaignAlternatives(
 ): CampaignAlternative[] {
   const alternatives: CampaignAlternative[] = [];
   const ratio = input.availableStrength / Math.max(1, input.opposition);
-  const arrival = Number.isFinite(input.arrivalSeconds)
-    ? clamp(1 - input.arrivalSeconds / HORIZON_SECONDS) : 0;
+  const arrival = Number.isFinite(input.arrivalDays)
+    ? clamp(1 - input.arrivalDays / CAMPAIGN_HORIZON_DAYS) : 0;
   // A bounded relative-power estimate; terrain and hidden future commitments
   // remain explicitly uncertain. No combat rule or random draw is changed.
   const success = clamp(ratio * ratio / (1 + ratio * ratio) * arrival);
-  const loss = clamp(input.lossFractionPerSecond * HORIZON_SECONDS) * nationalCostShare;
+  const loss = clamp(input.lossFractionPerDay * CAMPAIGN_HORIZON_DAYS) * nationalCostShare;
   const attackCost = loss + (1 - success) * clamp(input.availableStrength /
     Math.max(1, input.availableStrength + input.opposition)) * 0.1;
   const options: Omit<CampaignAlternative, "opponentId" | "changeCost" | "score">[] = [
@@ -105,7 +106,7 @@ function localCampaignAlternatives(
     // Real committed force and travel opportunity cost, not a fixed ban on
     // changing decisions. Strong evidence can outweigh the sunk plan.
     const changeCost = changed && military ? input.committedFraction *
-      clamp(input.arrivalSeconds / HORIZON_SECONDS) * 0.1 : 0;
+      clamp(input.arrivalDays / CAMPAIGN_HORIZON_DAYS) * 0.1 : 0;
     const riskAversion = 1.5 - aggression;
     const replacementRisk = Math.max(0, loss - input.replacementFraction * nationalCostShare) *
       (option.mode === "limited-offensive" ? 1 : option.mode === "defend" ? 0.5 : 1 - input.peaceProbability);

@@ -88,7 +88,7 @@ test("settlement preference survives a capital override but requires a legal dip
   campaign.mode = "defend";
   campaign.constraints.objectivesSecured = false;
   campaign.constraints.capitalCritical = true;
-  campaign.constraints.foodSeconds = 10;
+  campaign.constraints.foodDays = 10;
   assert(campaignPrefersSettlement(world, operation.nationId, operation.enemyNationId));
   world.wars[0]!.isTest = true;
   assert(!campaignPrefersSettlement(world, operation.nationId, operation.enemyNationId));

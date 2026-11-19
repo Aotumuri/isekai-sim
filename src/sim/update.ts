@@ -96,6 +96,7 @@ import {
 import {
   FAST_TICK_MS,
   SLOW_TICK_MS,
+  completedSlowTicks,
   getSpeedMultiplier,
   type SimClock,
 } from "./time";
@@ -105,7 +106,7 @@ const MAX_FAST_TICKS_PER_FRAME = 8;
 const FAST_TICK_BUDGET_MS = 8;
 
 export function updateSimulation(world: WorldState, clock: SimClock, deltaMs: number): void {
-  if (clock.paused) return;
+  if (clock.paused || !Number.isFinite(deltaMs)) return;
   const clampedDelta = Math.min(MAX_FRAME_MS, Math.max(0, deltaMs));
   const scaledMs = clampedDelta * getSpeedMultiplier(clock);
   if (scaledMs <= 0) {
@@ -113,7 +114,6 @@ export function updateSimulation(world: WorldState, clock: SimClock, deltaMs: nu
   }
 
   clock.accumulatorMs += scaledMs;
-  clock.slowAccumulatorMs += scaledMs;
 
   let processedFastTicks = 0;
   const fastTickBudgetStartedAt =
@@ -123,19 +123,18 @@ export function updateSimulation(world: WorldState, clock: SimClock, deltaMs: nu
     processedFastTicks < MAX_FAST_TICKS_PER_FRAME
   ) {
     clock.accumulatorMs -= FAST_TICK_MS;
-    stepFastTick(world, FAST_TICK_MS);
+    stepSimulationDay(world);
     processedFastTicks += 1;
     if (performance.now() - fastTickBudgetStartedAt >= FAST_TICK_BUDGET_MS) {
       break;
     }
   }
+}
 
-  const dueSlowTicks = Math.floor(world.time.elapsedMs / SLOW_TICK_MS);
-  while (
-    clock.slowAccumulatorMs >= SLOW_TICK_MS &&
-    world.time.slowTick < dueSlowTicks
-  ) {
-    clock.slowAccumulatorMs -= SLOW_TICK_MS;
+export function stepSimulationDay(world: WorldState): void {
+  stepFastTick(world, FAST_TICK_MS);
+  const dueSlowTicks = completedSlowTicks(world.time.fastTick);
+  while (world.time.slowTick < dueSlowTicks) {
     stepSlowTick(world, SLOW_TICK_MS);
   }
 }

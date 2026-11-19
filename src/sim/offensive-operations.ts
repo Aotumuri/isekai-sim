@@ -2,7 +2,7 @@ import { decideTheaterLaunch, type TheaterLaunchDecision } from "./theater-comma
 import { campaignShouldStandDown } from "./war-campaign/peace-guidance";
 import { campaignCostLimitReached } from "./war-campaign/policy";
 import { getWarCampaign } from "./war-campaign/state";
-import { getCampaignDeadline } from "./campaign-deadline";
+import { CAMPAIGN_URGENCY_DAYS, getCampaignDeadlineDays } from "./campaign-deadline";
 import { getCampaignObjectives } from "./campaign-objectives";
 import { campaignOperationRank } from "./war-campaign/operation-guidance";
 import { getMoveTicksPerRegion } from "./movement";
@@ -1047,7 +1047,7 @@ function advanceOperation(
     const staged = approachReadiness.operationCompletion >= requiredCompletion;
     const canAccelerate = !operation.isMajorOffensive && !operation.supplyReliefPlanId &&
       preparationTicks >= Math.ceil(minimumPreparation / 2) &&
-      getCampaignDeadline(world, operation.nationId, operation.enemyNationId) <= 75 &&
+      getCampaignDeadlineDays(world, operation.nationId, operation.enemyNationId) <= CAMPAIGN_URGENCY_DAYS &&
       getFrontPlan(world, operation.frontId, operation.nationId)?.reasonFlags.includes("closing-campaign-window");
     if (staged && (preparationTicks >= minimumPreparation || canAccelerate)) {
       const { attackerStrength, defenderStrength } = getLaunchLocalStrength(world, operation);

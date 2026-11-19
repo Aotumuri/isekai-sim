@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { setAmphibiousDiagnosticObserver, type AmphibiousLaunchFeasibilityDiagnostic } from "../../src/sim/amphibious";
-import { FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
+import { completedSlowTicks, FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
 import { stepFastTick, stepSlowTick } from "../../src/sim/update";
 import type { WorldState } from "../../src/sim/world-state";
 import type { WarState } from "../../src/sim/war-state";
@@ -64,7 +64,7 @@ function runSeed(seed: number, result: Evaluation[], allInstances: WarInstance[]
   } });
   for (let tick = 0; tick < FAST_TICKS; tick += 1) {
     stepFastTick(world, FAST_TICK_MS); observeWars(world, seed, registry, previousTerritory); previousTerritory = territory(world);
-    const dueSlowTicks = Math.floor(world.time.elapsedMs / SLOW_TICK_MS);
+    const dueSlowTicks = completedSlowTicks(world.time.fastTick);
     while (world.time.slowTick < dueSlowTicks) { stepSlowTick(world, SLOW_TICK_MS); observeWars(world, seed, registry, previousTerritory); previousTerritory = territory(world); }
   }
   allInstances.push(...registry.values());

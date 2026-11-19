@@ -1,3 +1,4 @@
+import { EXTENDED_PEACE_DAYS } from "../../src/sim/diplomatic-time";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createScenarioWorld } from "../scenarios";
@@ -18,7 +19,7 @@ test("sharing immutable peace facts preserves every legal and illegal offer asse
   assert.ok(district);
   const terms: PeaceTerms[] = [whitePeaceTerms(), { ...whitePeaceTerms(), demandedRegionIds: [district.id] },
     { ...whitePeaceTerms(), demandedWeapons: 10 }, { ...whitePeaceTerms(), offeredWeapons: 20 },
-    { ...whitePeaceTerms(), demandedWeapons: 101 }, { ...whitePeaceTerms(), truceSeconds: 600 },
+    { ...whitePeaceTerms(), demandedWeapons: 101 }, { ...whitePeaceTerms(), truceDays: EXTENDED_PEACE_DAYS },
     { ...whitePeaceTerms(), puppetTarget: true }];
   for (const [recipient, proposer] of [[war.nationAId, war.nationBId], [war.nationBId, war.nationAId]]) {
     for (const offer of terms) {

@@ -1,3 +1,4 @@
+import { remainingDaysUntilSlowTick, slowTicksToDays } from "../sim/time";
 import { endDisplacementOrder, getPersecutionTargets, startDisplacementOrder } from "../sim/forced-displacement";
 import { POPULATION_GROUPS } from "../sim/regional-population";
 import { populationPolicyTitle } from "../sim/population-politics";
@@ -74,7 +75,7 @@ export function attachPoliticsControls(
       const character = getNationCharacter(world, nation.id);
       const democracy = politics.system === "democracy";
       const active = getWarDeclarationMode(world) === "diplomacy" && nation.macroRegionIds.length > 0;
-      const next = Math.max(0, politics.nextMandateAt - world.time.slowTick);
+      const next = remainingDaysUntilSlowTick(world.time.fastTick, politics.nextMandateAt);
       const target = partner();
       const issue = getPoliticalCampaignIssue(world, nation.id, target);
       const partnerNation = world.nations.find((item) => item.id === target && item.macroRegionIds.length > 0);
@@ -88,7 +89,7 @@ export function attachPoliticsControls(
       const faithBan = getReligiousBan(world, nation);
       root.innerHTML = `<h2>${democracy ? "Parliamentary democracy" : "Monarchy"}</h2>
         <p><strong>Governing ideology:</strong> ${name(politics.governingIdeologyId)}</p>
-        ${ban && ban.until > world.time.slowTick ? `<p><strong>Banned movement:</strong> ${name(ban.ideologyId)} · ${ban.until - world.time.slowTick}s remaining</p>` : ""}
+        ${ban && ban.until > world.time.slowTick ? `<p><strong>Banned movement:</strong> ${name(ban.ideologyId)} · ${remainingDaysUntilSlowTick(world.time.fastTick, ban.until)} days remaining</p>` : ""}
         ${hasPoliticalTurbulence(world) ? `<h2>Territorial governance</h2>
           <p>Stability ${Math.round(governance?.stability ?? 100)}/100 · Diversity ${Math.round((governance?.diversity ?? 0) * 100)}%</p>
           <p class="society-note">Autonomy reduces the cost of governing diverse districts. Assimilation changes culture and religion gradually and can provoke resistance.</p>
@@ -96,17 +97,17 @@ export function attachPoliticsControls(
             `<button type="button" data-governance-policy="${policy}" aria-pressed="${(governance?.policy ?? "centralized") === policy}">${policy[0]!.toUpperCase() + policy.slice(1)}</button>`).join("")}</div>` : ""}
         ${nation.populationPolicy ? `<p><strong>${populationPolicyTitle(nation.populationPolicy)}</strong> · ${nation.populationPolicy.type === "homeland" ? "Claims nearby districts with a substantial population of the homeland's ancestry." : "Recognizes the most widely practiced faith as the state religion."}</p>` : ""}
         ${hasPoliticalTurbulence(world) && nation.populationPolicy?.type === "religious" ? `<h2>Religious restrictions</h2>
-          <p class="society-note">${faithBan ? `All faiths except ${POPULATION_GROUPS.faith[faithBan.allowedFaith]} are outlawed for ${faithBan.until - world.time.slowTick}s.` : "A ban on other faiths causes unrest and foreign backlash."}</p>
+          <p class="society-note">${faithBan ? `All faiths except ${POPULATION_GROUPS.faith[faithBan.allowedFaith]} are outlawed for ${remainingDaysUntilSlowTick(world.time.fastTick, faithBan.until)} days.` : "A ban on other faiths causes unrest and foreign backlash."}</p>
           ${faithBan ? '<button type="button" data-religious-ban="lift">Lift ban</button>' :
             `<button type="button" data-religious-ban="start" ${!active || (nation.nextReligiousBanAt ?? 0) > world.time.slowTick ? "disabled" : ""}>Ban all other religions</button>`}` : ""}
-        <p class="society-note">${active ? `Next ${democracy ? "election" : "royal succession"} in ${next}s` : "Domestic politics are paused."}
+        <p class="society-note">${active ? `Next ${democracy ? "election" : "royal succession"} in ${next} days` : "Domestic politics are paused."}
         · Doctrine: ${character.doctrine} · Aggression ${Math.round(character.aggression * 100)}% · Cooperation ${Math.round(character.cooperation * 100)}%</p>
         <p class="society-note">${democracy ? "Elections convert public support into 100 seats. A majority coalition governs." : "Court support shapes succession. A challenger needs an eight-point lead to change royal policy."}</p>
         <table><thead><tr><th>Ideology</th><th>${democracy ? "Public support" : "Court support"}</th>${democracy ? "<th>Seats</th>" : ""}<th>Role</th></tr></thead>
         <tbody>${parties.map(([id, share]) => `<tr><td>${name(id)}</td><td>${share}%</td>${democracy ? `<td>${politics.seats.get(id) ?? 0}</td>` : ""}<td>${id === politics.governingIdeologyId ? "Leads government" : politics.coalition.includes(id) ? "Coalition" : "Opposition"}</td></tr>`).join("")}</tbody></table>
         ${targets.length || order ? `<h2>Targeted persecution</h2>
         <p class="society-note">Forced expulsion displaces residents across accessible land borders. Mass killing causes permanent population losses. Both fuel unrest and diplomatic backlash.</p>
-        ${order ? `<p>Target: ${POPULATION_GROUPS[order.dimension][order.group]} · ${Math.max(0, order.until - world.time.slowTick)}s remaining · ${order.mode === "killing" ? `${(order.killed ?? 0).toFixed(2)} population units killed` : `${order.displaced.toFixed(2)} population units displaced`}.</p>
+        ${order ? `<p>Target: ${POPULATION_GROUPS[order.dimension][order.group]} · ${remainingDaysUntilSlowTick(world.time.fastTick, order.until)} days remaining · ${order.mode === "killing" ? `${(order.killed ?? 0).toFixed(2)} population units killed` : `${order.displaced.toFixed(2)} population units displaced`}.</p>
         <button type="button" data-expulsion-action="stop">End persecution order</button>` : `<label>Target group <select data-expulsion-target>
         ${targets.map(({ dimension, group, name }) => {
           const value = `${dimension}:${group}`;
@@ -114,7 +115,7 @@ export function attachPoliticsControls(
         }).join("")}</select></label>
         <div class="society-actions"><button type="button" data-expulsion-action="expel" ${!active || cooldown ? "disabled" : ""}>Order forced expulsion</button>
         ${hasPoliticalTurbulence(world) ? `<button type="button" data-expulsion-action="kill" ${!active || cooldown ? "disabled" : ""}>Order mass killing</button>` : ""}</div>
-        ${cooldown ? `<p class="society-note">Available again in ${cooldown}s.</p>` : ""}`}` : ""}
+        ${cooldown ? `<p class="society-note">Available again in ${slowTicksToDays(cooldown)} days.</p>` : ""}`}` : ""}
         <h2>Foreign political outreach</h2>
         <p class="society-note">Promote your governing ideology in ${esc(getNationName(world, target))}. Supporting a rival movement raises diplomatic tension.</p>
         ${partnerPolitics ? `<p class="society-note">Partner government: ${name(partnerPolitics.governingIdeologyId)} · Local support for ${name(politics.governingIdeologyId)}: ${partnerPolitics.support.get(politics.governingIdeologyId) ?? 0}%.</p>` : ""}

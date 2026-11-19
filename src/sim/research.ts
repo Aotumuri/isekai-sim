@@ -152,6 +152,7 @@ export function getNationalResearchSummary(world: WorldState, nationId: NationId
 }
 export function updateResearch(world: WorldState): void {
   if (!world.settings?.researchEnabled) return;
+  // The science budget and material costs apply once per ten-day accounting cycle.
   const state = getResearchState(world);
   if (state.lastSlowTick === world.time.slowTick) return;
   state.lastSlowTick = world.time.slowTick;

@@ -1,3 +1,5 @@
+import { DEFAULT_TRUCE_DAYS } from "../sim/diplomatic-time";
+import { DAYS_PER_YEAR, remainingDaysUntilSlowTick } from "../sim/time";
 import { getNationName } from "../sim/nation-identity";
 import { getConferenceWars, openPeaceConference, respondToPeaceConference } from "../sim/peace-conference";
 import type { WorldState } from "../sim/world-state";
@@ -27,8 +29,8 @@ export function attachPeaceConferenceControls(root: HTMLElement, world: WorldSta
     const name = (nation: NationId) => getNationName(world, nation);
     const invited = [...new Set(wars.flatMap((war) => [war.nationAId, war.nationBId]))];
     status.textContent = active
-      ? `${active.wars.length} wars · ${Math.max(0, active.expiresAt - world.time.slowTick)}s left. ${active.participants.map((nation) =>
-        `${name(nation)} (${active.approvals.has(nation) ? "consented" : "pending"})`).join(", ")}. Terms: return occupations and sign a five-minute truce in every listed war.`
+      ? `${active.wars.length} wars · ${remainingDaysUntilSlowTick(world.time.fastTick, active.expiresAt)} days left. ${active.participants.map((nation) =>
+        `${name(nation)} (${active.approvals.has(nation) ? "consented" : "pending"})`).join(", ")}. Terms: return occupations and sign a ${DEFAULT_TRUCE_DAYS / DAYS_PER_YEAR}-year truce in every listed war.`
       : `Invite ${invited.map(name).join(", ")} to settle ${wars.length} wars. Every participant must consent to status-quo peace. Other wars continue.`;
   }
 

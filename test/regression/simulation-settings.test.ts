@@ -51,16 +51,13 @@ test("slowing from x32 to x16 discards queued ticks and preserves slow-tick prog
   setSpeedIndex(clock, 7);
   for (let tick = 0; tick < 9; tick += 1) stepFastTick(world, 100);
   clock.accumulatorMs = 3_050;
-  clock.slowAccumulatorMs = 3_950;
 
   assert.equal(decreaseSpeed(clock), true);
   assert.equal(getSpeedMultiplier(clock), 16);
   assert.equal(clock.accumulatorMs, 50);
-  assert.equal(clock.slowAccumulatorMs, 950);
 
   updateSimulation(world, clock, 50 / 16);
   assert.equal(world.time.fastTick, 10);
   assert.equal(world.time.slowTick, 1);
   assert.equal(clock.accumulatorMs, 0);
-  assert.equal(clock.slowAccumulatorMs, 0);
 });

@@ -1,6 +1,6 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { SimClock, SimTime } from "../sim/time";
-import { getSpeedMultiplier } from "../sim/time";
+import { formatWorldDate, getSpeedMultiplier } from "../sim/time";
 import type { Renderer } from "./renderer";
 
 const HUD_BG = 0x0f1826;
@@ -38,7 +38,7 @@ export function attachTimeHud(renderer: Renderer): TimeHud {
 
   const update = (time: SimTime, clock: SimClock): void => {
     const nextText = [
-      `Time ${formatClock(time.elapsedMs)}`,
+      `${formatWorldDate(time.fastTick)}`,
       clock.paused ? "Paused" : `Speed x${formatSpeed(getSpeedMultiplier(clock))}`,
       "Keys [ ] or 1-8",
       "Hold Space: Region / naval orders",
@@ -71,21 +71,9 @@ function layoutHud(container: Container, background: Graphics, text: Text): void
   container.hitArea = null;
 }
 
-function formatClock(elapsedMs: number): string {
-  const totalSeconds = Math.floor(elapsedMs / 1000);
-  const seconds = totalSeconds % 60;
-  const minutes = Math.floor(totalSeconds / 60) % 60;
-  const hours = Math.floor(totalSeconds / 3600);
-  return `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
-}
-
 function formatSpeed(speed: number): string {
   if (Number.isInteger(speed)) {
     return `${speed}`;
   }
   return speed.toFixed(1).replace(/\.0$/, "");
-}
-
-function pad2(value: number): string {
-  return value.toString().padStart(2, "0");
 }

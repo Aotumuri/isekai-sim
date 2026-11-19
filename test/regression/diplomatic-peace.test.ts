@@ -1,3 +1,5 @@
+import { DEFAULT_TRUCE_DAYS } from "../../src/sim/diplomatic-time";
+import { daysToSlowTicks } from "../../src/sim/time";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { extendTruce, getDiplomacyState, getInfluence, getRelation, hasTreaty, TRUCE_EXTENSION, updateDiplomaticRelations } from "../../src/sim/diplomacy";
@@ -9,6 +11,8 @@ import { createSimulationSettings } from "../../src/sim/simulation-settings";
 import { enterPlayerNation } from "../../src/sim/player-nation";
 import { stepFastTick, stepSlowTick } from "../../src/sim/update";
 import { withMutedSimulationLogs } from "../helpers/muted-logs";
+
+const DEFAULT_TRUCE_TICKS = daysToSlowTicks(DEFAULT_TRUCE_DAYS);
 
 test("negotiated peace returns occupations and troops while preserving unrelated wars", () => {
   const world = createFixedSocietyWorld();
@@ -79,8 +83,8 @@ test("a friendly partner extends an expiring truce once and keeps both parties p
   relation.opinion = 20;
   relation.trust = 49;
   relation.tension = 20;
-  relation.treaties.push({ type: "truce", expiresAtSlowTick: 300 });
-  world.time.slowTick = 240;
+  relation.treaties.push({ type: "truce", expiresAtSlowTick: DEFAULT_TRUCE_TICKS });
+  world.time.slowTick = DEFAULT_TRUCE_TICKS - TRUCE_EXTENSION.negotiationWindowSlowTicks + 1;
 
   const influence = getInfluence(world, a.id);
   assert.equal(extendTruce(world, a.id, b.id), false);
@@ -89,9 +93,9 @@ test("a friendly partner extends an expiring truce once and keeps both parties p
   assert.ok(extendTruce(world, a.id, b.id));
   assert.equal(getInfluence(world, a.id), influence - TRUCE_EXTENSION.cost);
   assert.equal(extendTruce(world, a.id, b.id), false);
-  world.time.slowTick = 300;
+  world.time.slowTick = DEFAULT_TRUCE_TICKS;
   assert.ok(hasTreaty(world, b.id, a.id, "truce"));
-  assert.equal(relation.treaties[0].expiresAtSlowTick, 300 + TRUCE_EXTENSION.seconds);
+  assert.equal(relation.treaties[0].expiresAtSlowTick, DEFAULT_TRUCE_TICKS + TRUCE_EXTENSION.durationSlowTicks);
 });
 
 test("AI former enemies renew an expiring peace while both have other commitments", () => {
@@ -110,12 +114,12 @@ test("AI former enemies renew an expiring peace while both have other commitment
     if (caseName === "manual partner") assert(enterPlayerNation(world, b.id));
     const relation = getRelation(world, a.id, b.id);
     Object.assign(relation, { opinion: 5, trust: 55, tension: 10 });
-    world.time.slowTick = 240;
+    world.time.slowTick = DEFAULT_TRUCE_TICKS - TRUCE_EXTENSION.negotiationWindowSlowTicks + 1;
     const influence = getInfluence(world, a.id);
     updateDiplomaticRelations(world);
     updateDiplomaticRelations(world);
     const extendsPeace = caseName === "separate wars" || caseName === "rebuilding partner";
-    assert.equal(relation.treaties[0]?.expiresAtSlowTick, extendsPeace ? 480 : 300, caseName);
+    assert.equal(relation.treaties[0]?.expiresAtSlowTick, DEFAULT_TRUCE_TICKS + (extendsPeace ? TRUCE_EXTENSION.durationSlowTicks : 0), caseName);
     assert.equal(getInfluence(world, a.id), influence + 3 - (extendsPeace ? TRUCE_EXTENSION.cost : 0), caseName);
   }
 });

@@ -1,3 +1,4 @@
+import { slowTicksToDays } from "../sim/time";
 import { getManualGovernmentId } from "../sim/player-nation";
 import { FINANCIAL_AID, getFinancialAidIssue, sendFinancialAid } from "../sim/financial-aid";
 import { getDomesticUnrest } from "../sim/domestic-unrest";
@@ -77,10 +78,10 @@ export function attachTreasuryControls(root: HTMLElement, world: WorldState, sel
       return;
     }
     const unrest = getDomesticUnrest(world, nation.id), cooldown = Math.max(0, (treasury.nextReliefTick ?? 0) - world.time.slowTick);
-    view("revenue").textContent = `Population ${cash(treasury.population)} · Taxable ${cash(treasury.taxablePopulation)} · Last collection +${cash(treasury.lastRevenue)} · Next estimate +${cash(treasury.taxablePopulation * treasury.taxRate / 100)} every ${TAX_COLLECTION_INTERVAL}s.`;
+    view("revenue").textContent = `Population ${cash(treasury.population)} · Taxable ${cash(treasury.taxablePopulation)} · Last collection +${cash(treasury.lastRevenue)} · Next estimate +${cash(treasury.taxablePopulation * treasury.taxRate / 100)} every ${slowTicksToDays(TAX_COLLECTION_INTERVAL)} days.`;
     view("pressure").textContent = `Domestic unrest ${Math.round(unrest.pressure)}/100. Low taxes ease unrest. High taxes can fuel unrest even in peacetime.`;
-    view("military").textContent = `${militaryFundingCost(treasury)} cash every ${TAX_COLLECTION_INTERVAL}s · Larger standing force (+25%, rounded up, within the mobilization limit) and shorter recruitment cycles. ${isMilitaryFunded(world, treasury) ? "Currently funded." : "Currently unfunded."}`;
-    view("relief").textContent = `${reliefCost(treasury)} cash · Reduces unrest by up to 22 points${cooldown ? ` · Available in ${cooldown}s` : ""}.`;
+    view("military").textContent = `${militaryFundingCost(treasury)} cash every ${slowTicksToDays(TAX_COLLECTION_INTERVAL)} days · Larger standing force (+25%, rounded up, within the mobilization limit) and shorter recruitment cycles. ${isMilitaryFunded(world, treasury) ? "Currently funded." : "Currently unfunded."}`;
+    view("relief").textContent = `${reliefCost(treasury)} cash · Reduces unrest by up to 22 points${cooldown ? ` · Available in ${slowTicksToDays(cooldown)} days` : ""}.`;
     action("relief").disabled = unrest.pressure <= 0 || cooldown > 0 || treasury.balance < reliefCost(treasury);
     updateSites(nation.id);
     const project = [...(world.publicWorks ?? [])].find(([, item]) => item.nationId === nation.id);
@@ -88,8 +89,8 @@ export function attachTreasuryControls(root: HTMLElement, world: WorldState, sel
     const issue = project ? null : district() ? getPublicWorkIssue(world, nation.id, district(), kind()) : "No empty district available.";
     action("build").disabled = !!project || !!issue;
     view("construction").textContent = project
-      ? `${districtName(project[0])} · ${project[1].kind} · ${project[1].remaining}s left${project[1].paused ? " · Paused for safety or supply" : ""}.`
-      : `${cost.cash} cash + ${cost.steel} steel + ${cost.fuel} fuel · ${cost.duration}s.${issue ? ` ${issue}` : ""}`;
+      ? `${districtName(project[0])} · ${project[1].kind} · ${slowTicksToDays(project[1].remaining)} days left${project[1].paused ? " · Paused for safety or supply" : ""}.`
+      : `${cost.cash} cash + ${cost.steel} steel + ${cost.fuel} fuel · ${slowTicksToDays(cost.duration)} days.${issue ? ` ${issue}` : ""}`;
     view("spending").textContent = `Total spent · Research ${cash(treasury.spent.research)} · Military ${cash(treasury.spent.military)} · Relief ${cash(treasury.spent.relief)} · Construction ${cash(treasury.spent.construction)} · Aid ${cash(treasury.spent.aid ?? 0)}.`;
   }
 

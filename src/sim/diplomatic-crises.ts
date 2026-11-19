@@ -1,3 +1,4 @@
+import { CRISIS_TRUCE_SLOW_TICKS } from "./diplomatic-time";
 import { adoptTerritorialClaim, deferTerritorialClaim, getWarTerritorialDemand, recordTerritorialClaimOutcome } from "./territorial-claim-objective";
 import { getElectoralClaimPressure } from "./politics";
 import { getNationIdeology } from "./nation-identity";
@@ -141,7 +142,7 @@ export function resolveCrisisPeacefully(world: WorldState, a: NationId, b: Natio
   relation.tension = Math.max(0, relation.tension - 40);
   relation.cooldownUntilSlowTick = world.time.slowTick + 120;
   relation.treaties = relation.treaties.filter((treaty) => treaty.type !== "truce");
-  relation.treaties.push({ type: "truce", expiresAtSlowTick: world.time.slowTick + 120 });
+  relation.treaties.push({ type: "truce", expiresAtSlowTick: world.time.slowTick + CRISIS_TRUCE_SLOW_TICKS });
   getDiplomacyState(world).crisesResolved += 1;
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [a, b], message: `${a} and ${b} defused their crisis (${reason}).` });
 }
@@ -344,8 +345,8 @@ export function betrayTerritorialSettlement(world: WorldState, aggressorId: Nati
     hasTreaty(world, aggressorId, targetId, "alliance") || hasTreaty(world, aggressorId, targetId, "non-aggression") ||
     ![aggressorId, targetId].every((id) => world.nations.some((nation) => nation.id === id && isNationActive(nation)))) return false;
   const relation = getRelation(world, aggressorId, targetId);
-  if (!relation.territorialSettlement || world.time.slowTick - relation.territorialSettlement.atSlowTick >= 120 ||
-    !relation.treaties.some((treaty) => treaty.type === "truce" && treaty.expiresAtSlowTick === relation.territorialSettlement!.atSlowTick + 120 && treaty.expiresAtSlowTick > world.time.slowTick) || !spendInfluence(world, aggressorId, 20)) return false;
+  if (!relation.territorialSettlement || world.time.slowTick - relation.territorialSettlement.atSlowTick >= CRISIS_TRUCE_SLOW_TICKS ||
+    !relation.treaties.some((treaty) => treaty.type === "truce" && treaty.expiresAtSlowTick === relation.territorialSettlement!.atSlowTick + CRISIS_TRUCE_SLOW_TICKS && treaty.expiresAtSlowTick > world.time.slowTick) || !spendInfluence(world, aggressorId, 20)) return false;
   relation.treaties = relation.treaties.filter((treaty) => treaty.type !== "truce");
   relation.cooldownUntilSlowTick = 0;
   if (!startDiplomaticWar(world, aggressorId, targetId)) return false;

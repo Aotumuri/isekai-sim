@@ -10,7 +10,7 @@ import {
   getCapitalDefenseAssessment,
   type CapitalThreatLevel,
 } from "../../src/sim/capital-defense";
-import { FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
+import { completedSlowTicks, FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
 import { stepFastTick, stepSlowTick } from "../../src/sim/update";
 import type { WorldState } from "../../src/sim/world-state";
 import type { NationId } from "../../src/worldgen/nation";
@@ -219,7 +219,7 @@ function runSeed(seed: number): RunResult {
     const decisionTick = world.time.fastTick + 1;
     sampleDecisionState(world, histories, decisionTick);
     stepFastTick(world, FAST_TICK_MS);
-    const dueSlowTicks = Math.floor(world.time.elapsedMs / SLOW_TICK_MS);
+    const dueSlowTicks = completedSlowTicks(world.time.fastTick);
     while (world.time.slowTick < dueSlowTicks) stepSlowTick(world, SLOW_TICK_MS);
   }
 

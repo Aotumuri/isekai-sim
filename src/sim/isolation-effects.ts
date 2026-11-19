@@ -126,7 +126,7 @@ export function updateIsolationEffects(world: WorldState): void {
         }
       }
     }
-    // A pocket cut off for a full minute begins consuming its equipment stock.
+    // A pocket cut off for 600 days begins consuming its equipment stock.
     if (age >= 600) {
       for (const slot of unit.equipment) {
         slot.fill = Math.min(slot.fill, Math.max(0.25, slot.fill - 0.003));

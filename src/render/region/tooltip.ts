@@ -1,3 +1,4 @@
+import { slowTicksToDays } from "../../sim/time";
 import { isStrategicResource, STRATEGIC_RESOURCE_NAMES } from "../../data/strategic-resources";
 import { formatPopulationDistrict, isPopulationMode } from "../population-map";
 import { getUnitTransportCapacity } from "../../sim/unit-capabilities";
@@ -40,7 +41,7 @@ export function formatRegionTooltip(
         if (owner === focus) lines.push("Home territory");
         else if (claim) {
           lines.push(`Claim strength: ${Math.round(claim.strength)} / 100`);
-          if (claim.heldTicks > 0) lines.push(`Previously held: ${claim.heldTicks} seconds`);
+          if (claim.heldTicks > 0) lines.push(`Previously held: ${slowTicksToDays(claim.heldTicks)} days`);
           if (meso.resource) lines.push("Resource interest");
           if (claim.demanded) lines.push("Active territorial ultimatum");
         } else lines.push("No territorial claim");

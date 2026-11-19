@@ -31,21 +31,21 @@ test("campaign decay and newly recorded battle losses use the continuing war's o
   const concurrent = step();
   const secondBasis = Math.max(...concurrent.objectives.map((goal) => goal.openingManpower!));
   assert(secondBasis > firstBasis);
-  const carry = concurrent.observation!.lossRate;
+  const carry = concurrent.observation!.lossFractionPerDay;
   assert(carry > 0);
-  assert(Math.abs(carry - (600 / secondBasis) * 0.2 * 0.8) < 1e-12,
+  assert(Math.abs(carry - (600 / secondBasis / 10) * 0.2 * 0.8) < 1e-12,
     "expanding the basis only rescales and decays the carried rate");
 
   world.wars = world.wars.filter((war) => war !== second);
   const after = step();
   assert.equal(after.objectives.length, 1);
   assert(after.constraints.casualtyFraction > concurrent.constraints.casualtyFraction);
-  assert(Math.abs(after.observation!.lossRate - carry * (secondBasis / firstBasis) * 0.8) < 1e-12,
+  assert(Math.abs(after.observation!.lossFractionPerDay - carry * (secondBasis / firstBasis) * 0.8) < 1e-12,
     "continuing-war forecast must not differentiate fractions on different scales");
 
   recordDirectBattleDamage(losses, nation.id, 125);
   const next = step();
-  assert(Math.abs(next.observation!.lossRate - (after.observation!.lossRate * 0.8 + (125 / firstBasis) * 0.2)) < 1e-12,
+  assert(Math.abs(next.observation!.lossFractionPerDay - (after.observation!.lossFractionPerDay * 0.8 + (125 / firstBasis / 10) * 0.2)) < 1e-12,
     "new real losses still enter both observations on the same scale");
 });
 
@@ -55,16 +55,16 @@ test("the first cost observation starts at zero and legacy objectives supply the
   const nationId = world.wars[0].aggressorId;
   updateWarCampaigns(world);
   const campaign = world.warCampaigns!.byNationId.get(nationId)!;
-  assert.equal(campaign.observation!.lossRate, 0);
+  assert.equal(campaign.observation!.lossFractionPerDay, 0);
 
   const openingStrength = 400;
   const legacyCampaign = {
     ...campaign,
     objectives: [{ ...campaign.objectives[0], openingManpower: undefined, openingStrength }],
-    observation: { tick: world.time.fastTick, casualtyFraction: 0.25, lossRate: 0.125 },
+    observation: { tick: world.time.fastTick, casualtyFraction: 0.25, lossFractionPerDay: 0.0125 },
   };
   world.time.fastTick += 10;
   // The basis doubles while 20 newly unavailable manpower enter the ledger.
-  assert(Math.abs(observeCampaignCost(world, 120 / 800, 800, legacyCampaign).lossRate - 0.055) < 1e-12);
-  assert.equal(observeCampaignCost(world, 0.5, 800, { ...legacyCampaign, observation: undefined }).lossRate, 0);
+  assert(Math.abs(observeCampaignCost(world, 120 / 800, 800, legacyCampaign).lossFractionPerDay - 0.0055) < 1e-12);
+  assert.equal(observeCampaignCost(world, 0.5, 800, { ...legacyCampaign, observation: undefined }).lossFractionPerDay, 0);
 });

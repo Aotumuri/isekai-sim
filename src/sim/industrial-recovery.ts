@@ -8,8 +8,9 @@ import { isNationRegionSupplied } from "./supply-assessment";
 import { spendTreasury, TAX_COLLECTION_INTERVAL } from "./treasury";
 import { getMesoById, getOwnerByMesoId } from "./world-cache";
 import type { WorldState } from "./world-state";
+import { daysToSlowTicks } from "./time";
 
-const RECOVERY_DURATION = 60;
+const RECOVERY_DURATION = daysToSlowTicks(600);
 // Restarting an existing site costs one fifth of the baseline city works budget.
 const RESTORATION_COST = { cash: 9, steel: 16 };
 

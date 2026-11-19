@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createDefaultWorldConfig, createWorldConfig } from "../../src/data/world-config";
 import { createWorld } from "../../src/sim/create-world";
-import { FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
+import { completedSlowTicks, FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
 import { stepFastTick, stepSlowTick } from "../../src/sim/update";
 import { assertWorldInvariants, semanticWorldSignature } from "../helpers/invariants";
 import { withMutedSimulationLogs } from "../helpers/muted-logs";
@@ -89,7 +89,7 @@ withMutedSimulationLogs(() => {
   for (let index = 0; index < ticks; index++) {
     const tickStart = performance.now();
     stepFastTick(world, FAST_TICK_MS);
-    while (world.time.slowTick < Math.floor(world.time.elapsedMs / SLOW_TICK_MS)) stepSlowTick(world, SLOW_TICK_MS);
+    while (world.time.slowTick < completedSlowTicks(world.time.fastTick)) stepSlowTick(world, SLOW_TICK_MS);
     peakTickMs = Math.max(peakTickMs, performance.now() - tickStart);
     observe();
   }

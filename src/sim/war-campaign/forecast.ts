@@ -6,7 +6,9 @@ import type { CampaignObjective, WarCampaign } from "./state";
 import type { CampaignOpportunity } from "./alternatives";
 import { getOwnerByMesoId } from "../world-cache";
 import { getUnitCombatStrength } from "../unit-strength";
-import { getMoveMsPerRegion } from "../movement";
+import { estimateLandTravelDays } from "../movement";
+import { fastTicksToDays, remainingDays } from "../time";
+import { CAMPAIGN_HORIZON_DAYS } from "./alternatives";
 import { getNationalTerritorialValue, getTerritorialValue } from "../territorial-value";
 import { assessPeaceOffer, whitePeaceTerms } from "../war-negotiations";
 import { hasMinimumPeaceAge } from "../peace-maturity";
@@ -19,19 +21,19 @@ import { forecastCampaignForceShares } from "./forecast-force";
 import { getCampaignObjectiveDistances } from "./forecast-distances";
 import { getCampaignOpeningInvestment } from "./battle-costs";
 
-export interface CampaignObservation { tick: number; casualtyFraction: number; lossRate: number }
+export interface CampaignObservation { tick: number; casualtyFraction: number; lossFractionPerDay: number }
 
 export function observeCampaignCost(
   world: WorldState, casualtyFraction: number, openingInvestment: number, previous?: WarCampaign,
 ): CampaignObservation {
   const old = previous?.observation;
-  if (!old) return { tick: world.time.fastTick, casualtyFraction, lossRate: 0 };
+  if (!old) return { tick: world.time.fastTick, casualtyFraction, lossFractionPerDay: 0 };
   // The next decision may drop or add an opponent with a different opening
   // investment. Express both observations and the carried rate in today's units.
   const basisScale = getCampaignOpeningInvestment(previous.objectives) / openingInvestment;
-  const elapsed = (world.time.fastTick - old.tick) / 10;
+  const elapsed = fastTicksToDays(world.time.fastTick - old.tick);
   const rate = elapsed > 0 ? Math.max(0, casualtyFraction - old.casualtyFraction * basisScale) / elapsed : 0;
-  return { tick: world.time.fastTick, casualtyFraction, lossRate: old.lossRate * basisScale * 0.8 + rate * 0.2 };
+  return { tick: world.time.fastTick, casualtyFraction, lossFractionPerDay: old.lossFractionPerDay * basisScale * 0.8 + rate * 0.2 };
 }
 
 /** Adapter collects observable state; the alternative evaluator is pure.
@@ -58,15 +60,15 @@ export function forecastCampaignOpportunities(
     const distances = getCampaignObjectiveDistances(world, nation.id, goal);
     const shares = forecastCampaignForceShares(world, nation.id, goal.opponentId, units);
     const arriving = units.map((unit) => ({ strength: getUnitCombatStrength(unit) * (shares.get(unit.id) ?? 0),
-      seconds: (distances.get(unit.regionId) ?? Infinity) * getMoveMsPerRegion(unit) / 1000 }))
-      .filter(({ strength, seconds }) => strength > 0 && seconds < 30);
+      days: estimateLandTravelDays(unit, distances.get(unit.regionId) ?? Infinity) }))
+      .filter(({ strength, days }) => strength > 0 && days < CAMPAIGN_HORIZON_DAYS);
     let available = arriving.reduce((sum, { strength }) => sum + strength, 0);
-    let arrival = available > 0 ? arriving.reduce((sum, { strength, seconds }) => sum + strength * seconds, 0) / available : Infinity;
+    let arrival = available > 0 ? arriving.reduce((sum, { strength, days }) => sum + strength * days, 0) / available : Infinity;
     const invasion = world.amphibiousOperations.operations.find((op) => op.nationId === nation.id &&
       op.enemyNationId === goal.opponentId && op.phase !== "cancelled" && op.phase !== "landed");
     if (!available && invasion) {
       available = invasion.assignedStrength;
-      arrival = Math.max(0, invasion.launchFeasibility.estimatedCompletionTick - world.time.fastTick) / 10;
+      arrival = remainingDays(world.time.fastTick, invasion.launchFeasibility.estimatedCompletionTick);
     }
     const victoryRegions = goal.political?.purpose === "decisive-victory"
       ? world.mesoRegions.filter((r) => owners.get(r.id) === goal.opponentId).map((r) => r.id) : goal.regionIds;
@@ -88,9 +90,9 @@ export function forecastCampaignOpportunities(
       1 / (1 + Math.exp(-peace.score / 10)) * 0.5 : 0 : 0;
     const settlingGain = securedValue || (terms.demandedRegionIds.length || terms.demandedWeapons > 0 ? politicalValue : 0);
     return { opponentId: goal.opponentId, availableStrength: available,
-      opposition: strengths.get(goal.opponentId) ?? 0, arrivalSeconds: arrival,
+      opposition: strengths.get(goal.opponentId) ?? 0, arrivalDays: arrival,
       objectiveValue: Math.max(0, politicalValue - securedValue), securedValue,
-      homelandAtRisk: atRisk, lossFractionPerSecond: observation.lossRate,
+      homelandAtRisk: atRisk, lossFractionPerDay: observation.lossFractionPerDay,
       replacementFraction: Math.min(nation.resources.manpower, nation.resources.weapons * strengthPerWeapon) / investment,
       peaceProbability, settlementReady: hasReadyCampaignSettlement(world, war, negotiation, peaceContext),
       settlementValue: settlingGain, militaryGoalHeld: goal.achieved,

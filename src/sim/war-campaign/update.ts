@@ -2,14 +2,14 @@ import type { NationRuntime } from "../nation-runtime";
 import type { WarState } from "../war-state";
 import type { NationId } from "../../worldgen/nation";
 import { getCapitalDefenseAssessment } from "../capital-defense";
-import { foodReserveSeconds } from "../food-supply";
+import { foodReserveDays } from "../food-supply";
 import { getNationCharacter } from "../nation-character";
 import { isNationActive } from "../nation-active";
 import { allFieldUnits } from "../mobilization";
 import { getUnitCombatStrength } from "../unit-strength";
 import { getWarCasualties } from "../war-state";
 import type { WorldState } from "../world-state";
-import { campaignCostLimitReached, evaluateCampaignPolicy, requiresCampaignReview, type CampaignConstraints } from "./policy";
+import { MINIMUM_CAMPAIGN_FOOD_DAYS, campaignCostLimitReached, evaluateCampaignPolicy, requiresCampaignReview, type CampaignConstraints } from "./policy";
 import { getOpposingFrontSide } from "../land-fronts";
 import { createWarCampaignState, type CampaignObjective, type WarCampaign, type WarCampaignState } from "./state";
 import { buildCampaignObjectives } from "./objectives";
@@ -57,7 +57,7 @@ export function updateWarCampaigns(world: WorldState): void {
     const decision = evaluateCampaignPolicy(constraints, alternatives);
     const topologyChanged = !previous || previous.objectives.map((goal) => goal.warKey).sort().join("|") !==
       objectives.map((goal) => goal.warKey).sort().join("|");
-    const emergency = constraints.capitalCritical || constraints.foodSeconds < 45;
+    const emergency = constraints.capitalCritical || constraints.foodDays < MINIMUM_CAMPAIGN_FOOD_DAYS;
     const negotiating = previous?.mode === "seek-peace" || previous?.mode === "consolidate";
     const current = alternatives.find((option) => option.mode === previous?.mode &&
       (negotiating || option.opponentId === previous.primaryOpponentId));
@@ -133,7 +133,7 @@ function assessCampaignConstraints(
         wars.reduce((sum, war) => sum + getWarCasualties(war, nation.id), 0)) + (battleCost?.removedManpower ?? 0)) /
         openingInvestment,
       costTolerance: 0.5 + character.aggression,
-      foodSeconds: nation.food ? foodReserveSeconds(nation.food) : Infinity,
+      foodDays: nation.food ? foodReserveDays(nation.food) : Infinity,
       replacementConstrained: nation.resources.weapons <= 0 && nation.resources.manpower <= 0,
       capitalCritical: getCapitalDefenseAssessment(world, nation.id)?.threatLevel === "critical",
       objectivesSecured: objectives.some((goal) => goal.kind === "limited-occupation") &&

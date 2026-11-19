@@ -9,8 +9,9 @@ import { POPULATION_DIMENSIONS } from "./regional-population";
 import { recordSimulationEvent } from "./simulation-settings";
 import { getOwnerByMesoId } from "./world-cache";
 import type { WorldState } from "./world-state";
+import { daysToSlowTicks, slowTicksToDays } from "./time";
 
-export const FOOD_INTERVAL = 10;
+export const FOOD_INTERVAL = daysToSlowTicks(100);
 export const FAMINE_THRESHOLD = 3;
 export const foodStorageLimit = (demand: number, level = 0): number => 20 + demand * (18 + 6 * level);
 
@@ -54,19 +55,19 @@ function collectFoodDistricts(world: WorldState): Map<NationId, FoodDistricts> {
   return totals;
 }
 
-export function foodReserveSeconds(food: NationalFoodSupply): number {
+export function foodReserveDays(food: NationalFoodSupply): number {
   const ration = RATION_POLICIES[food.rationPolicy ?? "normal"];
   const deficit = food.demand * ration - food.harvest - (food.levy ?? 0);
-  return deficit > 0 ? Math.floor(food.stock / deficit * FOOD_INTERVAL) : Infinity;
+  return deficit > 0 ? Math.floor(food.stock / deficit * slowTicksToDays(FOOD_INTERVAL)) : Infinity;
 }
 
 function updateReserveWarning(world: WorldState, id: NationId, food: NationalFoodSupply): void {
-  const seconds = foodReserveSeconds(food);
-  if (food.reserveWarning && seconds >= 120) food.reserveWarning = false;
-  if (food.reserveWarning || seconds > 60 || food.shortageCycles >= FAMINE_THRESHOLD) return;
+  const days = foodReserveDays(food);
+  if (food.reserveWarning && days >= 1200) food.reserveWarning = false;
+  if (food.reserveWarning || days > 600 || food.shortageCycles >= FAMINE_THRESHOLD) return;
   food.reserveWarning = true;
   recordSimulationEvent(world, { category: "politics", nationIds: [id],
-    message: `${id}'s grain reserve will last about ${seconds} more seconds at current harvest and ration levels.` });
+    message: `${id}'s grain reserve will last about ${days} more days at current harvest and ration levels.` });
 }
 
 function applyFamineDeaths(world: WorldState, districts: MesoRegionId[], mortality: number): number {

@@ -1,5 +1,5 @@
-import { FAST_TICK_MS, SLOW_TICK_MS, createSimClock, setSpeedIndex } from "../../src/sim/time";
-import { stepFastTick, stepSlowTick, updateSimulation } from "../../src/sim/update";
+import { createSimClock, setSpeedIndex } from "../../src/sim/time";
+import { stepSimulationDay, updateSimulation } from "../../src/sim/update";
 import type { WorldState } from "../../src/sim/world-state";
 import { BenchmarkMetrics } from "../benchmark/metrics";
 import type { BenchmarkMode } from "../benchmark/types";
@@ -70,11 +70,7 @@ export function runSimulation(
 
 function runThroughputTicks(world: WorldState, ticks: number, observe?: (world: WorldState) => void): void {
   for (let i = 0; i < ticks; i += 1) {
-    stepFastTick(world, FAST_TICK_MS);
-    const dueSlowTicks = Math.floor(world.time.elapsedMs / SLOW_TICK_MS);
-    while (world.time.slowTick < dueSlowTicks) {
-      stepSlowTick(world, SLOW_TICK_MS);
-    }
+    stepSimulationDay(world);
     observe?.(world);
   }
 }

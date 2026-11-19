@@ -1,9 +1,10 @@
+import { DEFAULT_TRUCE_DAYS, EXTENDED_PEACE_DAYS, MAX_TRUCE_DAYS } from "../../src/sim/diplomatic-time";
 import { formatTerritorialClaimObjective } from "../../src/render/territorial-claim-summary";
 import { getNationalPolitics, updateNationalPolitics } from "../../src/sim/politics";
 import { assessWarIntent } from "../../src/sim/war-declaration";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getCampaignDeadline } from "../../src/sim/campaign-deadline";
+import { getCampaignDeadlineDays } from "../../src/sim/campaign-deadline";
 import { getCampaignObjectives } from "../../src/sim/campaign-objectives";
 import { getCrisisDeploymentReadiness, updateCrisisDeployments } from "../../src/sim/crisis-deployment";
 import { getDiplomacyState, getRelation } from "../../src/sim/diplomacy";
@@ -115,12 +116,12 @@ test("automatic acceptance waits for contact, and severe unrest induces staged c
   const { world, a, b } = campaign();
   const war = declareWar(world.wars, a.id, b.id, 0)!;
   const negotiation = getWarNegotiation(world, war);
-  const offer = { ...whitePeaceTerms(), offeredWeapons: 70, truceSeconds: 900 };
+  const offer = { ...whitePeaceTerms(), offeredWeapons: 70, truceDays: MAX_TRUCE_DAYS };
   world.time.fastTick = 310;
   assert.match(assessPeaceOffer(world, b.id, a.id, offer).reason, /battlefield evidence/);
   b.warCooperation = 0;
   const unrest = getDomesticUnrest(world, b.id);
-  unrest.pressure = 95; unrest.lowSupportSeconds = 300;
+  unrest.pressure = 95; unrest.lowSupportSlowTicks = 300;
   const initial = negotiation.offers.get(b.id)!;
   world.time.slowTick = 30;
   updateWarNegotiations(world);
@@ -134,14 +135,14 @@ test("an additional enemy increases the value of an enforceable truce and occupa
   const { world, a, b } = campaign();
   declareWar(world.wars, a.id, b.id, 0);
   world.time.fastTick = 1000;
-  const score = (seconds: number) => assessPeaceOffer(world, b.id, a.id, { ...whitePeaceTerms(), truceSeconds: seconds }).score;
-  const baseTruce = score(600) - score(300);
+  const score = (days: number) => assessPeaceOffer(world, b.id, a.id, { ...whitePeaceTerms(), truceDays: days }).score;
+  const baseTruce = score(EXTENDED_PEACE_DAYS) - score(DEFAULT_TRUCE_DAYS);
   const c = world.nations.find(({ id }) => id !== a.id && id !== b.id)!;
   declareWar(world.wars, c.id, b.id, 0);
-  assert(score(600) - score(300) > baseTruce);
+  assert(score(EXTENDED_PEACE_DAYS) - score(DEFAULT_TRUCE_DAYS) > baseTruce);
   const target = getCampaignObjectives(world, a.id, b.id)[0];
   assert(target);
-  const cost = () => score(300) - assessPeaceOffer(world, b.id, a.id, { ...whitePeaceTerms(), demandedRegionIds: [...getCampaignObjectives(world, a.id, b.id)] }).score;
+  const cost = () => score(DEFAULT_TRUCE_DAYS) - assessPeaceOffer(world, b.id, a.id, { ...whitePeaceTerms(), demandedRegionIds: [...getCampaignObjectives(world, a.id, b.id)] }).score;
   const unoccupied = cost();
   world.occupation.mesoById.set(target, a.id);
   world.occupation.version++;
@@ -153,7 +154,7 @@ test("a valid opening window and a published objective reach the active front pl
   const war = declareWar(world.wars, a.id, b.id, 0)!;
   war.cause = "diplomatic-crisis";
   const negotiation = getWarNegotiation(world, war);
-  assert(getCampaignDeadline(world, a.id, b.id) <= 75);
+  assert(getCampaignDeadlineDays(world, a.id, b.id) <= 750);
   updateLandFronts(world);
   const sector = world.landFronts.operationalSectors.find((item) =>
     (item.nationAId === a.id && item.nationBId === b.id) || (item.nationBId === a.id && item.nationAId === b.id))!;
@@ -201,7 +202,7 @@ test("rival demands can yield to a mutually acceptable longer truce", () => {
   }
   updateWarNegotiations(world);
   assert(!findWar(world.wars, a.id, b.id));
-  assert.equal(world.warNegotiations?.settlements[0]?.terms.truceSeconds, 600);
+  assert.equal(world.warNegotiations?.settlements[0]?.terms.truceDays, EXTENDED_PEACE_DAYS);
 });
 
 test("a collapsing food reserve makes fighting on less attractive at the same military strength", () => {

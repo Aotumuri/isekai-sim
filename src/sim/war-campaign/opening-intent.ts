@@ -1,3 +1,4 @@
+import { MINIMUM_CAMPAIGN_FOOD_DAYS } from "./policy";
 import type { NationId } from "../../worldgen/nation";
 import type { MesoRegionId } from "../../worldgen/meso-region";
 import type { WorldState } from "../world-state";
@@ -5,13 +6,13 @@ import { getOwnerByMesoId, getPortTargetsByNation } from "../world-cache";
 import { getTerritorialValue } from "../territorial-value";
 import { getCachedMaritimeRoute } from "../maritime-supply";
 import { getUnitCombatStrength } from "../unit-strength";
-import { foodReserveSeconds } from "../food-supply";
+import { foodReserveDays } from "../food-supply";
 
 export interface CampaignOpeningIntent {
   objectiveRegionIds: MesoRegionId[];
   rationale: "declared-territory" | "border-value" | "maritime-foothold" | "no-access";
   feasible: boolean;
-  foodSeconds: number;
+  foodDays: number;
   estimatedOpposition: number;
 }
 
@@ -23,7 +24,7 @@ export function assessCampaignOpening(
 ): CampaignOpeningIntent {
   const owners = getOwnerByMesoId(world);
   const nation = world.nations.find((item) => item.id === nationId);
-  const foodSeconds = nation?.food ? foodReserveSeconds(nation.food) : Infinity;
+  const foodDays = nation?.food ? foodReserveDays(nation.food) : Infinity;
   const declared = requested.filter((id) => owners.get(id) === opponentId);
   const borders = world.mesoRegions.filter((region) => region.type !== "sea" && owners.get(region.id) === opponentId &&
     region.neighbors.some((neighbor) => owners.get(neighbor.id) === nationId));
@@ -51,7 +52,7 @@ export function assessCampaignOpening(
   return {
     objectiveRegionIds: declared.length ? [...declared] : ranked[0] ? [ranked[0].id] : [],
     rationale: declared.length ? "declared-territory" : !ranked.length ? "no-access" : borders.length ? "border-value" : "maritime-foothold",
-    feasible: candidates.length > 0 && foodSeconds >= 45,
-    foodSeconds, estimatedOpposition: ranked[0]?.opposition ?? 0,
+    feasible: candidates.length > 0 && foodDays >= MINIMUM_CAMPAIGN_FOOD_DAYS,
+    foodDays, estimatedOpposition: ranked[0]?.opposition ?? 0,
   };
 }

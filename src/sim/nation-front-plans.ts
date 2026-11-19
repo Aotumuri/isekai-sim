@@ -1,7 +1,7 @@
 import { hasMinimumPeaceAge } from "./peace-maturity";
 import { applyCampaignFrontGuidance } from "./war-campaign/front-guidance";
 import { getCampaignObjectives } from "./campaign-objectives";
-import { getCampaignDeadline } from "./campaign-deadline";
+import { CAMPAIGN_URGENCY_DAYS, getCampaignDeadlineDays } from "./campaign-deadline";
 import { WORLD_BALANCE } from "../data/balance";
 import type { NationId } from "../worldgen/nation";
 import {
@@ -313,8 +313,8 @@ function evaluateNationFrontPlan(
   const supplyPriority = supplyRisks.reduce(
     (maximum, risk) => Math.max(maximum, risk.status === "critical" ? 26 : 13), 0,
   );
-  const deadline = getCampaignDeadline(world, nationId, enemy.nationId);
-  const canPress = deadline <= 75 && ratio >= 1.05 && friendly.strength > 0 &&
+  const deadline = getCampaignDeadlineDays(world, nationId, enemy.nationId);
+  const canPress = deadline <= CAMPAIGN_URGENCY_DAYS && ratio >= 1.05 && friendly.strength > 0 &&
     posture !== "retreat" && !isCapitalDefenseFront && capitalDefense?.threatLevel !== "critical" &&
     !supplyRisks.some((risk) => risk.status === "critical");
   const campaignPosture = canPress ? "attack" : posture;

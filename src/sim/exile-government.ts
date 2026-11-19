@@ -1,3 +1,4 @@
+import { slowTicksToDays } from "./time";
 import { WORLD_BALANCE } from "../data/balance";
 import { allMobilizedUnits } from "./mobilization";
 import type { MesoRegionId } from "../worldgen/meso-region";
@@ -134,7 +135,7 @@ function returnGovernment(world: WorldState, record: ExileGovernment, capitalId:
   }
   getExileState(world).version++;
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [record.nationId, record.hostId],
-    message: `${getNationName(world, record.nationId)}'s government returned to ${record.restoredDistricts} liberated districts. A 60-second reorganization period begins.` });
+    message: `${getNationName(world, record.nationId)}'s government returned to ${record.restoredDistricts} liberated districts. A ${slowTicksToDays(record.graceUntilSlowTick - world.time.slowTick)}-day reorganization period begins.` });
 }
 export function updateExileGovernments(world: WorldState): void {
   const state = world.exileGovernments; if (!state) return;

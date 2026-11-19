@@ -1,3 +1,5 @@
+import { daysToSlowTicks } from "../../src/sim/time";
+import { EXTENDED_PEACE_DAYS } from "../../src/sim/diplomatic-time";
 import { updateWarCampaigns } from "../../src/sim/war-campaign/update";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -31,7 +33,7 @@ test("both sides publish standing opening conditions without instantly ending th
 test("domestic crisis makes pragmatic governments accept an exit while intransigent governments resist", () => {
   const { world, a, b } = scene();
   world.time.slowTick = 120; world.time.fastTick = 1200;
-  b.warCooperation = 0; const unrest = getDomesticUnrest(world, b.id); unrest.pressure = 85; unrest.lowSupportSeconds = 250;
+  b.warCooperation = 0; const unrest = getDomesticUnrest(world, b.id); unrest.pressure = 85; unrest.lowSupportSlowTicks = 250;
   b.character = { doctrine: "merchant", aggression: 0.25, cooperation: 0.9, innovation: 0.5, thrift: 0.8 };
   const pragmatic = assessPeaceOffer(world, b.id, a.id, whitePeaceTerms()); assert(pragmatic.accepts);
   const urgency = getPeaceUrgency(world, b.id);
@@ -53,16 +55,16 @@ test("accepted territory exchanges and reparations settle atomically, preserve o
   const pair = [...owners].filter(([id, owner]) => owner === b.id && id !== b.capitalMesoId).flatMap(([demanded]) => [...owners].filter(([id, owner]) => owner === a.id && id !== a.capitalMesoId).map(([offered]) => ({ demanded, offered }))).find(({ demanded, offered }) => !getPeaceTermsIssue(world, a.id, b.id, { ...whitePeaceTerms(), demandedRegionIds: [demanded], offeredRegionIds: [offered] }));
   assert(pair, "fixture needs a valid exchange along the border");
   const { demanded, offered } = pair;
-  const unrest = getDomesticUnrest(world, b.id); unrest.pressure = 85; unrest.lowSupportSeconds = 250;
+  const unrest = getDomesticUnrest(world, b.id); unrest.pressure = 85; unrest.lowSupportSlowTicks = 250;
   const troop = world.units.find((unit) => unit.nationId === b.id)!; troop.regionId = demanded;
   world.occupation.mesoById.set(demanded, a.id); world.occupation.version++;
-  assert(proposePeaceTerms(world, a.id, b.id, { ...whitePeaceTerms(), demandedRegionIds: [demanded], offeredRegionIds: [offered], demandedWeapons: 20, truceSeconds: 600 }));
+  assert(proposePeaceTerms(world, a.id, b.id, { ...whitePeaceTerms(), demandedRegionIds: [demanded], offeredRegionIds: [offered], demandedWeapons: 20, truceDays: EXTENDED_PEACE_DAYS }));
   assert(acceptPeaceOffer(world, b.id, a.id));
   assert.equal(getOwnerByMesoId(world).get(demanded), a.id); assert.equal(getOwnerByMesoId(world).get(offered), b.id);
   assert.equal(a.resources.weapons, 120); assert.equal(b.resources.weapons, 80);
   assert(!findWar(world.wars, a.id, b.id)); assert(findWar(world.wars, a.id, c.id));
   assert.equal(troop.regionId, b.capitalMesoId); assert(unrest.pressure < 85);
-  assert.equal(getRelation(world, a.id, b.id).treaties.find((treaty) => treaty.type === "truce")?.expiresAtSlowTick, 600);
+  assert.equal(getRelation(world, a.id, b.id).treaties.find((treaty) => treaty.type === "truce")?.expiresAtSlowTick, daysToSlowTicks(EXTENDED_PEACE_DAYS));
   assert.equal(world.warNegotiations?.settlements.length, 1);
 });
 test("unaffordable or stale proposals cannot charge resources or transfer any territory", () => {
@@ -77,7 +79,7 @@ test("unaffordable or stale proposals cannot charge resources or transfer any te
 test("automatic negotiations can conclude peace before the domestic crisis becomes a revolution", () => {
   const { world, a, b, negotiation } = scene();
   b.character = { doctrine: "merchant", aggression: 0.25, cooperation: 0.9, innovation: 0.5, thrift: 0.8 };
-  b.warCooperation = 0; const unrest = getDomesticUnrest(world, b.id); unrest.pressure = 85; unrest.lowSupportSeconds = 250;
+  b.warCooperation = 0; const unrest = getDomesticUnrest(world, b.id); unrest.pressure = 85; unrest.lowSupportSlowTicks = 250;
   negotiation.offers.get(a.id)!.terms = whitePeaceTerms(); negotiation.automatic.set(a.id, false);
   world.time.slowTick = 120; world.time.fastTick = 1200;
   updateWarNegotiations(world);
@@ -136,7 +138,7 @@ test("a secured legal campaign goal enters automatic peace terms even when absen
   const campaign = world.warCampaigns!.byNationId.get(a.id)!;
   campaign.objectives.find((item) => item.opponentId === b.id)!.regionIds = [goal];
   campaign.mode = "consolidate";
-  campaign.constraints.foodSeconds = Infinity;
+  campaign.constraints.foodDays = Infinity;
   campaign.constraints.casualtyFraction = 0;
   campaign.constraints.objectivesSecured = true;
   world.occupation.mesoById.set(goal, a.id);
@@ -162,7 +164,7 @@ test("mutually accepted goal recognition respects maturity and yields to urgent 
     const campaign = world.warCampaigns!.byNationId.get(a.id)!;
     campaign.objectives.find((item) => item.opponentId === b.id)!.regionIds = [goal];
     campaign.mode = "consolidate";
-    Object.assign(campaign.constraints, { foodSeconds: urgent ? 0 : Infinity, casualtyFraction: 0, objectivesSecured: true });
+    Object.assign(campaign.constraints, { foodDays: urgent ? 0 : Infinity, casualtyFraction: 0, objectivesSecured: true });
     world.occupation.mesoById.set(goal, a.id); world.occupation.version++;
     for (const nation of [a, b]) {
       nation.warCooperation = 0;
@@ -170,10 +172,10 @@ test("mutually accepted goal recognition respects maturity and yields to urgent 
       getDomesticUnrest(world, nation.id).pressure = 95;
       negotiation.lastRevisionSlowTick.set(nation.id, 90);
     }
-    const recognition = { ...whitePeaceTerms(), demandedRegionIds: [goal], truceSeconds: 600 };
+    const recognition = { ...whitePeaceTerms(), demandedRegionIds: [goal], truceDays: EXTENDED_PEACE_DAYS };
     negotiation.offers.get(a.id)!.terms = recognition;
     negotiation.offers.get(a.id)!.revisedAtSlowTick = 88;
-    negotiation.offers.get(b.id)!.terms = { ...whitePeaceTerms(), truceSeconds: 600 };
+    negotiation.offers.get(b.id)!.terms = { ...whitePeaceTerms(), truceDays: EXTENDED_PEACE_DAYS };
     negotiation.offers.get(b.id)!.revisedAtSlowTick = 70;
     world.time.slowTick = 90; world.time.fastTick = 900;
     assert(assessPeaceOffer(world, b.id, a.id, recognition).accepts);

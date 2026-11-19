@@ -1,11 +1,13 @@
 /** Pure national policy. Combat and movement rules are deliberately absent. */
 import type { CampaignAlternative } from "./alternatives";
+export const MINIMUM_CAMPAIGN_FOOD_DAYS = 450;
+
 export type CampaignMode = "defend" | "limited-offensive" | "consolidate" | "seek-peace";
 export interface CampaignConstraints {
   strengthRatio: number;
   casualtyFraction: number;
   costTolerance: number;
-  foodSeconds: number;
+  foodDays: number;
   replacementConstrained: boolean;
   capitalCritical: boolean;
   objectivesSecured: boolean;
@@ -22,19 +24,19 @@ export function requiresCampaignReview(
 ): boolean {
   if (!previous || membershipChanged || ageTicks >= 80) return true;
   return current.capitalCritical && !previous.capitalCritical ||
-    current.foodSeconds < 45 && previous.foodSeconds >= 45 ||
+    current.foodDays < MINIMUM_CAMPAIGN_FOOD_DAYS && previous.foodDays >= MINIMUM_CAMPAIGN_FOOD_DAYS ||
     current.casualtyFraction >= current.costTolerance && previous.casualtyFraction < previous.costTolerance ||
     current.objectivesSecured !== previous.objectivesSecured;
 }
 
 export function campaignCostLimitReached(input: CampaignConstraints): boolean {
-  return input.casualtyFraction >= input.costTolerance || input.foodSeconds < 45;
+  return input.casualtyFraction >= input.costTolerance || input.foodDays < MINIMUM_CAMPAIGN_FOOD_DAYS;
 }
 
 export function evaluateCampaignPolicy(input: CampaignConstraints, alternatives?: CampaignAlternative[]): CampaignDecision {
   if (input.capitalCritical) return { mode: "defend", reason: "capital-emergency" };
   if (campaignCostLimitReached(input)) {
-    return { mode: "seek-peace", reason: input.foodSeconds < 45 ? "food-runway" : "cost-limit" };
+    return { mode: "seek-peace", reason: input.foodDays < MINIMUM_CAMPAIGN_FOOD_DAYS ? "food-runway" : "cost-limit" };
   }
   if (alternatives?.length) {
     const choice = alternatives[0];

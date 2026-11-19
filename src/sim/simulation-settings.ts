@@ -29,6 +29,7 @@ export function getWarDeclarationMode(world: WorldState): "diplomacy" | "legacy"
 }
 
 export interface SimulationEvent {
+  /** Fast tick at publication, also the elapsed world day. */
   tick: number;
   category: "diplomacy" | "research" | "aid" | "trade" | "military" | "politics";
   nationIds: string[];

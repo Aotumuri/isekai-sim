@@ -1,3 +1,4 @@
+import { daysToSlowTicks } from "./time";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import { hasTreaty } from "./diplomacy";
 import { dominantGroup, getRegionalPopulations, groupAffinity, POPULATION_DIMENSIONS, type RegionalPopulation } from "./regional-population";
@@ -17,8 +18,10 @@ function movePopulation(source: RegionalPopulation, from: RegionalPopulation, to
   }
 }
 
+const MIGRATION_INTERVAL = daysToSlowTicks(100);
+
 export function updatePopulationMigration(world: WorldState): void {
-  if (world.time.slowTick % 10 !== 0 || !world.regionalPopulations) return;
+  if (world.time.slowTick % MIGRATION_INTERVAL !== 0 || !world.regionalPopulations) return;
   const populations = getRegionalPopulations(world);
   const next = new Map([...populations].map(([id, p]) => [id, {
     size: p.size, ancestry: [...p.ancestry], culture: [...p.culture], faith: [...p.faith],

@@ -1,3 +1,5 @@
+import { DEFAULT_TRUCE_DAYS, EXTENDED_PEACE_DAYS } from "../../src/sim/diplomatic-time";
+import { daysToSlowTicks } from "../../src/sim/time";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createUnitForType } from "../../src/sim/create-units";
@@ -93,7 +95,7 @@ test("signed resource reparations transfer available stock once per interval and
   assert.equal(b.resources.fuel, 0);
   assert(Math.abs(treatyRisk(b, world.time.slowTick) - 0.9) < 1e-9);
   b.resources.fuel = 10;
-  world.time.slowTick = signedAt + terms.truceSeconds;
+  world.time.slowTick = signedAt + daysToSlowTicks(terms.truceDays);
   updateResourceReparations(world);
   assert.equal(b.resources.fuel, 10);
   assert.equal(world.resourceReparations?.length, 0);
@@ -128,18 +130,18 @@ test("the same concession costs more in peace talks when the payer has less stoc
   const { world, c, b } = scene();
   const base = whitePeaceTerms();
   const term = { ...base, resourceReparation: { resource: "fuel" as const, amount: 10 } };
-  const penalty = (truceSeconds: number) => assessPeaceOffer(world, b.id, c.id, { ...base, truceSeconds }).score -
-    assessPeaceOffer(world, b.id, c.id, { ...term, truceSeconds }).score;
+  const penalty = (truceDays: number) => assessPeaceOffer(world, b.id, c.id, { ...base, truceDays }).score -
+    assessPeaceOffer(world, b.id, c.id, { ...term, truceDays }).score;
 
-  b.resources.fuel = 180;
-  // Nine payments over a 300-second truce, funded entirely from stock.
-  assert(Math.abs(penalty(300) - 12.5) < 1e-9);
-  assert(penalty(600) > penalty(300));
+  b.resources.fuel = 120;
+  // Six payments over a five-year truce, funded entirely from stock.
+  assert(Math.abs(penalty(DEFAULT_TRUCE_DAYS) - 12.5) < 1e-9);
+  assert(penalty(EXTENDED_PEACE_DAYS) > penalty(DEFAULT_TRUCE_DAYS));
   b.resourceFlow.productionSurplus = { fuel: 2 };
-  assert(penalty(300) < 4);
+  assert(penalty(DEFAULT_TRUCE_DAYS) < 4);
   b.resources.fuel = 0;
   b.resourceFlow.productionSurplus.fuel = 0;
-  assert(Math.abs(penalty(300) - 25) < 1e-9);
+  assert(Math.abs(penalty(DEFAULT_TRUCE_DAYS) - 25) < 1e-9);
 });
 
 test("the domestic surplus snapshot accounts for fuel upkeep and excludes foreign deliveries", () => {
@@ -158,7 +160,7 @@ test("the domestic surplus snapshot accounts for fuel upkeep and excludes foreig
 
 test("an existing resource pledge raises the AI's cost of a second peace deal", () => {
   const { world, a, c, d } = scene();
-  c.resources.fuel = 180;
+  c.resources.fuel = 120;
   const base = whitePeaceTerms();
   const term = { ...base, resourceReparation: { resource: "fuel" as const, amount: 10 } };
   const penalty = () => assessPeaceOffer(world, c.id, d.id, base).score -
@@ -172,13 +174,13 @@ test("an existing resource pledge raises the AI's cost of a second peace deal", 
 test("reparations planners choose a useful installment and scale it down for existing claims", () => {
   const { world, a, b, c } = scene();
   Object.assign(b.resources, { steel: 100, copper: 100, tungsten: 100, rubber: 100, fuel: 0 });
-  c.resources.fuel = 180;
+  c.resources.fuel = 120;
   b.resourceFlow.usage.fuel = 5;
-  const proposed = chooseResourceReparation(world, b, c, 300);
+  const proposed = chooseResourceReparation(world, b, c, DEFAULT_TRUCE_DAYS);
   assert.deepEqual(proposed, { resource: "fuel", amount: 10 });
   assert(proposePeaceTerms(world, a.id, c.id, { ...whitePeaceTerms(), resourceReparation: proposed }));
   assert(acceptPeaceOffer(world, c.id, a.id));
-  assert.deepEqual(chooseResourceReparation(world, b, c, 300), { resource: "fuel", amount: 5 });
+  assert.deepEqual(chooseResourceReparation(world, b, c, DEFAULT_TRUCE_DAYS), { resource: "fuel", amount: 5 });
   b.resourceFlow.productionSurplus = { fuel: 1 };
-  assert.equal(chooseResourceReparation(world, b, c, 300), undefined);
+  assert.equal(chooseResourceReparation(world, b, c, DEFAULT_TRUCE_DAYS), undefined);
 });

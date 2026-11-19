@@ -16,6 +16,7 @@ import { getAmphibiousNavalProductionDemands } from "./amphibious";
 import { isNationActive } from "./nation-active";
 import type { NationResourceFlow, NationResources } from "./nation-runtime";
 import { nextScheduledTickRange } from "./schedule";
+import { daysToSlowTicks } from "./time";
 import { registerNewCombatShipsAsReserve, type DesiredNavalForce } from "./naval-strategy";
 import {
   isNationRegionSupplied,
@@ -24,6 +25,10 @@ import {
 import { createUnitId, type NavalUnitType, type UnitState, type UnitType } from "./unit";
 import type { WorldState } from "./world-state";
 import { getCityTargetsByNation, getOwnerByMesoId, getPortTargetsByNation } from "./world-cache";
+
+const MOBILIZED_MIN_INTERVAL = daysToSlowTicks(20);
+const WARTIME_MAX_INTERVAL = daysToSlowTicks(60);
+const ALERT_MAX_INTERVAL = daysToSlowTicks(120);
 
 export type ProductionSupplyStatus = "supplied" | "blocked-isolation";
 
@@ -513,10 +518,13 @@ function updateProductionInternal(world: WorldState): void {
       naval: currentNavalCount,
     });
     const recruitmentInterval = isMilitaryFunded(world, nation.treasury) ? 0.6 : 1;
+    const mobilizing = mobilization && mobilization.threat >= 0.35;
+    const earliest = mobilizing ? MOBILIZED_MIN_INTERVAL : minInterval;
+    const latest = !mobilizing ? maxInterval : mobilization.phase === "war" ? WARTIME_MAX_INTERVAL : ALERT_MAX_INTERVAL;
     nation.nextUnitProductionTick = nextScheduledTickRange(
       world.time.slowTick,
-      Math.max(1, Math.ceil((mobilization && mobilization.threat >= 0.35 ? 2 : minInterval) * recruitmentInterval)),
-      Math.max(1, Math.ceil((mobilization && mobilization.threat >= 0.35 ? (mobilization.phase === "war" ? 6 : 12) : maxInterval) * recruitmentInterval)),
+      Math.max(1, Math.ceil(earliest * recruitmentInterval)),
+      Math.max(1, Math.ceil(latest * recruitmentInterval)),
       world.simRng,
     );
   }

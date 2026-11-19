@@ -5,6 +5,7 @@ import { getNationCharacter, type NationCharacter } from "./nation-character";
 import { BUILTIN_IDEOLOGIES, getIdeologies, getNationIdeology, identityHash } from "./nation-identity";
 import type { NationRuntime } from "./nation-runtime";
 import { getWarDeclarationMode, hasPoliticalTurbulence, recordSimulationEvent } from "./simulation-settings";
+import { daysToSlowTicks, yearsToDays } from "./time";
 import type { WorldState } from "./world-state";
 
 export type GovernmentSystem = "democracy" | "monarchy";
@@ -23,9 +24,16 @@ export interface NationalPolitics {
   nextSuppressionAt?: number;
 }
 
-const ELECTION_INTERVAL = 420;
-const SUCCESSION_INTERVAL = 900;
-const SUPPORT_REVIEW_INTERVAL = 30;
+const ELECTION_INTERVAL = daysToSlowTicks(yearsToDays(4));
+const MINIMUM_SUCCESSION_INTERVAL = daysToSlowTicks(yearsToDays(20));
+const INITIAL_ELECTION_STAGGER = daysToSlowTicks(180);
+const SUCCESSION_VARIATION = daysToSlowTicks(yearsToDays(15));
+const SUPPORT_REVIEW_INTERVAL = daysToSlowTicks(300);
+
+function mandateInterval(system: GovernmentSystem, hash: number): number {
+  return system === "democracy" ? ELECTION_INTERVAL : MINIMUM_SUCCESSION_INTERVAL + hash % SUCCESSION_VARIATION;
+}
+
 export interface ElectoralClaimPressure {
   coalitionSupport: number;
   electionAtSlowTick: number;
@@ -84,11 +92,15 @@ export function getNationalPolitics(world: WorldState, nation: NationRuntime): N
   const support = initialSupport(incumbent, hash >>> 16);
   const seats = system === "democracy" ? new Map(support) : new Map<string, number>();
   const now = world.time.slowTick;
+  const phase = hash >>> 8;
+  const firstTerm = system === "democracy"
+    ? ELECTION_INTERVAL - phase % INITIAL_ELECTION_STAGGER
+    : mandateInterval(system, phase);
   return nation.politics = {
     system, governingIdeologyId: incumbent,
     coalition: system === "democracy" ? formCoalition(seats, incumbent) : [incumbent],
     support, seats, consecutiveMandates: 1,
-    nextMandateAt: now + (system === "democracy" ? ELECTION_INTERVAL : SUCCESSION_INTERVAL) + (hash >>> 8) % 120,
+    nextMandateAt: now + firstTerm,
     nextSupportReviewAt: now + SUPPORT_REVIEW_INTERVAL,
   };
 }
@@ -130,7 +142,7 @@ function installPoliticalMandate(world: WorldState, nation: NationRuntime, polit
   politics.governingIdeologyId = ideologyId;
   politics.support = initialSupport(ideologyId, identityHash(`${nation.id}:${ideologyId}:mandate`));
   politics.consecutiveMandates = 1;
-  politics.nextMandateAt = world.time.slowTick + (politics.system === "democracy" ? ELECTION_INTERVAL : SUCCESSION_INTERVAL);
+  politics.nextMandateAt = world.time.slowTick + mandateInterval(politics.system, identityHash(`${nation.id}:${world.time.slowTick}`));
   politics.nextSupportReviewAt = world.time.slowTick + SUPPORT_REVIEW_INTERVAL;
   politics.seats = politics.system === "democracy" ? new Map(politics.support) : new Map();
   politics.coalition = politics.system === "democracy" ? formCoalition(politics.seats, ideologyId) : [ideologyId];
@@ -176,7 +188,7 @@ export function updateNationalPolitics(world: WorldState): void {
     }
     if (now < politics.nextMandateAt) continue;
     const democratic = politics.system === "democracy";
-    politics.nextMandateAt = now + (democratic ? ELECTION_INTERVAL : SUCCESSION_INTERVAL);
+    politics.nextMandateAt = now + mandateInterval(politics.system, identityHash(`${nation.id}:${now}`));
     const banned = hasPoliticalTurbulence(world) && (politics.suppression?.until ?? 0) > now ? politics.suppression?.ideologyId : undefined;
     const eligible = rankedParties(politics.support, incumbent).filter(([id]) => id !== banned);
     const leader = eligible[0]?.[0] ?? incumbent;

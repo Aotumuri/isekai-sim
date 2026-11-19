@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { WORLD_BALANCE } from "../../src/data/balance";
 import { getCapitalDefenseAssessment } from "../../src/sim/capital-defense";
 import { getStrategicProgressAssessment } from "../../src/sim/strategic-progress";
-import { FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
+import { completedSlowTicks, FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
 import { stepFastTick, stepSlowTick } from "../../src/sim/update";
 import type { WarState } from "../../src/sim/war-state";
 import type { WorldState } from "../../src/sim/world-state";
@@ -153,7 +153,7 @@ function runSeed(seed: number, destinationInstances: WarInstance[], destinationO
     stepFastTick(world, FAST_TICK_MS);
     observeInstances(world, seed, registry, priorTerritory);
     priorTerritory = territoryCounts(world);
-    const dueSlowTicks = Math.floor(world.time.elapsedMs / SLOW_TICK_MS);
+    const dueSlowTicks = completedSlowTicks(world.time.fastTick);
     while (world.time.slowTick < dueSlowTicks) {
       stepSlowTick(world, SLOW_TICK_MS);
       observeInstances(world, seed, registry, priorTerritory);

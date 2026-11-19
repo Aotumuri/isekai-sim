@@ -1,3 +1,5 @@
+import { CRISIS_TRUCE_SLOW_TICKS, TREATY_DURATION_SLOW_TICKS } from "./diplomatic-time";
+import { daysToSlowTicks, slowTicksToDays, yearsToDays } from "./time";
 import type { TerritorialClaimDeferral, TerritorialClaimObjective, TerritorialClaimOutcome } from "./territorial-claim-objective";
 import { getManualGovernmentId } from "./player-nation";
 import { areSubjectPartners, getSubjectOverlord } from "./subject-governments";
@@ -142,7 +144,7 @@ export function proposeTreaty(world: WorldState, proposerId: NationId, partnerId
   const trustNeeded = requiredTreatyTrust(type, proposer, partner, world.time.slowTick);
   if (relation.crisis || relation.opinion < threshold || relation.trust < trustNeeded ||
     !spendInfluence(world, proposerId, cost)) return false;
-  relation.treaties.push({ type, expiresAtSlowTick: world.time.slowTick + (type === "alliance" ? 600 : 400) });
+  relation.treaties.push({ type, expiresAtSlowTick: world.time.slowTick + TREATY_DURATION_SLOW_TICKS[type] });
   relation.trust = clamp(relation.trust + 5, 0, 100);
   relation.tension = Math.max(0, relation.tension - 15);
   getDiplomacyState(world).treatiesSigned += 1;
@@ -151,7 +153,11 @@ export function proposeTreaty(world: WorldState, proposerId: NationId, partnerId
   return true;
 }
 
-export const TRUCE_EXTENSION = { cost: 10, seconds: 180, negotiationWindow: 90 } as const;
+export const TRUCE_EXTENSION = {
+  cost: 10,
+  durationSlowTicks: daysToSlowTicks(yearsToDays(3)),
+  negotiationWindowSlowTicks: daysToSlowTicks(yearsToDays(1)),
+} as const;
 
 function getActiveTruce(world: WorldState, relation: DiplomaticRelation): Treaty | undefined {
   return relation.treaties.find((treaty) =>
@@ -166,11 +172,11 @@ export function getTruceExtensionIssue(world: WorldState, proposer: NationId, pa
     ![proposer, partner].every((id) => world.nations.some((nation) => nation.id === id && isNationPresent(world, nation)))) {
     return "Both nations need an active truce.";
   }
-  if (relation.territorialSettlement && truce.expiresAtSlowTick === relation.territorialSettlement.atSlowTick + 120) {
+  if (relation.territorialSettlement && truce.expiresAtSlowTick === relation.territorialSettlement.atSlowTick + CRISIS_TRUCE_SLOW_TICKS) {
     return "Territorial settlement truces have fixed terms.";
   }
-  if (truce.expiresAtSlowTick - world.time.slowTick > TRUCE_EXTENSION.negotiationWindow) {
-    return `Available in the last ${TRUCE_EXTENSION.negotiationWindow} seconds of the truce.`;
+  if (truce.expiresAtSlowTick - world.time.slowTick > TRUCE_EXTENSION.negotiationWindowSlowTicks) {
+    return `Available in the last ${slowTicksToDays(TRUCE_EXTENSION.negotiationWindowSlowTicks)} days of the truce.`;
   }
   if (relation.crisis || relation.opinion < 0 || relation.trust < 50 || relation.tension > 35) {
     return "The partner requires neutral opinion, 50 trust, tension at most 35 and no active crisis.";
@@ -181,9 +187,9 @@ export function getTruceExtensionIssue(world: WorldState, proposer: NationId, pa
 export function extendTruce(world: WorldState, proposer: NationId, partner: NationId): boolean {
   if (getTruceExtensionIssue(world, proposer, partner) || !spendInfluence(world, proposer, TRUCE_EXTENSION.cost)) return false;
   const relation = getRelation(world, proposer, partner);
-  getActiveTruce(world, relation)!.expiresAtSlowTick += TRUCE_EXTENSION.seconds;
+  getActiveTruce(world, relation)!.expiresAtSlowTick += TRUCE_EXTENSION.durationSlowTicks;
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [proposer, partner],
-    message: `${proposer} and ${partner} extended their truce by ${TRUCE_EXTENSION.seconds} seconds.` });
+    message: `${proposer} and ${partner} extended their truce by ${slowTicksToDays(TRUCE_EXTENSION.durationSlowTicks)} days.` });
   return true;
 }
 
@@ -270,7 +276,7 @@ export function updateDiplomaticRelations(world: WorldState): void {
     } else if (cooperation > 0.6 && relation.opinion >= 20) proposeTreaty(world, a, b, "non-aggression");
     const otherCommitments = (wars.has(a) || rebuilding.has(a)) && (wars.has(b) || rebuilding.has(b));
     if ((commonEnemy || otherCommitments) && !areSubjectPartners(world, a, b) &&
-      relation.treaties.some((treaty) => treaty.type === "truce" && treaty.negotiatedPeace && treaty.expiresAtSlowTick - now <= TRUCE_EXTENSION.negotiationWindow) &&
+      relation.treaties.some((treaty) => treaty.type === "truce" && treaty.negotiatedPeace && treaty.expiresAtSlowTick - now <= TRUCE_EXTENSION.negotiationWindowSlowTicks) &&
       !relation.treaties.some((treaty) => treaty.type === "alliance" || treaty.type === "non-aggression")) {
       if (!extendTruce(world, a, b)) extendTruce(world, b, a);
     }

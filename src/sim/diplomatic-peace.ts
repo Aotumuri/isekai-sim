@@ -1,3 +1,5 @@
+import { DEFAULT_TRUCE_DAYS } from "./diplomatic-time";
+import { daysToSlowTicks } from "./time";
 import { recordTerritorialClaimOutcome } from "./territorial-claim-objective";
 import { getManualGovernmentId } from "./player-nation";
 import { relieveUnrestAfterPeace } from "./domestic-unrest";
@@ -67,8 +69,8 @@ export function concludePeace(world: WorldState, a: NationId, b: NationId, reaso
   relation.crisis = null; relation.tension = 15;
   relation.opinion = Math.max(-30, relation.opinion); relation.grievance *= 0.5;
   relation.treaties = relation.treaties.filter((treaty) => treaty.type !== "truce");
-  relation.treaties.push({ type: "truce", expiresAtSlowTick: world.time.slowTick + 300, negotiatedPeace: true });
-  relation.cooldownUntilSlowTick = world.time.slowTick + 300;
+  relation.treaties.push({ type: "truce", expiresAtSlowTick: world.time.slowTick + daysToSlowTicks(DEFAULT_TRUCE_DAYS), negotiatedPeace: true });
+  relation.cooldownUntilSlowTick = world.time.slowTick + daysToSlowTicks(DEFAULT_TRUCE_DAYS);
   getDiplomacyState(world).fatigueByWarId.delete(warFatigueKey(war));
   getDiplomacyState(world).peaceAgreements += 1;
   world.warNegotiations?.active.delete(warFatigueKey(war));

@@ -15,7 +15,7 @@ export function distributePublicRelief(world: WorldState, id: NationId): boolean
   const unrest = getDomesticUnrest(world, id);
   if (unrest.pressure <= 0 || !spendTreasury(treasury, "relief", reliefCost(treasury))) return false;
   unrest.pressure = Math.max(0, unrest.pressure - 22);
-  unrest.lowSupportSeconds = Math.max(0, unrest.lowSupportSeconds - 15);
+  unrest.lowSupportSlowTicks = Math.max(0, unrest.lowSupportSlowTicks - 15);
   treasury.nextReliefTick = world.time.slowTick + RELIEF_COOLDOWN;
   recordSimulationEvent(world, { category: "politics", nationIds: [id],
     message: `${id} distributed emergency cash relief to households.` });

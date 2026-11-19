@@ -4,7 +4,7 @@ import { runSimulation } from "../helpers/simulation-driver";
 import { assertWorldInvariants, semanticWorldSignature } from "../helpers/invariants";
 import { withMutedSimulationLogs } from "../helpers/muted-logs";
 import { createTestScenario } from "../helpers/test-scenario";
-import { FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
+import { completedSlowTicks, FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
 import { stepFastTick, stepSlowTick } from "../../src/sim/update";
 
 test("fixed-seed active war keeps core world invariants", () => {
@@ -35,7 +35,7 @@ test("enabling instrumentation does not change simulation state", () => {
     runSimulation(instrumented, { ticks: 40 });
     for (let i = 0; i < 40; i += 1) {
       stepFastTick(productionLike, FAST_TICK_MS);
-      const dueSlowTicks = Math.floor(productionLike.time.elapsedMs / SLOW_TICK_MS);
+      const dueSlowTicks = completedSlowTicks(productionLike.time.fastTick);
       while (productionLike.time.slowTick < dueSlowTicks) {
         stepSlowTick(productionLike, SLOW_TICK_MS);
       }

@@ -4824,7 +4824,7 @@ test("a binding cost limit still blocks discretionary attacks before peace can m
   const campaign = world.warCampaigns!.byNationId.get(NATION_A)!;
   campaign.mode = "consolidate";
   campaign.constraints.objectivesSecured = true;
-  campaign.constraints.foodSeconds = 0;
+  campaign.constraints.foodDays = 0;
   updateNationFrontPlans(world);
   assert.equal(planFor(world, NATION_A).posture, "hold");
   assert(!planFor(world, NATION_A).reasonFlags.includes("campaign-military-exit"));

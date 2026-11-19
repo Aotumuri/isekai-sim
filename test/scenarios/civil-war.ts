@@ -27,7 +27,7 @@ export const setupCivilWar: ScenarioSetup = (world) => {
   candidate.warCooperation = WORLD_BALANCE.war.cooperation.min;
   // This benchmark starts with an already matured domestic crisis.
   const unrest = getDomesticUnrest(world, candidate.id);
-  unrest.pressure = 100; unrest.lowSupportSeconds = WORLD_BALANCE.war.civilWar.minimumCrisisSeconds;
+  unrest.pressure = 100; unrest.lowSupportSlowTicks = WORLD_BALANCE.war.civilWar.minimumCrisisSlowTicks;
   if (!world.wars.some((war) => war.nationAId === candidate.id || war.nationBId === candidate.id)) {
     const enemy = world.nations.find((nation) => nation.id !== candidate.id && nation.macroRegionIds.length)!;
     declareWar(world.wars, candidate.id, enemy.id, world.time.fastTick);

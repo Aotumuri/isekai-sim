@@ -6,7 +6,7 @@ import {
   type AmphibiousOperation,
   type AmphibiousStrategicWindowDiagnosticPolicy,
 } from "../../src/sim/amphibious";
-import { FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
+import { completedSlowTicks, FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
 import { stepFastTick, stepSlowTick } from "../../src/sim/update";
 import type { WorldState } from "../../src/sim/world-state";
 import type { WarState } from "../../src/sim/war-state";
@@ -164,7 +164,7 @@ function runVariant(policy: AmphibiousStrategicWindowDiagnosticPolicy): VariantR
       stepFastTick(world, FAST_TICK_MS);
       trackWarOutcomes(world, knownWars, outcomes, priorNationCounts);
       priorNationCounts = nationCounts(world);
-      const dueSlowTicks = Math.floor(world.time.elapsedMs / SLOW_TICK_MS);
+      const dueSlowTicks = completedSlowTicks(world.time.fastTick);
       while (world.time.slowTick < dueSlowTicks) {
         stepSlowTick(world, SLOW_TICK_MS);
         trackWarOutcomes(world, knownWars, outcomes, priorNationCounts);

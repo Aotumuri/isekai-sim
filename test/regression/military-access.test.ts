@@ -1,3 +1,5 @@
+import { estimateLandTravelDays } from "../../src/sim/movement";
+import { FAST_TICK_MS, fastTicksToDays } from "../../src/sim/time";
 import { updateIsolationEffects } from "../../src/sim/isolation-effects";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -38,7 +40,12 @@ test("real land movement crosses trusted territory and local supply is shared wi
   assert.equal(getOwnerByMesoId(world).get(next), host); assert.equal(getMilitaryRoutingOwners(world, guest).get(next), guest);
   const unit = createUnitForType(createUnitId(world.unitIdCounter++), guest, source, "Infantry"); world.units = [unit];
   getMilitaryAccessState(world).orders.set(unit.id, { nationId: guest, destinationId: next });
-  for (let tick = 0; tick < 50; tick++) { world.time.fastTick++; repositionUnits(world, 100); }
+  const travelDays = estimateLandTravelDays(unit, 1);
+  while (fastTicksToDays(world.time.fastTick) < travelDays) {
+    assert.equal(unit.regionId, source);
+    world.time.fastTick++;
+    repositionUnits(world, FAST_TICK_MS);
+  }
   assert.equal(unit.regionId, next); assert.equal(getOwnerByMesoId(world).get(next), host);
   updateSupplyAssessment(world);
   assert.equal(isNationRegionSupplied(world, guest, next), isNationRegionSupplied(world, host, next));

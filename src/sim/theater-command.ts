@@ -1,7 +1,7 @@
 import { WORLD_BALANCE } from "../data/balance";
-import { getCampaignDeadline } from "./campaign-deadline";
+import { CAMPAIGN_URGENCY_DAYS, getCampaignDeadlineDays } from "./campaign-deadline";
 import type { OffensiveOperation } from "./offensive-operations";
-import { FAST_TICK_MS, SLOW_TICK_MS } from "./time";
+import { FAST_TICKS_PER_SLOW_TICK } from "./time";
 import { identityHash } from "./nation-identity";
 import { getWarCampaign } from "./war-campaign/state";
 import type { WorldState } from "./world-state";
@@ -33,8 +33,8 @@ export function decideTheaterLaunch(
   if (operation.isMajorOffensive || operation.supplyReliefPlanId || operation.supplyCutoffObjective ||
       operation.pocketClosureObjective || operation.pocketReductionObjective ||
       preparationTicks < settings.minimumPreparationTicks ||
-      preparationTicks + SLOW_TICK_MS / FAST_TICK_MS > settings.preparationTimeoutTicks ||
-      getCampaignDeadline(world, nationId, enemyNationId) <= 75) return;
+      preparationTicks + FAST_TICKS_PER_SLOW_TICK > settings.preparationTimeoutTicks ||
+      getCampaignDeadlineDays(world, nationId, enemyNationId) <= CAMPAIGN_URGENCY_DAYS) return;
   const player = world.playerNation;
   if (player?.nationId === nationId && (!player.automaticGovernment || player.commandMode !== "automatic")) return;
   const nation = world.nations.find((item) => item.id === nationId);
@@ -63,7 +63,7 @@ export function decideTheaterLaunch(
 function canReachPreferredReadinessAtNextReview(
   world: WorldState, operation: OffensiveOperation, preferredReadiness: number,
 ): boolean {
-  const nextReview = world.time.fastTick + SLOW_TICK_MS / FAST_TICK_MS;
+  const nextReview = world.time.fastTick + FAST_TICKS_PER_SLOW_TICK;
   return operation.approachGroups.length > 0 && operation.approachGroups.every((group) => {
     const required = (operation.plannedStrengthByApproach.get(group.regionId) ?? 0) * preferredReadiness;
     if (required <= 0) return false;

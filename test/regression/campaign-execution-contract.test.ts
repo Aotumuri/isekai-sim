@@ -61,7 +61,7 @@ test("negotiation intent alone cannot suspend the military fallback before an ag
   campaign.militaryMode = "limited-offensive";
   campaign.settlementReadyOpponentIds = [];
   campaign.constraints.casualtyFraction = 0;
-  campaign.constraints.foodSeconds = Infinity;
+  campaign.constraints.foodDays = Infinity;
   const enemy = campaign.primaryOpponentId!;
   assert.equal(campaignPrefersSettlement(world, plan.nationId, enemy), true);
   assert.equal(campaignShouldStandDown(world, plan.nationId, enemy), false);
@@ -70,6 +70,6 @@ test("negotiation intent alone cannot suspend the military fallback before an ag
   assert.equal(campaignShouldStandDown(world, plan.nationId, enemy), true);
   assert.equal(applyCampaignFrontGuidance(world, plan).posture, "hold");
   campaign.settlementReadyOpponentIds = [];
-  campaign.constraints.foodSeconds = 10;
+  campaign.constraints.foodDays = 10;
   assert.equal(campaignShouldStandDown(world, plan.nationId, enemy), true);
 });

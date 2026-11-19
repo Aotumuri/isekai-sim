@@ -10,7 +10,7 @@ import {
 } from "./land-fronts";
 import { getFrontAllocation } from "./nation-front-allocations";
 import { getSectorPlan } from "./nation-front-plans";
-import { FAST_TICK_MS, SLOW_TICK_MS } from "./time";
+import { completedSlowTicks, FAST_TICKS_PER_SLOW_TICK } from "./time";
 import type { WorldState } from "./world-state";
 import { getUnitCombatStrength } from "./unit-strength";
 import { getStrategicProgressAssessment } from "./strategic-progress";
@@ -410,8 +410,7 @@ interface InactivityClassificationInput {
 
 function classifyInactivity(input: InactivityClassificationInput): { category: InactivityCategory; reason: InactivityReason; nextEvaluationTick: number } {
   const { world, nationId, enemyNationId } = input;
-  const remainingSlowMs = SLOW_TICK_MS - (world.time.elapsedMs % SLOW_TICK_MS);
-  const nextSlowTick = world.time.fastTick + Math.max(1, Math.ceil(remainingSlowMs / FAST_TICK_MS));
+  const nextSlowTick = (completedSlowTicks(world.time.fastTick) + 1) * FAST_TICKS_PER_SLOW_TICK;
   const result = (category: InactivityCategory, reason: InactivityReason, nextEvaluationTick = nextSlowTick) => ({ category, reason, nextEvaluationTick });
   if (input.critical) return result("healthy-waiting", "capital-emergency");
   if (input.retreating || world.retreatPlans.plansByNationId.get(nationId)?.some((plan) => input.sectors.some((sector) => sector.id === plan.frontId))) return result("healthy-waiting", "retreat");

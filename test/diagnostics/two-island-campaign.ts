@@ -2,7 +2,7 @@ import { WORLD_BALANCE } from "../../src/data/balance";
 import type { AmphibiousOperation } from "../../src/sim/amphibious";
 import { getUnitCombatStrength } from "../../src/sim/unit-strength";
 import type { UnitId, UnitState } from "../../src/sim/unit";
-import { FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
+import { completedSlowTicks, FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
 import { stepFastTick, stepSlowTick } from "../../src/sim/update";
 import type { WorldState } from "../../src/sim/world-state";
 import type { MesoRegionId } from "../../src/worldgen/meso-region";
@@ -84,7 +84,7 @@ console.info = () => undefined;
 try {
   for (let index = 0; index < ticks; index += 1) {
     stepFastTick(world, FAST_TICK_MS);
-    const dueSlowTicks = Math.floor(world.time.elapsedMs / SLOW_TICK_MS);
+    const dueSlowTicks = completedSlowTicks(world.time.fastTick);
     while (world.time.slowTick < dueSlowTicks) stepSlowTick(world, SLOW_TICK_MS);
     observeCampaign(world, previous);
     previous = snapshotUnits(world.units);

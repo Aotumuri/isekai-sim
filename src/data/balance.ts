@@ -1,3 +1,5 @@
+import { daysToSlowTicks } from "../sim/time";
+
 export type MapGenerator = "legacy" | "historical";
 
 export const WORLD_BALANCE = {
@@ -163,8 +165,8 @@ export const WORLD_BALANCE = {
   },
   production: {
     unitSlowTickRange: {
-      min: 10,
-      max: 50,
+      min: daysToSlowTicks(100),
+      max: daysToSlowTicks(500),
     },
     cityUnitsPerCycle: 1,
     portNavalUnitsPerCycle: 1,
@@ -330,7 +332,7 @@ export const WORLD_BALANCE = {
         timelineLimit: 1024,
       },
       isolation: {
-        // Ten seconds of simulation time at the current 100 ms fast tick gives
+        // A hundred world days at one day per fast tick gives
         // newly cut-off formations time to reconnect before readiness decays.
         graceTicks: 100,
         // One tenth of normal reorganization recovery. This takes 300 slow
@@ -502,8 +504,8 @@ export const WORLD_BALANCE = {
       enabled: true,
       warningSupport: 0.35,
       criticalSupport: 0.2,
-      minimumCrisisSeconds: 300,
-      revolutionCooldownSeconds: 600,
+      minimumCrisisSlowTicks: daysToSlowTicks(3000),
+      revolutionCooldownSlowTicks: daysToSlowTicks(6000),
     },
     cooperation: {
       min: 0,

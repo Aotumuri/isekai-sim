@@ -1,3 +1,4 @@
+import { daysToSlowTicks, slowTicksToDays, yearsToDays } from "./time";
 import { areSubjectPartners } from "./subject-governments";
 import { areFactionPartners } from "./factions";
 import { getNationCharacter } from "./nation-character";
@@ -9,6 +10,8 @@ import { getRelation, spendInfluence, hasTreaty } from "./diplomacy";
 import { getWarDeclarationMode, recordSimulationEvent } from "./simulation-settings";
 import { getOwnerByMesoId, getMesoById } from "./world-cache";
 import { findWar } from "./war-state";
+
+const ACCESS_DURATION = daysToSlowTicks(yearsToDays(5));
 
 export interface MilitaryAccessGrant {
   hostId: NationId; guestId: NationId; expiresAtSlowTick: number;
@@ -38,8 +41,8 @@ function issueMilitaryAccess(world: WorldState, hostId: NationId, guestId: Natio
     state.grants.filter((grant) => grant.revokedAtSlowTick === undefined).length >= 64 ||
     (state.grants.length >= 128 && !state.grants.some((grant) => grant.hostId === hostId && grant.guestId === guestId)) || !spendInfluence(world, payerId, 6)) return false;
   state.grants = state.grants.filter((grant) => !(grant.hostId === hostId && grant.guestId === guestId));
-  state.grants.push({ hostId, guestId, expiresAtSlowTick: world.time.slowTick + 400 }); state.version++;
-  recordSimulationEvent(world, { category: "military", nationIds: [hostId, guestId], message: `${hostId} granted military access and local logistics to ${guestId} for 400 seconds.` });
+  state.grants.push({ hostId, guestId, expiresAtSlowTick: world.time.slowTick + ACCESS_DURATION }); state.version++;
+  recordSimulationEvent(world, { category: "military", nationIds: [hostId, guestId], message: `${hostId} granted military access and local logistics to ${guestId} for ${slowTicksToDays(ACCESS_DURATION)} days.` });
   return true;
 }
 export function grantMilitaryAccess(world: WorldState, hostId: NationId, guestId: NationId): boolean {

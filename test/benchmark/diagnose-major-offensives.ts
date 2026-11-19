@@ -5,7 +5,7 @@ import { getFrontlineCoverage } from "../../src/sim/frontline-coverage";
 import type { OffensiveOperation } from "../../src/sim/offensive-operations";
 import { getUnitCombatStrength } from "../../src/sim/unit-strength";
 import type { WorldState } from "../../src/sim/world-state";
-import { FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
+import { completedSlowTicks, FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
 import { stepFastTick, stepSlowTick } from "../../src/sim/update";
 import { createScenarioWorld } from "../scenarios";
 import type { BenchmarkScenarioName } from "./types";
@@ -116,7 +116,7 @@ try {
   for (let index = 0; index < ticks; index += 1) {
     stepFastTick(world, FAST_TICK_MS);
     sampleWorld(world, scenario, seed, records);
-    const dueSlowTicks = Math.floor(world.time.elapsedMs / SLOW_TICK_MS);
+    const dueSlowTicks = completedSlowTicks(world.time.fastTick);
     while (world.time.slowTick < dueSlowTicks) {
       stepSlowTick(world, SLOW_TICK_MS);
       sampleWorld(world, scenario, seed, records);

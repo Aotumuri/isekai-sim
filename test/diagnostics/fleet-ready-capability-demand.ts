@@ -7,7 +7,7 @@ import {
   type AmphibiousLaunchFeasibilityDiagnostic,
 } from "../../src/sim/amphibious";
 import { isEffectivelyControlledPort } from "../../src/sim/maritime-supply";
-import { FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
+import { completedSlowTicks, FAST_TICK_MS, SLOW_TICK_MS } from "../../src/sim/time";
 import { stepFastTick, stepSlowTick } from "../../src/sim/update";
 import { getMesoById, getNeighborsById, getOwnerByMesoId } from "../../src/sim/world-cache";
 import type { WorldState } from "../../src/sim/world-state";
@@ -185,7 +185,7 @@ function runSeed(seed: number): RunRecord {
       observeWarOutcomes(world, knownWars, warOutcomes, priorNationSnapshots);
       priorNationSnapshots = snapshotNations(world);
       observe(world, seed, records, wars, pendingConnectionEvents);
-      const dueSlowTicks = Math.floor(world.time.elapsedMs / SLOW_TICK_MS);
+      const dueSlowTicks = completedSlowTicks(world.time.fastTick);
       while (world.time.slowTick < dueSlowTicks) {
         stepSlowTick(world, SLOW_TICK_MS);
         observeWarOutcomes(world, knownWars, warOutcomes, priorNationSnapshots);
