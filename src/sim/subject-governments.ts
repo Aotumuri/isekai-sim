@@ -16,6 +16,7 @@ export interface SubjectGovernment {
   establishedAtFastTick: number;
   autonomy?: number;
   foodLevy?: FoodLevyRate;
+  industrialAidRouteBlocked?: boolean;
 }
 
 export function getSubjectOverlord(world: WorldState, subjectId: NationId): NationId | undefined {

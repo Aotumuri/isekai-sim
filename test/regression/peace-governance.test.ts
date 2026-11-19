@@ -5,9 +5,12 @@ import { planPuppetPartition } from "../../src/sim/puppet-partition";
 import { createSimulationSettings } from "../../src/sim/simulation-settings";
 import { getSubjectOverlord, installSubjectGovernment } from "../../src/sim/subject-governments";
 import { updateSubjectAutonomy } from "../../src/sim/subject-autonomy";
+import { updateSupplyAssessment } from "../../src/sim/supply-assessment";
+import { setTradeEmbargo } from "../../src/sim/trade-embargo";
 import { acceptPeaceOffer, proposePeaceTerms, whitePeaceTerms } from "../../src/sim/war-negotiations";
 import { declareWar, findWar } from "../../src/sim/war-state";
 import { getOwnerByMesoId } from "../../src/sim/world-cache";
+import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 import { createSeededWorld } from "../helpers/seeded-world";
 
 function scene() {
@@ -70,4 +73,55 @@ test("a subject with maximum autonomy can leave a weakened overlord", () => {
   world.time.slowTick = 10;
   updateSubjectAutonomy(world);
   assert.equal(getSubjectOverlord(world, subject.id), undefined);
+});
+
+function industryScene() {
+  const world = createFixedSocietyWorld();
+  const [overlord, subject] = world.nations;
+  installSubjectGovernment(world, overlord.id, subject.id);
+  updateSupplyAssessment(world);
+  subject.subjectGovernment!.autonomy = 30;
+  subject.resources.steel = 0;
+  subject.resources.fuel = 11;
+  subject.resourceFlow.productionSurplus = { steel: 2, fuel: 0 };
+  overlord.resources.steel = overlord.resources.fuel = 50;
+  world.time.slowTick = 10;
+  return { world, overlord, subject, government: subject.subjectGovernment! };
+}
+
+test("subject support uses projected output and covers only the remaining reserve shortfall", () => {
+  const { world, overlord, subject, government } = industryScene();
+  updateSubjectAutonomy(world);
+  assert.equal(subject.resources.steel, 0);
+  assert.equal(overlord.resources.steel, 50);
+  assert.equal(subject.resources.fuel, 12);
+  assert.equal(overlord.resources.fuel, 49);
+  const pressureWithSupport = government.autonomy!;
+
+  const isolated = industryScene();
+  assert(setTradeEmbargo(isolated.world, isolated.subject.id, isolated.overlord.id, true));
+  updateSubjectAutonomy(isolated.world);
+  assert.equal(isolated.subject.resources.fuel, 11);
+  assert.equal(isolated.overlord.resources.fuel, 50);
+  assert(isolated.government.autonomy! > pressureWithSupport);
+  assert(isolated.government.industrialAidRouteBlocked);
+  isolated.world.time.slowTick += 10;
+  updateSubjectAutonomy(isolated.world);
+  assert.equal(isolated.world.events?.filter(({ message }) => message.includes("no open route")).length, 1);
+  assert(setTradeEmbargo(isolated.world, isolated.subject.id, isolated.overlord.id, false));
+  isolated.world.time.slowTick += 10;
+  updateSubjectAutonomy(isolated.world);
+  assert.equal(isolated.subject.resources.fuel, 12);
+  assert(!isolated.government.industrialAidRouteBlocked);
+  assert(isolated.world.events?.some(({ message }) => message.includes("route reopened")));
+});
+
+test("the overlord keeps enough fuel for its own demand", () => {
+  const { world, overlord, subject } = industryScene();
+  subject.resources.fuel = 0;
+  overlord.resourceFlow.usage.fuel = 8;
+  overlord.resources.fuel = 41;
+  updateSubjectAutonomy(world);
+  assert.equal(subject.resources.fuel, 1);
+  assert.equal(overlord.resources.fuel, 40);
 });

@@ -2,7 +2,7 @@ import { getManualGovernmentId } from "./player-nation";
 import { culturalDistance } from "./annexation";
 import { getRelation, hasTreaty } from "./diplomacy";
 import { startDiplomaticWar } from "./diplomatic-crises";
-import { changeResource } from "./international-trade";
+import { changeResource, findTradeRoute, resourceReserve } from "./international-trade";
 import type { NationRuntime } from "./nation-runtime";
 import { getNationName } from "./nation-identity";
 import { getWarDeclarationMode, hasPoliticalTurbulence, recordSimulationEvent } from "./simulation-settings";
@@ -10,38 +10,61 @@ import { releaseSubjectGovernment } from "./subject-governments";
 import { getMesoById, getOwnerByMesoId } from "./world-cache";
 import type { WorldState } from "./world-state";
 
+const AUTONOMY_INTERVAL = 10;
+const SUBJECT_INDUSTRIAL_RESERVE = 12;
+const AID_PER_RESOURCE = 3;
+const AID_RESOURCES = ["steel", "fuel"] as const;
+
+function supportSubjectIndustry(world: WorldState, overlord: NationRuntime, subject: NationRuntime,
+  government: NonNullable<NationRuntime["subjectGovernment"]>): number {
+  const requests = AID_RESOURCES.map((resource) => {
+    const surplus = subject.resourceFlow.productionSurplus?.[resource] ?? 0;
+    const stock = subject.resources[resource] + surplus * AUTONOMY_INTERVAL;
+    const requested = Math.max(0, Math.min(AID_PER_RESOURCE, SUBJECT_INDUSTRIAL_RESERVE - stock));
+    const exportable = Math.max(0, overlord.resources[resource] - resourceReserve(overlord, resource));
+    return { resource, requested, available: Math.min(requested, exportable) };
+  });
+  const canSupply = requests.some(({ available }) => available > 0);
+  const routeBlocked = canSupply && !findTradeRoute(world, overlord.id, subject.id);
+  if (canSupply && routeBlocked !== !!government.industrialAidRouteBlocked) {
+    recordSimulationEvent(world, { category: "trade", nationIds: [overlord.id, subject.id],
+      message: routeBlocked
+        ? `${overlord.id} could not deliver industrial support to ${subject.id}: no open route.`
+        : `${overlord.id} resumed industrial support to ${subject.id} after the route reopened.` });
+  }
+  government.industrialAidRouteBlocked = routeBlocked;
+  let unmet = 0;
+  for (const { resource, requested, available } of requests) {
+    const delivered = routeBlocked ? 0 : available;
+    if (delivered > 0) {
+      changeResource(overlord, resource, -delivered);
+      changeResource(subject, resource, delivered);
+    }
+    unmet += (requested - delivered) / AID_PER_RESOURCE;
+  }
+  return unmet;
+}
+
 export function updateSubjectAutonomy(world: WorldState): void {
-  if (getWarDeclarationMode(world) !== "diplomacy" || world.time.slowTick % 10 !== 0 ||
+  if (getWarDeclarationMode(world) !== "diplomacy" || world.time.slowTick % AUTONOMY_INTERVAL !== 0 ||
     !world.nations.some((nation) => nation.subjectGovernment)) return;
   const owners = getOwnerByMesoId(world), regions = getMesoById(world);
   const nations = new Map(world.nations.map((nation) => [nation.id, nation]));
-  const land = new Map<NationRuntime, { districts: number; deposits: Set<string> }>();
+  const districtCounts = new Map<NationRuntime, number>();
   for (const [id, owner] of owners) {
     const nation = nations.get(owner), region = regions.get(id);
     if (!nation || !region || region.type === "sea") continue;
-    const assets = land.get(nation) ?? { districts: 0, deposits: new Set<string>() };
-    assets.districts++;
-    if (region.resource && (!world.occupation.mesoById.has(id) || world.occupation.mesoById.get(id) === owner)) {
-      assets.deposits.add(region.resource);
-    }
-    land.set(nation, assets);
+    districtCounts.set(nation, (districtCounts.get(nation) ?? 0) + 1);
   }
   for (const subject of world.nations) {
     const government = subject.subjectGovernment;
     const overlord = government && nations.get(government.overlordId);
-    const assets = land.get(subject), overlordAssets = overlord && land.get(overlord);
-    if (!government || !overlord || !assets || !overlordAssets) continue;
-    let shortage = 0;
-    for (const resource of ["steel", "fuel"] as const) {
-      if (assets.deposits.has(resource) || subject.resources[resource] >= 12) continue;
-      const aid = Math.max(0, Math.min(3, overlord.resources[resource] - 20, 12 - subject.resources[resource]));
-      changeResource(overlord, resource, -aid);
-      changeResource(subject, resource, aid);
-      shortage += 1 - aid / 3;
-    }
+    const districts = districtCounts.get(subject), overlordDistricts = overlord && districtCounts.get(overlord);
+    if (!government || !overlord || !districts || !overlordDistricts) continue;
+    const shortage = supportSubjectIndustry(world, overlord, subject, government);
     const populations = world.regionalPopulations;
     const gap = culturalDistance(populations?.get(subject.capitalMesoId), populations?.get(overlord.capitalMesoId));
-    const power = Math.min(1.5, assets.districts / overlordAssets.districts);
+    const power = Math.min(1.5, districts / overlordDistricts);
     const relation = getRelation(world, subject.id, overlord.id);
     const strain = (1 - Math.max(0, Math.min(1, overlord.warCooperation))) * 2;
     const food = world.settings?.foodEnabled === false ? undefined : subject.food;
