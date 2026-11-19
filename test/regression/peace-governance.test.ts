@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { annexedOutputFactor, recordAnnexation, updateAnnexations } from "../../src/sim/annexation";
 import { planPuppetPartition } from "../../src/sim/puppet-partition";
+import { getNationalPolitics } from "../../src/sim/politics";
 import { createSimulationSettings } from "../../src/sim/simulation-settings";
 import { getSubjectOverlord, installSubjectGovernment } from "../../src/sim/subject-governments";
 import { updateSubjectAutonomy } from "../../src/sim/subject-autonomy";
@@ -44,8 +45,13 @@ test("partition terms are revalidated and create two subjects without duplicatin
     if (partition) { target = candidate; break; }
   }
   assert(partition);
-  declareWar(world.wars, overlord.id, target.id, 0);
-  const terms = { ...whitePeaceTerms(), puppetTarget: true, partition };
+  world.settings!.politicalTurbulenceEnabled = true;
+  const politics = getNationalPolitics(world, overlord);
+  const support = new Map(politics.support);
+  const war = declareWar(world.wars, overlord.id, target.id, 0)!;
+  war.openingAggressorIdeologyId = politics.governingIdeologyId;
+  war.contributionByNationId.set(target.id, 9_600);
+  const terms = { ...whitePeaceTerms(), partition };
   const before = new Map(world.occupation.mesoById), count = world.nations.length;
   target.resources.steel = 100;
   assert(proposePeaceTerms(world, overlord.id, target.id, terms));
@@ -59,6 +65,7 @@ test("partition terms are revalidated and create two subjects without duplicatin
   assert.equal(world.nations.length, count + 1);
   assert.equal(getSubjectOverlord(world, target.id), overlord.id);
   assert.equal(getSubjectOverlord(world, successor.id), overlord.id);
+  assert.deepEqual(politics.support, support);
   assert.equal(successor.capitalMesoId, partition.capitalId);
   assert(partition.districtIds.every((id) => getOwnerByMesoId(world).get(id) === successor.id));
   assert.equal(successor.resources.steel + target.resources.steel, 100);

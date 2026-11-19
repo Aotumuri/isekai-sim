@@ -359,7 +359,7 @@ export function acceptPeaceOffer(world: WorldState, recipient: NationId, propose
   if (legs.length && !transferTerritories(world, legs, "agreement", founding)) return false;
   // Validation and territory transfer are synchronous and cannot remove this war.
   const aggressorSecuredGains = war.aggressorId === proposer
-    ? terms.demandedRegionIds.length > 0 || !!terms.puppetTarget
+    ? terms.demandedRegionIds.length > 0 || !!terms.puppetTarget || !!terms.partition
     : terms.offeredRegionIds.length > 0;
   if (!concludePeace(world, recipient, proposer, "accepted negotiated terms", aggressorSecuredGains)) return false;
   const a = world.nations.find((nation) => nation.id === proposer)!, b = world.nations.find((nation) => nation.id === recipient)!;
