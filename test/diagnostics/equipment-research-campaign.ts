@@ -26,7 +26,7 @@ withMutedSimulationLogs(() => {
     for (const unit of units) {
       if (unit.design?.family) assert.equal(unit.design.family, unit.type);
       if (unit.type === "TransportShip") {
-        const capacity = getUnitTransportCapacity(unit); assert(capacity <= 25);
+        const capacity = getUnitTransportCapacity(unit); assert(capacity <= 35);
         assert(unit.cargoUnits.length <= capacity); peakCargo = Math.max(peakCargo, unit.cargoUnits.length); peakShipCapacity = Math.max(peakShipCapacity, capacity);
       }
     }
@@ -39,7 +39,7 @@ withMutedSimulationLogs(() => {
       for (const family of EQUIPMENT_FAMILIES) {
         const program = getResearchPortfolio(world, nation.id, family);
         for (const branch of FAMILY_RESEARCH_BRANCHES[family]) {
-          assert(Number.isInteger(program.levels[branch]) && program.levels[branch] >= 0 && program.levels[branch] <= 10);
+          assert(Number.isSafeInteger(program.levels[branch]) && program.levels[branch] >= 0);
           assert(Number.isFinite(program.progress[branch]) && program.progress[branch] >= 0);
         }
       }

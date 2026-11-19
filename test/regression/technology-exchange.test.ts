@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getDiplomacyState, getRelation, proposeTreaty } from "../../src/sim/diplomacy";
-import { getResearchPortfolio } from "../../src/sim/research";
+import { getResearchCost, getResearchPortfolio, updateResearch } from "../../src/sim/research";
 import { licenseTechnology } from "../../src/sim/technology-exchange";
+import { updateSupplyAssessment } from "../../src/sim/supply-assessment";
 import { createSocietyWorld } from "../helpers/society-world";
 
 test("technology licenses accelerate domestic research, cost resources and cannot be spammed", () => {
@@ -37,4 +38,27 @@ test("technology licensing transfers only the specified equipment program", () =
   assert(getResearchPortfolio(world, b.id, "Tank").progress.armor > 0);
   assert.equal(getResearchPortfolio(world, b.id).progress.armor, 0);
   assert(!licenseTechnology(world, a.id, b.id, "armor", "Infantry"));
+});
+
+test("late licenses boost research without directly granting levels or exceeding the project cost", () => {
+  const world = createSocietyWorld(), [a, b] = world.nations;
+  b.resources.weapons = b.resources.steel = b.resources.copper = 100;
+  const relation = getRelation(world, a.id, b.id); relation.trust = relation.opinion = 80;
+  relation.treaties.push({ type: "alliance", expiresAtSlowTick: 1000 });
+  getDiplomacyState(world).influenceByNationId.set(a.id, 100);
+  getResearchPortfolio(world, a.id).levels.firepower = 100;
+  const target = getResearchPortfolio(world, b.id);
+  target.focus = "firepower";
+  target.levels.firepower = 20;
+  const cost = getResearchCost(target, "firepower");
+  target.progress.firepower = cost - 20;
+  assert(licenseTechnology(world, a.id, b.id, "firepower"));
+  assert(target.progress.firepower < cost && target.progress.firepower > cost - 20);
+  assert.equal(target.levels.firepower, 20);
+  assert.equal(b.resources.weapons, 96);
+  assert.equal(b.resources.steel, 98);
+  assert.equal(licenseTechnology(world, a.id, b.id, "firepower"), false);
+  updateSupplyAssessment(world);
+  updateResearch(world);
+  assert.equal(target.levels.firepower, 21);
 });

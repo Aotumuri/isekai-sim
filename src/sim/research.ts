@@ -1,7 +1,8 @@
 import { changeResource } from "./international-trade";
 import { getPrototypeMaterialRates } from "./research-materials";
+import { effectiveResearchLevel, lateResearchCost, limitEquipmentStat } from "./research-progression";
 import { spendTreasury } from "./treasury";
-import { buildWarAdjacency } from "./war-state";
+import { buildWarAdjacency, type WarAdjacency } from "./war-state";
 import type { NationId } from "../worldgen/nation";
 import type { UnitType } from "./unit";
 import { getNationCharacter } from "./nation-character";
@@ -80,23 +81,39 @@ export function getResearchPortfolio(world: WorldState, nationId: NationId, fami
   return program;
 }
 export function getResearchCost(portfolio: ResearchPortfolio, branch: ResearchBranch): number {
-  return 70 + portfolio.levels[branch] * 45 + RESEARCH_BRANCHES.reduce((sum, key) => sum + (portfolio.levels[key] ?? 0), 0) * 3;
+  const level = portfolio.levels[branch];
+  return 70 + 45 * level + lateResearchCost(level) +
+    3 * RESEARCH_BRANCHES.reduce((sum, key) => sum + (portfolio.levels[key] ?? 0), 0);
 }
-/** Capacity gains shrink at every level; the level cap bounds a standard ship to 25 units instead of unbounded growth. */
-export function cargoCapacityMultiplier(level: number): number { const safe = clamp(Number.isFinite(level) ? level : 0, 0, 10); return 1 + safe * 0.1 + 0.6 * (1 - Math.exp(-safe / 2)); }
+function validResearchLevel(level: number): number {
+  return Number.isSafeInteger(level) && level > 0 ? level : 0;
+}
+
+export function cargoCapacityMultiplier(level: number): number {
+  const effect = effectiveResearchLevel(validResearchLevel(level));
+  return 1 + effect * 0.1 + 0.6 * -Math.expm1(-effect / 2);
+}
+
 export function designFromResearch(manufacturerId: NationId, levels: ResearchLevels, family: EquipmentFamily = "Infantry"): WeaponDesign {
-  const safe = Object.fromEntries(RESEARCH_BRANCHES.map((branch) => [branch,
-    FAMILY_RESEARCH_BRANCHES[family].includes(branch) ? clamp(Number.isFinite(levels[branch]) ? levels[branch] : 0, 0, 10) : 0])) as ResearchLevels;
-  const armor = safe.armor, speed = safe.mobility, cargo = safe.capacity;
-  return { manufacturerId, family, levels: { ...safe }, generation: RESEARCH_BRANCHES.reduce((sum, branch) => sum + safe[branch], 0),
-    firepower: 1 + safe.firepower * 0.06, handling: 1 + safe.handling * 0.025,
-    armor: 1 + armor * 0.055, mobility: clamp(1 + speed * 0.045 - armor * 0.012 - cargo * 0.008, 0.8, 1.45),
-    capacity: cargoCapacityMultiplier(cargo),
-    reliability: clamp(1 + safe.reliability * 0.025 - safe.firepower * 0.015 - speed * 0.008 - cargo * 0.004, 0.75, 1.25),
-    weaponCost: clamp(1 + safe.firepower * 0.06 + safe.reliability * 0.02 + armor * 0.04 + speed * 0.025 + cargo * 0.04 + safe.handling * 0.02 - safe.materials * 0.045 - safe.production * 0.025, 0.55, 2.8),
-    steelCost: clamp(1 + safe.firepower * 0.08 + armor * 0.06 + cargo * 0.04 - safe.materials * 0.045 - safe.production * 0.02, 0.55, 2.8),
-    fuelUse: clamp(1 + safe.firepower * 0.04 + armor * 0.035 + speed * 0.04 + cargo * 0.025 - safe.fuel * 0.045 - safe.logistics * 0.015, 0.5, 2),
-    recovery: 1 + safe.logistics * 0.03 + safe.handling * 0.01 };
+  const designLevels = emptyResearchLevels(), effect = emptyResearchLevels();
+  let generation = 0;
+  for (const branch of FAMILY_RESEARCH_BRANCHES[family]) {
+    const level = validResearchLevel(levels[branch]);
+    designLevels[branch] = level;
+    effect[branch] = effectiveResearchLevel(level);
+    generation += level;
+  }
+  const armor = effect.armor, speed = effect.mobility, cargo = effect.capacity;
+  return { manufacturerId, family, levels: designLevels, generation,
+    firepower: 1 + effect.firepower * 0.06, handling: 1 + effect.handling * 0.025,
+    armor: 1 + armor * 0.055,
+    mobility: limitEquipmentStat(1 + speed * 0.045 - armor * 0.012 - cargo * 0.008, 0.75, 1.50, 0.05),
+    capacity: cargoCapacityMultiplier(designLevels.capacity),
+    reliability: limitEquipmentStat(1 + effect.reliability * 0.025 - effect.firepower * 0.015 - speed * 0.008 - cargo * 0.004, 0.72, 1.28, 0.03),
+    weaponCost: limitEquipmentStat(1 + effect.firepower * 0.06 + effect.reliability * 0.02 + armor * 0.04 + speed * 0.025 + cargo * 0.04 + effect.handling * 0.02 - effect.materials * 0.045 - effect.production * 0.025, 0.50, 2.85, 0.05),
+    steelCost: limitEquipmentStat(1 + effect.firepower * 0.08 + armor * 0.06 + cargo * 0.04 - effect.materials * 0.045 - effect.production * 0.02, 0.50, 2.85, 0.05),
+    fuelUse: limitEquipmentStat(1 + effect.firepower * 0.04 + armor * 0.035 + speed * 0.04 + cargo * 0.025 - effect.fuel * 0.045 - effect.logistics * 0.015, 0.45, 2.05, 0.05),
+    recovery: 1 + effect.logistics * 0.03 + effect.handling * 0.01 };
 }
 export function getNationalDesign(world: WorldState, nationId: NationId, family: EquipmentFamily = "Infantry"): WeaponDesign {
   if (!world.research?.byNationId.has(nationId)) return designFromResearch(nationId, emptyResearchLevels(), family);
@@ -119,16 +136,21 @@ export function getResearchPriorities(world: WorldState, nationId: NationId, fam
   }
   const portfolio = getResearchPortfolio(world, nationId, family);
   if (portfolio.focus !== "auto" && weights[portfolio.focus]) weights[portfolio.focus] += 8;
-  for (const branch of RESEARCH_BRANCHES) if (portfolio.levels[branch] >= 10) weights[branch] = 0;
+  for (const branch of FAMILY_RESEARCH_BRANCHES[family]) {
+    // Discount already-mature branches while preserving doctrine and focus.
+    weights[branch] *= 10 / Math.max(10, portfolio.levels[branch]);
+  }
   return weights;
 }
-export function getEquipmentResearchPriorities(world: WorldState, nationId: NationId): Record<EquipmentFamily, number> {
+export function getEquipmentResearchPriorities(
+  world: WorldState, nationId: NationId, wars: WarAdjacency = buildWarAdjacency(world.wars),
+): Record<EquipmentFamily, number> {
   const character = getNationCharacter(world, nationId), coastal = (getPortTargetsByNation(world).get(nationId)?.length ?? 0) > 0;
   const weights = { Infantry: 3, Tank: 1.5, CombatShip: coastal ? 1 : 0, TransportShip: coastal ? 0.8 : 0 };
   if (character.doctrine === "expansionist") weights.Tank += 1;
   if (character.doctrine === "guardian") weights.Infantry += 1;
   if (coastal && character.doctrine === "merchant") weights.TransportShip += 1.5;
-  const enemies = buildWarAdjacency(world.wars).get(nationId);
+  const enemies = wars.get(nationId);
   if (enemies?.size) {
     const observations = world.strategicThreatObservation.observationByNationId;
     const opposingShips = [...enemies].reduce((sum, id) =>
@@ -141,7 +163,6 @@ export function getEquipmentResearchPriorities(world: WorldState, nationId: Nati
   for (const family of EQUIPMENT_FAMILIES) {
     const program = getResearchPortfolio(world, nationId, family), priority = program.priority ?? "auto";
     if (priority !== "auto") weights[family] = { paused: 0, low: 0.35, normal: 1, high: 4 }[priority];
-    if (!Object.values(getResearchPriorities(world, nationId, family)).some((value) => value > 0)) weights[family] = 0;
   }
   return weights;
 }
@@ -156,20 +177,23 @@ export function updateResearch(world: WorldState): void {
   const state = getResearchState(world);
   if (state.lastSlowTick === world.time.slowTick) return;
   state.lastSlowTick = world.time.slowTick;
-  for (const id of state.byNationId.keys()) if (!world.nations.some((nation) => nation.id === id && isNationPresent(world, nation))) {
+  const present = new Set(world.nations.filter((nation) => isNationPresent(world, nation)).map((nation) => nation.id));
+  for (const id of state.byNationId.keys()) if (!present.has(id)) {
     state.byNationId.delete(id);
     for (const key of state.refitAnnouncedGenerationByNationId.keys()) if (key === id || key.startsWith(`${id}|`)) state.refitAnnouncedGenerationByNationId.delete(key);
   }
   const cities = getCityTargetsByNation(world);
-  for (const nation of world.nations.filter((item) => isNationPresent(world, item))) {
+  const wars = buildWarAdjacency(world.wars);
+  for (const nation of world.nations) {
+    if (!present.has(nation.id)) continue;
     const programs = EQUIPMENT_FAMILIES.map((family) => getResearchPortfolio(world, nation.id, family));
     for (const program of programs) program.lastScience = 0;
     if (!isNationActive(nation)) { for (const program of programs) program.status = "government in exile"; continue; }
     if (!isNationRegionSupplied(world, nation.id, nation.capitalMesoId)) { for (const program of programs) program.status = "capital isolated"; continue; }
-    const weights = getEquipmentResearchPriorities(world, nation.id), total = Object.values(weights).reduce((sum, value) => sum + value, 0);
+    const weights = getEquipmentResearchPriorities(world, nation.id, wars), total = Object.values(weights).reduce((sum, value) => sum + value, 0);
     for (const family of EQUIPMENT_FAMILIES) if (!weights[family]) {
       const program = getResearchPortfolio(world, nation.id, family);
-      program.status = FAMILY_RESEARCH_BRANCHES[family].every((branch) => program.levels[branch] >= 10) ? "complete" : "paused";
+      program.status = "paused";
     }
     if (!total) continue;
     const root = getResearchPortfolio(world, nation.id);
@@ -197,7 +221,7 @@ export function updateResearch(world: WorldState): void {
         if (!priorities[branch]) continue;
         program.progress[branch] += science * priorities[branch] / sum;
         const cost = getResearchCost(program, branch);
-        if (program.progress[branch] + 1e-9 < cost) continue;
+        if (program.progress[branch] + 1e-9 < cost || !Number.isSafeInteger(program.levels[branch] + 1)) continue;
         program.progress[branch] = Math.max(0, program.progress[branch] - cost); program.levels[branch]++; program.completedProjects++;
         recordSimulationEvent(world, { category: "research", nationIds: [nation.id], message: `${nation.id} completed ${EQUIPMENT_FAMILY_NAMES[family]} / ${RESEARCH_BRANCH_NAMES[branch]} level ${program.levels[branch]}.` });
       }
@@ -211,4 +235,3 @@ export function updateResearch(world: WorldState): void {
     }
   }
 }
-function clamp(value: number, min: number, max: number): number { return Math.min(max, Math.max(min, value)); }

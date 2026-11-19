@@ -75,7 +75,7 @@ for (const seed of requestedSeed ? [requestedSeed] : [101, 695919685365, 8227483
       }
       for (const [id] of world.research?.byNationId ?? []) for (const family of EQUIPMENT_FAMILIES) {
         const portfolio = getResearchPortfolio(world, id, family);
-        for (const branch of RESEARCH_BRANCHES) if (!Number.isInteger(portfolio.levels[branch]) || portfolio.levels[branch] < 0 || portfolio.levels[branch] > 10 ||
+        for (const branch of RESEARCH_BRANCHES) if (!Number.isSafeInteger(portfolio.levels[branch]) || portfolio.levels[branch] < 0 ||
           !Number.isFinite(portfolio.progress[branch]) || portfolio.progress[branch] < 0) throw new Error("Invalid research progress");
       }
       if (world.events && world.events.length > 200) throw new Error("Unbounded event history");

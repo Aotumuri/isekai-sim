@@ -51,6 +51,6 @@ The chosen model is a historical timeline with inspectable historical world maps
 
 ## Priorities and deferred work
 
-Keep the nation-centered autonomous simulation observable, causally legible, deterministic where applicable, and viable at large scale. The canonical in-world calendar is specified in [SIMULATION_TIME.md](SIMULATION_TIME.md); it is a design target, not a claim about current mechanics. Research must eventually continue beyond level 10, with increasing costs and controlled marginal effects rather than unbounded numerical inflation or meaningless hidden caps.
+Keep the nation-centered autonomous simulation observable, causally legible, deterministic where applicable, and viable at large scale. The implemented calendar and research progression are specified in [SIMULATION_TIME.md](SIMULATION_TIME.md). Research continues beyond level 10 with increasing project costs and diminishing equipment gains.
 
 Intervention and possession experiences, direct player-control expansion, a general-purpose character engine, and detailed full military replay are deferred. Existing documents such as [SOCIETY.md](../SOCIETY.md) and [NAVY.md](../NAVY.md) describe existing systems and remain useful references; this vision governs future planning where priorities differ.

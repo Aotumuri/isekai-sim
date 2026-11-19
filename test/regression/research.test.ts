@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { designFromResearch, emptyResearchLevels, getResearchCost, getResearchPortfolio, getResearchPriorities,
-  getResearchState, RESEARCH_BRANCHES, EQUIPMENT_FAMILIES, updateResearch } from "../../src/sim/research";
+  getResearchState, FAMILY_RESEARCH_BRANCHES, EQUIPMENT_FAMILIES, getEquipmentResearchPriorities, updateResearch } from "../../src/sim/research";
 import { updateSupplyAssessment } from "../../src/sim/supply-assessment";
 import { createSocietyWorld } from "../helpers/society-world";
 
@@ -28,7 +28,7 @@ test("research spends real resources, preserves parallel progress and completes 
   assert.equal(portfolio.totalScience, progress);
 });
 
-test("research pauses without a budget and when disabled, and stops at the level cap", () => {
+test("research pauses without a budget and when disabled, then resumes an old complete program at level 10", () => {
   const { world, nation, portfolio } = fundedWorld();
   nation.resources.steel = 0; nation.resources.weapons = 0;
   updateResearch(world);
@@ -39,10 +39,18 @@ test("research pauses without a budget and when disabled, and stops at the level
   updateResearch(world);
   assert.equal(portfolio.totalScience, 0);
   world.settings!.researchEnabled = true;
-  for (const family of EQUIPMENT_FAMILIES) for (const branch of RESEARCH_BRANCHES) getResearchPortfolio(world, nation.id, family).levels[branch] = 10;
+  for (const family of EQUIPMENT_FAMILIES) for (const branch of FAMILY_RESEARCH_BRANCHES[family]) {
+    getResearchPortfolio(world, nation.id, family).levels[branch] = 10;
+  }
+  portfolio.status = "complete";
+  portfolio.progress.firepower = getResearchCost(portfolio, "firepower") - 0.001;
+  assert(getEquipmentResearchPriorities(world, nation.id).Infantry > 0);
   updateResearch(world);
-  assert.equal(portfolio.status, "complete");
-  assert.equal(nation.resources.steel, 1000);
+  assert.equal(portfolio.status, "researching");
+  assert.equal(portfolio.levels.firepower, 11);
+  assert(nation.resources.steel < 1000);
+  assert(getResearchPriorities(world, nation.id).firepower > 0);
+  assert.equal(getResearchPriorities(world, nation.id).armor, 0);
 });
 
 test("firepower carries resource and reliability penalties that other research can offset", () => {
@@ -82,4 +90,18 @@ test("the military economy reserves enough steel for research instead of consumi
   updateResearch(world);
   assert.equal(portfolio.status, "researching");
   assert(nation.resources.steel < scienceStock);
+});
+
+test("projects retain early costs and become progressively more expensive", () => {
+  const { portfolio } = fundedWorld();
+  let previousCost = 0, previousIncrease = 0;
+  for (let level = 0; level <= 100; level++) {
+    portfolio.levels.firepower = level;
+    const cost = getResearchCost(portfolio, "firepower");
+    if (level <= 10) assert.equal(cost, 70 + 48 * level);
+    assert(Number.isFinite(cost) && cost > previousCost);
+    if (level > 10) assert(cost - previousCost > previousIncrease);
+    previousIncrease = cost - previousCost;
+    previousCost = cost;
+  }
 });

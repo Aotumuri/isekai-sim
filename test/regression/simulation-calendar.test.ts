@@ -3,7 +3,7 @@ import test from "node:test";
 import { concludePeace } from "../../src/sim/diplomatic-peace";
 import { getRelation, hasTreaty, proposeTreaty } from "../../src/sim/diplomacy";
 import { getNationalPolitics, updateNationalPolitics } from "../../src/sim/politics";
-import { getNationalResearchSummary } from "../../src/sim/research";
+import { getNationalResearchSummary, getResearchCost, getResearchPortfolio } from "../../src/sim/research";
 import {
   createSimClock, DAYS_PER_YEAR, daysToFastTicks, daysToSlowTicks, FAST_TICK_MS,
   fastTicksToDays, formatWorldDate, getSpeedMultiplier, remainingDays,
@@ -53,6 +53,11 @@ test("playback frame batching preserves warfare and society at the same world da
     const world = createFixedSocietyWorld();
     const [a, b] = world.nations;
     declareWar(world.wars, a.id, b.id, 0);
+    Object.assign(a.resources, { steel: 1000, weapons: 1000, copper: 100 });
+    const program = getResearchPortfolio(world, a.id);
+    program.levels.firepower = 20;
+    program.focus = "firepower";
+    program.progress.firepower = getResearchCost(program, "firepower") - 0.001;
     const clock = createSimClock();
     setSpeedIndex(clock, speedIndex);
     const speed = getSpeedMultiplier(clock);
@@ -65,6 +70,7 @@ test("playback frame batching preserves warfare and society at the same world da
     }
     assert.equal(world.time.fastTick, days);
     assert.equal(world.time.slowTick, 16);
+    assert.equal(program.levels.firepower, 21);
     return {
       simulation: semanticWorldSignature(world),
       society: world.nations.map(({ politics, treasury, food }) => ({ politics, treasury, food })),
@@ -115,12 +121,17 @@ test("a trade agreement and a postwar truce last about five years and expire at 
 test("research advances once per ten days while tax and food settle every 100 days", () => {
   const world = createFixedSocietyWorld();
   const [nation] = world.nations;
-  Object.assign(nation.resources, { steel: 1000, weapons: 1000 });
+  Object.assign(nation.resources, { steel: 1000, weapons: 1000, copper: 100 });
+  const program = getResearchPortfolio(world, nation.id);
+  program.levels.firepower = 10;
+  program.focus = "firepower";
+  program.progress.firepower = getResearchCost(program, "firepower") - 0.001;
   for (let i = 1; i <= 100; i++) {
     const before = getNationalResearchSummary(world, nation.id).totalScience;
     const lastFood = world.lastFoodTick, lastTax = world.lastTaxCollectionTick;
     stepSimulationDay(world);
     const science = getNationalResearchSummary(world, nation.id).totalScience;
+    assert.equal(program.levels.firepower, i < 10 ? 10 : 11);
     if (i % 10 === 0) assert(science > before && science - before < 4);
     else assert.equal(science, before);
     if (i < 100) {

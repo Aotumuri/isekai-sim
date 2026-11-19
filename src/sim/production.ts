@@ -390,7 +390,7 @@ function updateProductionInternal(world: WorldState): void {
         recordResourceBlock(world, nation.resources);
         return false;
       }
-      const unit = createUnitForWorld(world, nation.id, regionId, unitType);
+      const unit = createUnitForWorld(world, nation.id, regionId, unitType, designs[unitType]);
       newUnits.push(unit);
       world.instrumentation?.recordLandUnitLifecycle?.({
         tick: world.time.fastTick, unitId: unit.id, nationId: nation.id, regionId,
@@ -425,7 +425,7 @@ function updateProductionInternal(world: WorldState): void {
         recordResourceBlock(world, nation.resources, "naval");
         return false;
       }
-      newUnits.push(createUnitForWorld(world, nation.id, regionId, unitType));
+      newUnits.push(createUnitForWorld(world, nation.id, regionId, unitType, designs[unitType]));
       currentNavalCount += 1;
       diagnostics.successfulProductions += 1;
       world.instrumentation?.incrementCounter("production.successful");
@@ -593,10 +593,11 @@ function createUnitForWorld(
   nationId: NationId,
   regionId: MesoRegionId,
   unitType: UnitType,
+  design: WeaponDesign,
 ): UnitState {
   const unitId = createUnitId(world.unitIdCounter);
   world.unitIdCounter += 1;
-  return equipNewUnit(world, createUnitForType(unitId, nationId, regionId, unitType));
+  return equipNewUnit(world, createUnitForType(unitId, nationId, regionId, unitType), design);
 }
 
 function createEmptyFlow(): NationResourceFlow {

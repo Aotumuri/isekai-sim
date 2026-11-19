@@ -3,7 +3,7 @@ import test from "node:test";
 import { createSocietyWorld } from "../helpers/society-world";
 import { updateSupplyAssessment } from "../../src/sim/supply-assessment";
 import { EQUIPMENT_FAMILIES, getResearchPortfolio, getNationalDesign, getNationalResearchSummary, updateResearch,
-  getResearchCost, emptyResearchLevels, designFromResearch, cargoCapacityMultiplier, getResearchPriorities } from "../../src/sim/research";
+  FAMILY_RESEARCH_BRANCHES, getResearchCost, emptyResearchLevels, designFromResearch, cargoCapacityMultiplier, getResearchPriorities } from "../../src/sim/research";
 function scene() {
   const world = createSocietyWorld(), nation = world.nations[0]!;
   nation.resources.steel = nation.resources.weapons = 1000; nation.resources.fuel = 100; updateSupplyAssessment(world);
@@ -50,12 +50,13 @@ test("family-specific upgrades have real benefits, costs and compensating resear
 });
 test("transport payload has strictly diminishing gains and a bounded late-game ceiling", () => {
   let previousGain = Infinity;
-  for (let level = 1; level <= 10; level++) {
+  for (let level = 1; level <= 100; level++) {
     const gain = cargoCapacityMultiplier(level) - cargoCapacityMultiplier(level - 1);
     assert(gain > 0 && gain < previousGain); previousGain = gain;
   }
   assert(cargoCapacityMultiplier(10) < 2.6);
-  assert.equal(cargoCapacityMultiplier(100000), cargoCapacityMultiplier(10));
+  assert(cargoCapacityMultiplier(100000) > cargoCapacityMultiplier(100));
+  assert(cargoCapacityMultiplier(100000) < 3.6);
   assert.equal(cargoCapacityMultiplier(NaN), 1);
 });
 test("branch focus is restricted to the selected equipment class", () => {
@@ -104,4 +105,44 @@ test("a prototype material shortage pauses only the affected program", () => {
   assert(tank.lastScience > 0);
   assert(nation.resources.rubber < 10);
   assert(nation.resources.fuel < 100);
+});
+
+test("advanced designs retain raw levels and bound equipment modifiers across every family", () => {
+  const { nation } = scene();
+  for (const family of EQUIPMENT_FAMILIES) for (const level of [10, 11, 20, 50, 100, Number.MAX_SAFE_INTEGER]) {
+    const levels = emptyResearchLevels();
+    const branches = FAMILY_RESEARCH_BRANCHES[family];
+    for (const branch of branches) levels[branch] = level;
+    const design = designFromResearch(nation.id, levels, family);
+    assert.deepEqual(design.levels, levels);
+    assert.equal(design.generation, level * branches.length);
+    assert(design.firepower >= 1 && design.firepower <= 2.2);
+    assert(design.armor! >= 1 && design.armor! <= 2.1);
+    assert(design.mobility! >= 0.75 && design.mobility! <= 1.50);
+    assert(design.reliability >= 0.72 && design.reliability <= 1.28);
+    assert(design.capacity! >= 1 && design.capacity! < 3.6);
+    assert(design.fuelUse >= 0.45 && design.fuelUse <= 2.05);
+    assert(design.recovery >= 1 && design.recovery <= 1.8);
+    for (const cost of [design.steelCost, design.weaponCost]) assert(cost >= 0.50 && cost <= 2.85);
+  }
+});
+
+test("advanced development improves the intended stat with smaller marginal gains", () => {
+  const { nation } = scene();
+  const tank = (level: number) => designFromResearch(nation.id,
+    { ...emptyResearchLevels(), firepower: level, armor: level, mobility: level }, "Tank");
+  const early = tank(5), next = tank(6), late = tank(99), advanced = tank(100);
+  assert.equal(early.firepower, 1.3);
+  for (const key of ["firepower", "armor", "mobility", "fuelUse", "weaponCost"] as const) {
+    const earlyGain = next[key]! - early[key]!, lateGain = advanced[key]! - late[key]!;
+    assert(lateGain > 0 && lateGain < earlyGain, key);
+  }
+  for (const [branch, stat, direction] of [
+    ["reliability", "reliability", 1], ["logistics", "recovery", 1],
+    ["production", "weaponCost", -1], ["materials", "steelCost", -1], ["fuel", "fuelUse", -1],
+  ] as const) {
+    const prior = designFromResearch(nation.id, { ...emptyResearchLevels(), [branch]: 99 }, "Tank");
+    const current = designFromResearch(nation.id, { ...emptyResearchLevels(), [branch]: 100 }, "Tank");
+    assert((current[stat] - prior[stat]) * direction > 0, branch);
+  }
 });

@@ -6,6 +6,7 @@ import { getDiplomacyState, getRelation, hasTreaty, spendInfluence } from "./dip
 import { changeResource } from "./international-trade";
 import { isNationActive } from "./nation-active";
 import { getResearchCost, getResearchPortfolio, getResearchState, EQUIPMENT_FAMILIES, FAMILY_RESEARCH_BRANCHES, type EquipmentFamily, type ResearchBranch } from "./research";
+import { effectiveResearchLevel } from "./research-progression";
 import { getWarDeclarationMode, recordSimulationEvent } from "./simulation-settings";
 import type { WorldState } from "./world-state";
 
@@ -21,9 +22,9 @@ export function licenseTechnology(world: WorldState, licensorId: NationId, recip
   if ((state.licenseCooldowns.get(key) ?? -1) > world.time.slowTick) return false;
   const source = getResearchPortfolio(world, licensorId, family), target = getResearchPortfolio(world, recipientId, family);
   const gap = source.levels[branch] - target.levels[branch];
-  if (gap <= 0 || target.levels[branch] >= 10) return false;
+  if (gap <= 0) return false;
   const cost = getResearchCost(target, branch);
-  const points = Math.min(cost * 0.3, 5 + gap * 6, cost - target.progress[branch] - 0.01);
+  const points = Math.min(cost * 0.3, 5 + effectiveResearchLevel(gap) * 6, cost - target.progress[branch] - 0.01);
   if (points < 1 || !spendInfluence(world, licensorId, 5)) return false;
   changeResource(recipient, "weapons", -4); changeResource(licensor, "weapons", 4);
   changeResource(recipient, "steel", -2);

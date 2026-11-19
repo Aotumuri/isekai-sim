@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createUnitForType } from "../../src/sim/create-units";
-import { getDevelopedUnitWeaponCost, refitUnit } from "../../src/sim/equipment-development";
+import { getDevelopedUnitWeaponCost, refitUnit, updateEquipmentRefits } from "../../src/sim/equipment-development";
 import { designFromResearch, emptyResearchLevels, getResearchPortfolio, EQUIPMENT_FAMILIES } from "../../src/sim/research";
 import { updateProduction } from "../../src/sim/production";
 import { updateSupplyAssessment } from "../../src/sim/supply-assessment";
@@ -86,4 +86,33 @@ test("tank production switches to infantry when strategic materials run out", ()
   const tanks = build().filter(({ type }) => type === "Tank");
   assert(tanks.length > 0);
   assert((nation.resourceFlow.usage.rubber ?? 0) >= tanks.length * 3);
+});
+
+test("automatic refits batch small late gains and still require supplies for advanced retrofits", () => {
+  const { world, nation, portfolio } = preparedWorld();
+  const unit = world.units.find((item) => item.nationId === nation.id && item.type === "Infantry")!;
+  world.units = [unit];
+  unit.design = designFromResearch(nation.id, { ...emptyResearchLevels(), firepower: 50 });
+  portfolio.levels.firepower = 51;
+  updateEquipmentRefits(world);
+  assert.equal(unit.design.generation, 50);
+  assert.equal(world.research?.retrofits, 0);
+
+  portfolio.levels.firepower = 100;
+  portfolio.levels.handling = 20;
+  nation.resources.steel = 6;
+  const weapons = nation.resources.weapons;
+  world.time.slowTick += 10;
+  updateEquipmentRefits(world);
+  assert.equal(unit.design.generation, 50);
+  assert.equal(nation.resources.weapons, weapons);
+  assert.equal(nation.resources.steel, 6);
+
+  nation.resources.steel = 100;
+  world.time.slowTick += 10;
+  updateEquipmentRefits(world);
+  assert.equal(unit.design.generation, 120);
+  assert.equal(world.research?.retrofits, 1);
+  assert(nation.resources.weapons < weapons);
+  assert(nation.resources.steel < 100 && nation.resources.steel >= 6);
 });

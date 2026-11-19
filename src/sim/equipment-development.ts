@@ -1,7 +1,9 @@
-import { getDesignUtility } from "./unit-capabilities";
+import { getDesignTransportCapacity, getDesignUtility } from "./unit-capabilities";
 import { WORLD_BALANCE } from "../data/balance";
 import { isAmphibiousOwnedUnit } from "./amphibious";
 import { getNationalDesign, getResearchState, FAMILY_RESEARCH_BRANCHES, type WeaponDesign } from "./research";
+import type { NationRuntime } from "./nation-runtime";
+import { effectiveResearchLevel } from "./research-progression";
 import { isNationActive } from "./nation-active";
 import { isNationRegionSupplied } from "./supply-assessment";
 import { recordSimulationEvent } from "./simulation-settings";
@@ -9,11 +11,13 @@ import type { UnitId, UnitState, UnitType } from "./unit";
 import { getMesoById, getOwnerByMesoId } from "./world-cache";
 import type { WorldState } from "./world-state";
 
+const REFIT_IMPROVEMENT_MULTIPLIER = 1.02;
+
 export function getDevelopedUnitWeaponCost(type: UnitType, design?: WeaponDesign): number {
   return Math.ceil(WORLD_BALANCE.unit.types[type].weaponCost * (design?.weaponCost ?? 1) - 1e-9);
 }
-export function equipNewUnit(world: WorldState, unit: UnitState): UnitState {
-  if (world.research?.byNationId.has(unit.nationId)) unit.design = getNationalDesign(world, unit.nationId, unit.type);
+export function equipNewUnit(world: WorldState, unit: UnitState, design?: WeaponDesign): UnitState {
+  if (world.research?.byNationId.has(unit.nationId)) unit.design = design ?? getNationalDesign(world, unit.nationId, unit.type);
   return unit;
 }
 export function canRefitUnit(world: WorldState, unit: UnitState): boolean {
@@ -27,19 +31,44 @@ export function canRefitUnit(world: WorldState, unit: UnitState): boolean {
 export function refitUnit(world: WorldState, unitId: UnitId): boolean {
   if (!world.settings?.researchEnabled) return false;
   const unit = world.units.find((item) => item.id === unitId);
-  if (!unit || !canRefitUnit(world, unit)) return false;
-  const design = getNationalDesign(world, unit.nationId, unit.type);
-  const oldGeneration = unit.design?.generation ?? 0;
-  const addedLevels = FAMILY_RESEARCH_BRANCHES[unit.type].reduce((sum, branch) => sum + Math.max(0, design.levels[branch] - (unit.design?.levels[branch] ?? 0)), 0);
-  // Legacy global generations included inapplicable research; compare actual new branches during migration.
-  if (design.generation <= oldGeneration && (unit.design?.family || !addedLevels || getDesignUtility(design) <= getDesignUtility(unit.design) * 1.02)) return false;
+  const nation = unit && world.nations.find((item) => item.id === unit.nationId && isNationActive(item));
+  if (!unit || !nation) return false;
+  return applyRefit(world, unit, nation, getNationalDesign(world, nation.id, unit.type), false);
+}
+
+function hasMaterialUpgrade(type: UnitType, design: WeaponDesign, current: WeaponDesign | undefined): boolean {
+  // The fleet fields incremental improvements together once one is large enough
+  // to justify paying for the retrofit. Check rounded costs and actual payload.
+  return design.recovery > (current?.recovery ?? 1) * REFIT_IMPROVEMENT_MULTIPLIER ||
+    (current?.fuelUse ?? 1) > design.fuelUse * REFIT_IMPROVEMENT_MULTIPLIER ||
+    (current?.steelCost ?? 1) > design.steelCost * REFIT_IMPROVEMENT_MULTIPLIER ||
+    getDevelopedUnitWeaponCost(type, design) < getDevelopedUnitWeaponCost(type, current) ||
+    (type === "TransportShip" && getDesignTransportCapacity(design) > getDesignTransportCapacity(current));
+}
+
+function applyRefit(world: WorldState, unit: UnitState, nation: NationRuntime, design: WeaponDesign, automatic: boolean): boolean {
+  const current = unit.design;
+  if (current?.family && design.generation <= current.generation) return false;
+  let addedEffect = 0;
+  for (const branch of FAMILY_RESEARCH_BRANCHES[unit.type]) {
+    const deployedLevel = current?.levels[branch] ?? 0;
+    if (design.levels[branch] > deployedLevel) {
+      addedEffect += effectiveResearchLevel(design.levels[branch]) - effectiveResearchLevel(deployedLevel);
+    }
+  }
+  if (addedEffect <= 0) return false;
+  // A legacy global generation can include levels outside this equipment family.
+  const utility = getDesignUtility(design), currentUtility = getDesignUtility(current);
+  if (design.generation <= (current?.generation ?? 0) && utility <= currentUtility * REFIT_IMPROVEMENT_MULTIPLIER) return false;
   // An imported weapon is kept until the domestic design actually catches up.
-  if (unit.design && getDesignUtility(design) < getDesignUtility(unit.design) * 0.95) return false;
-  const nation = world.nations.find((item) => item.id === unit.nationId && isNationActive(item));
-  if (!nation) return false;
+  if (current && utility < currentUtility * 0.95) return false;
+  // Preserve early fielding and batch late advances once they are perceptible.
+  if (automatic && utility <= currentUtility * REFIT_IMPROVEMENT_MULTIPLIER &&
+      FAMILY_RESEARCH_BRANCHES[unit.type].some((branch) => design.levels[branch] > 10) &&
+      !hasMaterialUpgrade(unit.type, design, current)) return false;
   const weapons = Math.max(1, Math.ceil(getDevelopedUnitWeaponCost(unit.type, design) * 0.25));
-  const steel = Math.max(1, addedLevels * 0.5 * design.steelCost);
-  if (nation.resources.weapons < weapons + 6 || nation.resources.steel < steel + 6) return false;
+  const steel = Math.max(1, addedEffect * 0.5 * design.steelCost);
+  if (nation.resources.weapons < weapons + 6 || nation.resources.steel < steel + 6 || !canRefitUnit(world, unit)) return false;
   nation.resources.weapons -= weapons; nation.resources.steel -= steel;
   nation.resourceFlow.usage.weapons += weapons; nation.resourceFlow.delta.weapons -= weapons;
   nation.resourceFlow.usage.steel += steel; nation.resourceFlow.delta.steel -= steel;
@@ -59,8 +88,18 @@ export function updateEquipmentRefits(world: WorldState): void {
   if (world.time.slowTick - state.lastRetrofitSlowTick < 10) return;
   state.lastRetrofitSlowTick = world.time.slowTick;
   const counts = new Map<string, number>();
+  const nations = new Map(world.nations.filter(isNationActive).map((nation) => [nation.id, nation]));
+  const designs = new Map<string, WeaponDesign>();
   for (const unit of [...world.units].sort((a, b) => a.id.localeCompare(b.id))) {
     if ((counts.get(unit.nationId) ?? 0) >= 2) continue;
-    if (refitUnit(world, unit.id)) counts.set(unit.nationId, (counts.get(unit.nationId) ?? 0) + 1);
+    const nation = nations.get(unit.nationId);
+    if (!nation || !state.byNationId.has(nation.id)) continue;
+    const key = `${nation.id}|${unit.type}`;
+    let design = designs.get(key);
+    if (!design) {
+      design = getNationalDesign(world, nation.id, unit.type);
+      designs.set(key, design);
+    }
+    if (applyRefit(world, unit, nation, design, true)) counts.set(nation.id, (counts.get(nation.id) ?? 0) + 1);
   }
 }

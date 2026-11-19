@@ -237,14 +237,14 @@ export function attachSocietyPanel(root: HTMLElement, world: WorldState, clock: 
     }).join("");
     setText("research-status", `${settings.researchEnabled ? RESEARCH_STATUS[portfolio.status] : "Research paused"} · ${EQUIPMENT_FAMILY_NAMES[family]} focus: ${BRANCH_NAMES[portfolio.focus === "auto" ? portfolio.primaryBranch : portfolio.focus]} · Science per ${DAYS_PER_SLOW_TICK} days: program ${portfolio.lastScience.toFixed(2)} / nation ${summary.lastScience.toFixed(2)} · Completed ${summary.completedProjects} projects`);
     view("research").innerHTML = FAMILY_RESEARCH_BRANCHES[family].map((branch) => {
-      const cost = getResearchCost(portfolio, branch), percent = portfolio.levels[branch] >= 10 ? 100 : Math.min(100, portfolio.progress[branch] / cost * 100);
+      const cost = getResearchCost(portfolio, branch), percent = Math.min(100, portfolio.progress[branch] / cost * 100);
       return `<div class="society-research-row"><span>${BRANCH_NAMES[branch]}</span><b>Lv.${portfolio.levels[branch]}</b><progress aria-label="${BRANCH_NAMES[branch]} research progress" max="100" value="${percent}"></progress><small>${Math.floor(percent)}%</small></div>`;
     }).join("");
     setText("program-description", {
       Infantry: "Small arms: improve firepower, accuracy and handling, or reliability. Better handling improves effective fire and organization recovery; precision weapons cost more to manufacture.",
       Tank: "Tanks: emphasize firepower, protection or speed. Armor reduces received damage but adds weight and fuel demand. Faster engines consume more fuel and require reliability improvements.",
       CombatShip: "Warships: choose stronger guns, tougher protection or higher speed. Armor slows the ship; powerful guns and engines increase operating costs. Efficiency and reliability research offset these penalties.",
-      TransportShip: "Transport ships: expand cargo capacity, improve survivability or increase speed. Capacity gains diminish: a standard 10-unit ship reaches at most 25 units at level 10. Larger hulls cost more, burn more fuel and move more slowly.",
+      TransportShip: "Transport ships: expand cargo capacity, improve survivability or increase speed. Capacity gains diminish: a standard 10-unit ship carries 25 units at level 10 and can carry more with further research. Larger hulls cost more, burn more fuel and move more slowly.",
     }[family]);
     if (!panel.querySelector<HTMLElement>('[data-pane="politics"]')?.hidden) politics.update(nation);
     if (!panel.querySelector<HTMLElement>('[data-pane="food"]')?.hidden) food.update(nation);
