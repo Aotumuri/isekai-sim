@@ -308,7 +308,7 @@ export function assessPeaceOffer(world: WorldState, recipient: NationId, propose
     (terms.demandedRegionIds.includes(nation.capitalMesoId) ? 25 : 0);
   const landBenefit = getTerritorialValue(world, recipient, terms.offeredRegionIds) / totalValue * 80;
   const reparation = terms.resourceReparation;
-  const resourceShare = reparation ? resourceReparationBurden(nation, reparation, terms.truceSeconds) : 0;
+  const resourceShare = reparation ? resourceReparationBurden(world, nation, reparation, terms.truceSeconds) : 0;
   const weaponsShare = terms.demandedWeapons / Math.max(10, nation.resources.weapons);
   const paymentCost = (weaponsShare + resourceShare) * 25;
   const paymentBenefit = Math.min(18, terms.offeredWeapons * 0.5);

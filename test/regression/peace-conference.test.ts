@@ -9,6 +9,7 @@ import { getRelation, hasTreaty } from "../../src/sim/diplomacy";
 import { createFaction, getFactionState, getNationFaction, leaveFaction } from "../../src/sim/factions";
 import { getNationIdeology } from "../../src/sim/nation-identity";
 import { openPeaceConference, respondToPeaceConference, updatePeaceConferences } from "../../src/sim/peace-conference";
+import { REPARATION_INTERVAL, updateResourceReparations } from "../../src/sim/resource-reparations";
 import { createSimulationSettings } from "../../src/sim/simulation-settings";
 import { acceptPeaceOffer, assessPeaceOffer, proposePeaceTerms, whitePeaceTerms } from "../../src/sim/war-negotiations";
 import { declareWar, findWar } from "../../src/sim/war-state";
@@ -69,8 +70,7 @@ test("joint-only faction members can withdraw and sign separately", () => {
   assert(findWar(world.wars, a.id, c.id));
 });
 
-test("signed resource reparations transfer available stock once per interval and expire with the truce", async () => {
-  const { REPARATION_INTERVAL, updateResourceReparations } = await import("../../src/sim/resource-reparations");
+test("signed resource reparations transfer available stock once per interval and expire with the truce", () => {
   const { world, c, b } = scene();
   const terms = { ...whitePeaceTerms(), resourceReparation: { resource: "fuel" as const, amount: 5 } };
   c.resources.fuel = 0;
@@ -94,6 +94,31 @@ test("signed resource reparations transfer available stock once per interval and
   updateResourceReparations(world);
   assert.equal(b.resources.fuel, 10);
   assert.equal(world.resourceReparations?.length, 0);
+});
+
+test("simultaneous peace installments split scarce stock regardless of signature order", () => {
+  const { world, a, b, c, d } = scene();
+  for (const creditor of [b, a]) {
+    assert(proposePeaceTerms(world, creditor.id, c.id, {
+      ...whitePeaceTerms(), resourceReparation: { resource: "fuel", amount: creditor === a ? 9 : 3 },
+    }));
+    assert(acceptPeaceOffer(world, c.id, creditor.id));
+  }
+  declareWar(world.wars, d.id, a.id, 0);
+  assert(proposePeaceTerms(world, d.id, a.id, {
+    ...whitePeaceTerms(), resourceReparation: { resource: "fuel", amount: 3 },
+  }));
+  assert(acceptPeaceOffer(world, a.id, d.id));
+  a.resources.fuel = b.resources.fuel = d.resources.fuel = 0;
+  c.resources.fuel = 8;
+  const relations = [a, b].map((creditor) => getRelation(world, c.id, creditor.id));
+  const trust = relations.map((relation) => relation.trust);
+  world.time.slowTick = REPARATION_INTERVAL;
+  updateResourceReparations(world);
+  updateResourceReparations(world);
+  assert.deepEqual([a, b, c, d].map((nation) => nation.resources.fuel), [6, 2, 0, 0]);
+  assert.deepEqual(world.resourceReparations?.map((term) => term.lastPayment?.paid), [2, 6, 0]);
+  relations.forEach((relation, index) => assert.equal(relation.trust, trust[index]! - 1));
 });
 
 test("the same concession costs more in peace talks when the payer has less stock or surplus", () => {
@@ -126,4 +151,17 @@ test("the domestic surplus snapshot accounts for fuel upkeep and excludes foreig
   changeResource(payer, "fuel", 15);
   assert.equal(payer.resourceFlow.income.fuel, 18);
   assert.equal(payer.resourceFlow.productionSurplus?.fuel, 0);
+});
+
+test("an existing resource pledge raises the AI's cost of a second peace deal", () => {
+  const { world, a, c, d } = scene();
+  c.resources.fuel = 180;
+  const base = whitePeaceTerms();
+  const term = { ...base, resourceReparation: { resource: "fuel" as const, amount: 10 } };
+  const penalty = () => assessPeaceOffer(world, c.id, d.id, base).score -
+    assessPeaceOffer(world, c.id, d.id, term).score;
+  assert(Math.abs(penalty() - 12.5) < 1e-9);
+  assert(proposePeaceTerms(world, a.id, c.id, term));
+  assert(acceptPeaceOffer(world, c.id, a.id));
+  assert(Math.abs(penalty() - 25) < 1e-9);
 });

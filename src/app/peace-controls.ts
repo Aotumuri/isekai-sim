@@ -84,8 +84,12 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
     editor.hidden = !enabled;
     const delivery = (world.resourceReparations ?? []).find((term) =>
       (term.payerId === a && term.recipientId === b) || (term.payerId === b && term.recipientId === a));
+    const nextDelivery = delivery && delivery.nextPaymentAt < delivery.expiresAt
+      ? `Next delivery in ${Math.max(0, delivery.nextPaymentAt - world.time.slowTick)}s, subject to available stock.` : "";
+    const lastDelivery = delivery?.lastPayment
+      ? ` Last delivery: ${delivery.lastPayment.paid.toFixed(1)} / ${delivery.amount} ${delivery.resource}.` : "";
     view("deliveries").textContent = delivery
-      ? `${getNationName(world, delivery.payerId)} owes ${delivery.amount} ${delivery.resource} every ${REPARATION_INTERVAL}s. Next delivery in ${Math.max(0, delivery.nextPaymentAt - world.time.slowTick)}s, subject to available stock.` : "";
+      ? `${getNationName(world, delivery.payerId)} owes ${delivery.amount} ${delivery.resource} every ${REPARATION_INTERVAL}s. ${nextDelivery}${lastDelivery}` : "";
     const ownOverlord = getSubjectOverlord(world, a);
     const partnerOverlord = getSubjectOverlord(world, b);
     const subjectPolicy = world.nations.find((nation) => nation.id === b)?.governance;
