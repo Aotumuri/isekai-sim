@@ -65,6 +65,7 @@ import {
 } from "./offensive-operations";
 import { advanceDefeatedWithdrawals, recoverDefeatedFormations, repatriatePrisoners } from "./defeated-formations";
 import { updatePrisonerExchanges } from "./prisoner-exchange";
+import { updateIndustrialRecovery } from "./industrial-recovery";
 import { updateRetreatPlans } from "./retreat-plans";
 import { updateCapitalDefense } from "./capital-defense";
 import { updateStrategicReserves } from "./strategic-reserves";
@@ -238,6 +239,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateTerritorialGovernance(world);
   recoverDefeatedFormations(world);
   updateProduction(world);
+  updateIndustrialRecovery(world);
   repatriatePrisoners(world);
   updatePrisonerExchanges(world);
   updateResourceReparations(world);

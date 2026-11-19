@@ -2,6 +2,7 @@ import { getOperatingOccupiedDeposits } from "./occupied-deposits";
 import { isStrategicResource, STRATEGIC_RESOURCES, type StrategicResource } from "../data/strategic-resources";
 import { isMilitaryFunded } from "./military-funding";
 import { annexedOutputFactor } from "./annexation";
+import { industrialRecoveryFactor } from "./industrial-recovery";
 import { allMobilizedUnits, getArmyLimits, getMobilization } from "./mobilization";
 import { equipNewUnit, getDevelopedUnitWeaponCost } from "./equipment-development";
 import { getNationalDesign, type WeaponDesign } from "./research";
@@ -693,6 +694,7 @@ function collectResourceOutputs(
   };
 
   const occupiedDeposits = getOperatingOccupiedDeposits(world);
+  const recovering = !!world.industrialRecovery?.size;
   for (const meso of mesoRegions) {
     if (meso.type === "sea") {
       continue;
@@ -711,7 +713,8 @@ function collectResourceOutputs(
     }
 
     const output = ensureOutput(owner);
-    const factor = annexedOutputFactor(world, owner, meso.id);
+    const factor = annexedOutputFactor(world, owner, meso.id) *
+      (recovering ? industrialRecoveryFactor(world, owner, meso.id) : 1);
     if (meso.resource === "steel") {
       output.steel += steelPerDeposit * factor;
     } else if (meso.resource === "fuel") {

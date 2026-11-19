@@ -8,9 +8,10 @@ import { getDiplomacyState, getRelation, spendInfluence } from "./diplomacy";
 import { resolveCrisisPeacefully } from "./diplomatic-crises";
 import { getNationCharacter } from "./nation-character";
 import { isNationActive } from "./nation-active";
+import { recordIndustrialRecovery } from "./industrial-recovery";
 import { updateOccupation } from "./occupation";
 import { getWarDeclarationMode, recordSimulationEvent } from "./simulation-settings";
-import { getOwnerByMesoId } from "./world-cache";
+import { getMesoById, getOwnerByMesoId } from "./world-cache";
 import { recordWarAccountability } from "./war-accountability";
 import { buildWarAdjacency, findWar, getWarCasualties, isAtWar, type WarState } from "./war-state";
 import type { WorldState } from "./world-state";
@@ -37,10 +38,14 @@ export function concludePeace(world: WorldState, a: NationId, b: NationId, reaso
     (battle.attackerNationId === a && battle.defenderNationId === b) ||
     (battle.attackerNationId === b && battle.defenderNationId === a)));
   let changed = false;
+  let restartingDistricts = 0;
+  const regions = getMesoById(world);
   for (const [regionId, occupier] of world.occupation.mesoById) {
     const owner = ownerById.get(regionId);
     if ((owner === a && occupier === b) || (owner === b && occupier === a)) {
       world.occupation.mesoById.delete(regionId); world.occupation.dirtyMesoIds.add(regionId); changed = true;
+      const region = regions.get(regionId);
+      if (region && recordIndustrialRecovery(world, region, owner)) restartingDistricts++;
     }
   }
   if (changed) world.occupation.version += 1;
@@ -70,7 +75,8 @@ export function concludePeace(world: WorldState, a: NationId, b: NationId, reaso
   relieveUnrestAfterPeace(world, a); relieveUnrestAfterPeace(world, b);
   recordWarAccountability(world, war, aggressorSecuredGains);
   recordSimulationEvent(world, { category: "diplomacy", nationIds: [a, b],
-    message: `${a} and ${b} signed peace (${reason}); occupations and expeditionary troops returned.` });
+    message: `${a} and ${b} signed peace (${reason}); occupations and expeditionary troops returned.${
+      restartingDistricts ? ` Industrial output is recovering in ${restartingDistricts} districts.` : ""}` });
   return true;
 }
 

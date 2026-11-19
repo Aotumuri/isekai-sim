@@ -7,6 +7,7 @@ import type { NationId } from "../worldgen/nation";
 import type { AgriculturalLand } from "../worldgen/agricultural-land";
 import type { PublicWork } from "./public-works";
 import type { Annexation } from "./annexation";
+import type { IndustrialRecovery } from "./industrial-recovery";
 import type { RegionalPopulation } from "./regional-population";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { WarNegotiationState } from "./war-negotiations";
@@ -87,6 +88,7 @@ export interface WorldState {
   lastTaxCollectionTick?: number;
   publicWorks?: Map<MesoRegionId, PublicWork>;
   annexations?: Map<MesoRegionId, Annexation>;
+  industrialRecovery?: Map<MesoRegionId, IndustrialRecovery>;
   regionalPopulations?: Map<MesoRegionId, RegionalPopulation>;
   lastFoodTick?: number;
   irrigatedDistricts?: Set<MesoRegionId>;
