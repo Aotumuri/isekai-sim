@@ -220,6 +220,9 @@ export function updateDiplomaticRelations(world: WorldState): void {
     [exposure.observerNationId, exposure.threatNationId] as [NationId, NationId])];
   for (const [a, b] of contacts) if (active.has(a) && active.has(b) && a !== b) getRelation(world, a, b);
   const wars = buildWarAdjacency(world.wars);
+  const rebuilding = new Set<NationId>();
+  for (const district of world.industrialRecovery?.values() ?? []) rebuilding.add(district.owner);
+  const player = getManualGovernmentId(world);
   for (const [key, relation] of state.relations) {
     const a = relation.nationAId, b = relation.nationBId;
     if (!active.has(a) || !active.has(b)) { state.relations.delete(key); continue; }
@@ -248,10 +251,15 @@ export function updateDiplomaticRelations(world: WorldState): void {
     relation.tension = clamp(relation.tension + (first.aggression + second.aggression - 0.9) * 2 -
       (relation.opinion > 20 ? 1.5 : 0) + relation.grievance * 0.03 + distrust * 0.35, 0, 100);
     if (relation.crisis) continue;
-    const player = getManualGovernmentId(world);
     if (a === player || b === player) continue;
     if (relation.opinion >= 55 && relation.trust >= 55) proposeTreaty(world, a, b, "alliance");
     else if (cooperation > 0.6 && relation.opinion >= 20) proposeTreaty(world, a, b, "non-aggression");
+    const otherCommitments = (wars.has(a) || rebuilding.has(a)) && (wars.has(b) || rebuilding.has(b));
+    if ((commonEnemy || otherCommitments) && !areSubjectPartners(world, a, b) &&
+      relation.treaties.some((treaty) => treaty.type === "truce" && treaty.negotiatedPeace && treaty.expiresAtSlowTick - now <= TRUCE_EXTENSION.negotiationWindow) &&
+      !relation.treaties.some((treaty) => treaty.type === "alliance" || treaty.type === "non-aggression")) {
+      if (!extendTruce(world, a, b)) extendTruce(world, b, a);
+    }
     if (world.settings?.tradeEnabled && relation.opinion >= 10) proposeTreaty(world, a, b, "trade");
   }
 }

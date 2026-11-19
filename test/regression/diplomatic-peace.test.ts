@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { extendTruce, getDiplomacyState, getInfluence, getRelation, hasTreaty, TRUCE_EXTENSION } from "../../src/sim/diplomacy";
+import { extendTruce, getDiplomacyState, getInfluence, getRelation, hasTreaty, TRUCE_EXTENSION, updateDiplomaticRelations } from "../../src/sim/diplomacy";
 import { concludePeace, getWarFatigue, mediateCrisis, updateDiplomaticPeace } from "../../src/sim/diplomatic-peace";
 import { declareWar, findWar } from "../../src/sim/war-state";
 import { createFixedSocietyWorld } from "../helpers/fixed-society-world";
 import { createScenarioWorld } from "../scenarios";
 import { createSimulationSettings } from "../../src/sim/simulation-settings";
+import { enterPlayerNation } from "../../src/sim/player-nation";
 import { stepFastTick, stepSlowTick } from "../../src/sim/update";
 import { withMutedSimulationLogs } from "../helpers/muted-logs";
 
@@ -91,4 +92,30 @@ test("a friendly partner extends an expiring truce once and keeps both parties p
   world.time.slowTick = 300;
   assert.ok(hasTreaty(world, b.id, a.id, "truce"));
   assert.equal(relation.treaties[0].expiresAtSlowTick, 300 + TRUCE_EXTENSION.seconds);
+});
+
+test("AI former enemies renew an expiring peace while both have other commitments", () => {
+  for (const caseName of ["separate wars", "rebuilding partner", "quiet partner", "manual partner"] as const) {
+    const world = createFixedSocietyWorld();
+    world.settings!.tradeEnabled = false;
+    const [a, b, c, d] = world.nations;
+    declareWar(world.wars, a.id, b.id, 0);
+    assert(concludePeace(world, a.id, b.id));
+    declareWar(world.wars, a.id, c.id, 0);
+    if (caseName === "rebuilding partner") {
+      world.industrialRecovery = new Map([[b.capitalMesoId, { owner: b.id, remaining: 50, lastTick: 239 }]]);
+    } else if (caseName !== "quiet partner") {
+      declareWar(world.wars, b.id, d.id, 0);
+    }
+    if (caseName === "manual partner") assert(enterPlayerNation(world, b.id));
+    const relation = getRelation(world, a.id, b.id);
+    Object.assign(relation, { opinion: 5, trust: 55, tension: 10 });
+    world.time.slowTick = 240;
+    const influence = getInfluence(world, a.id);
+    updateDiplomaticRelations(world);
+    updateDiplomaticRelations(world);
+    const extendsPeace = caseName === "separate wars" || caseName === "rebuilding partner";
+    assert.equal(relation.treaties[0]?.expiresAtSlowTick, extendsPeace ? 480 : 300, caseName);
+    assert.equal(getInfluence(world, a.id), influence + 3 - (extendsPeace ? TRUCE_EXTENSION.cost : 0), caseName);
+  }
 });
