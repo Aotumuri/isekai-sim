@@ -3,7 +3,6 @@ import type { NationId } from "../worldgen/nation";
 import { seekReconstructionGrant } from "./financial-aid";
 import { changeResource, resourceReserve } from "./international-trade";
 import { getManualGovernmentId } from "./player-nation";
-import { PUBLIC_WORKS } from "./public-works";
 import { recordSimulationEvent } from "./simulation-settings";
 import { isNationRegionSupplied } from "./supply-assessment";
 import { spendTreasury, TAX_COLLECTION_INTERVAL } from "./treasury";
@@ -11,7 +10,8 @@ import { getMesoById, getOwnerByMesoId } from "./world-cache";
 import type { WorldState } from "./world-state";
 
 const RECOVERY_DURATION = 60;
-const RESTORATION_COST = { cash: PUBLIC_WORKS.city.cash / 5, steel: PUBLIC_WORKS.city.steel / 5 };
+// Restarting an existing site costs one fifth of the baseline city works budget.
+const RESTORATION_COST = { cash: 9, steel: 16 };
 
 export interface IndustrialRecovery {
   owner: NationId;
