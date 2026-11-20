@@ -12,6 +12,7 @@ export interface SimulationSettings {
   researchEnabled: boolean;
   armsAidEnabled: boolean;
   tradeEnabled: boolean;
+  economicPlanningEnabled?: boolean;
   foodEnabled?: boolean;
   politicalTurbulenceEnabled?: boolean;
 }

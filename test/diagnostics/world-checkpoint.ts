@@ -8,16 +8,39 @@ import type { WorldState } from "../../src/sim/world-state";
 
 const resources = ["steel", "fuel", "weapons", "manpower", "copper", "rubber", "tungsten"] as const;
 const emptyStocks = () => ({ steel: 0, fuel: 0, weapons: 0, manpower: 0, copper: 0, rubber: 0, tungsten: 0 });
-export const createFlowTotals = () => ({ income: emptyStocks(), usage: emptyStocks(), surplus: emptyStocks() });
+interface DomesticTotals {
+  steelOutput: number;
+  fuelOutput: number;
+  fuelDemand: number;
+  fuelConsumed: number;
+  fuelUnmet: number;
+  weaponsOutput: number;
+  weaponsForRecruitment: number;
+}
+export const createFlowTotals = () => ({
+  income: emptyStocks(), usage: emptyStocks(), surplus: emptyStocks(),
+  domestic: {} as Record<string, DomesticTotals>,
+});
 
 export function sampleFlows(world: WorldState, totals: ReturnType<typeof createFlowTotals>): void {
-  for (const { resourceFlow: flow } of world.nations) {
+  for (const { id, resourceFlow: flow } of world.nations) {
     if (flow.lastTick !== world.time.slowTick) continue;
     for (const key of resources) {
       totals.income[key] += flow.income[key] ?? 0;
       totals.usage[key] += flow.usage[key] ?? 0;
       totals.surplus[key] += flow.productionSurplus?.[key] ?? 0;
     }
+    const industry = flow.industry;
+    if (!industry) continue;
+    const domestic = totals.domestic[id] ??= { steelOutput: 0, fuelOutput: 0, fuelDemand: 0, fuelConsumed: 0,
+      fuelUnmet: 0, weaponsOutput: 0, weaponsForRecruitment: 0 };
+    domestic.steelOutput += industry.output.steel;
+    domestic.fuelOutput += industry.output.fuel;
+    domestic.fuelDemand += industry.fuelDemand;
+    domestic.fuelConsumed += industry.fuelConsumed;
+    domestic.fuelUnmet += industry.fuelDemand - industry.fuelConsumed;
+    domestic.weaponsOutput += industry.output.weapons;
+    domestic.weaponsForRecruitment += industry.weaponsForRecruitment;
   }
 }
 
@@ -64,6 +87,7 @@ export function summarizeWorld(world: WorldState) {
       unrest: world.domesticUnrest?.byNationId.get(nation.id), stocks: nation.resources, flow: nation.resourceFlow,
       treasury: nation.treasury?.balance, food: nation.food?.stock, projects: programs.reduce((n, p) => n + p.completedProjects, 0),
       levels: programs.map((p) => Math.max(...Object.values(p.levels))), statuses: programs.map((p) => p.status),
+      science: programs.map((p) => p.totalScience),
     };
   });
   const inactiveStocks = emptyStocks();
@@ -93,7 +117,13 @@ export function summarizeWorld(world: WorldState) {
     wars: world.wars.length, treaties, relations: world.diplomacy?.relations.size ?? 0,
     peace: world.diplomacy?.peaceAgreements ?? 0,
     defensiveInterventions: world.diplomacy?.defensiveInterventions ?? 0,
-    trade: { delivered: trade?.delivered ?? 0, returned: trade?.returned ?? 0, fuelSpent: trade?.fuelSpent ?? 0 },
+    trade: { delivered: trade?.delivered ?? 0, returned: trade?.returned ?? 0, fuelSpent: trade?.fuelSpent ?? 0,
+      industrial: trade?.procurement && {
+        attempted: trade.procurement.attempted, dispatched: trade.procurement.dispatched,
+        delivered: trade.procurement.delivered, returned: trade.procurement.returned,
+        paid: trade.procurement.paid, quantities: trade.procurement.quantities,
+      },
+    },
     coalitions: world.commonThreatCoalitions.coalitions.length,
     coalitionsFormed: world.commonThreatCoalitions.coalitionsFormed,
     coalitionsDissolved: world.commonThreatCoalitions.coalitionsDissolved,

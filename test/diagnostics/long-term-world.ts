@@ -15,13 +15,14 @@ assert(["quick", "quick-default", "medium", "scale", "dense"].includes(scenario 
 const seed = Number(rawSeed), days = rawDays.map(Number);
 assert(Number.isSafeInteger(seed) && seed >= 0);
 assert(days.length && days.every((day, index) => Number.isSafeInteger(day) && day > (days[index - 1] ?? 0)));
-const optionalSystems = ["warCampaignEnabled", "politicalTurbulenceEnabled", "defeatedFormationsEnabled"] as const;
+const optionalSystems = ["warCampaignEnabled", "politicalTurbulenceEnabled", "defeatedFormationsEnabled", "economicPlanningEnabled"] as const;
 const disabled = process.env.WORLD_DISABLE;
 assert(!disabled || optionalSystems.some((system) => system === disabled), "Unknown WORLD_DISABLE setting");
 const settings = createSimulationSettings(scenario === "quick-default" ? {} : {
   warCampaignEnabled: disabled !== "warCampaignEnabled",
   politicalTurbulenceEnabled: disabled !== "politicalTurbulenceEnabled",
   defeatedFormationsEnabled: disabled !== "defeatedFormationsEnabled",
+  ...(disabled === "economicPlanningEnabled" ? { economicPlanningEnabled: false } : {}),
 });
 const world = withMutedSimulationLogs(() => createSeededWorld({
   seed, quick: scenario.startsWith("quick"), config: {

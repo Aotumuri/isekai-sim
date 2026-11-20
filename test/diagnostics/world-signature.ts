@@ -4,11 +4,15 @@ import type { WorldState } from "../../src/sim/world-state";
 /** Compare simulation state across revisions on the same runtime. */
 export function worldSignature(world: WorldState): string {
   const { cache, instrumentation, mapView, ...state } = world;
+  const settings = state.settings && { ...state.settings };
+  // Opting out of procurement can be compared with worlds from before the flag.
+  if (settings) delete settings.economicPlanningEnabled;
   const omitTimings = (system: object) => Object.fromEntries(
     Object.entries(system).filter(([key]) => !key.endsWith("CpuMs")),
   );
   const snapshot = {
     ...state,
+    ...(settings ? { settings } : {}),
     events: state.events?.slice(), // The history observer wraps push.
     amphibiousOperations: omitTimings(state.amphibiousOperations),
     strategicThreatObservation: omitTimings(state.strategicThreatObservation),

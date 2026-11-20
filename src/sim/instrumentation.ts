@@ -9,6 +9,7 @@ export type SimulationMetricName =
   | "production.capacityCounting"
   | "production.supplyLookup"
   | "production.supplyIntegration"
+  | "trade.procurement"
   | "repositionUnits"
   | "assignment.rebuild"
   | "assignment.defense"

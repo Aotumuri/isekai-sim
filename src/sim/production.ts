@@ -14,6 +14,8 @@ import type { NationId } from "../worldgen/nation";
 import { createUnitForType } from "./create-units";
 import { getAmphibiousNavalProductionDemands } from "./amphibious";
 import { isNationActive } from "./nation-active";
+import { getManualGovernmentId } from "./player-nation";
+import { fuelForPrototypes, steelForResearch, weaponReserve } from "./resource-planning";
 import type { NationResourceFlow, NationResources } from "./nation-runtime";
 import { nextScheduledTickRange } from "./schedule";
 import { daysToSlowTicks } from "./time";
@@ -24,6 +26,7 @@ import {
 } from "./supply-assessment";
 import { createUnitId, type NavalUnitType, type UnitState, type UnitType } from "./unit";
 import type { WorldState } from "./world-state";
+import { buildWarAdjacency } from "./war-state";
 import { getCityTargetsByNation, getOwnerByMesoId, getPortTargetsByNation } from "./world-cache";
 
 const MOBILIZED_MIN_INTERVAL = daysToSlowTicks(20);
@@ -186,12 +189,20 @@ function updateProductionInternal(world: WorldState): void {
     }
   }
   const fuelDemandByNation = collectFuelDemandByNation(world.units);
+  const planning = !!world.settings && world.settings.economicPlanningEnabled !== false;
+  const wars = planning ? buildWarAdjacency(world.wars) : undefined;
+  const manualGovernment = planning ? getManualGovernmentId(world) : undefined;
+  const mobilized = allMobilizedUnits(world);
+  const unitCountsByNation = collectUnitCountsByNation(mobilized);
   const fuelAvailableByNation = applyResourceOutputs(
     world.nations,
     resourceOutputs,
     fuelDemandByNation,
     flowByNation,
     world,
+    unitCountsByNation,
+    wars,
+    manualGovernment,
   );
 
   const production = WORLD_BALANCE.production;
@@ -207,8 +218,6 @@ function updateProductionInternal(world: WorldState): void {
   const cityTargetsByNation = getCityTargetsByNation(world);
   const portTargetsByNation = getPortTargetsByNation(world);
   const capacityCountStartedAt = world.instrumentation ? performance.now() : 0;
-  const mobilized = allMobilizedUnits(world);
-  const unitCountsByNation = collectUnitCountsByNation(mobilized);
   updateCapacityDiagnostics(world, unitCountsByNation, mobilized);
   if (world.instrumentation) {
     world.instrumentation.recordDuration(
@@ -287,6 +296,11 @@ function updateProductionInternal(world: WorldState): void {
     let recruited = 0;
     const designs = { Infantry: getNationalDesign(world, nation.id, "Infantry"), Tank: getNationalDesign(world, nation.id, "Tank"),
       CombatShip: getNationalDesign(world, nation.id, "CombatShip"), TransportShip: getNationalDesign(world, nation.id, "TransportShip") };
+    const industry = flowByNation.get(nation.id)?.industry;
+    const forecastTankFuel = industry && nation.id !== manualGovernment && !wars?.has(nation.id) && (mobilization?.threat ?? 0) < 0.35;
+    const tankFuel = forecastTankFuel ? getUnitFuelUse("Tank") * designs.Tank.fuelUse : 0;
+    let remainingTankFuel = industry
+      ? industry.output.fuel - industry.fuelDemand + Math.max(0, nation.resources.fuel - industry.prototypeFuelReserve) / 5 : 0;
     const currentCounts = unitCountsByNation.get(nation.id) ?? { land: 0, naval: 0 };
     let currentLandCount = currentCounts.land;
     let currentNavalCount = currentCounts.naval;
@@ -380,7 +394,8 @@ function updateProductionInternal(world: WorldState): void {
           performance.now() - supplyStartedAt,
         );
       }
-      const unitType = pickAffordableUnitType(campaignProductionResources(nation.resources, recoveryStock), world.simRng, designs);
+      const unitType = pickAffordableUnitType(campaignProductionResources(nation.resources, recoveryStock), world.simRng, designs,
+        !forecastTankFuel || remainingTankFuel >= tankFuel);
       if (!unitType) {
         recordResourceBlock(world, nation.resources);
         return false;
@@ -390,6 +405,7 @@ function updateProductionInternal(world: WorldState): void {
         recordResourceBlock(world, nation.resources);
         return false;
       }
+      if (unitType === "Tank") remainingTankFuel -= tankFuel;
       const unit = createUnitForWorld(world, nation.id, regionId, unitType, designs[unitType]);
       newUnits.push(unit);
       world.instrumentation?.recordLandUnitLifecycle?.({
@@ -653,9 +669,14 @@ function finalizeResourceFlows(
     } else {
       flow.delta = cloneResources(nation.resources);
     }
+    if (flow.industry) {
+      const recruitment = flow.usage.weapons;
+      flow.industry.weaponsForRecruitment = recruitment;
+      flow.industry.weaponDemandAverage += (recruitment - flow.industry.weaponDemandAverage) / 12;
+    }
     flow.productionSurplus = {
       steel: Math.max(0, flow.income.steel - flow.usage.steel),
-      fuel: Math.max(0, flow.income.fuel - flow.usage.fuel),
+      fuel: Math.max(0, flow.income.fuel - (flow.industry?.fuelDemand ?? flow.usage.fuel)),
     };
     for (const resource of STRATEGIC_RESOURCES) {
       if (nation.resources[resource] !== undefined) {
@@ -763,19 +784,28 @@ function applyResourceOutputs(
   fuelDemandByNation: Map<NationId, number>,
   flowByNation: Map<NationId, NationResourceFlow>,
   world: WorldState,
+  fielded: Map<NationId, DomainUnitCounts>,
+  wars: ReturnType<typeof buildWarAdjacency> | undefined,
+  manualGovernment?: NationId,
 ): Map<NationId, boolean> {
   const outputBalance = WORLD_BALANCE.resources.output;
   const baseSteelPerWeapon = Math.max(0, Math.round(outputBalance.steelPerWeapon));
   const fuelAvailability = new Map<NationId, boolean>();
+  const researchEnabled = !!world.settings?.researchEnabled;
 
   for (const nation of nations) {
     if (!isNationActive(nation)) {
       continue;
     }
     const resources = nation.resources;
+    const fuelBeforeOutput = resources.fuel;
     const steelPerWeapon = baseSteelPerWeapon;
     const flow = getFlow(flowByNation, nation.id);
     const output = outputs.get(nation.id);
+    const counts = fielded.get(nation.id);
+    const atWar = wars?.has(nation.id) ?? false;
+    const autonomous = !!wars && nation.id !== manualGovernment;
+    const target = wars ? weaponReserve(nation, (counts?.land ?? 0) + (counts?.naval ?? 0), atWar) : 0;
     if (output) {
       for (const resource of STRATEGIC_RESOURCES) {
         if (output[resource] === undefined) continue;
@@ -793,10 +823,12 @@ function applyResourceOutputs(
       resources.manpower = Math.max(0, resources.manpower + manpowerIncome);
 
       const weaponCapacity = Math.max(0, output.weaponCapacity);
-      const maxWeapons = Math.floor(weaponCapacity);
+      const maxWeapons = autonomous ? Math.min(Math.floor(weaponCapacity),
+        Math.ceil(Math.max(0, target - resources.weapons))) : Math.floor(weaponCapacity);
+      const protectedSteel = autonomous ? steelForResearch(nation, atWar, researchEnabled) : researchEnabled ? 8 : 0;
       const maxBySteel =
         steelPerWeapon > 0
-          ? Math.floor(Math.max(0, resources.steel - (world.settings?.researchEnabled ? 8 : 0)) / steelPerWeapon)
+          ? Math.floor(Math.max(0, resources.steel - protectedSteel) / steelPerWeapon)
           : maxWeapons;
       const weaponsProduced = Math.max(0, Math.min(maxWeapons, maxBySteel));
       if (weaponsProduced > 0) {
@@ -810,14 +842,18 @@ function applyResourceOutputs(
       }
     }
 
-    const fuelDemand = fuelDemandByNation.get(nation.id) ?? 0;
-    const demand = Math.max(0, fuelDemand);
-    flow.usage.fuel += demand;
-    const hasFuel = resources.fuel > 0;
-    if (demand > 0) {
-      resources.fuel = Math.max(0, resources.fuel - demand);
+    const demand = fuelDemandByNation.get(nation.id) ?? 0;
+    const prototypeFuelReserve = autonomous && researchEnabled && !atWar
+      ? fuelForPrototypes(nation, fuelBeforeOutput, flow.income.fuel) : 0;
+    const availableFuel = Math.max(0, resources.fuel - prototypeFuelReserve);
+    const fuelConsumed = Math.min(availableFuel, demand);
+    flow.usage.fuel += wars ? fuelConsumed : demand;
+    resources.fuel -= fuelConsumed;
+    if (wars) {
+      flow.industry = { output: { ...flow.income }, fuelDemand: demand, fuelConsumed, weaponsTarget: target,
+        weaponDemandAverage: nation.resourceFlow.industry?.weaponDemandAverage ?? 0, weaponsForRecruitment: 0, prototypeFuelReserve };
     }
-    fuelAvailability.set(nation.id, hasFuel);
+    fuelAvailability.set(nation.id, availableFuel > 0);
   }
 
   return fuelAvailability;
@@ -851,14 +887,16 @@ function pickAffordableUnitType(
   resources: NationResources,
   rng: WorldState["simRng"],
   designs?: Partial<Record<UnitType, WeaponDesign>>,
+  allowTank = true,
 ): UnitType | null {
   const canInfantry = canAffordUnit(resources, "Infantry", designs?.Infantry);
   const canTank = canAffordUnit(resources, "Tank", designs?.Tank);
   if (canInfantry && canTank) {
     const tankShare = clamp(WORLD_BALANCE.unit.tankShare, 0, 1);
-    return rng.nextFloat() < tankShare ? "Tank" : "Infantry";
+    const roll = rng.nextFloat();
+    return allowTank && roll < tankShare ? "Tank" : "Infantry";
   }
-  if (canTank) {
+  if (allowTank && canTank) {
     return "Tank";
   }
   if (canInfantry) {

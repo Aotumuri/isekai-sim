@@ -7,6 +7,7 @@ import type { NationId } from "../worldgen/nation";
 import type { UnitType } from "./unit";
 import { getNationCharacter } from "./nation-character";
 import { isNationActive, isNationPresent } from "./nation-active";
+import type { NationResources } from "./nation-runtime";
 import { isNationRegionSupplied } from "./supply-assessment";
 import { recordSimulationEvent } from "./simulation-settings";
 import { getCityTargetsByNation, getPortTargetsByNation } from "./world-cache";
@@ -204,12 +205,19 @@ export function updateResearch(world: WorldState): void {
     const bonus = nation.treasury?.researchFunding && baseBudget >= 0.1
       ? Math.min(capacity * 0.6, materialLimit - baseBudget, nation.treasury.balance / 2) : 0;
     const budget = baseBudget + bonus;
+    const industry = nation.resourceFlow.lastTick === world.time.slowTick ? nation.resourceFlow.industry : undefined;
+    const desiredBudget = capacity + (nation.treasury?.researchFunding ? Math.min(capacity * 0.6, nation.treasury.balance / 2) : 0);
+    const demand: Partial<NationResources> | undefined = industry ? { steel: desiredBudget * 0.4, weapons: desiredBudget * 0.2 } : undefined;
+    if (industry) industry.researchDemand = demand;
     let usedBudget = 0;
     for (const family of EQUIPMENT_FAMILIES) {
       if (!weights[family]) continue;
       const program = getResearchPortfolio(world, nation.id, family), priorities = getResearchPriorities(world, nation.id, family);
       const sum = Object.values(priorities).reduce((value, item) => value + item, 0);
       const materials = getPrototypeMaterialRates(nation.resources, family);
+      if (demand) for (const [resource, rate] of materials) {
+        demand[resource] = (demand[resource] ?? 0) + desiredBudget * weights[family] / total * rate;
+      }
       const science = materials.reduce((limit, [resource, rate]) =>
         Math.min(limit, Math.max(0, (nation.resources[resource] ?? 0) - 2) / rate), budget * weights[family] / total);
       if (budget < 0.1 || science <= 0) { program.status = "saving resources"; continue; }

@@ -1,5 +1,5 @@
 import { getManualGovernmentId } from "./player-nation";
-import { STRATEGIC_RESOURCES, isStrategicResource } from "../data/strategic-resources";
+import { isStrategicResource } from "../data/strategic-resources";
 import { isTradeEmbargoed } from "./trade-embargo";
 import { exchangePortPopulation } from "./population-migration";
 import { areFactionPartners } from "./factions";
@@ -16,8 +16,9 @@ import { getMesoById, getNeighborsById, getOwnerByMesoId, getPortTargetsByNation
 import { buildWarAdjacency, isAtWar } from "./war-state";
 import { getUnitCombatStrength } from "./unit-strength";
 import type { WorldState } from "./world-state";
+import { INDUSTRIAL_RESOURCES, type IndustrialResource } from "./resource-planning";
+import { updateIndustrialProcurement } from "./industrial-procurement";
 
-const INDUSTRIAL_RESOURCES = ["steel", "fuel", "weapons", ...STRATEGIC_RESOURCES] as const;
 export const TRADE_RESOURCES = [...INDUSTRIAL_RESOURCES, "food", "cash"] as const;
 export type TradeResource = typeof TRADE_RESOURCES[number];
 export interface TradeRoute { regionIds: MesoRegionId[]; maritime: boolean }
@@ -26,12 +27,23 @@ export interface TradeDeal {
   offeredResource: TradeResource; requestedResource: TradeResource;
   offeredAmount: number; requestedAmount: number; route: TradeRoute;
   humanitarian?: boolean;
+  industrialPurchase?: true;
   rerouted?: boolean;
   arrivesAtSlowTick: number; status: "in-transit" | "delivered" | "returned";
 }
 export interface InternationalTradeState {
   deals: TradeDeal[]; nextDealNumber: number; lastSlowTick: number; lastAISlowTick: number;
   delivered: number; returned: number; fuelSpent: number;
+  procurement?: {
+    lastReview: number;
+    attempted: number;
+    dispatched: number;
+    delivered: number;
+    returned: number;
+    paid: number;
+    quantities: Partial<Record<IndustrialResource, number>>;
+    retryAfter: Map<string, number>;
+  };
 }
 export function getInternationalTradeState(world: WorldState): InternationalTradeState {
   return world.internationalTrade ??= { deals: [], nextDealNumber: 0, lastSlowTick: -1,
@@ -58,14 +70,20 @@ function changeTradeStock(nation: NationRuntime, resource: TradeResource, amount
 export function resourceReserve(nation: NationRuntime, resource: TradeResource): number {
   if (resource === "food") return (nation.food?.demand ?? 0) * (nation.food?.protectGrainExports ? 6 : 2);
   if (resource === "cash") return 10;
-  return resource === "fuel" ? Math.max(20, nation.resourceFlow.usage.fuel * 5) : resource === "weapons" ? 25 : isStrategicResource(resource) ? 6 : 20;
+  return resource === "fuel" ? Math.max(20, (nation.resourceFlow.industry?.fuelDemand ?? nation.resourceFlow.usage.fuel) * 5)
+    : resource === "weapons" ? 25 : isStrategicResource(resource) ? 6 : 20;
 }
 
 /** Civilian trade charters have their own fuel cost; they do not steal military transports. */
 export function findTradeRoute(world: WorldState, a: NationId, b: NationId): TradeRoute | null {
   const first = world.nations.find((nation) => nation.id === a && isNationActive(nation));
   const second = world.nations.find((nation) => nation.id === b && isNationActive(nation));
-  if (!first || !second || a === b || isTradeEmbargoed(world, a, b) || isAtWar(a, b, buildWarAdjacency(world.wars))) return null;
+  return first && second ? findTradeRouteBetween(world, first, second) : null;
+}
+
+function findTradeRouteBetween(world: WorldState, first: NationRuntime, second: NationRuntime): TradeRoute | null {
+  const a = first.id, b = second.id;
+  if (a === b || isTradeEmbargoed(world, a, b) || isAtWar(a, b, buildWarAdjacency(world.wars))) return null;
   if (!isNationRegionSupplied(world, a, first.capitalMesoId) || !isNationRegionSupplied(world, b, second.capitalMesoId)) return null;
   const regions = getMesoById(world), neighbors = getNeighborsById(world), owners = getOwnerByMesoId(world);
   const owner = (id: MesoRegionId) => world.occupation.mesoById.get(id) ?? owners.get(id);
@@ -135,42 +153,73 @@ function supportsTradeResource(world: WorldState, nation: NationRuntime, resourc
 }
 export function proposeResourceTrade(world: WorldState, sellerId: NationId, buyerId: NationId,
   offeredResource: TradeResource, offeredAmount: number, requestedResource: TradeResource, requestedAmount: number): boolean {
-  return dispatchTrade(world, sellerId, buyerId, offeredResource, offeredAmount, requestedResource, requestedAmount, false);
+  return dispatchTrade(world, sellerId, buyerId, offeredResource, offeredAmount, requestedResource, requestedAmount, false) === true;
 }
 
 export function sendGrainAid(world: WorldState, donor: NationId, recipient: NationId, amount: number): boolean {
-  return dispatchTrade(world, donor, recipient, "food", amount, "cash", 0, true);
+  return dispatchTrade(world, donor, recipient, "food", amount, "cash", 0, true) === true;
+}
+
+export interface IndustrialPurchaseTerms {
+  exportFloor: number;
+  sellerFuelReserve: number;
+  cashReserve: number;
+  markup: number;
+}
+
+export function purchaseIndustrialResource(world: WorldState, seller: NationRuntime, buyer: NationRuntime,
+  resource: IndustrialResource, limit: number, terms: IndustrialPurchaseTerms): boolean | "no-route" {
+  return dispatchTrade(world, seller.id, buyer.id, resource, limit, "cash", 0, false, { ...terms, seller, buyer });
 }
 
 function dispatchTrade(world: WorldState, sellerId: NationId, buyerId: NationId,
   offeredResource: TradeResource, offeredAmount: number, requestedResource: TradeResource, requestedAmount: number,
-  humanitarian: boolean): boolean {
+  humanitarian: boolean, purchase?: IndustrialPurchaseTerms & { seller: NationRuntime; buyer: NationRuntime }): boolean | "no-route" {
   if (getWarDeclarationMode(world) !== "diplomacy" || !world.settings?.tradeEnabled || sellerId === buyerId ||
     offeredResource === requestedResource || !TRADE_RESOURCES.includes(offeredResource) || !TRADE_RESOURCES.includes(requestedResource) ||
-    !Number.isFinite(offeredAmount) || !Number.isFinite(requestedAmount) || offeredAmount <= 0 || (!humanitarian && requestedAmount <= 0)) return false;
+    !Number.isFinite(offeredAmount) || !Number.isFinite(requestedAmount) || offeredAmount <= 0 ||
+    (!humanitarian && !purchase && requestedAmount <= 0)) return false;
   if (!hasTradeAgreement(world, sellerId, buyerId) || isTradeEmbargoed(world, sellerId, buyerId)) return false;
-  const ratio = offeredAmount * TRADE_RESOURCE_VALUES[offeredResource] / (requestedAmount * TRADE_RESOURCE_VALUES[requestedResource]);
-  if (!humanitarian && (ratio < 0.8 || ratio > 1.25)) return false;
+  if (!humanitarian && !purchase) {
+    const ratio = offeredAmount * TRADE_RESOURCE_VALUES[offeredResource] / (requestedAmount * TRADE_RESOURCE_VALUES[requestedResource]);
+    if (ratio < 0.8 || ratio > 1.25) return false;
+  }
   const state = getInternationalTradeState(world);
   if (state.deals.filter((deal) => deal.status === "in-transit").length >= 32 || state.deals.some((deal) => deal.status === "in-transit" &&
     ((deal.sellerId === sellerId && deal.buyerId === buyerId) || (deal.sellerId === buyerId && deal.buyerId === sellerId)))) return false;
-  const seller = world.nations.find((nation) => nation.id === sellerId && isNationActive(nation));
-  const buyer = world.nations.find((nation) => nation.id === buyerId && isNationActive(nation));
-  if (!seller || !buyer ||
+  const seller = purchase?.seller ?? world.nations.find((nation) => nation.id === sellerId);
+  const buyer = purchase?.buyer ?? world.nations.find((nation) => nation.id === buyerId);
+  if (!seller || !buyer || !isNationActive(seller) || !isNationActive(buyer) ||
     ![seller, buyer].every((nation) => supportsTradeResource(world, nation, offeredResource) && (humanitarian || supportsTradeResource(world, nation, requestedResource))) ||
-    getTradeStock(seller, offeredResource) < offeredAmount + resourceReserve(seller, offeredResource) ||
-    (!humanitarian && getTradeStock(buyer, requestedResource) < requestedAmount + resourceReserve(buyer, requestedResource))) return false;
-  const route = findTradeRoute(world, sellerId, buyerId);
-  if (!route) return false;
+    (!purchase && (getTradeStock(seller, offeredResource) < offeredAmount + resourceReserve(seller, offeredResource) ||
+      (!humanitarian && getTradeStock(buyer, requestedResource) < requestedAmount + resourceReserve(buyer, requestedResource))))) return false;
+  const route = findTradeRouteBetween(world, seller, buyer);
+  if (!route) return "no-route";
   const shippingFuel = shippingFuelFor(route);
-  const carriers = humanitarian ? [seller] : [seller, buyer];
+  if (purchase) {
+    const exportFloor = Math.max(resourceReserve(seller, offeredResource), purchase.exportFloor);
+    const fuelReserve = Math.max(resourceReserve(seller, "fuel"), purchase.sellerFuelReserve);
+    if (purchase.markup < 1 || (shippingFuel > 0 && seller.resources.fuel < fuelReserve + shippingFuel)) return false;
+    const costPerUnit = TRADE_RESOURCE_VALUES[offeredResource] * purchase.markup;
+    const freight = shippingFuel * TRADE_RESOURCE_VALUES.fuel * purchase.markup;
+    const cash = getTradeStock(buyer, "cash") - Math.max(resourceReserve(buyer, "cash"), purchase.cashReserve);
+    const reserveAndFreight = offeredResource === "fuel" && shippingFuel > 0
+      ? Math.max(exportFloor, fuelReserve) + shippingFuel : exportFloor;
+    offeredAmount = Math.min(offeredAmount, route.maritime ? 60 : 120,
+      getTradeStock(seller, offeredResource) - reserveAndFreight, (cash - freight) / costPerUnit);
+    requestedAmount = Math.min(cash, offeredAmount * costPerUnit + freight);
+    if (!Number.isFinite(offeredAmount) || !Number.isFinite(requestedAmount) || offeredAmount < 1 || requestedAmount <= 0) return false;
+  }
+  const carriers = humanitarian || purchase ? [seller] : [seller, buyer];
   const carrier = carriers.find((nation) => nation.resources.fuel -
     (nation.id === sellerId && offeredResource === "fuel" ? offeredAmount : nation.id === buyerId && requestedResource === "fuel" ? requestedAmount : 0) >= shippingFuel);
   if (shippingFuel > 0 && !carrier) return false;
   changeTradeStock(seller, offeredResource, -offeredAmount); changeTradeStock(buyer, requestedResource, -requestedAmount);
   if (shippingFuel > 0) { changeResource(carrier!, "fuel", -shippingFuel); state.fuelSpent += shippingFuel; }
   state.deals.push({ id: `trade-${state.nextDealNumber++}`, sellerId, buyerId, offeredResource, offeredAmount,
-    requestedResource, requestedAmount, route, ...(humanitarian ? { humanitarian: true } : {}), arrivesAtSlowTick: world.time.slowTick + transitTicks(route), status: "in-transit" });
+    requestedResource, requestedAmount, route, ...(humanitarian ? { humanitarian: true } : {}),
+    ...(purchase ? { industrialPurchase: true } : {}),
+    arrivesAtSlowTick: world.time.slowTick + transitTicks(route), status: "in-transit" });
   recordSimulationEvent(world, { category: "trade", nationIds: [sellerId, buyerId],
     message: humanitarian ? `${sellerId} sent ${offeredAmount.toFixed(1)} grain as relief to ${buyerId}.` : `${sellerId} dispatched ${offeredAmount.toFixed(1)} ${offeredResource} for ${requestedAmount.toFixed(1)} ${requestedResource} from ${buyerId}.` });
   return true;
@@ -178,9 +227,11 @@ function dispatchTrade(world: WorldState, sellerId: NationId, buyerId: NationId,
 
 function rerouteTrade(world: WorldState, deal: TradeDeal, seller: NationRuntime, buyer: NationRuntime): boolean {
   if (deal.rerouted) return false;
-  const route = findTradeRoute(world, seller.id, buyer.id);
+  const route = findTradeRouteBetween(world, seller, buyer);
   if (!route || !isTradeRouteOpen(world, seller.id, buyer.id, route)) return false;
   const fuel = shippingFuelFor(route);
+  // The buyer's escrow covers the original charter. A new paid charter needs a new order.
+  if (deal.industrialPurchase && fuel > 0) return false;
   const carriers = deal.humanitarian ? [seller] : [seller, buyer];
   const carrier = carriers.find((nation) => nation.resources.fuel >= fuel);
   if (fuel > 0 && !carrier) return false;
@@ -208,7 +259,9 @@ function returnTradeEscrow(world: WorldState, deal: TradeDeal, seller: NationRun
   if (seller) changeTradeStock(seller, deal.offeredResource, deal.offeredAmount);
   if (buyer) changeTradeStock(buyer, deal.requestedResource, deal.requestedAmount);
   deal.status = "returned";
-  getInternationalTradeState(world).returned++;
+  const state = getInternationalTradeState(world);
+  state.returned++;
+  if (deal.industrialPurchase && state.procurement) state.procurement.returned++;
   recordSimulationEvent(world, { category: "trade", nationIds: [deal.sellerId, deal.buyerId],
     message: `${deal.id} returned: route or agreement unavailable.` });
 }
@@ -242,6 +295,12 @@ export function updateInternationalTrade(world: WorldState): void {
           if (from && to) exchangePortPopulation(world, from, to);
         }
         deal.status = "delivered"; state.delivered += 1; getDiplomacyState(world).tradeDeliveries += 1;
+        if (deal.industrialPurchase && state.procurement) {
+          const resource = deal.offeredResource as IndustrialResource;
+          state.procurement.delivered++;
+          state.procurement.paid += deal.requestedAmount;
+          state.procurement.quantities[resource] = (state.procurement.quantities[resource] ?? 0) + deal.offeredAmount;
+        }
         const relation = getRelation(world, deal.sellerId, deal.buyerId);
         relation.opinion = Math.min(100, relation.opinion + 2); relation.trust = Math.min(100, relation.trust + 1);
         recordSimulationEvent(world, { category: "trade", nationIds: [deal.sellerId, deal.buyerId], message: `${deal.id} delivered to ${deal.sellerId} and ${deal.buyerId}.` });
@@ -251,6 +310,10 @@ export function updateInternationalTrade(world: WorldState): void {
   }
   if (getWarDeclarationMode(world) !== "diplomacy" || !world.settings?.tradeEnabled) return;
   const trading = getInternationalTradeState(world);
+  if (world.settings.economicPlanningEnabled !== false) {
+    updateIndustrialProcurement(world, trading);
+    return;
+  }
   if (world.time.slowTick - trading.lastAISlowTick < 20) return;
   trading.lastAISlowTick = world.time.slowTick;
   const player = getManualGovernmentId(world);

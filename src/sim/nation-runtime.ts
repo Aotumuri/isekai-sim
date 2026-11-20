@@ -27,6 +27,16 @@ export interface NationResourceFlow {
   delta: NationResources;
   /** Domestic output less production and upkeep, before trade and treaty transfers. */
   productionSurplus?: Partial<NationResources>;
+  industry?: {
+    output: NationResources;
+    fuelDemand: number;
+    fuelConsumed: number;
+    weaponsForRecruitment: number;
+    weaponDemandAverage: number;
+    weaponsTarget: number;
+    prototypeFuelReserve: number;
+    researchDemand?: Partial<NationResources>;
+  };
   lastTick: number;
 }
 
