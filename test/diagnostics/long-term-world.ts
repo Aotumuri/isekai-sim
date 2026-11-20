@@ -7,6 +7,7 @@ import { createSeededWorld } from "../helpers/seeded-world";
 import { withMutedSimulationLogs } from "../helpers/muted-logs";
 import { observeWorldHistory } from "./world-history-observer";
 import { createFlowTotals, sampleFlows, summarizeWorld } from "./world-checkpoint";
+import { worldSignature } from "./world-signature";
 
 const [scenario, rawSeed, ...rawDays] = process.argv.slice(2);
 assert(["quick", "quick-default", "medium", "scale", "dense"].includes(scenario ?? ""),
@@ -72,5 +73,9 @@ for (const day of days) {
     ...(world.instrumentation ? { fastOnlyMs: fastMs, cycleBoundaryMs: slowMs, timings, counters } : {}),
   }));
   previous = day;
+}
+if (process.env.WORLD_SIGNATURE === "1") {
+  // Run after the performance and memory samples.
+  console.log(JSON.stringify({ signature: worldSignature(world) }));
 }
 console.log(JSON.stringify({ history: history.timeline, historyCounts: history.counts }));

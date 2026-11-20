@@ -12,6 +12,10 @@ import { getDevelopedUnitWeaponCost } from "./equipment-development";
 import { getUnitEquipmentFulfillment } from "./reorganization";
 import { isNationRegionSupplied } from "./supply-assessment";
 import { recordSimulationEvent } from "./simulation-settings";
+import { collectMobilizationThreats } from "./mobilization-threat";
+import { buildWarAdjacency } from "./war-state";
+
+export { getMobilizationThreat } from "./mobilization-threat";
 
 export type MobilizationPolicy = "automatic" | "limited" | "total";
 export type MobilizationPhase = "standing" | "alert" | "mobilizing" | "war" | "demobilizing";
@@ -57,28 +61,6 @@ export function allMobilizedUnits(world: WorldState): UnitState[] {
   return units;
 }
 
-export function getMobilizationThreat(world: WorldState, nationId: NationId): number {
-  if (world.wars.some((war) => war.nationAId === nationId || war.nationBId === nationId)) return 1;
-  const owners = getOwnerByMesoId(world), nearby = new Set<NationId>();
-  for (const exposure of world.strategicThreatObservation.exposures) if (exposure.observerNationId === nationId && (exposure.landAdjacent || exposure.sharedSeaComponent)) nearby.add(exposure.threatNationId);
-  // Diplomacy works before the first strategic snapshot, too.
-  for (const region of world.mesoRegions) if (owners.get(region.id) === nationId) for (const neighbor of region.neighbors) {
-    const owner = owners.get(neighbor.id); if (owner && owner !== nationId) nearby.add(owner);
-  }
-  let threat = 0;
-  for (const relation of world.diplomacy?.relations.values() ?? []) {
-    if (relation.nationAId !== nationId && relation.nationBId !== nationId) continue;
-    const other = relation.nationAId === nationId ? relation.nationBId : relation.nationAId;
-    if (relation.crisis) threat = Math.max(threat, 0.75);
-    if (!nearby.has(other) || relation.treaties.some((treaty) => ["truce", "alliance", "non-aggression"].includes(treaty.type) && treaty.expiresAtSlowTick > world.time.slowTick)) continue;
-    if (relation.tension >= 55 && (relation.opinion < -15 || relation.grievance >= 25)) threat = Math.max(threat, relation.tension >= 80 ? 0.6 : 0.35);
-    const enemy = world.mobilization?.byNationId.get(other);
-    if (enemy && enemy.readiness >= 0.5 && relation.opinion < -20) threat = Math.max(threat, 0.5);
-  }
-  for (const intent of world.warIntent.assessmentsByNationId.get(nationId) ?? []) if (
-    world.time.fastTick - intent.evaluatedAtTick <= 120 && intent.aboveThreshold) threat = Math.max(threat, 0.55);
-  return threat;
-}
 export function getArmyLimits(world: WorldState, nation: NationRuntime, item = getMobilization(world, nation.id)) {
   const owners = getOwnerByMesoId(world);
   const populations = getRegionalPopulations(world);
@@ -104,13 +86,15 @@ export function updateMobilization(world: WorldState): void {
     return;
   }
   const units = allMobilizedUnits(world);
-  const threats = new Map(world.nations.map((nation) => [nation.id, getMobilizationThreat(world, nation.id)]));
+  const wars = buildWarAdjacency(world.wars);
+  const threats = collectMobilizationThreats(world, world.nations
+    .filter((nation) => nation.macroRegionIds.length).map(({ id }) => id), wars);
   for (const nation of world.nations) {
     if (!nation.macroRegionIds.length) continue;
     const item = getMobilization(world, nation.id), elapsed = Math.max(0, world.time.slowTick - item.lastSlowTick);
     if (!elapsed && item.standingArmy > 0) continue;
     const previousThreat = item.threat, previousPhase = item.phase;
-    const atWar = world.wars.some((war) => war.nationAId === nation.id || war.nationBId === nation.id);
+    const atWar = wars.has(nation.id);
     item.threat = threats.get(nation.id) ?? 0;
     if (item.policy === "total") item.threat = Math.max(item.threat, 0.95);
     let desired = item.policy === "limited" && !atWar ? Math.min(0.4, item.threat) : item.threat;
