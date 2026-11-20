@@ -10,6 +10,8 @@ import { createScenarioWorld } from "../scenarios";
 import { createSimulationSettings } from "../../src/sim/simulation-settings";
 import { enterPlayerNation } from "../../src/sim/player-nation";
 import { stepFastTick, stepSlowTick } from "../../src/sim/update";
+import { updateSurrender } from "../../src/sim/surrender";
+import { integrateSubjectGovernment } from "../../src/sim/territorial-governance";
 import { withMutedSimulationLogs } from "../helpers/muted-logs";
 
 const DEFAULT_TRUCE_TICKS = daysToSlowTicks(DEFAULT_TRUCE_DAYS);
@@ -56,7 +58,7 @@ test("war fatigue updates once per interval and trusted third parties can mediat
   assert(getDiplomacyState(world).crisesResolved > 0);
 });
 
-test("peace rescues troops embarked at sea without counting a failed landing", () => {
+function embarkedLanding() {
   const world = createScenarioWorld("two-island-amphibious", { seed: 695919685365, width: 640, height: 360, quick: true });
   world.settings = createSimulationSettings({ researchEnabled: false, mobilizationEnabled: false });
   const sea = new Set(world.mesoRegions.filter((region) => region.type === "sea").map((region) => region.id));
@@ -68,6 +70,11 @@ test("peace rescues troops embarked at sea without counting a failed landing", (
   });
   const transport = world.units.find((unit) => sea.has(unit.regionId) && unit.cargoUnits.length > 0);
   assert(transport);
+  return { world, transport };
+}
+
+test("peace rescues troops embarked at sea without counting a failed landing", () => {
+  const { world, transport } = embarkedLanding();
   const cargoIds = transport.cargoUnits.map((unit) => unit.id);
   const failures = world.amphibiousOperations.failedLandings;
   assert(concludePeace(world, world.nations[0]!.id, world.nations[1]!.id));
@@ -122,4 +129,42 @@ test("AI former enemies renew an expiring peace while both have other commitment
     assert.equal(relation.treaties[0]?.expiresAtSlowTick, DEFAULT_TRUCE_TICKS + (extendsPeace ? TRUCE_EXTENSION.durationSlowTicks : 0), caseName);
     assert.equal(getInfluence(world, a.id), influence + 3 - (extendsPeace ? TRUCE_EXTENSION.cost : 0), caseName);
   }
+});
+
+test("capitulation stands down the victor's landing and returns its surviving embarked units once", () => {
+  const { world, transport } = embarkedLanding();
+  const operation = world.amphibiousOperations.operationByUnitId.get(transport.id);
+  assert(operation);
+  const cargo = [...transport.cargoUnits];
+  const failures = world.amphibiousOperations.failedLandings;
+  world.units = world.units.filter((unit) => unit.nationId !== operation.enemyNationId);
+  updateSurrender(world);
+  assert.equal(findWar(world.wars, operation.nationId, operation.enemyNationId), null);
+  assert.equal(operation.phase, "cancelled");
+  assert.equal(transport.cargoUnits.length, 0);
+  assert.equal(world.amphibiousOperations.failedLandings, failures);
+  for (const unit of cargo) assert.equal(world.units.filter((item) => item.id === unit.id).length, 1);
+});
+
+test("integration releases an old landing assignment while preserving the inherited troops aboard", () => {
+  const { world, transport } = embarkedLanding();
+  const operation = world.amphibiousOperations.operationByUnitId.get(transport.id);
+  assert(operation);
+  const subject = world.nations.find(({ id }) => id === operation.nationId)!;
+  const overlord = world.nations.find(({ id }) => id === operation.enemyNationId)!;
+  const cargo = [...transport.cargoUnits];
+  const failures = world.amphibiousOperations.failedLandings;
+  world.wars = [];
+  world.settings!.politicalTurbulenceEnabled = true;
+  world.time.slowTick = 200;
+  subject.subjectGovernment = { overlordId: overlord.id, establishedAtFastTick: 0 };
+  subject.governance = { policy: "assimilation", stability: 90, alignment: 1, diversity: 0, since: 0 };
+  getRelation(world, overlord.id, subject.id).trust = 65;
+  assert(integrateSubjectGovernment(world, overlord.id, subject.id));
+  assert.equal(operation.phase, "cancelled");
+  assert(!world.amphibiousOperations.operationByUnitId.has(transport.id));
+  assert.equal(world.amphibiousOperations.failedLandings, failures);
+  assert.deepEqual(transport.cargoUnits, cargo);
+  assert.equal(transport.nationId, overlord.id);
+  assert(cargo.every((unit) => unit.nationId === overlord.id && !world.units.includes(unit)));
 });

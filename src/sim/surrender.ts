@@ -1,3 +1,5 @@
+import { withdrawAmphibiousOperationsForPeace } from "./amphibious";
+import { warFatigueKey } from "./diplomatic-peace";
 import { recordTerritorialClaimOutcome, type TerritorialClaimObjective } from "./territorial-claim-objective";
 import { updateFactionGovernments } from "./factions";
 import { establishExileGovernment, updateExileGovernments } from "./exile-government";
@@ -180,9 +182,6 @@ export function updateSurrender(world: WorldState): void {
         category: "military", nationIds: [uprising.defenderId, surrenderNationId],
         message: `${uprising.defenderId} recovered ${restored.length} provinces after suppressing the uprising.`,
       });
-      if (clearCapitalMarkerForNation(surrenderNationId, nationById, mesoById)) {
-        buildingChanged = true;
-      }
       surrenderedThisTick.push(surrenderNationId);
       const remainingMacroIds = nationById.get(surrenderNationId)?.macroRegionIds ?? [];
       if (remainingMacroIds.length === 0) {
@@ -190,7 +189,14 @@ export function updateSurrender(world: WorldState): void {
       }
       world.wars = world.wars.filter((war) => {
         const continues = war.nationAId !== surrenderNationId && war.nationBId !== surrenderNationId;
-        if (!continues && war.claimObjective) (endedClaims ??= []).push(war.claimObjective);
+        if (!continues) {
+          if (war.claimObjective) (endedClaims ??= []).push(war.claimObjective);
+          const survivorId = war.nationAId === surrenderNationId ? war.nationBId : war.nationAId;
+          withdrawAmphibiousOperationsForPeace(world, war.nationAId, war.nationBId, survivorId);
+          const key = warFatigueKey(war);
+          world.warNegotiations?.active.delete(key);
+          world.diplomacy?.fatigueByWarId.delete(key);
+        }
         return continues;
       });
       world.battles = world.battles.filter(
@@ -310,7 +316,8 @@ function collectWarContributions(
     }
     for (const mesoId of macro.mesoRegionIds) {
       const occupier = world.occupation.mesoById.get(mesoId);
-      if (!occupier || occupier === surrenderedNationId) {
+      // Another state may already have surrendered earlier in this pass.
+      if (!occupier || !contributions.has(occupier)) {
         continue;
       }
       occupationCounts.set(occupier, (occupationCounts.get(occupier) ?? 0) + 1);
@@ -587,23 +594,6 @@ function isCityBuilding(building: MesoRegion["building"]): boolean {
   return building === "city" || building === "capital";
 }
 
-function clearCapitalMarkerForNation(
-  nationId: NationId,
-  nationById: Map<NationId, WorldState["nations"][number]>,
-  mesoById: Map<MesoRegion["id"], MesoRegion>,
-): boolean {
-  const nation = nationById.get(nationId);
-  if (!nation) {
-    return false;
-  }
-  const meso = mesoById.get(nation.capitalMesoId);
-  if (meso && meso.building === "capital") {
-    meso.building = "city";
-    return true;
-  }
-  return false;
-}
-
 function collectUnitCountsByNation(units: UnitState[]): Map<NationId, number> {
   const counts = new Map<NationId, number>();
   for (const unit of units) {
@@ -760,6 +750,18 @@ function repatriateUnitsAfterSurrender(
       continue;
     }
     if (isAtWar(unit.nationId, owner, warAdjacency)) {
+      remainingUnits.push(unit);
+      continue;
+    }
+
+    if (unit.domain === "naval") {
+      // A foreign port can change hands during the settlement. Ships leave it by sea.
+      const sea = neighborsById.get(unit.regionId)?.find((id) => mesoById.get(id)?.type === "sea");
+      if (sea) {
+        unit.regionId = sea;
+        resetUnitMovement(unit);
+        for (const cargo of unit.cargoUnits) cargo.regionId = sea;
+      }
       remainingUnits.push(unit);
       continue;
     }

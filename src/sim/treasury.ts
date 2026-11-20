@@ -40,7 +40,7 @@ function populationByNation(world: WorldState) {
   return totals;
 }
 
-function createTreasury(balance: number): NationalTreasury {
+export function createTreasury(balance: number): NationalTreasury {
   return { balance, taxRate: 15, population: 0, taxablePopulation: 0, lastRevenue: 0,
     researchFunding: false, militaryFunding: false,
     spent: { research: 0, military: 0, relief: 0, construction: 0, aid: 0 } };

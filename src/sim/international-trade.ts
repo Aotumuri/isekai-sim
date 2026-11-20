@@ -204,6 +204,23 @@ function transitTicks(route: TradeRoute): number {
   return Math.max(3, Math.ceil(route.regionIds.length * 1.5));
 }
 
+function returnTradeEscrow(world: WorldState, deal: TradeDeal, seller: NationRuntime | undefined, buyer: NationRuntime | undefined): void {
+  if (seller) changeTradeStock(seller, deal.offeredResource, deal.offeredAmount);
+  if (buyer) changeTradeStock(buyer, deal.requestedResource, deal.requestedAmount);
+  deal.status = "returned";
+  getInternationalTradeState(world).returned++;
+  recordSimulationEvent(world, { category: "trade", nationIds: [deal.sellerId, deal.buyerId],
+    message: `${deal.id} returned: route or agreement unavailable.` });
+}
+
+export function returnTradeEscrowForGovernment(world: WorldState, nationId: NationId): void {
+  for (const deal of world.internationalTrade?.deals ?? []) {
+    if (deal.status !== "in-transit" || (deal.sellerId !== nationId && deal.buyerId !== nationId)) continue;
+    returnTradeEscrow(world, deal, world.nations.find(({ id }) => id === deal.sellerId),
+      world.nations.find(({ id }) => id === deal.buyerId));
+  }
+}
+
 export function updateInternationalTrade(world: WorldState): void {
   const state = world.internationalTrade;
   if (state && state.lastSlowTick !== world.time.slowTick) {
@@ -217,10 +234,7 @@ export function updateInternationalTrade(world: WorldState): void {
       const open = canTrade && isTradeRouteOpen(world, deal.sellerId, deal.buyerId, deal.route);
       if (canTrade && !open && rerouteTrade(world, deal, seller, buyer)) continue;
       if (!open) {
-        if (seller) changeTradeStock(seller, deal.offeredResource, deal.offeredAmount);
-        if (buyer) changeTradeStock(buyer, deal.requestedResource, deal.requestedAmount);
-        deal.status = "returned"; state.returned += 1;
-        recordSimulationEvent(world, { category: "trade", nationIds: [deal.sellerId, deal.buyerId], message: `${deal.id} returned: route or agreement unavailable.` });
+        returnTradeEscrow(world, deal, seller, buyer);
       } else if (world.time.slowTick >= deal.arrivesAtSlowTick) {
         changeTradeStock(buyer!, deal.offeredResource, deal.offeredAmount); changeTradeStock(seller!, deal.requestedResource, deal.requestedAmount);
         if (deal.route.maritime) {

@@ -71,6 +71,7 @@ export type NationRuntime = Nation & {
   politics?: NationalPolitics;
   theaterCommander?: TheaterCommander;
   subjectGovernment?: SubjectGovernment;
+  integratedIntoId?: Nation["id"];
   unitRoles: NationUnitRoles;
   capitalFallCount: number;
   surrenderScore: number;

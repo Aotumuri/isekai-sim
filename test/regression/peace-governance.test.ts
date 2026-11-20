@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { STRATEGIC_RESOURCES } from "../../src/data/strategic-resources";
 import { annexedOutputFactor, recordAnnexation, updateAnnexations } from "../../src/sim/annexation";
 import { planPuppetPartition } from "../../src/sim/puppet-partition";
 import { getNationalPolitics } from "../../src/sim/politics";
@@ -53,12 +54,15 @@ test("partition terms are revalidated and create two subjects without duplicatin
   war.contributionByNationId.set(target.id, 9_600);
   const terms = { ...whitePeaceTerms(), partition };
   const before = new Map(world.occupation.mesoById), count = world.nations.length;
-  target.resources.steel = 100;
+  const keys = ["steel", "fuel", "weapons", "manpower", ...STRATEGIC_RESOURCES] as const;
+  for (const [index, key] of keys.entries()) target.resources[key] = 100 + index;
+  const stockBefore = { ...target.resources }, cashBefore = target.treasury!.balance, grainBefore = target.food!.stock;
   assert(proposePeaceTerms(world, overlord.id, target.id, terms));
   world.occupation.mesoById.delete(target.capitalMesoId);
   assert(!acceptPeaceOffer(world, target.id, overlord.id));
   assert(findWar(world.wars, overlord.id, target.id));
   assert.equal(world.nations.length, count);
+  assert.deepEqual(target.resources, stockBefore);
   world.occupation.mesoById = before;
   assert(acceptPeaceOffer(world, target.id, overlord.id));
   const successor = world.nations.at(-1)!;
@@ -68,7 +72,10 @@ test("partition terms are revalidated and create two subjects without duplicatin
   assert.deepEqual(politics.support, support);
   assert.equal(successor.capitalMesoId, partition.capitalId);
   assert(partition.districtIds.every((id) => getOwnerByMesoId(world).get(id) === successor.id));
-  assert.equal(successor.resources.steel + target.resources.steel, 100);
+  for (const key of keys) assert(Math.abs(successor.resources[key]! + target.resources[key]! - stockBefore[key]!) < 1e-8);
+  assert(Math.abs(successor.treasury!.balance + target.treasury!.balance - cashBefore) < 1e-8);
+  assert(Math.abs(successor.food!.stock + target.food!.stock - grainBefore) < 1e-8);
+  assert(!acceptPeaceOffer(world, target.id, overlord.id));
 });
 
 test("a subject with maximum autonomy can leave a weakened overlord", () => {

@@ -3,6 +3,7 @@ import { isNationActive } from "../../src/sim/nation-active";
 import { POPULATION_DIMENSIONS, POPULATION_GROUPS } from "../../src/sim/regional-population";
 import { getUnitCombatStrength } from "../../src/sim/unit-strength";
 import { getOwnerByMesoId } from "../../src/sim/world-cache";
+import type { NationId } from "../../src/worldgen/nation";
 import type { WorldState } from "../../src/sim/world-state";
 
 const resources = ["steel", "fuel", "weapons", "manpower", "copper", "rubber", "tungsten"] as const;
@@ -22,7 +23,7 @@ export function sampleFlows(world: WorldState, totals: ReturnType<typeof createF
 
 export function summarizeWorld(world: WorldState) {
   const owners = getOwnerByMesoId(world);
-  const land = new Map<string, number>();
+  const land = new Map<NationId, number>();
   for (const owner of owners.values()) land.set(owner, (land.get(owner) ?? 0) + 1);
   const landTotal = [...land.values()].reduce((sum, districts) => sum + districts, 0);
   const populationGroups = POPULATION_DIMENSIONS.map((dimension) =>
@@ -65,9 +66,27 @@ export function summarizeWorld(world: WorldState) {
       levels: programs.map((p) => Math.max(...Object.values(p.levels))), statuses: programs.map((p) => p.status),
     };
   });
+  const inactiveStocks = emptyStocks();
+  let inactiveCash = 0, inactiveGrain = 0;
+  for (const nation of world.nations) if (!isNationActive(nation)) {
+    for (const key of resources) inactiveStocks[key] += nation.resources[key] ?? 0;
+    inactiveCash += nation.treasury?.balance ?? 0;
+    inactiveGrain += nation.food?.stock ?? 0;
+  }
+  const inactiveIds = new Set(world.nations.filter((nation) => !isNationActive(nation)).map(({ id }) => id));
   const trade = world.internationalTrade;
   return {
     active: active.length, total: world.nations.length,
+    inactiveAssets: { stocks: inactiveStocks, cash: inactiveCash, grain: inactiveGrain },
+    exiles: [...(world.exileGovernments?.byNationId.values() ?? [])].map(({ nationId, status, restoredDistricts }) =>
+      ({ nationId, status, restoredDistricts })),
+    successionChecks: {
+      inactiveOwners: [...land.keys()].filter((id) => inactiveIds.has(id)).length,
+      foreignCapitals: world.nations.filter((nation) => isNationActive(nation) && owners.get(nation.capitalMesoId) !== nation.id).length,
+      duplicateDistricts: world.macroRegions.reduce((sum, macro) => sum + macro.mesoRegionIds.length, 0) - owners.size,
+      inactiveUnits: world.units.filter((unit) => inactiveIds.has(unit.nationId)).length,
+      inactiveWars: world.wars.filter((war) => inactiveIds.has(war.nationAId) || inactiveIds.has(war.nationBId)).length,
+    },
     maxShare: Math.max(0, ...land.values()) / Math.max(1, landTotal),
     hhi: [...land.values()].reduce((sum, count) => sum + (count / landTotal) ** 2, 0),
     population, populationGroups, localMix: localMix / Math.max(1, population * POPULATION_DIMENSIONS.length),

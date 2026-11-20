@@ -677,7 +677,7 @@ export function updateAmphibiousOperations(world: WorldState): void {
     const demand = world.amphibiousOperations.capabilityDemands.find((item) => item.id === operation.capabilityDemandId);
     if (operation.phase !== "transporting" && operation.kind === "landing" && !demand?.playerPlan &&
       campaignShouldStandDown(world, operation.nationId, operation.enemyNationId)) {
-      cancelOperation(world, operation, "campaign-settlement", validation.phase, unitById, true);
+      cancelOperation(world, operation, "campaign-settlement", validation.phase, unitById, "withdrawal");
       continue;
     }
     const force = operation.assignedUnitIds.map((id) => unitById.get(id)).filter((u): u is UnitState => !!u);
@@ -1605,13 +1605,17 @@ export function getAmphibiousOperationValidation(
 }
 
 /** Agreed withdrawal preserves embarked troops instead of treating peace as a lost landing. */
-export function withdrawAmphibiousOperationsForPeace(world: WorldState, a: NationId, b: NationId): void {
-  const units = new Map(world.units.map((unit) => [unit.id, unit]));
+export function withdrawAmphibiousOperationsForPeace(world: WorldState, a: NationId, b: NationId, survivor?: NationId): void {
+  const applies = (nation: NationId, enemy: NationId) =>
+    (!survivor || nation === survivor) && ((nation === a && enemy === b) || (nation === b && enemy === a));
+  let units: Map<UnitId, UnitState> | undefined;
+  let changed = false;
   for (const op of world.amphibiousOperations.operations) {
     if (op.phase === "landed" || op.phase === "cancelled" ||
-      !((op.nationId === a && op.enemyNationId === b) || (op.nationId === b && op.enemyNationId === a))) continue;
+      !applies(op.nationId, op.enemyNationId)) continue;
     const home = world.nations.find((nation) => nation.id === op.nationId)?.capitalMesoId;
     if (!home) continue;
+    units ??= new Map(world.units.map((unit) => [unit.id, unit]));
     for (const transportId of op.transportIds) {
       const transport = units.get(transportId);
       if (!transport) continue;
@@ -1621,18 +1625,39 @@ export function withdrawAmphibiousOperationsForPeace(world: WorldState, a: Natio
       }
       transport.cargoUnits = [];
     }
-    cancelOperation(world, op, "war-ended", "voyage", units, true);
+    cancelOperation(world, op, "war-ended", "voyage", units, "withdrawal");
+    changed = true;
   }
   for (const demand of world.amphibiousOperations.capabilityDemands) {
-    if (((demand.nationId === a && demand.enemyNationId === b) || (demand.nationId === b && demand.enemyNationId === a)) &&
-      demand.state !== "cancelled" && demand.state !== "expired") demand.state = "cancelled";
+    if (applies(demand.nationId, demand.enemyNationId) && demand.state !== "cancelled" && demand.state !== "expired") {
+      demand.state = "cancelled";
+      changed = true;
+    }
   }
-  rebuildOwnership(world);
+  if (changed) rebuildOwnership(world);
 }
 
-function cancelOperation(world: WorldState, op: AmphibiousOperation, reason: AmphibiousCancellationReason, phase: AmphibiousValidationPhase, units: Map<UnitId, UnitState>, peacefulWithdrawal = false): void {
+/** Release old command assignments while leaving troops aboard the inherited transports. */
+export function cancelIntegratedAmphibiousOperations(world: WorldState, nationId: NationId): void {
+  const state = world.amphibiousOperations;
+  const active = state.operations.filter((op) => op.nationId === nationId && op.phase !== "landed" && op.phase !== "cancelled");
+  if (active.length) {
+    const units = new Map(world.units.map((unit) => [unit.id, unit]));
+    for (const op of active) cancelOperation(world, op, "war-ended", "voyage", units, "inheritance");
+  }
+  let cancelledDemand = false;
+  for (const demand of state.capabilityDemands) {
+    if (demand.nationId !== nationId || demand.state === "cancelled" || demand.state === "expired") continue;
+    demand.state = "cancelled";
+    cancelledDemand = true;
+  }
+  if (cancelledDemand) state.version++;
+  if (active.length || cancelledDemand) rebuildOwnership(world);
+}
+
+function cancelOperation(world: WorldState, op: AmphibiousOperation, reason: AmphibiousCancellationReason, phase: AmphibiousValidationPhase, units: Map<UnitId, UnitState>, resolution: "failure" | "withdrawal" | "inheritance" = "failure"): void {
   const transports = op.transportIds.map((id) => units.get(id)).filter((unit): unit is UnitState => !!unit);
-  for (const transport of transports) if (transport.cargoUnits.length) {
+  for (const transport of transports) if (resolution !== "inheritance" && transport.cargoUnits.length) {
     const region = getMesoById(world).get(transport.regionId);
     if (region?.type !== "sea" && getOwnerByMesoId(world).get(transport.regionId) === op.nationId) {
       for (const unit of transport.cargoUnits) { unit.regionId = transport.regionId; resetMovement(unit); world.units.push(unit); }
@@ -1646,7 +1671,7 @@ function cancelOperation(world: WorldState, op: AmphibiousOperation, reason: Amp
   reportLifecycle(world, op, "cancelled", reason);
   op.preparationLeaseEndedAtTick ??= world.time.fastTick;
   world.amphibiousOperations.cancelledPlans += 1;
-  if (!peacefulWithdrawal) {
+  if (resolution === "failure") {
     world.amphibiousOperations.failedLandings += 1;
     if (phase === "ready") world.amphibiousOperations.readyFailures += 1;
     else if (phase === "voyage") world.amphibiousOperations.voyageFailures += 1;

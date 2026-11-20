@@ -54,6 +54,9 @@ test("escaped units arrive once under host command and an occupied homeland prod
 
 test("actual allied liberation restores only controlled homeland, returns surviving forces, and resumes the war", () => {
   const { world, a, host, enemy, homeland, escapees } = createExileWorld();
+  a.resources.copper = 19;
+  const balances = [a, host, enemy].map(({ resources, treasury, food }) =>
+    ({ resources: { ...resources }, cash: treasury?.balance, grain: food?.stock }));
   updateSurrender(world); const record = world.exileGovernments!.byNationId.get(a.id)!;
   world.time.slowTick = record.arrivesAtSlowTick; updateExileGovernments(world);
   const target = homeland[0]!;
@@ -72,6 +75,8 @@ test("actual allied liberation restores only controlled homeland, returns surviv
   world.occupation.mesoById.set(next, host.id); world.occupation.version++;
   updateExileGovernments(world); assert.equal(getOwnerByMesoId(world).get(next), a.id); assert.equal(record.restoredDistricts, 2);
   assert.equal(new Set(allFieldUnits(world).map((unit) => unit.id)).size, allFieldUnits(world).length);
+  assert.deepEqual([a, host, enemy].map(({ resources, treasury, food }) =>
+    ({ resources, cash: treasury?.balance, grain: food?.stock })), balances);
 });
 
 test("a failed host leads to relocation when possible and dissolution when every trusted ally is gone", () => {

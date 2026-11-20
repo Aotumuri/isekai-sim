@@ -1,5 +1,5 @@
 import type { NationRuntime } from "./nation-runtime";
-import { getRelation, hasTreaty } from "./diplomacy";
+import { relationKey, hasTreaty } from "./diplomacy";
 import { areFactionPartners } from "./factions";
 import type { MacroRegion, MacroRegionId } from "../worldgen/macro-region";
 import type { MesoRegionId } from "../worldgen/meso-region";
@@ -10,7 +10,8 @@ import { updateTerritorialClaims } from "./territorial-claims";
 import { updateOccupation } from "./occupation";
 import { findWar } from "./war-state";
 import { recordSimulationEvent } from "./simulation-settings";
-import { getSubjectOverlord } from "./subject-governments";
+import { hasMilitaryAccess } from "./military-access";
+import { getSubjectIntegrationIssue, inheritIntegratedGovernment } from "./state-succession";
 
 export interface TerritoryTransfer { from: NationId; to: NationId; regionIds: MesoRegionId[] }
 function newProvinceId(world: WorldState): MacroRegionId {
@@ -81,9 +82,10 @@ function validateTerritoryTransfers(world: WorldState, legs: TerritoryTransfer[]
 export function transferTerritories(world: WorldState, legs: TerritoryTransfer[], reason: "agreement" | "ultimatum" | "unilateral" | "integration" = "agreement", founding?: FoundingTransfer): boolean {
   const integration = reason === "integration" ? legs[0] : undefined;
   if (reason === "integration" && (!integration || founding || legs.length !== 1 ||
-    getSubjectOverlord(world, integration.from) !== integration.to)) return false;
+    getSubjectIntegrationIssue(world, integration.to, integration.from))) return false;
   if (!validateTerritoryTransfers(world, legs, founding, integration?.from)) return false;
   updateTerritorialClaims(world);
+  const previousOwners = getOwnerByMesoId(world);
   if (founding) world.nations.push(founding.nation);
   const changed = new Set(legs.flatMap((leg) => leg.regionIds)), regions = getMesoById(world);
   for (const leg of legs) {
@@ -93,7 +95,8 @@ export function transferTerritories(world: WorldState, legs: TerritoryTransfer[]
   refreshNationProvinces(world); world.mapVersion++; world.territoryVersion++;
   const owners = getOwnerByMesoId(world), involved = new Set(legs.flatMap((leg) => [leg.from, leg.to]));
   // Demote all ceded capitals before choosing replacements, including capital swaps.
-  for (const nation of world.nations) if (owners.get(nation.capitalMesoId) !== nation.id) {
+  for (const nation of world.nations) if (previousOwners.get(nation.capitalMesoId) === nation.id &&
+    owners.get(nation.capitalMesoId) !== nation.id) {
     const old = regions.get(nation.capitalMesoId);
     if (old?.building === "capital") old.building = "city";
   }
@@ -115,16 +118,13 @@ export function transferTerritories(world: WorldState, legs: TerritoryTransfer[]
   for (const id of changed) { world.occupation.mesoById.delete(id); world.occupation.dirtyMesoIds.add(id); }
   world.occupation.version++; world.buildingVersion++;
   for (const unit of world.units) {
-    if (integration && unit.nationId === integration.from) {
-      unit.nationId = integration.to;
-      for (const cargo of unit.cargoUnits) if (cargo.nationId === integration.from) cargo.nationId = integration.to;
-    }
     const wasOnTransferredLand = changed.has(unit.regionId);
     if (wasOnTransferredLand) {
       const owner = owners.get(unit.regionId);
-      if (owner && owner !== unit.nationId && !findWar(world.wars, owner, unit.nationId)) {
+      if (owner && owner !== unit.nationId && !(integration && unit.nationId === integration.from) &&
+        !findWar(world.wars, owner, unit.nationId) && !hasMilitaryAccess(world, unit.nationId, owner)) {
         const home = world.nations.find((nation) => nation.id === unit.nationId);
-        if (home && unit.domain === "land") unit.regionId = home.capitalMesoId;
+        if (home?.macroRegionIds.length && unit.domain === "land") unit.regionId = home.capitalMesoId;
         else if (unit.domain !== "land") {
           const origin = regions.get(unit.regionId)?.center;
           const sea = world.mesoRegions.filter((region) => region.type === "sea").sort((a, b) =>
@@ -139,6 +139,11 @@ export function transferTerritories(world: WorldState, legs: TerritoryTransfer[]
       for (const cargo of unit.cargoUnits) cargo.regionId = unit.regionId;
     }
   }
+  if (integration) {
+    const former = world.nations.find(({ id }) => id === integration.from)!;
+    const successor = world.nations.find(({ id }) => id === integration.to)!;
+    inheritIntegratedGovernment(world, former, successor);
+  }
   world.battles = world.battles.filter((battle) => !changed.has(battle.mesoId));
   updateOccupation(world);
   updateTerritorialClaims(world, reason === "unilateral" ? new Set() : new Set(legs.map((leg) => leg.from)));
@@ -150,9 +155,10 @@ export function transferTerritories(world: WorldState, legs: TerritoryTransfer[]
 /** Liberation is restricted to the recorded homeland actually held by the recognized host. */
 export function restoreExiledTerritories(world: WorldState, nationId: NationId, liberatorId: NationId, regionIds: MesoRegionId[]): boolean {
   const exile = world.exileGovernments?.byNationId.get(nationId);
-  if (!exile || exile.status === "dissolved" || exile.hostId !== liberatorId || !regionIds.length || new Set(regionIds).size !== regionIds.length) return false;
-  const relation = getRelation(world, nationId, liberatorId);
-  if (findWar(world.wars, nationId, liberatorId) || relation.trust < 60 || relation.opinion < 35 ||
+  const nation = world.nations.find(({ id }) => id === nationId);
+  if (!nation || nation.integratedIntoId || !exile || exile.status === "dissolved" || exile.hostId !== liberatorId || !regionIds.length || new Set(regionIds).size !== regionIds.length) return false;
+  const relation = world.diplomacy?.relations.get(relationKey(nationId, liberatorId));
+  if (!relation || findWar(world.wars, nationId, liberatorId) || relation.trust < 60 || relation.opinion < 35 ||
     (!areFactionPartners(world, nationId, liberatorId) && !hasTreaty(world, nationId, liberatorId, "alliance"))) return false;
   const owners = getOwnerByMesoId(world), regions = getMesoById(world), remaining = new Map<NationId, number>();
   for (const [id, owner] of owners) if (regions.get(id)?.type !== "sea") remaining.set(owner, (remaining.get(owner) ?? 0) + 1);

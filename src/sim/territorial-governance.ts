@@ -1,11 +1,11 @@
 import type { NationId } from "../worldgen/nation";
 import { recordAnnexation } from "./annexation";
-import { getRelation } from "./diplomacy";
 import { getNationCharacter } from "./nation-character";
 import { isNationActive } from "./nation-active";
 import type { NationRuntime } from "./nation-runtime";
 import { dominantGroup, POPULATION_DIMENSIONS, type RegionalPopulation } from "./regional-population";
 import { hasPoliticalTurbulence, recordSimulationEvent } from "./simulation-settings";
+import { getSubjectIntegrationIssue } from "./state-succession";
 import { getSubjectOverlord } from "./subject-governments";
 import { transferTerritories } from "./territory-transfer";
 import { getOwnerByMesoId } from "./world-cache";
@@ -39,42 +39,12 @@ export function getGovernanceUnrest(nation: NationRuntime): number {
     (state.policy === "assimilation" ? (1 - state.alignment) * 1.35 : 0);
 }
 
-export function getSubjectIntegrationIssue(world: WorldState, overlord: NationId, subject: NationId): string | undefined {
-  if (!hasPoliticalTurbulence(world) || getSubjectOverlord(world, subject) !== overlord) return "An active subject government is required.";
-  const nation = world.nations.find(({ id }) => id === subject)!;
-  const state = nation.governance;
-  if (state?.policy !== "assimilation" || world.time.slowTick - state.since < 180 || state.alignment < 0.72) return "Assimilation must run for 180s and reach 72% alignment.";
-  if (state.stability < 55 || (nation.subjectGovernment?.autonomy ?? 0) > 65 ||
-    getRelation(world, overlord, subject).trust < 45) return "Requires stability 55, autonomy pressure at most 65, and trust 45.";
-  if (world.wars.some(({ nationAId, nationBId }) => [nationAId, nationBId].some((id) => id === overlord || id === subject))) return "Both governments must be at peace.";
-  if (world.volunteers?.missions.some((mission) => (mission.donorId === subject || mission.recipientId === subject) &&
-    !["completed", "lost", "integrated"].includes(mission.status))) return "The subject has volunteer units in transit or on duty.";
-  if (world.macroRegions.some((macro) => macro.nationId === subject && macro.mesoRegionIds.some((id) => {
-    const occupier = world.occupation.mesoById.get(id);
-    return occupier && occupier !== subject;
-  }))) return "The subject must control its territory.";
-}
+export { getSubjectIntegrationIssue };
 
 export function integrateSubjectGovernment(world: WorldState, overlord: NationId, subject: NationId): boolean {
   if (getSubjectIntegrationIssue(world, overlord, subject)) return false;
-  const nation = world.nations.find(({ id }) => id === subject)!;
-  const sponsor = world.nations.find(({ id }) => id === overlord)!;
   const districts = world.macroRegions.filter(({ nationId }) => nationId === subject).flatMap(({ mesoRegionIds }) => mesoRegionIds);
   if (!transferTerritories(world, [{ from: subject, to: overlord, regionIds: districts }], "integration")) return false;
-  delete nation.subjectGovernment;
-  if (world.militaryAccess) world.militaryAccess.version++;
-  for (const resource of ["steel", "fuel", "manpower", "weapons"] as const) {
-    sponsor.resources[resource] += nation.resources[resource];
-    nation.resources[resource] = 0;
-  }
-  if (sponsor.treasury && nation.treasury) {
-    sponsor.treasury.balance += nation.treasury.balance;
-    nation.treasury.balance = 0;
-  }
-  if (sponsor.food && nation.food) {
-    sponsor.food.stock += nation.food.stock;
-    nation.food.stock = 0;
-  }
   recordAnnexation(world, overlord, districts);
   recordSimulationEvent(world, { category: "politics", nationIds: [overlord, subject],
     message: `${overlord} integrated ${subject} after a period of assimilation.` });

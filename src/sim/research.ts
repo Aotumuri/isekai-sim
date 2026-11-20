@@ -177,15 +177,15 @@ export function updateResearch(world: WorldState): void {
   const state = getResearchState(world);
   if (state.lastSlowTick === world.time.slowTick) return;
   state.lastSlowTick = world.time.slowTick;
-  const present = new Set(world.nations.filter((nation) => isNationPresent(world, nation)).map((nation) => nation.id));
-  for (const id of state.byNationId.keys()) if (!present.has(id)) {
+  const retained = new Set(world.nations.filter((nation) => nation.integratedIntoId || isNationPresent(world, nation)).map((nation) => nation.id));
+  for (const id of state.byNationId.keys()) if (!retained.has(id)) {
     state.byNationId.delete(id);
     for (const key of state.refitAnnouncedGenerationByNationId.keys()) if (key === id || key.startsWith(`${id}|`)) state.refitAnnouncedGenerationByNationId.delete(key);
   }
   const cities = getCityTargetsByNation(world);
   const wars = buildWarAdjacency(world.wars);
   for (const nation of world.nations) {
-    if (!present.has(nation.id)) continue;
+    if (nation.integratedIntoId || !retained.has(nation.id)) continue;
     const programs = EQUIPMENT_FAMILIES.map((family) => getResearchPortfolio(world, nation.id, family));
     for (const program of programs) program.lastScience = 0;
     if (!isNationActive(nation)) { for (const program of programs) program.status = "government in exile"; continue; }
