@@ -82,6 +82,7 @@ export type SimulationMetricName =
   | "surrender";
 
 export type SimulationCounterName =
+  | "territorialClaims.ownerSnapshots"
   | "production.attempted"
   | "production.blocked"
   | "production.blocked.isolation"

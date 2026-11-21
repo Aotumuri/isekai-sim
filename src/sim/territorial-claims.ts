@@ -68,6 +68,7 @@ export function inheritTerritorialClaims(
 export function updateTerritorialClaims(world: WorldState, consenting: ReadonlySet<NationId> = new Set()): void {
   const state = getTerritorialClaims(world), owners = getOwnerByMesoId(world);
   const elapsed = Math.max(0, world.time.slowTick - state.lastSlowTick);
+  let ownershipChanged = owners.size !== state.owners.size;
   const damage = new Map<string, { loser: NationId; taker: NationId; severity: number; count: number }>();
   const resent = (loser: NationId, taker: NationId, id: MesoRegionId, multiplier: number) => {
     if (loser === taker || consenting.has(loser)) return;
@@ -86,6 +87,7 @@ export function updateTerritorialClaims(world: WorldState, consenting: ReadonlyS
     }
     if (!memories.has(owner)) memories.set(owner, { heldTicks: 0, attachment: 20 });
     state.history.set(id, memories);
+    if (oldOwner !== owner) ownershipChanged = true;
     if (oldOwner && oldOwner !== owner) {
       resent(oldOwner, owner, id, 1);
       for (const [claimant, memory] of memories) if (claimant !== oldOwner && claimant !== owner && memory.attachment >= 40) resent(claimant, owner, id, 0.25);
@@ -102,6 +104,10 @@ export function updateTerritorialClaims(world: WorldState, consenting: ReadonlyS
     recordSimulationEvent(world, { category: "diplomacy", nationIds: [item.loser, item.taker],
       message: `${item.loser} resented territorial losses to ${item.taker} (${item.count} regions).` });
   }
-  state.owners = new Map(owners); state.lastSlowTick = world.time.slowTick;
+  if (ownershipChanged) {
+    state.owners = new Map(owners);
+    world.instrumentation?.incrementCounter("territorialClaims.ownerSnapshots");
+  }
+  state.lastSlowTick = world.time.slowTick;
   if (elapsed || damage.size) state.version += 1;
 }
