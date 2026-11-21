@@ -13,6 +13,7 @@ import { getWarDeclarationMode, hasPoliticalTurbulence, recordSimulationEvent } 
 import { getWarTerritorialDemand } from "./territorial-claim-objective";
 import { transferTerritories, type TerritoryTransfer } from "./territory-transfer";
 import { getUnitCombatStrength } from "./unit-strength";
+import type { RedistributionCandidateSample, RedistributionReviewSample } from "./instrumentation";
 import { buildWarAdjacency } from "./war-state";
 import { getMesoById, getOwnerByMesoId } from "./world-cache";
 import type { WorldState } from "./world-state";
@@ -101,9 +102,26 @@ function reviewAcquisition(world: WorldState, overlord: NationRuntime, ids: Meso
   const metrics = world.instrumentation;
   metrics?.incrementCounter("redistribution.reviews");
   const byId = new Map(subjects.map((nation) => [nation.id, nation]));
-  if (!borderingSubjects(world, ids, byId).size) {
+  metrics?.incrementCounter("redistribution.reviewedSubjects", subjects.length);
+  const adjacent = borderingSubjects(world, ids, byId);
+  metrics?.incrementCounter("redistribution.adjacentSubjects", adjacent.size);
+  const samples: RedistributionCandidateSample[] = [];
+  const finish = (outcome: RedistributionReviewSample["outcome"], reason: string) => {
+    world.instrumentation?.recordRedistributionReview?.({
+      overlordId: overlord.id, acquisitionDistricts: ids.length, subjectCount: subjects.length,
+      adjacentSubjectCount: adjacent.size, candidateCount: candidates, outcome, reason, candidates: samples,
+    });
+  };
+  let candidates = 0;
+  if (!adjacent.size) {
     metrics?.incrementCounter("redistribution.noEligibleSubject");
-    recordDecision(world, overlord.id, ids, "retained", "No eligible subject had a land border.");
+    const reason = subjects.length ? "No eligible subject had a land border." : "The overlord had no eligible subject.";
+    recordDecision(world, overlord.id, ids, "retained", reason);
+    metrics?.incrementCounter("redistribution.retained.noCandidate");
+    world.instrumentation?.recordRedistributionReview?.({
+      overlordId: overlord.id, acquisitionDistricts: ids.length, subjectCount: subjects.length,
+      adjacentSubjectCount: 0, candidateCount: 0, outcome: "retained", reason, candidates: [],
+    });
     return;
   }
   const borders = createPeaceBorderContext(world);
@@ -119,7 +137,9 @@ function reviewAcquisition(world: WorldState, overlord: NationRuntime, ids: Meso
   const sourceProvinces = provinces.get(overlord.id)!;
   const direct = getAdministration(world, overlord, sourceProvinces, strength.get(overlord.id) ?? 0);
   const local = new Map<NationId, Administration>();
-  const ranked = candidateParcels(ids, sourceProvinces, borders).flatMap((parcel) =>
+  const parcels = candidateParcels(ids, sourceProvinces, borders);
+  metrics?.incrementCounter("redistribution.parcels", parcels.length);
+  const ranked = parcels.flatMap((parcel) =>
     [...borderingSubjects(world, parcel, byId)].map((subjectId) => {
       let administration = local.get(subjectId);
       if (!administration) {
@@ -130,19 +150,32 @@ function reviewAcquisition(world: WorldState, overlord: NationRuntime, ids: Meso
       return { ...assessment, parcel, subjectId };
     })).sort((a, b) => b.score - a.score || b.parcel.length - a.parcel.length ||
       a.subjectId.localeCompare(b.subjectId) || a.parcel[0].localeCompare(b.parcel[0]));
+  candidates = ranked.length;
   metrics?.incrementCounter("redistribution.candidates", ranked.length);
 
   let retained = ranked[0]?.retentionReason ?? "No coherent parcel was available.";
   let refused: NationId | undefined;
-  for (const choice of ranked.slice(0, FINALIST_LIMIT)) {
-    if (choice.score <= MIN_DELEGATION_ADVANTAGE) break;
+  for (const [index, choice] of ranked.slice(0, FINALIST_LIMIT).entries()) {
+    const sample: RedistributionCandidateSample = {
+      subjectId: choice.subjectId, districts: choice.parcel.length, score: choice.score,
+      willing: choice.willing, capacityExceeded: choice.capacityExceeded, canImpose: choice.canImpose,
+      outcome: "pending", retentionReason: choice.retentionReason, delegationReason: choice.delegationReason,
+    };
+    samples.push(sample);
+    if (choice.score <= MIN_DELEGATION_ADVANTAGE) {
+      if (index === 0) metrics?.incrementCounter("redistribution.retained.belowThreshold");
+      sample.outcome = "below-threshold";
+      break;
+    }
     if (choice.capacityExceeded || !keepsProvincesConnected(choice.parcel, sourceProvinces, borders)) {
+      sample.outcome = choice.capacityExceeded ? "capacity" : "fragment";
       if (!refused) retained = choice.capacityExceeded ? "The subject could not administer the additional population and districts." :
         "The cession would fragment a province.";
       continue;
     }
     const leg = { from: overlord.id, to: choice.subjectId, regionIds: choice.parcel };
     if (getPeaceBorderIssue(world, [leg], borders)) {
+      sample.outcome = "land-component";
       if (!refused) retained = "The cession would split an existing land component.";
       continue;
     }
@@ -152,16 +185,33 @@ function reviewAcquisition(world: WorldState, overlord: NationRuntime, ids: Meso
     metrics?.incrementCounter("redistribution.proposals");
     if (!consent && !imposed) {
       metrics?.incrementCounter("redistribution.refusals");
+      sample.outcome = "refused";
       refused ??= choice.subjectId;
       retained = "The subject judged the administrative and security burden greater than the benefits.";
       continue;
     }
-    if (commitRedistribution(world, leg, consent, choice.willing, choice.delegationReason, ids.length)) return;
+    if (commitRedistribution(world, leg, consent, choice.willing, choice.delegationReason, ids.length)) {
+      sample.outcome = "committed";
+      metrics?.incrementCounter(consent ? "redistribution.consensual" : "redistribution.imposed");
+      finish(consent ? "consensual" : "imposed", choice.delegationReason);
+      return;
+    }
     metrics?.incrementCounter("redistribution.failedTransfers");
+    sample.outcome = "transfer-failed";
     retained = "The ownership transaction failed final validation.";
   }
-  metrics?.incrementCounter("redistribution.retained");
+  if (!ranked.length) metrics?.incrementCounter("redistribution.retained.noCandidate");
+  else if (ranked[0]!.score > MIN_DELEGATION_ADVANTAGE) {
+    const counted = refused ? "redistribution.retained.subjectRefused" :
+      samples.some(({ outcome }) => outcome === "transfer-failed") ? "redistribution.retained.transferFailed" :
+      samples.some(({ outcome }) => outcome === "land-component") ? "redistribution.retained.landComponent" :
+      samples.some(({ outcome }) => outcome === "fragment") ? "redistribution.retained.fragment" :
+      "redistribution.retained.capacity";
+    metrics?.incrementCounter(counted);
+  }
   recordDecision(world, overlord.id, ids, refused ? "rejected" : "retained", retained, refused);
+  metrics?.incrementCounter("redistribution.retained");
+  finish(refused ? "rejected" : "retained", retained);
 }
 
 export function updateSubjectRedistribution(world: WorldState): void {
@@ -196,17 +246,24 @@ export function updateSubjectRedistribution(world: WorldState): void {
   const batches = new Map<RecentAcquisition, MesoRegionId[]>();
   for (const [id, acquisition] of pending) {
     const owner = nations.get(acquisition.owner), region = regions.get(id);
-    if (now >= acquisition.expiresAt || !owner || owners.get(id) !== owner.id || owner.id === manual ||
-      owner.subjectGovernment || owner.capitalMesoId === id || !region || region.type === "sea") {
+    const invalid = now >= acquisition.expiresAt ? "expired" : !owner ? "ownership" : owners.get(id) !== owner.id ? "ownership" :
+      owner.id === manual ? "manual" : owner.subjectGovernment ? "overlordSubject" : owner.capitalMesoId === id ? "capital" :
+      !region || region.type === "sea" ? "region" : undefined;
+    if (invalid) {
       world.instrumentation?.incrementCounter("redistribution.invalidated");
+      world.instrumentation?.incrementCounter(`redistribution.invalidated.${invalid}`);
       pending.delete(id);
       continue;
     }
-    if (now < acquisition.reviewAt || wars.has(owner.id) || world.occupation.mesoById.has(id) || contested.has(id)) continue;
+    if (now < acquisition.reviewAt) { world.instrumentation?.incrementCounter("redistribution.heldForReview"); continue; }
+    if (wars.has(owner!.id)) { world.instrumentation?.incrementCounter("redistribution.heldByWar"); continue; }
+    if (world.occupation.mesoById.has(id)) { world.instrumentation?.incrementCounter("redistribution.heldByOccupation"); continue; }
+    if (contested.has(id)) { world.instrumentation?.incrementCounter("redistribution.heldByContestation"); continue; }
     const ids = batches.get(acquisition);
     if (ids) ids.push(id);
     else batches.set(acquisition, [id]);
   }
+  if (batches.size) world.instrumentation?.incrementCounter("redistribution.eligible");
   for (const [acquisition, ids] of batches) {
     const owner = nations.get(acquisition.owner)!;
     const stillSubjects = (subjects.get(owner.id) ?? []).filter((nation) =>

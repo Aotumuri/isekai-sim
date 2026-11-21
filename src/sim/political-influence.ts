@@ -3,6 +3,7 @@ import { areFactionPartners } from "./factions";
 import { isNationActive } from "./nation-active";
 import { getNationCharacter } from "./nation-character";
 import { getNationIdeology } from "./nation-identity";
+import { updateForeignBacking, updatePoliticalAdvocacy } from "./political-advocacy";
 import { getNationalPolitics, increasePoliticalSupport } from "./politics";
 import { getWarDeclarationMode, recordSimulationEvent } from "./simulation-settings";
 import { getAdjacentNationPairs } from "./world-cache";
@@ -60,9 +61,11 @@ export function launchPoliticalCampaign(world: WorldState, sponsorId: NationId, 
   return true;
 }
 
-export function updateForeignPoliticalInfluence(world: WorldState): void {
-  const now = world.time.slowTick;
-  if (getWarDeclarationMode(world) !== "diplomacy" || now < 180 || now % 60 !== 0) return;
+/**
+ * Bounded contact index for foreign political activity: a shared border, an alliance,
+ * a trade pact or a common faction. Built once per evaluation pass.
+ */
+export function getPoliticalContacts(world: WorldState): Map<NationId, Set<NationId>> {
   const contacts = new Map<NationId, Set<NationId>>();
   const addContact = (a: NationId, b: NationId) => {
     const partners = contacts.get(a) ?? new Set<NationId>();
@@ -73,13 +76,17 @@ export function updateForeignPoliticalInfluence(world: WorldState): void {
     addContact(a, b);
     addContact(b, a);
   }
+  const now = world.time.slowTick;
   for (const relation of world.diplomacy?.relations.values() ?? []) {
     if (!relation.treaties.some((treaty) => treaty.expiresAtSlowTick > now &&
       (treaty.type === "trade" || treaty.type === "alliance"))) continue;
     addContact(relation.nationAId, relation.nationBId);
     addContact(relation.nationBId, relation.nationAId);
   }
+  return contacts;
+}
 
+function updateIdeologicalCampaigns(world: WorldState, contacts: ReadonlyMap<NationId, ReadonlySet<NationId>>): void {
   for (const sponsor of [...world.nations].sort((a, b) => a.id.localeCompare(b.id))) {
     if (!isNationActive(sponsor) || !contacts.has(sponsor.id) || getInfluence(world, sponsor.id) < POLITICAL_CAMPAIGN_COST + 30) continue;
     if (world.wars.some((war) => war.nationAId === sponsor.id || war.nationBId === sponsor.id)) continue;
@@ -98,4 +105,15 @@ export function updateForeignPoliticalInfluence(world: WorldState): void {
     }).sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
     if (candidates[0]) launchPoliticalCampaign(world, sponsor.id, candidates[0].id);
   }
+}
+
+export function updateForeignPoliticalInfluence(world: WorldState): void {
+  const now = world.time.slowTick;
+  if (getWarDeclarationMode(world) !== "diplomacy" || now < 180) return;
+  // Support that is not renewed fades, regardless of the campaign cadence.
+  if (now % 10 === 0) updateForeignBacking(world);
+  if (now % 60 !== 0) return;
+  const contacts = getPoliticalContacts(world);
+  updateIdeologicalCampaigns(world, contacts);
+  updatePoliticalAdvocacy(world, contacts);
 }

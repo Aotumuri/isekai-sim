@@ -37,7 +37,21 @@ export interface RegionalNegotiation extends Mandate {
   nationalTreatment?: GroupTreatment;
   distrust: number;
   refusals?: Partial<Record<string, Refusal>>;
+  /** Foreign diplomatic support for this demand; one sponsor at a time. */
+  foreign?: ForeignBacking;
+  /** Sponsors this movement turned down, with the slow tick when it may listen again. */
+  foreignRefusals?: Partial<Record<NationId, number>>;
   reason: string;
+}
+
+export interface ForeignBacking {
+  sponsorId: NationId;
+  /** Current effectiveness after decay (0..1). */
+  strength: number;
+  /** How strongly the domestic government can repudiate outside involvement (0..1). */
+  backlash: number;
+  since: number;
+  renewAt: number;
 }
 
 export function getRegionalMandate(population: RegionalPopulation, memory?: RegionalIdentityGrievance): Mandate | undefined {
@@ -68,9 +82,12 @@ export function openRegionalNegotiation(
     ...mandate, owner: nation.id, status: "demand", reviewAt: world.time.slowTick + 10,
     distrust: prior?.owner === nation.id ? prior.distrust : 0, ideology: cabinetIdeology(nation),
     refusals: prior?.owner === nation.id ? prior.refusals : undefined,
+    foreignRefusals: prior?.owner === nation.id ? prior.foreignRefusals : undefined,
     reason: "Sustained unequal treatment mobilized a substantial local constituency.",
   };
   (world.regionalNegotiations ??= new Map()).set(id, talks);
+  const reopened = prior?.owner === nation.id && ["rejected", "withdrawn", "violated"].includes(prior.status);
+  world.instrumentation?.incrementCounter(reopened ? "regionalNegotiations.reopened" : "regionalNegotiations.opened");
   announce(world, id, talks, talks.requested === "autonomous" ? "demanded local control of institutions" : "demanded institutional protections");
 }
 
@@ -99,6 +116,12 @@ function resolve(world: WorldState, id: MesoRegionId, talks: RegionalNegotiation
   talks.status = status;
   talks.reason = reason;
   talks.reviewAt = world.time.slowTick + (status === "agreed" ? 10 : 100);
+  if (talks.foreign) {
+    if (status === "agreed") world.instrumentation?.incrementCounter("foreignAdvocacy.agreements");
+    delete talks.foreign;
+  }
+  world.instrumentation?.incrementCounter(`regionalNegotiations.${
+    status === "agreed" ? "agreed" : status === "rejected" ? "rejected" : status === "withdrawn" ? "withdrawn" : "violated"}`);
   if (status === "rejected") talks.distrust = Math.min(0.35, talks.distrust + 0.10);
   if (status === "violated") {
     talks.distrust = Math.min(0.35, talks.distrust + 0.24);
@@ -128,7 +151,16 @@ export function reviewRegionalNegotiation(
     }
     return;
   }
-  if (talks.status === "violated" || talks.status === "rejected" || talks.status === "withdrawn") return;
+  if (talks.status === "violated" || talks.status === "rejected" || talks.status === "withdrawn") {
+    // A later national reform can satisfy a demand that was refused earlier. Close the case
+    // honestly instead of leaving a failed negotiation on record forever.
+    if (talks.status !== "withdrawn" &&
+      demandSatisfied(getEffectiveTreatment(world, nation, talks.dimension, talks.group), talks.requested)) {
+      if (talks.refusals) delete talks.refusals[mandateKey(talks)];
+      resolve(world, id, talks, "withdrawn", "National reforms later met the movement's demand.");
+    }
+    return;
+  }
   const constituency = population[talks.dimension][talks.group]! / population.size;
   if (constituency < 0.12) {
     resolve(world, id, talks, "withdrawn", "The movement lost its local constituency.");
@@ -140,8 +172,10 @@ export function reviewRegionalNegotiation(
   }
   if (talks.status === "offer") {
     const localGrievance = grievanceLevel(getRegionalIdentityGrievance(world, id, nation.id));
+    // Recognized movements hold out for enforceable control rather than a partial guarantee.
+    const external = talks.foreign?.strength ?? 0;
     const adequate = talks.offer === talks.requested ||
-      (talks.offer === "protected" && Math.max(talks.grievance, localGrievance) + talks.distrust < 0.44);
+      (talks.offer === "protected" && Math.max(talks.grievance, localGrievance) + talks.distrust < 0.44 - external * 0.05);
     if (adequate) {
       talks.nationalTreatment = nationalTreatment;
       resolve(world, id, talks, "agreed", talks.offer === talks.requested ?
@@ -149,6 +183,7 @@ export function reviewRegionalNegotiation(
         "The movement accepted protection because it ends the immediate unequal treatment.");
     } else {
       rememberRefusal(world, nation, talks);
+      world.instrumentation?.incrementCounter("regionalNegotiations.refusedOffer");
       resolve(world, id, talks, "rejected", "The movement refused protections without control of its institutions after sustained exclusion.");
     }
     return;
@@ -164,14 +199,20 @@ export function reviewRegionalNegotiation(
     talks.status = "deferred";
     talks.reviewAt = now + 20;
     talks.reason = "The cabinet postponed the hearing once amid wartime shortages.";
+    world.instrumentation?.incrementCounter("regionalNegotiations.deferred");
     return;
   }
   const strategic = id === nation.capitalMesoId;
+  // Foreign recognition can raise the political cost of refusal, but a government that can
+  // repudiate the sponsor's motives may harden instead. Both effects are bounded.
+  const external = talks.foreign?.strength ?? 0, backlash = talks.foreign?.backlash ?? 0;
   const willing = talks.grievance * 0.9 + constituency * 0.22 + character.cooperation * 0.48 +
     (1 - legitimacy) * 0.45 + (democracy ? (1 - support) * 0.20 : 0) - talks.distrust * 0.2 -
-    (cohesionist ? 0.30 + support * 0.12 : 0) - (atWar ? 0.12 : 0) - hardship * 0.11;
+    (cohesionist ? 0.30 + support * 0.12 : 0) - (atWar ? 0.12 : 0) - hardship * 0.11 +
+    external * (0.12 - backlash * 0.20);
   if (willing < 0.34) {
     rememberRefusal(world, nation, talks);
+    world.instrumentation?.incrementCounter(cohesionist ? "regionalNegotiations.rejected.uniformity" : "regionalNegotiations.rejected.capacity");
     resolve(world, id, talks, "rejected", cohesionist ?
       "The governing coalition prioritized uniform institutions over the local demand." :
       "The cabinet judged its political and administrative capacity insufficient for concessions.");
@@ -180,7 +221,9 @@ export function reviewRegionalNegotiation(
   talks.offer = willing >= (strategic ? 0.82 : 0.61) ? talks.requested : "protected";
   talks.status = "offer";
   talks.reviewAt = now + 10;
+  world.instrumentation?.incrementCounter(talks.offer === talks.requested ? "regionalNegotiations.offered.full" : "regionalNegotiations.offered.partial");
   talks.reason = talks.offer === talks.requested ? "The cabinet sought to recover legitimacy by meeting the demand." :
     strategic ? "The cabinet retained control of institutions in the capital." : "The cabinet offered safeguards while retaining central oversight.";
+  if (talks.foreign) talks.reason += " International recognition of the demand shaped the cabinet's calculation.";
   announce(world, id, talks, talks.offer === "autonomous" ? "received an offer of local control" : "received an offer of protections");
 }

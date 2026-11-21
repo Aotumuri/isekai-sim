@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createSimulationSettings } from "../../src/sim/simulation-settings";
 import type { SimulationCounterName, SimulationMetricName } from "../../src/sim/instrumentation";
 import { DAYS_PER_SLOW_TICK } from "../../src/sim/time";
+import { isNationActive } from "../../src/sim/nation-active";
 import { installSubjectGovernment } from "../../src/sim/subject-governments";
 import { getAdjacentNationPairs } from "../../src/sim/world-cache";
 import { stepSimulationDay } from "../../src/sim/update";
@@ -49,7 +50,8 @@ if (subjectPairs) withMutedSimulationLogs(() => {
     if (paired.has(overlord) || paired.has(subject)) continue;
     installSubjectGovernment(world, overlord, subject);
     const nation = world.nations.find(({ id }) => id === subject)!;
-    nation.subjectGovernment!.autonomy = 44 + (paired.size % 6) * 5;
+    const autonomyBase = Number(process.env.WORLD_SUBJECT_AUTONOMY ?? 44);
+    nation.subjectGovernment!.autonomy = Math.max(0, Math.min(100, autonomyBase + (paired.size % 6) * 5));
     paired.add(overlord);
     paired.add(subject);
     if (paired.size === 2 * subjectPairs) break;
@@ -62,9 +64,16 @@ const seededAcquisitions = requestedAcquisitions ? seedSubjectAcquisitions(world
 if (requestedAcquisitions) assert(seededAcquisitions > 0, "No eligible borders for the controlled acquisitions");
 const timings: Partial<Record<SimulationMetricName, number>> = {};
 const counters: Partial<Record<SimulationCounterName, number>> = {};
+const mean = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+const redistributionSamples: import("../../src/sim/instrumentation").RedistributionReviewSample[] = [];
 if (process.env.WORLD_METRICS === "1") world.instrumentation = {
   recordDuration(name, ms) { timings[name] = (timings[name] ?? 0) + ms; },
   incrementCounter(name, amount = 1) { counters[name] = (counters[name] ?? 0) + amount; },
+  ...(process.env.WORLD_REDISTRIBUTION_SAMPLES === "1" ? {
+    recordRedistributionReview(sample: import("../../src/sim/instrumentation").RedistributionReviewSample) {
+      if (redistributionSamples.length < 200) redistributionSamples.push(sample);
+    },
+  } : {}),
 };
 const history = observeWorldHistory(world);
 const flows = createFlowTotals();
@@ -107,6 +116,16 @@ for (const day of days) {
     regionalRefusalRecords: [...world.regionalNegotiations?.values() ?? []].reduce((sum, talks) =>
       sum + Object.keys(talks.refusals ?? {}).length, 0),
     regionalAgreements: [...world.regionalNegotiations?.values() ?? []].filter(({ status }) => status === "agreed").length,
+    regionalStatuses: [...world.regionalNegotiations?.values() ?? []].reduce((counts, { status }) => {
+      counts[status] = (counts[status] ?? 0) + 1;
+      return counts;
+    }, {} as Record<string, number>),
+    regionalDistrust: mean([...world.regionalNegotiations?.values() ?? []].map(({ distrust }) => distrust)),
+    nationalLegitimacy: mean(world.nations.filter(isNationActive).map(({ identityStability }) => identityStability?.legitimacy ?? 100)),
+    nationalGrievance: mean(world.nations.filter(isNationActive).map(({ identityStability }) => identityStability?.grievance ?? 0)),
+    nationalAutonomyDemand: mean(world.nations.filter(isNationActive).map(({ identityStability }) => identityStability?.autonomyDemand ?? 0)),
+    subjectAutonomyPressure: mean(world.nations.filter(({ subjectGovernment }) => subjectGovernment)
+      .map(({ subjectGovernment }) => subjectGovernment!.autonomy ?? 0)),
     pendingRedistributions: world.recentAcquisitions?.size ?? 0,
     events: world.events?.length ?? 0,
     observedHistory: history.timeline.length,
@@ -122,4 +141,5 @@ if (process.env.WORLD_SIGNATURE === "1") {
   // Run after the performance and memory samples.
   console.log(JSON.stringify({ signature: worldSignature(world) }));
 }
+if (redistributionSamples.length) console.log(JSON.stringify({ redistributionSamples }));
 console.log(JSON.stringify({ history: history.timeline, historyCounts: history.counts }));

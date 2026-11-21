@@ -1,4 +1,4 @@
-import { regionalNegotiationLabel } from "../render/political-negotiation-labels";
+import { foreignBackingLabel, regionalNegotiationLabel } from "../render/political-negotiation-labels";
 import { getOwnerByMesoId } from "../sim/world-cache";
 import { remainingDaysUntilSlowTick, slowTicksToDays } from "../sim/time";
 import { endDisplacementOrder, getPersecutionTargets, startDisplacementOrder } from "../sim/forced-displacement";
@@ -58,7 +58,8 @@ function renderRegionalNegotiations(world: WorldState, nation: NationRuntime): s
   const rows = local.sort((a, b) => b[1].reviewAt - a[1].reviewAt).slice(0, 6).map(([id, talks]) => {
     const group = POPULATION_GROUPS[talks.dimension][talks.group];
     const occupier = world.occupation.mesoById.get(id);
-    return `<li>${esc(districtName(id))} · ${esc(group)} · ${regionalNegotiationLabel(talks)}${occupier && occupier !== nation.id ? " (suspended)" : ""}. ${esc(talks.reason)}</li>`;
+    const backing = foreignBackingLabel(talks, (nationId) => getNationName(world, nationId));
+    return `<li>${esc(districtName(id))} · ${esc(group)} · ${regionalNegotiationLabel(talks)}${occupier && occupier !== nation.id ? " (suspended)" : ""}. ${esc(talks.reason)}${backing ? ` <span class="society-note">${esc(backing)}</span>` : ""}</li>`;
   }).join("");
   return `<h2>Regional negotiations</h2><ul>${rows}</ul>${local.length > 6 ? `<p class="society-note">Showing six of ${local.length} districts. Hover over a district on the map to inspect its negotiations.</p>` : ""}`;
 }

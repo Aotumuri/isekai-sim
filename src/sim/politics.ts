@@ -20,6 +20,7 @@ export interface NationalPolitics {
   nextSupportReviewAt: number;
   nextForeignCampaignAt?: number;
   nextIncomingCampaignAt?: number;
+  nextForeignAdvocacyAt?: number;
   suppression?: { ideologyId: string; until: number };
   nextSuppressionAt?: number;
 }

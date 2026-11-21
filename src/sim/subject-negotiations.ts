@@ -36,6 +36,25 @@ export interface SubjectNegotiationContext {
   overlordAtWar: boolean;
   occupied: boolean;
   levyBurden: number;
+  /** Strongest accepted foreign backing for a demand inside the subject (0..1). */
+  externalBacking: number;
+}
+
+/**
+ * Territorial delegation to a subject is only available while the subject exists.
+ * A pending redistribution review is therefore an option value that union destroys.
+ */
+function pendingDelegation(world: WorldState, overlordId: NationId, subjectId: NationId): number {
+  const now = world.time.slowTick;
+  const seen = new Set<object>();
+  let batches = 0;
+  for (const acquisition of world.recentAcquisitions?.values() ?? []) {
+    if (seen.has(acquisition) || acquisition.owner !== overlordId ||
+      !acquisition.subjectIds.has(subjectId) || now >= acquisition.expiresAt) continue;
+    seen.add(acquisition);
+    batches += 1;
+  }
+  return batches;
 }
 
 function describe(world: WorldState, decision: SubjectDecision, subject: NationId) {
@@ -47,11 +66,27 @@ function conclude(world: WorldState, subject: NationRuntime, decision: SubjectDe
   decision.status = status;
   decision.reason = reason;
   decision.reviewAt = world.time.slowTick + (status === "counteroffer" ? 10 : 100);
+  const metrics = world.instrumentation;
+  if (metrics) {
+    if (decision.issue === "integration") {
+      metrics.incrementCounter(status === "agreed" ? "subjectNegotiations.integrationAgreed" :
+        status === "rejected" ? "subjectNegotiations.integrationRejected" : "subjectNegotiations.integrationDeferred");
+    } else if (decision.issue === "independence") {
+      metrics.incrementCounter(status === "unilateral" ? "subjectNegotiations.independenceUnilateral" :
+        status === "agreed" ? "subjectNegotiations.independenceAgreed" : "subjectNegotiations.independenceRefused");
+    } else {
+      metrics.incrementCounter(status === "agreed" ? "subjectNegotiations.selfGovernmentAgreed" :
+        status === "counteroffer" ? "subjectNegotiations.counteroffer" : "subjectNegotiations.selfGovernmentRefused");
+    }
+  }
   describe(world, decision, subject.id);
 }
 
 function assess(world: WorldState, c: SubjectNegotiationContext) {
   const { subject, overlord, government, relation, footprint, power, shortage, levyBurden } = c;
+  const external = c.externalBacking;
+  // Keeping the subject separate preserves the option to delegate pending acquisitions.
+  const pendingUnion = Math.min(0.20, pendingDelegation(world, overlord.id, subject.id) * 0.10);
   const central = overlord.character ?? getNationCharacter(world, overlord.id);
   const local = subject.character ?? getNationCharacter(world, subject.id);
   const localIdeology = subject.politics?.governingIdeologyId ?? subject.ideologyId;
@@ -69,19 +104,22 @@ function assess(world: WorldState, c: SubjectNegotiationContext) {
   const externalRisk = c.subjectAtWar ? 0.30 : 0;
   const protection = (1 - strength) * (0.23 + 0.30 * Math.max(0, overlord.warCooperation)) + externalRisk;
   const independence = pressure * 0.65 + local.aggression * 0.17 + grievance * 0.5 + levyBurden * 0.45 +
-    shortage * 0.10 + strength * 0.20 - protection - trust * 0.22 - charter * 0.18;
+    shortage * 0.10 + strength * 0.20 - protection - trust * 0.22 - charter * 0.18 + external * 0.08;
   const release = (1 - overlord.warCooperation) * 0.47 + Number(c.overlordAtWar) * 0.17 + central.cooperation * 0.24 +
     pressure * 0.31 + strength * 0.22 - central.aggression * 0.32 - footprint * 0.16 - levyBurden * 0.45;
   const centralUnion = central.aggression * 0.33 + central.innovation * 0.17 + trust * 0.33 + alignment * 0.23 +
-    ideologyMatch * 0.12 - grievance * 0.55 - footprint * 0.20 - charter * 0.18 - pressure * 0.24;
+    ideologyMatch * 0.12 - grievance * 0.55 - footprint * 0.20 - charter * 0.18 - pressure * 0.24 - external * 0.15 -
+    pendingUnion;
   const localUnion = protection * 0.70 + trust * 0.38 + local.cooperation * 0.25 + alignment * 0.17 +
     ideologyMatch * 0.12 + (1 - support) * 0.12 + shortage * 0.04 -
-    grievance * 0.6 - charter * 0.27 - pressure * 0.4 - Number(subject.politics?.system === "democracy") * 0.07;
+    grievance * 0.6 - charter * 0.27 - pressure * 0.4 - Number(subject.politics?.system === "democracy") * 0.07 - external * 0.12 -
+    pendingUnion * 0.6;
   const concede = central.cooperation * 0.37 + pressure * 0.28 + strength * 0.14 + trust * 0.15 -
-    centralizing * 0.22 - central.aggression * 0.16 - levyBurden * 0.2;
+    centralizing * 0.22 - central.aggression * 0.16 - levyBurden * 0.2 + external * 0.10;
   const context = [pressure, trust, strength, grievance, support, legitimacy, alignment, shortage * 0.5, levyBurden,
     overlord.warCooperation, Number(c.subjectAtWar), Number(c.overlordAtWar), charter, ideologyMatch, centralizing,
-    Number(c.occupied), Number(c.canIncreaseAid), Number(hasTreaty(world, subject.id, overlord.id, "truce"))];
+    Number(c.occupied), Number(c.canIncreaseAid), Number(hasTreaty(world, subject.id, overlord.id, "truce")), external * 0.5,
+    pendingUnion * 0.5];
   return { independence, release, centralUnion, localUnion, concede, context, trust, pressure, legitimacy, strength, central };
 }
 
@@ -113,6 +151,7 @@ function settleIndependence(world: WorldState, c: SubjectNegotiationContext, dec
 export function reviewSubjectNegotiation(world: WorldState, c: SubjectNegotiationContext): void {
   const { subject, overlord, government, relation } = c;
   const now = world.time.slowTick;
+  if ((government.nextIntegrationReviewAt ?? 0) > now) return;
   const charter = government.selfGovernment;
   if (charter && (government.foodLevy ?? 0) > charter.maximumLevy) {
     delete government.selfGovernment;
@@ -145,8 +184,16 @@ export function reviewSubjectNegotiation(world: WorldState, c: SubjectNegotiatio
   else if (age >= 1800 && bilateralPeace && terms.pressure < 0.55 && terms.centralUnion >= 0.52 &&
       terms.legitimacy >= 0.55 && hasPoliticalTurbulence(world)) issue = "integration";
   if (!issue) return;
+  if (issue === "integration" && pendingDelegation(world, overlord.id, subject.id) > 0) {
+    // Deferring union is not a decision event; the next cycle reconsiders after the review.
+    government.nextIntegrationReviewAt = now + 30;
+    world.instrumentation?.incrementCounter("subjectNegotiations.integrationDeferred");
+    return;
+  }
   if (prior?.issue === issue && prior.context.length &&
       terms.context.every((value, index) => Math.abs(value - prior.context[index]!) < 0.15)) return;
+  world.instrumentation?.incrementCounter(issue === "integration" ? "subjectNegotiations.integrationProposed" :
+    issue === "independence" ? "subjectNegotiations.independenceProposed" : "subjectNegotiations.selfGovernmentProposed");
   const reason = issue === "integration" ? "The overlord proposed union to consolidate administration and pool resources." :
     issue === "independence" ? "The subject judged political self-rule worth renegotiating the relationship." :
       "The subject sought control of domestic policy and lighter obligations.";
@@ -163,12 +210,20 @@ function resolveProposal(world: WorldState, c: SubjectNegotiationContext, decisi
     if (terms.localUnion < 0.59 || terms.centralUnion < 0.52 || !bilateralPeace) {
       conclude(world, subject, decision, "rejected", !bilateralPeace ?
         "War or occupation blocked ratification." :
-        "The cabinets could not agree that protection and coordination outweighed the loss of self-government and the cost of union.");
+        "The cabinets could not agree that protection and coordination outweighed the loss of self-government and the cost of union." +
+        (c.externalBacking > 0.05 ? " Outside diplomatic support also made union less attractive." : "") +
+        (pendingDelegation(world, overlord.id, subject.id) > 0 ? " A pending territorial redistribution also argued for keeping the subject separate." : ""));
       return;
     }
     government.integrationConsentAt = world.time.fastTick;
     const issue = getSubjectIntegrationIssue(world, overlord.id, subject.id);
     if (!issue && integrateSubjectGovernment(world, overlord.id, subject.id)) {
+      const metrics = world.instrumentation;
+      metrics?.incrementCounter("subjectNegotiations.integrationAgeDays",
+        Math.max(0, world.time.fastTick - government.establishedAtFastTick));
+      const pending = [...world.recentAcquisitions?.values() ?? []].some((acquisition) =>
+        acquisition.owner === overlord.id && acquisition.subjectIds.has(subject.id));
+      if (pending) metrics?.incrementCounter("subjectNegotiations.integrationWithPendingAcquisition");
       conclude(world, subject, decision, "agreed", "Both cabinets ratified integration for security and administrative coordination.");
     } else {
       delete government.integrationConsentAt;
@@ -196,7 +251,8 @@ function resolveProposal(world: WorldState, c: SubjectNegotiationContext, decisi
     relation.trust = Math.min(100, relation.trust + 6);
     decision.issue = "self-government";
     conclude(world, subject, decision, "agreed", "The subject accepted control of domestic policy and a binding ceiling on the harvest levy." +
-      (extraIndustrialAid ? " The overlord increased its industrial aid limit, subject to reserves and transport." : ""));
+      (extraIndustrialAid ? " The overlord increased its industrial aid limit, subject to reserves and transport." : "") +
+      (c.externalBacking > 0.05 ? " The concession also kept the subject from relying on an outside patron." : ""));
     return;
   }
   if (decision.issue === "independence" && terms.independence >= 0.58 && terms.pressure >= 0.82 &&

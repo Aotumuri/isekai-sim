@@ -1,5 +1,6 @@
 import { getRelation } from "./diplomacy";
 import { changeResource, findTradeRoute, resourceReserve } from "./international-trade";
+import type { NationId } from "../worldgen/nation";
 import type { NationRuntime } from "./nation-runtime";
 import { getWarDeclarationMode, hasPoliticalTurbulence, recordSimulationEvent } from "./simulation-settings";
 import { isNationActive } from "./nation-active";
@@ -62,6 +63,13 @@ export function updateSubjectAutonomy(world: WorldState): void {
     districtCounts.set(nation, (districtCounts.get(nation) ?? 0) + 1);
   }
   const wars = buildWarAdjacency(world.wars);
+  // Recognized demands inside a subject give its cabinet an outside option in bilateral talks.
+  const externalBacking = new Map<NationId, number>();
+  for (const [, talks] of world.regionalNegotiations ?? []) {
+    const strength = talks.foreign?.strength ?? 0;
+    if (strength <= 0) continue;
+    externalBacking.set(talks.owner, Math.max(externalBacking.get(talks.owner) ?? 0, strength));
+  }
   const parties = new Set(world.nations.flatMap(({ id, subjectGovernment }) =>
     subjectGovernment ? [id, subjectGovernment.overlordId] : []));
   const military = new Map<NationRuntime["id"], number>();
@@ -92,7 +100,8 @@ export function updateSubjectAutonomy(world: WorldState): void {
     reviewSubjectNegotiation(world, { subject, overlord, government, relation, shortage, canIncreaseAid, footprint: power,
       power: subjectStrength || sponsorStrength ? subjectStrength / Math.max(1, sponsorStrength) : power,
       subjectAtWar: wars.has(subject.id), overlordAtWar: wars.has(overlord.id),
-      occupied: occupied.has(subject), levyBurden: levyPressure / 4 });
+      occupied: occupied.has(subject), levyBurden: levyPressure / 4,
+      externalBacking: externalBacking.get(subject.id) ?? 0 });
   }
   world.instrumentation?.recordDuration("politics.subjectNegotiations", performance.now() - startedAt);
 }

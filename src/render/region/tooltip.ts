@@ -1,4 +1,4 @@
-import { regionalNegotiationLabel } from "../political-negotiation-labels";
+import { foreignBackingLabel, regionalNegotiationLabel } from "../political-negotiation-labels";
 import { getRegionalIdentityGrievance, grievanceLevel } from "../../sim/identity-grievances";
 import { POPULATION_GROUPS } from "../../sim/regional-population";
 import { slowTicksToDays } from "../../sim/time";
@@ -62,6 +62,8 @@ export function formatRegionTooltip(
       if (talks && talks.owner === owner) {
         const group = POPULATION_GROUPS[talks.dimension][talks.group];
         lines.push(`${regionalNegotiationLabel(talks)} · ${group}${occupier && occupier !== owner ? " · suspended under occupation" : ""}`, talks.reason);
+        const backing = foreignBackingLabel(talks, (id) => getNationName(world, id));
+        if (backing) lines.push(backing);
       }
       if (owner && occupier && owner !== occupier) lines.push(`Owned by: ${getNationName(world, owner)}`, `Occupied by: ${getNationName(world, occupier)}`);
     }

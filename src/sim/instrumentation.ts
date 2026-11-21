@@ -566,7 +566,69 @@ export type SimulationCounterName =
   | "redistribution.transfers"
   | "redistribution.failedTransfers"
   | "redistribution.invalidated"
-  | "redistribution.retained";
+  | "redistribution.invalidated.expired"
+  | "redistribution.invalidated.ownership"
+  | "redistribution.invalidated.manual"
+  | "redistribution.invalidated.overlordSubject"
+  | "redistribution.invalidated.capital"
+  | "redistribution.invalidated.region"
+  | "redistribution.heldByWar"
+  | "redistribution.heldByOccupation"
+  | "redistribution.heldByContestation"
+  | "redistribution.heldForReview"
+  | "redistribution.eligible"
+  | "redistribution.reviewedSubjects"
+  | "redistribution.adjacentSubjects"
+  | "redistribution.parcels"
+  | "redistribution.retained"
+  | "redistribution.retained.noCandidate"
+  | "redistribution.retained.belowThreshold"
+  | "redistribution.retained.capacity"
+  | "redistribution.retained.fragment"
+  | "redistribution.retained.landComponent"
+  | "redistribution.retained.subjectRefused"
+  | "redistribution.retained.transferFailed"
+  | "redistribution.consensual"
+  | "redistribution.imposed"
+  | "regionalNegotiations.opened"
+  | "regionalNegotiations.reopened"
+  | "regionalNegotiations.offered.full"
+  | "regionalNegotiations.offered.partial"
+  | "regionalNegotiations.agreed"
+  | "regionalNegotiations.rejected"
+  | "regionalNegotiations.rejected.uniformity"
+  | "regionalNegotiations.rejected.capacity"
+  | "regionalNegotiations.refusedOffer"
+  | "regionalNegotiations.withdrawn"
+  | "regionalNegotiations.violated"
+  | "regionalNegotiations.deferred"
+  | "subjectNegotiations.integrationProposed"
+  | "subjectNegotiations.integrationAgreed"
+  | "subjectNegotiations.integrationRejected"
+  | "subjectNegotiations.integrationDeferred"
+  | "subjectNegotiations.integrationAgeDays"
+  | "subjectNegotiations.integrationWithPendingAcquisition"
+  | "subjectNegotiations.independenceAgreed"
+  | "subjectNegotiations.independenceProposed"
+  | "subjectNegotiations.independenceRefused"
+  | "subjectNegotiations.independenceUnilateral"
+  | "subjectNegotiations.selfGovernmentProposed"
+  | "subjectNegotiations.selfGovernmentAgreed"
+  | "subjectNegotiations.selfGovernmentRefused"
+  | "subjectNegotiations.counteroffer"
+  | "foreignAdvocacy.candidates"
+  | "foreignAdvocacy.rejected.interest"
+  | "foreignAdvocacy.rejected.cost"
+  | "foreignAdvocacy.rejected.spend"
+  | "foreignAdvocacy.rejected.relation"
+  | "foreignAdvocacy.rejected.cooldown"
+  | "foreignAdvocacy.proposals"
+  | "foreignAdvocacy.accepted"
+  | "foreignAdvocacy.refused"
+  | "foreignAdvocacy.expired"
+  | "foreignAdvocacy.renewed"
+  | "foreignAdvocacy.negotiationsAffected"
+  | "foreignAdvocacy.agreements";
 
 /**
  * Optional benchmark observer. Production worlds do not install one, so hot paths
@@ -584,8 +646,33 @@ export type LandUnitLifecycleEvent = {
   | { reason: "production"; facility: "capital" | "city"; mobilizationPhase: MobilizationPhase | null }
 );
 
+/** Optional sample emitted once per subject territorial redistribution review. */
+export interface RedistributionCandidateSample {
+  subjectId: NationId;
+  districts: number;
+  score: number;
+  willing: number;
+  capacityExceeded: boolean;
+  canImpose: boolean;
+  outcome: "below-threshold" | "capacity" | "fragment" | "land-component" | "refused" | "pending" | "committed" | "transfer-failed";
+  retentionReason: string;
+  delegationReason: string;
+}
+
+export interface RedistributionReviewSample {
+  overlordId: NationId;
+  acquisitionDistricts: number;
+  subjectCount: number;
+  adjacentSubjectCount: number;
+  candidateCount: number;
+  outcome: "retained" | "rejected" | "consensual" | "imposed";
+  reason: string;
+  candidates: RedistributionCandidateSample[];
+}
+
 export interface SimulationInstrumentation {
   recordLandUnitLifecycle?(event: LandUnitLifecycleEvent): void;
+  recordRedistributionReview?(sample: RedistributionReviewSample): void;
   recordDuration(name: SimulationMetricName, durationMs: number): void;
   incrementCounter(name: SimulationCounterName, amount?: number): void;
 }

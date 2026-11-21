@@ -17,6 +17,7 @@ export interface SubjectGovernment {
   autonomy?: number;
   selfGovernment?: { since: number; maximumLevy: FoodLevyRate; extraIndustrialAid: boolean };
   integrationConsentAt?: number;
+  nextIntegrationReviewAt?: number;
   foodLevy?: FoodLevyRate;
   industrialAidRouteBlocked?: boolean;
 }
