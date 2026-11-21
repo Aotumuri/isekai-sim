@@ -11,6 +11,8 @@ import { updateOccupation } from "./occupation";
 import { findWar } from "./war-state";
 import { recordSimulationEvent } from "./simulation-settings";
 import { hasMilitaryAccess } from "./military-access";
+import { getSubjectOverlord } from "./subject-governments";
+import { updateRecentAcquisitions } from "./recent-acquisitions";
 import { getSubjectIntegrationIssue, inheritIntegratedGovernment } from "./state-succession";
 
 export interface TerritoryTransfer { from: NationId; to: NationId; regionIds: MesoRegionId[] }
@@ -78,8 +80,18 @@ function validateTerritoryTransfers(world: WorldState, legs: TerritoryTransfer[]
   return [...remaining].every(([id, count]) => id === integrating ? count === 0 : count > 0);
 }
 
+function isValidRedistribution(world: WorldState, leg: TerritoryTransfer): boolean {
+  const overlord = world.nations.find(({ id }) => id === leg.from);
+  return !!overlord && !overlord.subjectGovernment && getSubjectOverlord(world, leg.to) === leg.from &&
+    !world.wars.some(({ nationAId, nationBId }) =>
+      nationAId === leg.from || nationBId === leg.from || nationAId === leg.to || nationBId === leg.to) &&
+    !leg.regionIds.some((id) => id === overlord.capitalMesoId || world.occupation.mesoById.has(id));
+}
+
 /** Both sides of a swap validate before any ownership, cost or military state changes. */
-export function transferTerritories(world: WorldState, legs: TerritoryTransfer[], reason: "agreement" | "ultimatum" | "unilateral" | "integration" = "agreement", founding?: FoundingTransfer): boolean {
+export function transferTerritories(world: WorldState, legs: TerritoryTransfer[],
+  reason: "agreement" | "ultimatum" | "unilateral" | "integration" | "redistribution" = "agreement", founding?: FoundingTransfer): boolean {
+  if (reason === "redistribution" && (founding || legs.length !== 1 || !isValidRedistribution(world, legs[0]))) return false;
   const integration = reason === "integration" ? legs[0] : undefined;
   if (reason === "integration" && (!integration || founding || legs.length !== 1 ||
     getSubjectIntegrationIssue(world, integration.to, integration.from))) return false;
@@ -143,6 +155,15 @@ export function transferTerritories(world: WorldState, legs: TerritoryTransfer[]
       for (const cargo of unit.cargoUnits) cargo.regionId = unit.regionId;
     }
   }
+  for (const { from, to, regionIds } of legs) {
+    updateRecentAcquisitions(world, to, regionIds, reason !== "redistribution" && !integration && to !== founding?.nation.id);
+    if (reason === "redistribution") for (const id of regionIds) {
+      const recovery = world.industrialRecovery?.get(id);
+      if (recovery?.owner === from) recovery.owner = to;
+      const annexation = world.annexations?.get(id);
+      if (annexation?.owner === from) annexation.owner = to;
+    }
+  }
   if (integration) {
     const former = world.nations.find(({ id }) => id === integration.from)!;
     const successor = world.nations.find(({ id }) => id === integration.to)!;
@@ -151,7 +172,7 @@ export function transferTerritories(world: WorldState, legs: TerritoryTransfer[]
   world.battles = world.battles.filter((battle) => !changed.has(battle.mesoId));
   updateOccupation(world);
   updateTerritorialClaims(world, reason === "unilateral" ? new Set() : new Set(legs.map((leg) => leg.from)));
-  recordSimulationEvent(world, { category: "diplomacy", nationIds: [...new Set(legs.flatMap((leg) => [leg.from, leg.to]))],
+  if (reason !== "redistribution") recordSimulationEvent(world, { category: "diplomacy", nationIds: [...new Set(legs.flatMap((leg) => [leg.from, leg.to]))],
     message: `Territorial ${reason}: ${legs.map((leg) => `${leg.from} ceded ${leg.regionIds.length} regions to ${leg.to}`).join("; ")}.` });
   return true;
 }
@@ -183,6 +204,7 @@ export function restoreExiledTerritories(world: WorldState, nationId: NationId, 
     world.regionalNegotiations?.delete(id);
     world.occupation.mesoById.delete(id); world.occupation.dirtyMesoIds.add(id);
   }
+  updateRecentAcquisitions(world, nationId, regionIds, false);
   const newOwners = getOwnerByMesoId(world);
   for (const formerOwner of formerOwners) {
     const nation = world.nations.find((item) => item.id === formerOwner)!;

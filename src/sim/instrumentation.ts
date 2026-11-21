@@ -12,6 +12,7 @@ export type SimulationMetricName =
   | "trade.procurement"
   | "politics.identityGovernance"
   | "politics.subjectNegotiations"
+  | "politics.subjectRedistribution"
   | "repositionUnits"
   | "assignment.rebuild"
   | "assignment.defense"
@@ -555,7 +556,17 @@ export type SimulationCounterName =
   | "aiGeography.frontDistance.rebuilds"
   | "aiGeography.safety.requests"
   | "aiGeography.safety.hits"
-  | "aiGeography.safety.rebuilds";
+  | "aiGeography.safety.rebuilds"
+  | "redistribution.reviews"
+  | "redistribution.noEligibleSubject"
+  | "redistribution.candidates"
+  | "redistribution.validCandidates"
+  | "redistribution.proposals"
+  | "redistribution.refusals"
+  | "redistribution.transfers"
+  | "redistribution.failedTransfers"
+  | "redistribution.invalidated"
+  | "redistribution.retained";
 
 /**
  * Optional benchmark observer. Production worlds do not install one, so hot paths

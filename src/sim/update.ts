@@ -11,6 +11,7 @@ import { updateBudgetPolicies } from "./budget-policy";
 import { updatePublicWorks } from "./public-works";
 import { updateMilitaryFunding } from "./military-funding";
 import { updateTreasuries } from "./treasury";
+import { updateSubjectRedistribution } from "./subject-redistribution";
 import { updateSubjectAutonomy } from "./subject-autonomy";
 import { updateAnnexations } from "./annexation";
 import { updateNationalistMovements } from "./nationalist-movements";
@@ -226,6 +227,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateAlliedWarRequests(world);
   updateVolunteers(world);
   updateWarDeclarations(world);
+  updateSubjectRedistribution(world);
   updateCrisisDeployments(world);
   updateBudgetPolicies(world);
   updateTreasuries(world);

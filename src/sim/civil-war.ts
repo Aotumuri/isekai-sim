@@ -79,6 +79,7 @@ export function updateCivilWar(world: WorldState): void {
       buildingChanged = true;
     }
     const newNationId = createNationId(world.nations.length);
+    for (const id of rebelMesoIds) world.recentAcquisitions?.delete(id);
     // Record tenure through the split while the old borders are still intact.
     if (!territoryChanged) updateTerritorialClaims(world);
     inheritTerritorialClaims(world, nation.id, newNationId, rebelMesoIds);

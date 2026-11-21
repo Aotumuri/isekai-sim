@@ -1,3 +1,4 @@
+import { updateRecentAcquisitions } from "./recent-acquisitions";
 import { withdrawAmphibiousOperationsForPeace } from "./amphibious";
 import { warFatigueKey } from "./diplomatic-peace";
 import { recordTerritorialClaimOutcome, type TerritorialClaimObjective } from "./territorial-claim-objective";
@@ -172,7 +173,8 @@ export function updateSurrender(world: WorldState): void {
       occupationByMesoId,
       mesoById,
       dirtyOccupationMesoIds,
-      world.regionalNegotiations,
+      world,
+      new Set(restored),
     );
     occupationChanged ||= didChange.occupationChanged;
     territoryChanged ||= didChange.territoryChanged;
@@ -476,7 +478,8 @@ function applyAssignments(
   occupationByMesoId: Map<MesoRegion["id"], NationId>,
   mesoById: Map<MesoRegion["id"], MesoRegion>,
   dirtyMesoIds: Set<MesoRegion["id"]>,
-  regionalNegotiations: WorldState["regionalNegotiations"],
+  world: WorldState,
+  restored: ReadonlySet<MacroRegion["id"]>,
 ): { territoryChanged: boolean; occupationChanged: boolean; buildingChanged: boolean } {
   if (assignments.size === 0) {
     return { territoryChanged: false, occupationChanged: false, buildingChanged: false };
@@ -491,6 +494,7 @@ function applyAssignments(
   let occupationChanged = false;
   let buildingChanged = false;
   const surrenderedNation = nationById.get(surrenderedNationId);
+  const acquired = new Map<NationId, MesoRegion["id"][]>();
   for (const [macroId, newOwnerId] of assignments.entries()) {
     const macro = macroById.get(macroId);
     if (!macro) {
@@ -501,9 +505,7 @@ function applyAssignments(
     }
     const oldOwnerId = macro.nationId;
     macro.nationId = newOwnerId;
-    if (regionalNegotiations?.size) {
-      for (const id of macro.mesoRegionIds) regionalNegotiations.delete(id);
-    }
+    for (const id of macro.mesoRegionIds) world.regionalNegotiations?.delete(id);
     macro.isCore = false;
     territoryChanged = true;
 
@@ -533,6 +535,12 @@ function applyAssignments(
       }
     }
 
+    if (restored.has(macroId)) updateRecentAcquisitions(world, newOwnerId, macro.mesoRegionIds, false);
+    else {
+      const districts = acquired.get(newOwnerId);
+      if (districts) districts.push(...macro.mesoRegionIds);
+      else acquired.set(newOwnerId, [...macro.mesoRegionIds]);
+    }
     for (const mesoId of macro.mesoRegionIds) {
       if (occupationByMesoId.delete(mesoId)) {
         dirtyMesoIds.add(mesoId);
@@ -541,6 +549,7 @@ function applyAssignments(
     }
   }
 
+  for (const [owner, ids] of acquired) updateRecentAcquisitions(world, owner, ids, true);
   return { territoryChanged, occupationChanged, buildingChanged };
 }
 

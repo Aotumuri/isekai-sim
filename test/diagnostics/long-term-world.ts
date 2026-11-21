@@ -9,6 +9,7 @@ import { createSeededWorld } from "../helpers/seeded-world";
 import { withMutedSimulationLogs } from "../helpers/muted-logs";
 import { observeWorldHistory } from "./world-history-observer";
 import { createFlowTotals, sampleFlows, summarizeWorld } from "./world-checkpoint";
+import { seedSubjectAcquisitions } from "./seed-subject-acquisitions";
 import { worldSignature } from "./world-signature";
 
 const [scenario, rawSeed, ...rawDays] = process.argv.slice(2);
@@ -38,9 +39,13 @@ const world = withMutedSimulationLogs(() => createSeededWorld({
 // Optional scale fixture gives negotiations work even when the generated world remains at peace.
 const subjectPairs = Number(process.env.WORLD_SUBJECT_PAIRS ?? 0);
 assert(Number.isSafeInteger(subjectPairs) && subjectPairs >= 0);
+const selectedOverlord = process.env.WORLD_SUBJECT_OVERLORD;
+assert(!selectedOverlord || subjectPairs === 1, "WORLD_SUBJECT_OVERLORD requires one starting subject");
 if (subjectPairs) withMutedSimulationLogs(() => {
   const paired = new Set<string>();
-  for (const [overlord, subject] of getAdjacentNationPairs(world)) {
+  for (const [a, b] of getAdjacentNationPairs(world)) {
+    if (selectedOverlord && a !== selectedOverlord && b !== selectedOverlord) continue;
+    const [overlord, subject] = selectedOverlord === b ? [b, a] : [a, b];
     if (paired.has(overlord) || paired.has(subject)) continue;
     installSubjectGovernment(world, overlord, subject);
     const nation = world.nations.find(({ id }) => id === subject)!;
@@ -51,6 +56,10 @@ if (subjectPairs) withMutedSimulationLogs(() => {
   }
   assert.equal(paired.size, 2 * subjectPairs, "Not enough disjoint neighboring governments");
 });
+const requestedAcquisitions = Number(process.env.WORLD_SUBJECT_ACQUISITIONS ?? 0);
+assert(Number.isSafeInteger(requestedAcquisitions) && requestedAcquisitions >= 0);
+const seededAcquisitions = requestedAcquisitions ? seedSubjectAcquisitions(world, requestedAcquisitions) : 0;
+if (requestedAcquisitions) assert(seededAcquisitions > 0, "No eligible borders for the controlled acquisitions");
 const timings: Partial<Record<SimulationMetricName, number>> = {};
 const counters: Partial<Record<SimulationCounterName, number>> = {};
 if (process.env.WORLD_METRICS === "1") world.instrumentation = {
@@ -63,7 +72,7 @@ let previous = 0, peakUnits = world.units.length, warDays = 0, unitDays = 0;
 let fastMs = 0, slowMs = 0;
 const cpu = process.cpuUsage(), start = performance.now();
 console.log(JSON.stringify({ scenario, seed, settings, instrumented: !!world.instrumentation,
-  subjectPairs, initial: summarizeWorld(world), districts: world.mesoRegions.length, days }));
+  subjectPairs, selectedOverlord, seededAcquisitions, initial: summarizeWorld(world), districts: world.mesoRegions.length, days }));
 for (const day of days) {
   console.info = history.observeLog;
   try {
@@ -85,10 +94,26 @@ for (const day of days) {
   }
   const elapsed = performance.now() - start;
   const usage = process.cpuUsage(cpu);
+  const heapBeforeGcBytes = process.memoryUsage().heapUsed;
   global.gc?.();
+  const politicalRecords = {
+    populations: world.regionalPopulations?.size ?? 0,
+    grievances: world.identityGrievances?.size ?? 0,
+    identityGovernments: world.nations.filter(({ identityGovernment }) => identityGovernment).length,
+    identityHistory: world.nations.reduce((total, nation) => total + (nation.identityGovernment?.decisions.length ?? 0), 0),
+    subjects: world.nations.filter(({ subjectGovernment }) => subjectGovernment).length,
+    subjectDecisions: world.nations.filter(({ subjectDecision }) => subjectDecision).length,
+    regionalCases: world.regionalNegotiations?.size ?? 0,
+    regionalRefusalRecords: [...world.regionalNegotiations?.values() ?? []].reduce((sum, talks) =>
+      sum + Object.keys(talks.refusals ?? {}).length, 0),
+    regionalAgreements: [...world.regionalNegotiations?.values() ?? []].filter(({ status }) => status === "agreed").length,
+    pendingRedistributions: world.recentAcquisitions?.size ?? 0,
+    events: world.events?.length ?? 0,
+    observedHistory: history.timeline.length,
+  };
   console.log(JSON.stringify({ day, since: previous, ...summarizeWorld(world), peakUnits, warDays, unitDays, flows,
     historyCounts: history.counts, wallMs: elapsed, cpuMs: (usage.user + usage.system) / 1000,
-    peakRssKiB: process.resourceUsage().maxRSS, heapBytes: process.memoryUsage().heapUsed,
+    politicalRecords, heapBeforeGcBytes, peakRssKiB: process.resourceUsage().maxRSS, heapBytes: process.memoryUsage().heapUsed,
     ...(world.instrumentation ? { fastOnlyMs: fastMs, cycleBoundaryMs: slowMs, timings, counters } : {}),
   }));
   previous = day;

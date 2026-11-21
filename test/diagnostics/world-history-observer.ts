@@ -21,7 +21,12 @@ export function observeWorldHistory(world: WorldState, limit = 1_000) {
   events.push = function (...items: SimulationEvent[]): number {
     for (const event of items) {
       const kind = classify(event.message);
-      if (kind) record(kind, { ids: event.nationIds, message: event.message });
+      if (!kind) continue;
+      const district = kind.startsWith("regional-")
+        ? /, district (meso-[0-9]+):/.exec(event.message)?.[1] as import("../../src/worldgen/meso-region").MesoRegionId | undefined
+        : undefined;
+      const talks = district && world.regionalNegotiations?.get(district);
+      record(kind, { ids: event.nationIds, message: event.message, ...(talks ? { negotiation: { ...talks, refusals: undefined } } : {}) });
     }
     return Array.prototype.push.apply(this, items);
   };
@@ -76,6 +81,8 @@ export function observeWorldHistory(world: WorldState, limit = 1_000) {
 }
 
 function classify(message: string): string | undefined {
+  const redistribution = /^Subject territorial redistribution \(([^)]+)\)/.exec(message);
+  if (redistribution) return `redistribution-${redistribution[1]}`;
   const subject = /: subject (integration|independence|self-government) \(([^)]+)\)\./.exec(message);
   if (subject) return `subject-${subject[1]}-${subject[2]}`;
   if (message.includes(", district ")) {
@@ -83,6 +90,7 @@ function classify(message: string): string | undefined {
     if (message.includes(" received an offer ")) return "regional-offer";
     if (message.includes(" secured ")) return "regional-agreement";
     if (message.includes(" negotiations failed")) return "regional-rejection";
+    if (message.includes(" withdrew the demand")) return "regional-withdrawal";
     if (message.includes(" agreement was violated")) return "regional-violation";
   }
   if (message.startsWith("Territorial ")) return "transfer-" + message.split(/[ :]/)[1];

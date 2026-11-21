@@ -1,3 +1,4 @@
+import type { RecentAcquisition } from "./recent-acquisitions";
 import type { RegionalNegotiation } from "./regional-negotiations";
 import type { RegionalIdentityGrievance } from "./identity-grievances";
 import type { DefeatedFormations } from "./defeated-formations";
@@ -89,6 +90,7 @@ export interface WorldState {
   internationalTrade?: InternationalTradeState;
   lastTaxCollectionTick?: number;
   publicWorks?: Map<MesoRegionId, PublicWork>;
+  recentAcquisitions?: Map<MesoRegionId, RecentAcquisition>;
   annexations?: Map<MesoRegionId, Annexation>;
   industrialRecovery?: Map<MesoRegionId, IndustrialRecovery>;
   regionalPopulations?: Map<MesoRegionId, RegionalPopulation>;
