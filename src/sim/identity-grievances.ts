@@ -1,6 +1,6 @@
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
-import { getEffectiveTreatment, IDENTITY_GROUP_IDS, identityGroupIndex, type GroupTreatment } from "./identity-policy";
+import { getEffectiveTreatment, IDENTITY_GROUP_IDS, identityGroupIndex, regionalConcession, type GroupTreatment } from "./identity-policy";
 import type { NationRuntime } from "./nation-runtime";
 import { POPULATION_DIMENSIONS, type PopulationDimension, type RegionalPopulation } from "./regional-population";
 import type { WorldState } from "./world-state";
@@ -70,12 +70,20 @@ export function applyRegionalIdentityEffects(
     }
     return false;
   }
+  const pact = regionalConcession(world, id, effects.owner);
+  const talks = world.regionalNegotiations?.get(id);
+  const distrust = talks?.owner === effects.owner ? talks.distrust : 0;
+  if (distrust && talks) talks.distrust *= pact ? 0.84 : 0.94;
   let exposure = 0, relief = 0, largest = 0, changed = false;
   let causeDimension: PopulationDimension = previous?.dimension ?? "ancestry", causeGroup = previous?.group ?? 0;
   for (const { dimension, favored, groups } of effects.dimensions) {
     const distribution = population[dimension];
+    const delegated = pact?.dimension === dimension && pact.offer === "autonomous";
     let moved = 0;
-    for (const [group, { treatment, cost }] of groups.entries()) {
+    for (const [group, base] of groups.entries()) {
+      const guaranteed = pact?.dimension === dimension && pact.group === group ? pact.offer : undefined;
+      const treatment = guaranteed ?? base.treatment;
+      const cost = guaranteed || (delegated && treatment === "assimilation" && base.cost === COST.assimilation) ? 0 : base.cost;
       const share = distribution[group]! / population.size;
       const burden = share * cost;
       exposure += burden;
@@ -85,7 +93,7 @@ export function applyRegionalIdentityEffects(
         causeGroup = group;
       }
       if (treatment === "protected" || treatment === "autonomous") relief += share;
-      if (dimension === "ancestry" || group === favored || treatment !== "assimilation" || effects.autonomy || cost > COST.assimilation) continue;
+      if (dimension === "ancestry" || group === favored || treatment !== "assimilation" || effects.autonomy || delegated || cost > COST.assimilation) continue;
       // Track cultural adoption and individual religious affiliation at separate rates.
       const amount = distribution[group]! * (dimension === "culture" ? 0.018 : 0.005);
       distribution[group]! -= amount;
@@ -99,7 +107,7 @@ export function applyRegionalIdentityEffects(
   const exclusion = exposure / POPULATION_DIMENSIONS.length;
   const { owner, hardship, autonomyLoss } = effects;
   const shock = Math.max(0, exclusion - (previous?.owner === owner ? previous.exclusion : 0));
-  const target = Math.min(1, exclusion * (2 + hardship * 0.5) + autonomyLoss + shock * 0.35) *
+  const target = Math.min(1, exclusion * (2 + hardship * 0.5) + autonomyLoss + shock * 0.35 + distrust) *
     (1 - relief * 0.08) * (effects.autonomy ? 0.7 : 1);
   const recent = (previous?.recent ?? 0) * 0.65 + target * 0.35;
   const entrenched = (previous?.entrenched ?? 0) * 0.96 + recent * 0.04;

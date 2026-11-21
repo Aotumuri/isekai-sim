@@ -1,3 +1,4 @@
+import { regionalNegotiationLabel } from "../political-negotiation-labels";
 import { getRegionalIdentityGrievance, grievanceLevel } from "../../sim/identity-grievances";
 import { POPULATION_GROUPS } from "../../sim/regional-population";
 import { slowTicksToDays } from "../../sim/time";
@@ -56,6 +57,11 @@ export function formatRegionTooltip(
         } else lines.push("Past grievances persist");
         if (grievance.autonomyLoss > 0) lines.push("Recent loss of autonomy");
         if (grievance.hardship > 0.05) lines.push("Food shortage intensifies grievances");
+      }
+      const talks = world.regionalNegotiations?.get(meso.id);
+      if (talks && talks.owner === owner) {
+        const group = POPULATION_GROUPS[talks.dimension][talks.group];
+        lines.push(`${regionalNegotiationLabel(talks)} · ${group}${occupier && occupier !== owner ? " · suspended under occupation" : ""}`, talks.reason);
       }
       if (owner && occupier && owner !== occupier) lines.push(`Owned by: ${getNationName(world, owner)}`, `Occupied by: ${getNationName(world, occupier)}`);
     }

@@ -82,7 +82,7 @@ export function reviewIdentityPolicies(
   const reform = (1 - legitimacy) * 2 + (1 - support) * (democracy ? 0.5 : 0.2) + hunger * 0.3;
   const relation = overlord && world.diplomacy?.relations.get(relationKey(nation.id, overlord.id));
   const sponsorIdeology = overlord?.ideology;
-  const dependence = overlord ? (1 - autonomy) * ((sponsorIdeology === ideology ? 0.3 : 0) +
+  const dependence = overlord && !nation.subjectGovernment?.selfGovernment ? (1 - autonomy) * ((sponsorIdeology === ideology ? 0.3 : 0) +
     Math.max(0, relation?.trust ?? 0) / 170 + (atWar ? 0.12 : 0)) : 0;
   let best: Candidate | undefined;
   const consider = (dimension: PopulationDimension, group: number, action: Candidate["action"], score: number, reason: string) => {
@@ -93,7 +93,7 @@ export function reviewIdentityPolicies(
     const favored = identityGroupIndex(dimension, government.favored[dimension]);
     const groups = population[dimension];
     const sponsorId = overlord?.favored[dimension];
-    const sponsorGroup = sponsorId ? identityGroupIndex(dimension, sponsorId) : -1;
+    const sponsorGroup = sponsorId && !nation.subjectGovernment?.selfGovernment ? identityGroupIndex(dimension, sponsorId) : -1;
     const shareOf = (group: number) => (groups[group] ?? 0) / population.size;
     const localMajority = dominantGroup(groups);
     if (localMajority !== favored) {

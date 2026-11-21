@@ -2,7 +2,7 @@ import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { getRelation } from "./diplomacy";
 import { getDomesticUnrest } from "./domestic-unrest";
-import { getGroupTreatment, identityGroupIndex } from "./identity-policy";
+import { getGroupTreatment, identityGroupIndex, regionalConcession } from "./identity-policy";
 import { getNationCharacter } from "./nation-character";
 import { isNationActive } from "./nation-active";
 import type { NationRuntime } from "./nation-runtime";
@@ -145,6 +145,8 @@ export function updateForcedDisplacement(world: WorldState): void {
   for (const [id, owner] of owners) {
     const order = activeOrders.get(owner), source = populations.get(id);
     if (!order || !source || !isControlled(id, owner)) continue;
+    const pact = regionalConcession(world, id, owner);
+    if (pact?.dimension === order.dimension && pact.group === order.group) continue;
     if (order.mode === "killing") {
       order.killed = (order.killed ?? 0) + applyPersecution(source, undefined, order, impacts.get(owner));
       continue;

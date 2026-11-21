@@ -1,3 +1,4 @@
+import type { SubjectDecision } from "./subject-negotiations";
 import type { IdentityGovernment, IdentityGroup } from "./identity-policy";
 import type { NationalIdentityStability } from "./identity-grievances";
 import type { TheaterCommander } from "./theater-command";
@@ -80,13 +81,13 @@ export type NationRuntime = Nation & {
     alignment: number;
     alignmentCulture?: IdentityGroup<"culture">;
     since: number;
-    manual?: boolean;
     autonomyLostAt?: number;
   };
   character?: NationCharacter;
   preGovernmentCharacter?: NationCharacter;
   politics?: NationalPolitics;
   theaterCommander?: TheaterCommander;
+  subjectDecision?: SubjectDecision;
   subjectGovernment?: SubjectGovernment;
   integratedIntoId?: Nation["id"];
   unitRoles: NationUnitRoles;

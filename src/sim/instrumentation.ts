@@ -11,6 +11,7 @@ export type SimulationMetricName =
   | "production.supplyIntegration"
   | "trade.procurement"
   | "politics.identityGovernance"
+  | "politics.subjectNegotiations"
   | "repositionUnits"
   | "assignment.rebuild"
   | "assignment.defense"

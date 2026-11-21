@@ -172,6 +172,7 @@ export function updateSurrender(world: WorldState): void {
       occupationByMesoId,
       mesoById,
       dirtyOccupationMesoIds,
+      world.regionalNegotiations,
     );
     occupationChanged ||= didChange.occupationChanged;
     territoryChanged ||= didChange.territoryChanged;
@@ -475,6 +476,7 @@ function applyAssignments(
   occupationByMesoId: Map<MesoRegion["id"], NationId>,
   mesoById: Map<MesoRegion["id"], MesoRegion>,
   dirtyMesoIds: Set<MesoRegion["id"]>,
+  regionalNegotiations: WorldState["regionalNegotiations"],
 ): { territoryChanged: boolean; occupationChanged: boolean; buildingChanged: boolean } {
   if (assignments.size === 0) {
     return { territoryChanged: false, occupationChanged: false, buildingChanged: false };
@@ -499,6 +501,9 @@ function applyAssignments(
     }
     const oldOwnerId = macro.nationId;
     macro.nationId = newOwnerId;
+    if (regionalNegotiations?.size) {
+      for (const id of macro.mesoRegionIds) regionalNegotiations.delete(id);
+    }
     macro.isCore = false;
     territoryChanged = true;
 

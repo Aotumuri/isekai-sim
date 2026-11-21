@@ -1,3 +1,5 @@
+import { regionalNegotiationLabel } from "../render/political-negotiation-labels";
+import { getOwnerByMesoId } from "../sim/world-cache";
 import { remainingDaysUntilSlowTick, slowTicksToDays } from "../sim/time";
 import { endDisplacementOrder, getPersecutionTargets, startDisplacementOrder } from "../sim/forced-displacement";
 import { POPULATION_DIMENSIONS, POPULATION_GROUPS } from "../sim/regional-population";
@@ -21,7 +23,7 @@ const esc = (value: string) => value.replace(/[&<>"']/g, (char) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
 
 const DIMENSION_LABELS = { ancestry: "Ancestry", culture: "Culture", faith: "Religion" };
-const ADMINISTRATION_LABELS = { centralized: "Centralized", autonomy: "Regional autonomy", assimilation: "Common administration" };
+const ADMINISTRATION_LABELS = { centralized: "Centralized", autonomy: "Nationwide autonomy", assimilation: "Common administration" };
 const percent = (share: number) => Math.round(share * 100);
 
 function renderIdentityGovernment(world: WorldState, nation: NationRuntime): string {
@@ -30,8 +32,6 @@ function renderIdentityGovernment(world: WorldState, nation: NationRuntime): str
   const state = nation.identityStability;
   const id = state?.mostAffected;
   const district = id && getRegionalIdentityGrievance(world, id, nation.id);
-  const overlord = getSubjectOverlord(world, nation.id);
-  const subject = overlord ? ` · Independence pressure ${Math.round(nation.subjectGovernment?.autonomy ?? 0)}/100 under ${esc(getNationName(world, overlord))}` : "";
   const recognition = POPULATION_DIMENSIONS.map((dimension) => {
     const name = identityGroupName(dimension, government.favored[dimension]);
     const exceptions = Object.entries(government.treatments[dimension]).map(([id, treatment]) =>
@@ -43,11 +43,41 @@ function renderIdentityGovernment(world: WorldState, nation: NationRuntime): str
     `<li>Day ${day} · ${DIMENSION_LABELS[dimension]} · ${identityGroupName(dimension, group as IdentityGroup<typeof dimension>)} · ${action}. ${esc(reason)}</li>`).join("");
   return `<h2>Government identity and group policies</h2>${recognition}
     <p class="society-note">Groups without a listed policy are tolerated, subject to active religious bans.</p>
-    ${state ? `<p>Institutional legitimacy ${Math.round(state.legitimacy)}/100 · Regional grievance ${percent(state.grievance)}/100 · Demand for local autonomy ${percent(state.autonomyDemand)}/100${subject}</p>` : ""}
+    ${state ? `<p>Institutional legitimacy ${Math.round(state.legitimacy)}/100 · Regional grievance ${percent(state.grievance)}/100 · Demand for local autonomy ${percent(state.autonomyDemand)}/100</p>` : ""}
     ${id && district ? `<p class="society-note">Most affected: ${esc(districtName(id))} · Grievance ${percent(grievanceLevel(district))}/100 ·
       ${district.exclusion > 0.01 ? `Main group affected: ${POPULATION_GROUPS[district.dimension][district.group]} (${DIMENSION_LABELS[district.dimension].toLowerCase()}).` : "Past grievances persist."}
       ${district.autonomyLoss > 0 ? "Recent loss of autonomy." : ""} ${district.hardship > 0.05 ? "Food shortage intensifies grievances." : ""}</p>` : ""}
     ${recent ? `<h3>Recent decisions</h3><ul>${recent}</ul>` : ""}`;
+}
+
+function renderRegionalNegotiations(world: WorldState, nation: NationRuntime): string {
+  if (!world.regionalNegotiations?.size) return "";
+  const owners = getOwnerByMesoId(world);
+  const local = [...world.regionalNegotiations].filter(([id, talks]) => talks.owner === nation.id && owners.get(id) === nation.id);
+  if (!local.length) return "";
+  const rows = local.sort((a, b) => b[1].reviewAt - a[1].reviewAt).slice(0, 6).map(([id, talks]) => {
+    const group = POPULATION_GROUPS[talks.dimension][talks.group];
+    const occupier = world.occupation.mesoById.get(id);
+    return `<li>${esc(districtName(id))} · ${esc(group)} · ${regionalNegotiationLabel(talks)}${occupier && occupier !== nation.id ? " (suspended)" : ""}. ${esc(talks.reason)}</li>`;
+  }).join("");
+  return `<h2>Regional negotiations</h2><ul>${rows}</ul>${local.length > 6 ? `<p class="society-note">Showing six of ${local.length} districts. Hover over a district on the map to inspect its negotiations.</p>` : ""}`;
+}
+
+function renderSubjectPolitics(world: WorldState, nation: NationRuntime): string {
+  const overlord = getSubjectOverlord(world, nation.id), government = overlord ? nation.subjectGovernment : undefined;
+  const charter = government?.selfGovernment;
+  const decisions = world.nations.flatMap((subject) => {
+    const decision = subject.subjectDecision;
+    if (!decision || (subject.id !== nation.id && decision.overlordId !== nation.id)) return [];
+    const partner = esc(getNationName(world, subject.id === nation.id ? decision.overlordId : subject.id));
+    return [{ reviewAt: decision.reviewAt,
+      row: `<li>${partner} · ${decision.issue} (${decision.status}). ${esc(decision.reason)}</li>` }];
+  }).sort((a, b) => b.reviewAt - a.reviewAt).slice(0, 6);
+  if (!overlord && !decisions.length) return "";
+  return `<h2>Subject relations</h2>
+    ${overlord ? `<p>Independence pressure ${Math.round(government?.autonomy ?? 0)}/100 under ${esc(getNationName(world, overlord))}.</p>` : ""}
+    ${charter ? `<p>Domestic self-government · Harvest levy capped at ${percent(charter.maximumLevy)}%${charter.extraIndustrialAid ? " · Increased industrial aid limit" : ""}</p>` : ""}
+    ${decisions.length ? `<ul>${decisions.map(({ row }) => row).join("")}</ul>` : ""}`;
 }
 
 export function attachPoliticsControls(
@@ -126,11 +156,13 @@ export function attachPoliticsControls(
         ${ban && ban.until > world.time.slowTick ? `<p><strong>Banned movement:</strong> ${name(ban.ideologyId)} · ${remainingDaysUntilSlowTick(world.time.fastTick, ban.until)} days remaining</p>` : ""}
         ${hasPoliticalTurbulence(world) ? `<h2>Territorial governance</h2>
           <p>Stability ${Math.round(governance?.stability ?? 100)}/100 · Diversity ${Math.round((governance?.diversity ?? 0) * 100)}%</p>
-          <p class="society-note">Regional autonomy reduces grievances and suspends conversions driven by government policy. Common administration establishes a framework for integration.</p>
+          <p class="society-note">Nationwide autonomy suspends government-directed conversions. District agreements can protect specific communities or delegate control of cultural and religious institutions.</p>
           <div class="society-actions">${(["centralized", "autonomy", "assimilation"] as const).map((policy) =>
             `<button type="button" data-governance-policy="${policy}" aria-pressed="${(governance?.policy ?? "centralized") === policy}">${ADMINISTRATION_LABELS[policy]}</button>`).join("")}</div>` : ""}
         ${nation.populationPolicy ? `<p><strong>${populationPolicyTitle(nation.populationPolicy)}</strong> · ${nation.populationPolicy.type === "homeland" ? "Claims nearby districts with a substantial population of the homeland's ancestry." : "Maintains an official state religion."}</p>` : ""}
         ${renderIdentityGovernment(world, nation)}
+        ${renderRegionalNegotiations(world, nation)}
+        ${renderSubjectPolitics(world, nation)}
         ${hasPoliticalTurbulence(world) && getRecognizedFaith(nation) !== undefined ? `<h2>Religious restrictions</h2>
           <p class="society-note">${faithBan ? `Unprotected faiths outside ${POPULATION_GROUPS.faith[faithBan.allowedFaith]} are restricted for ${remainingDaysUntilSlowTick(world.time.fastTick, faithBan.until)} days.` : "A ban on other faiths causes unrest and foreign backlash."}</p>
           ${faithBan ? '<button type="button" data-religious-ban="lift">Lift ban</button>' :

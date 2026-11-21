@@ -70,6 +70,11 @@ export function summarizeWorld(world: WorldState) {
   const grievanceValues = [...(identityGrievances?.values() ?? [])].map(grievanceLevel);
   assert(grievanceValues.every((value) => Number.isFinite(value) && value >= 0 && value <= 1));
   assert(!identityGrievances || identityGrievances.size <= owners.size);
+  const regionalNegotiations: Record<string, number> = {};
+  for (const [district, talks] of world.regionalNegotiations ?? []) {
+    assert(owners.has(district) && Number.isFinite(talks.distrust) && talks.distrust >= 0 && talks.distrust <= 0.35);
+    if (owners.get(district) === talks.owner) regionalNegotiations[talks.status] = (regionalNegotiations[talks.status] ?? 0) + 1;
+  }
   const treaties: Record<string, number> = {};
   for (const relation of world.diplomacy?.relations.values() ?? []) {
     for (const { type, expiresAtSlowTick } of relation.treaties) {
@@ -91,7 +96,7 @@ export function summarizeWorld(world: WorldState) {
       assert(Object.values(program.progress).every((value) => Number.isFinite(value) && value >= 0));
     }
     return { id: nation.id, land: land.get(nation.id) ?? 0, population: nationPopulation.get(nation.id) ?? 0,
-      subject: nation.subjectGovernment, governance: nation.governance, ideology: nation.politics?.governingIdeologyId,
+      subject: nation.subjectGovernment, subjectDecision: nation.subjectDecision, governance: nation.governance, ideology: nation.politics?.governingIdeologyId,
       identityStability: nation.identityStability, identityGovernment: nation.identityGovernment,
       unrest: world.domesticUnrest?.byNationId.get(nation.id), stocks: nation.resources, flow: nation.resourceFlow,
       treasury: nation.treasury?.balance, food: nation.food?.stock, projects: programs.reduce((n, p) => n + p.completedProjects, 0),
@@ -125,7 +130,7 @@ export function summarizeWorld(world: WorldState) {
     identity: { regions: grievanceValues.length, peakGrievance: Math.max(0, ...grievanceValues),
       governments: world.nations.filter((nation) => nation.identityGovernment).length,
       decisions: world.nations.reduce((sum, nation) => sum + (nation.identityGovernment?.decisionCount ?? 0), 0) },
-    population, populationGroups, localMix: localMix / Math.max(1, population * POPULATION_DIMENSIONS.length),
+    regionalNegotiations, population, populationGroups, localMix: localMix / Math.max(1, population * POPULATION_DIMENSIONS.length),
     wars: world.wars.length, treaties, relations: world.diplomacy?.relations.size ?? 0,
     peace: world.diplomacy?.peaceAgreements ?? 0,
     defensiveInterventions: world.diplomacy?.defensiveInterventions ?? 0,

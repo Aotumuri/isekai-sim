@@ -76,6 +76,15 @@ export function observeWorldHistory(world: WorldState, limit = 1_000) {
 }
 
 function classify(message: string): string | undefined {
+  const subject = /: subject (integration|independence|self-government) \(([^)]+)\)\./.exec(message);
+  if (subject) return `subject-${subject[1]}-${subject[2]}`;
+  if (message.includes(", district ")) {
+    if (message.includes(" demanded ")) return "regional-demand";
+    if (message.includes(" received an offer ")) return "regional-offer";
+    if (message.includes(" secured ")) return "regional-agreement";
+    if (message.includes(" negotiations failed")) return "regional-rejection";
+    if (message.includes(" agreement was violated")) return "regional-violation";
+  }
   if (message.startsWith("Territorial ")) return "transfer-" + message.split(/[ :]/)[1];
   if (message.includes("installed a puppet government")) return "puppet";
   if (/after a period of (assimilation|administrative alignment)/.test(message)) return "integration";

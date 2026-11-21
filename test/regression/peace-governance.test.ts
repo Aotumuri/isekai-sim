@@ -78,13 +78,18 @@ test("partition terms are revalidated and create two subjects without duplicatin
   assert(!acceptPeaceOffer(world, target.id, overlord.id));
 });
 
-test("a subject with maximum autonomy can leave a weakened overlord", () => {
+test("a subject with high independence pressure can negotiate release from a weakened overlord", () => {
   const world = scene(), [overlord, subject] = world.nations;
   assert(overlord && subject);
   installSubjectGovernment(world, overlord.id, subject.id);
   subject.subjectGovernment!.autonomy = 100;
   overlord.warCooperation = 0;
-  world.time.slowTick = 10;
+  world.time.slowTick = 30;
+  world.time.fastTick = 300;
+  updateSubjectAutonomy(world);
+  assert.equal(getSubjectOverlord(world, subject.id), overlord.id);
+  world.time.slowTick = 40;
+  world.time.fastTick = 400;
   updateSubjectAutonomy(world);
   assert.equal(getSubjectOverlord(world, subject.id), undefined);
 });

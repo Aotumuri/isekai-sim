@@ -15,6 +15,8 @@ export interface SubjectGovernment {
   overlordId: NationId;
   establishedAtFastTick: number;
   autonomy?: number;
+  selfGovernment?: { since: number; maximumLevy: FoodLevyRate; extraIndustrialAid: boolean };
+  integrationConsentAt?: number;
   foodLevy?: FoodLevyRate;
   industrialAidRouteBlocked?: boolean;
 }
@@ -63,6 +65,7 @@ export function installSubjectGovernment(world: WorldState, overlordId: NationId
     relation.treaties = relation.treaties.filter((treaty) => treaty.type !== "alliance");
     relation.crisis = null;
   }
+  delete subject.subjectDecision;
   subject.subjectGovernment = { overlordId, establishedAtFastTick: world.time.fastTick };
   setPoliticalMandate(world, subject, getNationIdeology(world, overlordId).id);
   const relation = getRelation(world, overlordId, subjectId);

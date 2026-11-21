@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { createSimulationSettings } from "../../src/sim/simulation-settings";
 import type { SimulationCounterName, SimulationMetricName } from "../../src/sim/instrumentation";
 import { DAYS_PER_SLOW_TICK } from "../../src/sim/time";
+import { installSubjectGovernment } from "../../src/sim/subject-governments";
+import { getAdjacentNationPairs } from "../../src/sim/world-cache";
 import { stepSimulationDay } from "../../src/sim/update";
 import { createSeededWorld } from "../helpers/seeded-world";
 import { withMutedSimulationLogs } from "../helpers/muted-logs";
@@ -33,6 +35,22 @@ const world = withMutedSimulationLogs(() => createSeededWorld({
     } : {}),
   },
 }));
+// Optional scale fixture gives negotiations work even when the generated world remains at peace.
+const subjectPairs = Number(process.env.WORLD_SUBJECT_PAIRS ?? 0);
+assert(Number.isSafeInteger(subjectPairs) && subjectPairs >= 0);
+if (subjectPairs) withMutedSimulationLogs(() => {
+  const paired = new Set<string>();
+  for (const [overlord, subject] of getAdjacentNationPairs(world)) {
+    if (paired.has(overlord) || paired.has(subject)) continue;
+    installSubjectGovernment(world, overlord, subject);
+    const nation = world.nations.find(({ id }) => id === subject)!;
+    nation.subjectGovernment!.autonomy = 44 + (paired.size % 6) * 5;
+    paired.add(overlord);
+    paired.add(subject);
+    if (paired.size === 2 * subjectPairs) break;
+  }
+  assert.equal(paired.size, 2 * subjectPairs, "Not enough disjoint neighboring governments");
+});
 const timings: Partial<Record<SimulationMetricName, number>> = {};
 const counters: Partial<Record<SimulationCounterName, number>> = {};
 if (process.env.WORLD_METRICS === "1") world.instrumentation = {
@@ -45,7 +63,7 @@ let previous = 0, peakUnits = world.units.length, warDays = 0, unitDays = 0;
 let fastMs = 0, slowMs = 0;
 const cpu = process.cpuUsage(), start = performance.now();
 console.log(JSON.stringify({ scenario, seed, settings, instrumented: !!world.instrumentation,
-  initial: summarizeWorld(world), districts: world.mesoRegions.length, days }));
+  subjectPairs, initial: summarizeWorld(world), districts: world.mesoRegions.length, days }));
 for (const day of days) {
   console.info = history.observeLog;
   try {

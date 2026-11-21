@@ -115,7 +115,11 @@ export function transferTerritories(world: WorldState, legs: TerritoryTransfer[]
     // A consensual cession is not a battlefield city loss.
     if (reason !== "unilateral") nation.initialCityCount = owned.filter((region) => region.building === "city" || region.building === "capital").length;
   }
-  for (const id of changed) { world.occupation.mesoById.delete(id); world.occupation.dirtyMesoIds.add(id); }
+  for (const id of changed) {
+    world.regionalNegotiations?.delete(id);
+    world.occupation.mesoById.delete(id);
+    world.occupation.dirtyMesoIds.add(id);
+  }
   world.occupation.version++; world.buildingVersion++;
   for (const unit of world.units) {
     const wasOnTransferredLand = changed.has(unit.regionId);
@@ -176,6 +180,7 @@ export function restoreExiledTerritories(world: WorldState, nationId: NationId, 
   refreshNationProvinces(world); world.mapVersion++; world.territoryVersion++;
   for (const id of ids) {
     const region = regions.get(id)!; if (region.building === "capital") region.building = "city";
+    world.regionalNegotiations?.delete(id);
     world.occupation.mesoById.delete(id); world.occupation.dirtyMesoIds.add(id);
   }
   const newOwners = getOwnerByMesoId(world);

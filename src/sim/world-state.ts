@@ -1,3 +1,4 @@
+import type { RegionalNegotiation } from "./regional-negotiations";
 import type { RegionalIdentityGrievance } from "./identity-grievances";
 import type { DefeatedFormations } from "./defeated-formations";
 import type { WarCampaignState } from "./war-campaign/state";
@@ -96,6 +97,7 @@ export interface WorldState {
   agriculturalLand?: Map<MesoRegionId, AgriculturalLand>;
   populationRevision?: number;
   populationPolicyRevision?: number;
+  regionalNegotiations?: Map<MesoRegionId, RegionalNegotiation>;
   identityGrievances?: Map<MesoRegionId, RegionalIdentityGrievance>;
   armsAid?: ArmsAidState;
   worldSeed?: number;

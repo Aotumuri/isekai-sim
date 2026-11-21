@@ -92,12 +92,20 @@ test("separate group treatments coexist and only affected shares contribute to g
 
 test("lasting exclusion leaves a longer recovery than a temporary policy", (t) => {
   const outcomes = [1, 20].map((length) => {
-    const { nation, government, advance, local } = scene();
+    const { world, nation, government, advance, local, populations } = scene();
     government.nextReviewAt = Infinity;
-    government.treatments.ancestry.veyari = "restricted";
+    // Keep the same total exposure while isolating memory from organized local bargaining.
+    for (const [id, owner] of getOwnerByMesoId(world)) {
+      const population = populations.get(id);
+      if (population && owner === nation.id) {
+        population.ancestry = [0.2, 0.15, 0.2, 0.15, 0.15, 0.15].map((share) => share * population.size);
+      }
+    }
+    const affected = ["veyari", "orruvi", "nhalai", "istren"] as const;
+    for (const group of affected) government.treatments.ancestry[group] = "restricted";
     advance(length);
     const peak = grievanceLevel(local());
-    government.treatments.ancestry.veyari = "protected";
+    for (const group of affected) government.treatments.ancestry[group] = "protected";
     advance(1);
     assert.equal(local()!.exclusion, 0);
     assert(grievanceLevel(local()) > 0);
@@ -255,11 +263,12 @@ test("revolution origins and nationalist movements can cite exclusion, without m
     p.ancestry = shares(p.size, 0.65, 0.35);
   }
   other.identityGovernment!.treatments.ancestry.auvren = "restricted";
+  advance(9);
   government.treatments.ancestry.veyari = "restricted";
   government.treatments.culture["tide-guilds"] = "restricted";
   government.treatments.faith["ember-covenant"] = "restricted";
   setGovernancePolicy(world, nation.id, nation.id, "centralized");
-  advance(12);
+  advance(3);
   const origins = rankRevolutionOrigins(world, nation);
   assert(origins.length > 0);
   assert.equal(origins[0]!.dimension, "ancestry");

@@ -102,6 +102,9 @@ export function updateCivilWar(world: WorldState): void {
         continue;
       }
       macro.nationId = newNationId;
+      if (world.regionalNegotiations?.size) {
+        for (const id of macro.mesoRegionIds) world.regionalNegotiations.delete(id);
+      }
       territoryChanged = true;
     }
     nation.macroRegionIds = nation.macroRegionIds.filter(

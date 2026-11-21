@@ -1,3 +1,6 @@
+import type { MesoRegionId } from "../worldgen/meso-region";
+import type { NationId } from "../worldgen/nation";
+import { hasPoliticalTurbulence } from "./simulation-settings";
 import type { NationRuntime } from "./nation-runtime";
 import { POPULATION_GROUPS, type PopulationDimension } from "./regional-population";
 import type { WorldState } from "./world-state";
@@ -74,4 +77,11 @@ export function getEffectiveTreatment<D extends PopulationDimension>(
   // Explicit guarantees survive a general ban on unprotected faiths.
   if (ban && group !== ban.allowedFaith && treatment !== "protected" && treatment !== "autonomous") return "restricted";
   return treatment;
+}
+
+export function regionalConcession(world: WorldState, id: MesoRegionId, owner: NationId) {
+  const pact = world.regionalNegotiations?.get(id);
+  if (pact?.owner !== owner || pact.status !== "agreed" || !hasPoliticalTurbulence(world)) return;
+  const occupier = world.occupation.mesoById.get(id);
+  return !occupier || occupier === owner ? pact : undefined;
 }

@@ -1,5 +1,5 @@
 import { getDomesticUnrest } from "./domestic-unrest";
-import { getActiveFaithBan, getEffectiveTreatment, getRecognizedFaith } from "./identity-policy";
+import { getActiveFaithBan, getEffectiveTreatment, getRecognizedFaith, regionalConcession } from "./identity-policy";
 import { getNationCharacter } from "./nation-character";
 import { isNationActive } from "./nation-active";
 import type { NationRuntime } from "./nation-runtime";
@@ -51,8 +51,10 @@ export function updateReligiousPersecution(world: WorldState): void {
     const entry = active.get(owner), population = populations.get(id), occupier = world.occupation.mesoById.get(id);
     if (!entry || !population?.size || (occupier && occupier !== owner)) continue;
     entry.population += population.size;
+    const pact = regionalConcession(world, id, owner);
     for (const [group, count] of population.faith.entries()) {
       if (group !== entry.nation.religiousBan!.allowedFaith && count > 0 &&
+          !(pact?.dimension === "faith" && pact.group === group) &&
           getEffectiveTreatment(world, entry.nation, "faith", group) === "restricted") {
         addPersecutionImpact(entry.impact, population, "faith", group, count * 0.06);
       }
