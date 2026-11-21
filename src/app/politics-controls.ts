@@ -1,6 +1,10 @@
 import { remainingDaysUntilSlowTick, slowTicksToDays } from "../sim/time";
 import { endDisplacementOrder, getPersecutionTargets, startDisplacementOrder } from "../sim/forced-displacement";
-import { POPULATION_GROUPS } from "../sim/regional-population";
+import { POPULATION_DIMENSIONS, POPULATION_GROUPS } from "../sim/regional-population";
+import { getRecognizedFaith, identityGroupName, type IdentityGroup } from "../sim/identity-policy";
+import { getRegionalIdentityGrievance, grievanceLevel } from "../sim/identity-grievances";
+import { getSubjectOverlord } from "../sim/subject-governments";
+import { districtName } from "./territory-controls";
 import { populationPolicyTitle } from "../sim/population-politics";
 import { getPoliticalCampaignIssue, launchPoliticalCampaign, POLITICAL_CAMPAIGN_COST } from "../sim/political-influence";
 import type { NationId } from "../worldgen/nation";
@@ -15,6 +19,36 @@ import type { WorldState } from "../sim/world-state";
 
 const esc = (value: string) => value.replace(/[&<>"']/g, (char) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
+
+const DIMENSION_LABELS = { ancestry: "Ancestry", culture: "Culture", faith: "Religion" };
+const ADMINISTRATION_LABELS = { centralized: "Centralized", autonomy: "Regional autonomy", assimilation: "Common administration" };
+const percent = (share: number) => Math.round(share * 100);
+
+function renderIdentityGovernment(world: WorldState, nation: NationRuntime): string {
+  const government = nation.identityGovernment;
+  if (!government) return "";
+  const state = nation.identityStability;
+  const id = state?.mostAffected;
+  const district = id && getRegionalIdentityGrievance(world, id, nation.id);
+  const overlord = getSubjectOverlord(world, nation.id);
+  const subject = overlord ? ` · Independence pressure ${Math.round(nation.subjectGovernment?.autonomy ?? 0)}/100 under ${esc(getNationName(world, overlord))}` : "";
+  const recognition = POPULATION_DIMENSIONS.map((dimension) => {
+    const name = identityGroupName(dimension, government.favored[dimension]);
+    const exceptions = Object.entries(government.treatments[dimension]).map(([id, treatment]) =>
+      `${identityGroupName(dimension, id as IdentityGroup<typeof dimension>)} (${treatment})`);
+    return `<p><strong>${DIMENSION_LABELS[dimension]}</strong> · ${name}${dimension === "faith" && getRecognizedFaith(nation) !== undefined ? " (state religion)" : ""}
+      ${exceptions.length ? `<br><span class="society-note">${exceptions.join(" · ")}</span>` : ""}</p>`;
+  }).join("");
+  const recent = government.decisions.slice(-3).reverse().map(({ day, dimension, group, action, reason }) =>
+    `<li>Day ${day} · ${DIMENSION_LABELS[dimension]} · ${identityGroupName(dimension, group as IdentityGroup<typeof dimension>)} · ${action}. ${esc(reason)}</li>`).join("");
+  return `<h2>Government identity and group policies</h2>${recognition}
+    <p class="society-note">Groups without a listed policy are tolerated, subject to active religious bans.</p>
+    ${state ? `<p>Institutional legitimacy ${Math.round(state.legitimacy)}/100 · Regional grievance ${percent(state.grievance)}/100 · Demand for local autonomy ${percent(state.autonomyDemand)}/100${subject}</p>` : ""}
+    ${id && district ? `<p class="society-note">Most affected: ${esc(districtName(id))} · Grievance ${percent(grievanceLevel(district))}/100 ·
+      ${district.exclusion > 0.01 ? `Main group affected: ${POPULATION_GROUPS[district.dimension][district.group]} (${DIMENSION_LABELS[district.dimension].toLowerCase()}).` : "Past grievances persist."}
+      ${district.autonomyLoss > 0 ? "Recent loss of autonomy." : ""} ${district.hardship > 0.05 ? "Food shortage intensifies grievances." : ""}</p>` : ""}
+    ${recent ? `<h3>Recent decisions</h3><ul>${recent}</ul>` : ""}`;
+}
 
 export function attachPoliticsControls(
   root: HTMLElement,
@@ -92,14 +126,15 @@ export function attachPoliticsControls(
         ${ban && ban.until > world.time.slowTick ? `<p><strong>Banned movement:</strong> ${name(ban.ideologyId)} · ${remainingDaysUntilSlowTick(world.time.fastTick, ban.until)} days remaining</p>` : ""}
         ${hasPoliticalTurbulence(world) ? `<h2>Territorial governance</h2>
           <p>Stability ${Math.round(governance?.stability ?? 100)}/100 · Diversity ${Math.round((governance?.diversity ?? 0) * 100)}%</p>
-          <p class="society-note">Autonomy reduces the cost of governing diverse districts. Assimilation changes culture and religion gradually and can provoke resistance.</p>
+          <p class="society-note">Regional autonomy reduces grievances and suspends conversions driven by government policy. Common administration establishes a framework for integration.</p>
           <div class="society-actions">${(["centralized", "autonomy", "assimilation"] as const).map((policy) =>
-            `<button type="button" data-governance-policy="${policy}" aria-pressed="${(governance?.policy ?? "centralized") === policy}">${policy[0]!.toUpperCase() + policy.slice(1)}</button>`).join("")}</div>` : ""}
-        ${nation.populationPolicy ? `<p><strong>${populationPolicyTitle(nation.populationPolicy)}</strong> · ${nation.populationPolicy.type === "homeland" ? "Claims nearby districts with a substantial population of the homeland's ancestry." : "Recognizes the most widely practiced faith as the state religion."}</p>` : ""}
-        ${hasPoliticalTurbulence(world) && nation.populationPolicy?.type === "religious" ? `<h2>Religious restrictions</h2>
-          <p class="society-note">${faithBan ? `All faiths except ${POPULATION_GROUPS.faith[faithBan.allowedFaith]} are outlawed for ${remainingDaysUntilSlowTick(world.time.fastTick, faithBan.until)} days.` : "A ban on other faiths causes unrest and foreign backlash."}</p>
+            `<button type="button" data-governance-policy="${policy}" aria-pressed="${(governance?.policy ?? "centralized") === policy}">${ADMINISTRATION_LABELS[policy]}</button>`).join("")}</div>` : ""}
+        ${nation.populationPolicy ? `<p><strong>${populationPolicyTitle(nation.populationPolicy)}</strong> · ${nation.populationPolicy.type === "homeland" ? "Claims nearby districts with a substantial population of the homeland's ancestry." : "Maintains an official state religion."}</p>` : ""}
+        ${renderIdentityGovernment(world, nation)}
+        ${hasPoliticalTurbulence(world) && getRecognizedFaith(nation) !== undefined ? `<h2>Religious restrictions</h2>
+          <p class="society-note">${faithBan ? `Unprotected faiths outside ${POPULATION_GROUPS.faith[faithBan.allowedFaith]} are restricted for ${remainingDaysUntilSlowTick(world.time.fastTick, faithBan.until)} days.` : "A ban on other faiths causes unrest and foreign backlash."}</p>
           ${faithBan ? '<button type="button" data-religious-ban="lift">Lift ban</button>' :
-            `<button type="button" data-religious-ban="start" ${!active || (nation.nextReligiousBanAt ?? 0) > world.time.slowTick ? "disabled" : ""}>Ban all other religions</button>`}` : ""}
+            `<button type="button" data-religious-ban="start" ${!active || (nation.nextReligiousBanAt ?? 0) > world.time.slowTick ? "disabled" : ""}>Restrict unprotected religions</button>`}` : ""}
         <p class="society-note">${active ? `Next ${democracy ? "election" : "royal succession"} in ${next} days` : "Domestic politics are paused."}
         · Doctrine: ${character.doctrine} · Aggression ${Math.round(character.aggression * 100)}% · Cooperation ${Math.round(character.cooperation * 100)}%</p>
         <p class="society-note">${democracy ? "Elections convert public support into 100 seats. A majority coalition governs." : "Court support shapes succession. A challenger needs an eight-point lead to change royal policy."}</p>

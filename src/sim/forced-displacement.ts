@@ -2,6 +2,7 @@ import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { getRelation } from "./diplomacy";
 import { getDomesticUnrest } from "./domestic-unrest";
+import { getGroupTreatment, identityGroupIndex } from "./identity-policy";
 import { getNationCharacter } from "./nation-character";
 import { isNationActive } from "./nation-active";
 import type { NationRuntime } from "./nation-runtime";
@@ -36,8 +37,14 @@ export function getPersecutionTargets(world: WorldState, nation: NationRuntime):
   const capital = world.regionalPopulations?.get(nation.capitalMesoId);
   const dimensions: TargetDimension[] = dimension === "ancestry" && capital && hasPoliticalTurbulence(world) ? [dimension, "culture"] : [dimension];
   return dimensions.flatMap((category) => {
-    const protectedGroup = category === "culture" ? dominantGroup(capital!.culture) : nation.populationPolicy?.group;
-    return POPULATION_GROUPS[category].flatMap((name, group) => group === protectedGroup ? [] : [{ dimension: category, group, name }]);
+    const favored = nation.identityGovernment?.favored[category];
+    const protectedGroup = favored ? identityGroupIndex(category, favored) :
+      category === "culture" ? dominantGroup(capital!.culture) : nation.populationPolicy?.group;
+    return POPULATION_GROUPS[category].flatMap((name, group) => {
+      const treatment = getGroupTreatment(nation, category, group);
+      return group === protectedGroup || treatment === "protected" || treatment === "autonomous"
+        ? [] : [{ dimension: category, group, name }];
+    });
   });
 }
 
@@ -96,8 +103,9 @@ function considerExpulsion(world: WorldState, nation: NationRuntime): void {
     !(dimension === "ancestry" && pressure >= 95))) return;
   const groups = world.regionalPopulations?.get(nation.capitalMesoId)?.[dimension];
   if (!groups) return;
-  const target = groups.reduce((best, count, group) =>
-    group !== nation.populationPolicy?.group && count > (groups[best] ?? 0) ? group : best, -1);
+  const target = getPersecutionTargets(world, nation)
+    .filter((target) => target.dimension === dimension)
+    .reduce((best, { group }) => groups[group]! > (groups[best] ?? 0) ? group : best, -1);
   if (target < 0) return;
   const extreme = hasPoliticalTurbulence(world) && pressure >= 95 && getNationCharacter(world, nation.id).aggression >= 0.85 &&
     world.wars.some(({ nationAId, nationBId }) => nationAId === nation.id || nationBId === nation.id);

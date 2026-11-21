@@ -1,5 +1,4 @@
 import { getManualGovernmentId } from "./player-nation";
-import { culturalDistance } from "./annexation";
 import { getRelation, hasTreaty } from "./diplomacy";
 import { startDiplomaticWar } from "./diplomatic-crises";
 import { changeResource, findTradeRoute, resourceReserve } from "./international-trade";
@@ -62,8 +61,7 @@ export function updateSubjectAutonomy(world: WorldState): void {
     const districts = districtCounts.get(subject), overlordDistricts = overlord && districtCounts.get(overlord);
     if (!government || !overlord || !districts || !overlordDistricts) continue;
     const shortage = supportSubjectIndustry(world, overlord, subject, government);
-    const populations = world.regionalPopulations;
-    const gap = culturalDistance(populations?.get(subject.capitalMesoId), populations?.get(overlord.capitalMesoId));
+    const policyPressure = hasPoliticalTurbulence(world) ? (subject.identityStability?.autonomyDemand ?? 0) * 5 : 0;
     const power = Math.min(1.5, districts / overlordDistricts);
     const relation = getRelation(world, subject.id, overlord.id);
     const strain = (1 - Math.max(0, Math.min(1, overlord.warCooperation))) * 2;
@@ -71,7 +69,7 @@ export function updateSubjectAutonomy(world: WorldState): void {
     const levyPressure = (food?.levy ?? 0) < 0 ? (government.foodLevy ?? 0) * 4 : 0;
     const hunger = food ? (1 - food.rationCoverage) * 2 : 0;
     const autonomyRelief = hasPoliticalTurbulence(world) && subject.governance?.policy === "autonomy" ? 1.5 : 0;
-    const change = levyPressure + hunger + power * 3 + gap * 2 + strain + shortage - relation.trust * 0.04 - 0.5 - autonomyRelief;
+    const change = levyPressure + hunger + power * 3 + policyPressure + strain + shortage - relation.trust * 0.04 - 0.5 - autonomyRelief;
     government.autonomy = Math.max(0, Math.min(100, (government.autonomy ?? 0) + change));
     if (government.autonomy < 100 || hasTreaty(world, subject.id, overlord.id, "truce")) continue;
     if (!releaseSubjectGovernment(world, overlord.id, subject.id)) continue;

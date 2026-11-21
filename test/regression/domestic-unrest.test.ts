@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createSocietyWorld } from "../helpers/society-world";
 import { getDomesticUnrest, updateDomesticUnrest, canRevolt, recordRevolution, relieveUnrestAfterPeace } from "../../src/sim/domestic-unrest";
+import { WORLD_BALANCE } from "../../src/data/balance";
+import { IDENTITY_GROUP_IDS, type GroupTreatment } from "../../src/sim/identity-policy";
+import { updatePopulationPolitics } from "../../src/sim/population-politics";
+import { setGovernancePolicy, updateTerritorialGovernance } from "../../src/sim/territorial-governance";
 import { updateCivilWar } from "../../src/sim/civil-war";
 import { getRegionalPopulations, POPULATION_DIMENSIONS, POPULATION_GROUPS } from "../../src/sim/regional-population";
 import { declareWar } from "../../src/sim/war-state";
@@ -42,6 +46,7 @@ test("sustained moderate discontent is a crisis rather than an eligible revoluti
 
 function identityScene() {
   const world = createSocietyWorld();
+  world.settings!.politicalTurbulenceEnabled = true;
   const parent = world.nations.find((nation) => nation.macroRegionIds.length > 1)!;
   const province = world.macroRegions.find((item) =>
     item.nationId === parent.id && !item.mesoRegionIds.includes(parent.capitalMesoId))!;
@@ -63,11 +68,25 @@ for (const dimension of POPULATION_DIMENSIONS) {
       population[dimension] = [population.size * (1 - share), population.size * share, 0, 0, 0, 0];
     }
     const originalCount = world.nations.length;
+    updatePopulationPolitics(world);
+    const government = parent.identityGovernment!;
+    const policies: Partial<Record<string, GroupTreatment>> = government.treatments[dimension];
+    policies[IDENTITY_GROUP_IDS[dimension][1]] = "restricted";
+    government.nextReviewAt = Infinity;
+    setGovernancePolicy(world, parent.id, parent.id, "centralized");
+    for (let tick = 10; tick <= 80; tick += 10) {
+      world.time.slowTick = tick;
+      updateTerritorialGovernance(world);
+    }
     const unrest = getDomesticUnrest(world, parent.id);
     unrest.pressure = 60;
     updateCivilWar(world);
     assert.equal(world.nations.length, originalCount);
 
+    const opponent = world.nations.find(({ id }) => id !== parent.id)!;
+    declareWar(world.wars, parent.id, opponent.id, world.time.fastTick);
+    parent.warCooperation = 0;
+    unrest.lowSupportSlowTicks = WORLD_BALANCE.war.civilWar.minimumCrisisSlowTicks;
     unrest.pressure = 100;
     updateCivilWar(world);
     assert.equal(world.nations.length, originalCount + 1);

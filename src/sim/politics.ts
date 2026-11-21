@@ -174,7 +174,8 @@ export function updateNationalPolitics(world: WorldState): void {
       politics.nextSupportReviewAt = now + SUPPORT_REVIEW_INTERVAL;
       if (hasPoliticalTurbulence(world)) reviewSuppression(world, nation, politics);
       const opposition = rankedParties(politics.support, incumbent).find(([id]) => id !== incumbent)?.[0];
-      const crisis = Math.max(getRevolutionRisk(world, nation.id), 1 - nation.warCooperation);
+      const policyCrisis = hasPoliticalTurbulence(world) ? (nation.identityStability?.grievance ?? 0) * 1.5 : 0;
+      const crisis = Math.max(getRevolutionRisk(world, nation.id), 1 - nation.warCooperation, policyCrisis);
       const pressure = politics.system === "democracy" ? 4 : 2;
       if (politics.suppression && hasPoliticalTurbulence(world)) {
         increasePoliticalSupport(politics, politics.suppression.ideologyId, 3);

@@ -13,7 +13,6 @@ import { updateMilitaryFunding } from "./military-funding";
 import { updateTreasuries } from "./treasury";
 import { updateSubjectAutonomy } from "./subject-autonomy";
 import { updateAnnexations } from "./annexation";
-import { updatePopulationPolitics } from "./population-politics";
 import { updateNationalistMovements } from "./nationalist-movements";
 import { updateBorderIncidents } from "./border-incidents";
 import { updateFactionSanctions } from "./trade-embargo";
@@ -235,7 +234,6 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   beginAiGeographyEvaluation(world);
   updateSupplyAssessment(world);
   updateAnnexations(world);
-  updateTerritorialGovernance(world);
   recoverDefeatedFormations(world);
   updateProduction(world);
   updateIndustrialRecovery(world);
@@ -252,7 +250,7 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateInternationalTrade(world);
   updatePopulationMigration(world);
   updateFoodSupply(world);
-  updatePopulationPolitics(world);
+  updateTerritorialGovernance(world);
   updateReligiousPersecution(world);
   updateForcedDisplacement(world);
   updateArmsAid(world);

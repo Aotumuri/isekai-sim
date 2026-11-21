@@ -78,7 +78,7 @@ export function observeWorldHistory(world: WorldState, limit = 1_000) {
 function classify(message: string): string | undefined {
   if (message.startsWith("Territorial ")) return "transfer-" + message.split(/[ :]/)[1];
   if (message.includes("installed a puppet government")) return "puppet";
-  if (message.includes("after a period of assimilation")) return "integration";
+  if (/after a period of (assimilation|administrative alignment)/.test(message)) return "integration";
   if (message.startsWith("Revolution in ")) return "revolution";
   if (message.includes("declared independence")) return "subject-independence";
   if (message.includes(" is no longer a subject of ")) return "subject-release";
@@ -91,6 +91,9 @@ function classify(message: string): string | undefined {
   if (/ (election|royal succession) brought to power /.test(message)) return "mandate-change";
   if (/ (election|royal succession) retained /.test(message)) return "mandate-retained";
   if (message.includes("government in exile") || message.includes("liberated homeland")) return "exile";
-  if (message.includes("adopted cultural and religious assimilation")) return "assimilation-policy";
+  if (/adopted (cultural and religious assimilation|common administration)/.test(message)) return "assimilation-policy";
+  if (/ adopted (protected|tolerated|autonomous|assimilation|restricted) treatment for /.test(message)) return "group-treatment";
+  if (/ recognized .* \((ancestry|culture|faith)\)\./.test(message)) return "identity-recognition";
+  if (/proclaimed its (self-determination program|state faith)/.test(message)) return "legacy-recognition";
   if (message.includes("reunification movement")) return "nationalist-claim";
 }

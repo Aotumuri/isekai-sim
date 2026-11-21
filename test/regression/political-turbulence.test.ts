@@ -8,6 +8,7 @@ import { updateDiplomaticCrises } from "../../src/sim/diplomatic-crises";
 import { getDomesticUnrest } from "../../src/sim/domestic-unrest";
 import { getFactionState } from "../../src/sim/factions";
 import { getNationCharacter } from "../../src/sim/nation-character";
+import { updatePopulationPolitics } from "../../src/sim/population-politics";
 import { getNationalPolitics, updateNationalPolitics } from "../../src/sim/politics";
 import { updateNationalistMovements } from "../../src/sim/nationalist-movements";
 import { getForeignClaims } from "../../src/sim/territorial-claims";
@@ -43,7 +44,7 @@ function dividedSubject() {
   return { world, sponsor, subject };
 }
 
-test("regional autonomy makes a diverse country more stable without changing its population", () => {
+test("regional autonomy relieves institutional grievances without changing the population", () => {
   const { world, subject } = dividedSubject();
   const capital = world.regionalPopulations!.get(subject.capitalMesoId)!;
   const province = world.macroRegions.find(({ nationId, mesoRegionIds }) =>
@@ -53,6 +54,9 @@ test("regional autonomy makes a diverse country more stable without changing its
     population.culture = [population.size, 0, 0, 0, 0, 0];
     population.faith = [population.size, 0, 0, 0, 0, 0];
   }
+  updatePopulationPolitics(world);
+  subject.identityGovernment!.treatments.culture["reed-courts"] = "restricted";
+  subject.identityGovernment!.nextReviewAt = Infinity;
   setGovernancePolicy(world, subject.id, subject.id, "centralized");
   for (let tick = 10; tick <= 100; tick += 10) {
     world.time.slowTick = tick;
@@ -70,19 +74,23 @@ test("regional autonomy makes a diverse country more stable without changing its
   assert.deepEqual(capital.culture, culture);
 });
 
-test("subjects can assimilate gradually and integrate when ready while preserving ancestry", () => {
+test("subjects can adopt an administrative culture and integrate while preserving ancestry and faith", () => {
   const { world, sponsor, subject } = dividedSubject();
   const population = world.regionalPopulations!.get(subject.capitalMesoId)!;
-  const ancestry = [...population.ancestry];
+  const ancestry = [...population.ancestry], faith = [...population.faith];
+  updatePopulationPolitics(world);
+  subject.identityGovernment!.favored.culture = "reed-courts";
+  subject.identityGovernment!.treatments.culture["tide-guilds"] = "assimilation";
+  subject.identityGovernment!.nextReviewAt = Infinity;
   const subjectUnits = world.units.filter((unit) => unit.nationId === subject.id);
   assert.ok(setGovernancePolicy(world, sponsor.id, subject.id, "assimilation"));
   assert.ok(getSubjectIntegrationIssue(world, sponsor.id, subject.id));
-  for (let tick = 10; tick <= 400; tick += 10) {
+  for (let tick = 10; tick <= 800; tick += 10) {
     world.time.slowTick = tick;
     updateTerritorialGovernance(world);
   }
   assert.ok(population.culture[0]! > population.size * 0.72);
-  assert.ok(population.faith[0]! > population.size * 0.72);
+  assert.deepEqual(population.faith, faith);
   assert.deepEqual(population.ancestry, ancestry);
   assert.ok(Math.abs(population.culture.reduce((a, b) => a + b) - population.size) < 1e-8);
   assert.equal(getSubjectIntegrationIssue(world, sponsor.id, subject.id), undefined);
@@ -112,6 +120,7 @@ test("a negotiated local subject receives only the demanded provinces", () => {
 test("a subject uprising can be supported by volunteers without automatically bringing the sponsor to war", () => {
   const { world, sponsor, subject } = dividedSubject();
   assert.ok(setGovernancePolicy(world, sponsor.id, subject.id, "assimilation"));
+  subject.food = { stock: 0, harvest: 0, demand: 30, rationCoverage: 0.4, shortageCycles: 8, deaths: 0 };
   getDomesticUnrest(world, subject.id).pressure = 100;
   updateCivilWar(world);
   const rebels = world.nations.at(-1)!;

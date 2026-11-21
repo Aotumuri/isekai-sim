@@ -10,6 +10,7 @@ export type SimulationMetricName =
   | "production.supplyLookup"
   | "production.supplyIntegration"
   | "trade.procurement"
+  | "politics.identityGovernance"
   | "repositionUnits"
   | "assignment.rebuild"
   | "assignment.defense"

@@ -19,7 +19,9 @@ export function getSubjectIntegrationIssue(world: WorldState, overlord: NationId
   if (overlord === subject) return "A government cannot integrate itself.";
   const nation = world.nations.find(({ id }) => id === subject)!;
   const state = nation.governance;
-  if (state?.policy !== "assimilation" || world.time.slowTick - state.since < 180 || state.alignment < 0.72) return "Assimilation must run for 180s and reach 72% alignment.";
+  if (state?.policy !== "assimilation" || world.time.slowTick - state.since < 180 || state.alignment < 0.72) return "Common administration requires 1,800 days and 72% alignment with the overlord’s administrative culture.";
+  const sponsorCulture = world.nations.find(({ id }) => id === overlord)?.identityGovernment?.favored.culture;
+  if (state.alignmentCulture && sponsorCulture && state.alignmentCulture !== sponsorCulture) return "The overlord’s new administrative culture is awaiting an alignment review.";
   const relation = world.diplomacy?.relations.get(relationKey(overlord, subject));
   if (state.stability < 55 || (nation.subjectGovernment?.autonomy ?? 0) > 65 || !relation || relation.trust < 45) return "Requires stability 55, autonomy pressure at most 65, and trust 45.";
   if (world.wars.some(({ nationAId, nationBId }) => [nationAId, nationBId].some((id) => id === overlord || id === subject))) return "Both governments must be at peace.";

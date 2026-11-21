@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { getRecognizedFaith } from "../../src/sim/identity-policy";
 import { getNationName } from "../../src/sim/nation-identity";
 import { exchangePortPopulation, updatePopulationMigration } from "../../src/sim/population-migration";
 import { getHomelandClaimBonus, updatePopulationPolitics } from "../../src/sim/population-politics";
@@ -66,7 +67,7 @@ test("overland and port migration preserve every group and update local composit
   }
 });
 
-test("cohesionist self-determination gives way to a state religion after a mandate change", () => {
+test("a homeland mandate and state religion coexist and persist after a mandate change", () => {
   const world = createSocietyWorld();
   const nation = world.nations[0]!;
   const populations = getRegionalPopulations(world);
@@ -87,7 +88,8 @@ test("cohesionist self-determination gives way to a state religion after a manda
   nation.ideologyId = "capitalism";
   world.time.slowTick = 20;
   updatePopulationPolitics(world);
-  assert.match(getNationName(world, nation.id), /Ember Covenant Holy State/);
+  assert.match(getNationName(world, nation.id), /Auvren Homeland/);
   assert.equal(getNationName(world, nation.id, "short"), nation.name);
-  assert.equal(getHomelandClaimBonus(world, nation.id, nation.capitalMesoId), 0);
+  assert.equal(getRecognizedFaith(nation), 0);
+  assert(getHomelandClaimBonus(world, nation.id, nation.capitalMesoId) > 0);
 });

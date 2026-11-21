@@ -1,3 +1,5 @@
+import { grievanceLevel } from "./identity-grievances";
+import { hasPoliticalTurbulence } from "./simulation-settings";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { dominantGroup, groupAffinity, type RegionalPopulation } from "./regional-population";
@@ -10,12 +12,13 @@ export interface Annexation {
 }
 
 export function culturalDistance(a?: RegionalPopulation, b?: RegionalPopulation): number {
-  if (!a || !b) return 0;
+  if (!a?.size || !b?.size) return 0;
   const difference = a.culture.reduce((sum, count, index) => sum + Math.abs(count / a.size - b.culture[index]! / b.size), 0) / 2;
   return difference * (1 - groupAffinity(dominantGroup(a.culture), dominantGroup(b.culture)) / 2);
 }
 
 export function estimateAnnexationResistance(world: WorldState, owner: NationId, id: MesoRegionId): number {
+  if (hasPoliticalTurbulence(world)) return 0.15 + 0.5 * grievanceLevel(world.identityGrievances?.get(id));
   const capital = world.nations.find((nation) => nation.id === owner)?.capitalMesoId;
   return 0.15 + 0.65 * culturalDistance(
     world.regionalPopulations?.get(id), capital ? world.regionalPopulations?.get(capital) : undefined);

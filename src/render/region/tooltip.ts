@@ -1,3 +1,5 @@
+import { getRegionalIdentityGrievance, grievanceLevel } from "../../sim/identity-grievances";
+import { POPULATION_GROUPS } from "../../sim/regional-population";
 import { slowTicksToDays } from "../../sim/time";
 import { isStrategicResource, STRATEGIC_RESOURCE_NAMES } from "../../data/strategic-resources";
 import { formatPopulationDistrict, isPopulationMode } from "../population-map";
@@ -45,6 +47,15 @@ export function formatRegionTooltip(
           if (meso.resource) lines.push("Resource interest");
           if (claim.demanded) lines.push("Active territorial ultimatum");
         } else lines.push("No territorial claim");
+      }
+      const grievance = owner && getRegionalIdentityGrievance(world, meso.id, owner);
+      if (grievance && (!occupier || occupier === owner) && grievanceLevel(grievance) >= 0.01) {
+        lines.push(`Grievance: ${Math.round(grievanceLevel(grievance) * 100)}/100 · Local autonomy demand: ${Math.round(grievance.autonomyDemand * 100)}/100`);
+        if (grievance.exclusion > 0.01) {
+          lines.push(`Unequal treatment: ${POPULATION_GROUPS[grievance.dimension][grievance.group]} (${grievance.dimension === "faith" ? "religion" : grievance.dimension})`);
+        } else lines.push("Past grievances persist");
+        if (grievance.autonomyLoss > 0) lines.push("Recent loss of autonomy");
+        if (grievance.hardship > 0.05) lines.push("Food shortage intensifies grievances");
       }
       if (owner && occupier && owner !== occupier) lines.push(`Owned by: ${getNationName(world, owner)}`, `Occupied by: ${getNationName(world, occupier)}`);
     }

@@ -51,10 +51,9 @@ export function updateCivilWar(world: WorldState): void {
     }
 
     const unrest = getDomesticUnrest(world, nation.id);
-    if (unrest.pressure < 100 || world.time.slowTick < unrest.cooldownUntilSlowTick) continue;
+    if (unrest.pressure < 100 || !canRevolt(world, nation.id)) continue;
     const origins = isFamineRevolution(world, nation.food) ? [] : rankRevolutionOrigins(world, nation);
     let uprising = pickRebelTerritory(world, nation, [], mesoToMacro, macroAdjacency, origins);
-    if (!uprising && !canRevolt(world, nation.id)) continue;
     if (!uprising) {
       const cityCandidates = collectCityCandidates(nation.id, world.macroRegions, mesoById,
         world.occupation.mesoById, nation.capitalMesoId);

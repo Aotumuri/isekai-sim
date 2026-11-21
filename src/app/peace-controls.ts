@@ -101,8 +101,8 @@ export function attachPeaceControls(root: HTMLElement, world: WorldState, select
       : "";
     view("subject").innerHTML = describeSubject(a, ownOverlord) + (a !== b ? describeSubject(b, partnerOverlord) : "") +
       (partnerOverlord === a ? '<button type="button" data-peace-action="release">Grant independence</button>' : "") +
-      (partnerOverlord === a && hasPoliticalTurbulence(world) ? `<p>Subject policy: ${subjectPolicy?.policy ?? "centralized"} · Stability ${Math.round(subjectPolicy?.stability ?? 100)}/100 · Cultural and religious alignment ${Math.round((subjectPolicy?.alignment ?? 0) * 100)}%</p>
-        <div class="society-actions"><button type="button" data-peace-action="subject-assimilation">Order assimilation</button><button type="button" data-peace-action="subject-autonomy">Protect regional autonomy</button>
+      (partnerOverlord === a && hasPoliticalTurbulence(world) ? `<p>Subject administration: ${subjectPolicy?.policy === "assimilation" ? "common administration" : subjectPolicy?.policy ?? "centralized"} · Stability ${Math.round(subjectPolicy?.stability ?? 100)}/100 · Alignment with the overlord’s administrative culture ${Math.round((subjectPolicy?.alignment ?? 0) * 100)}%</p>
+        <div class="society-actions"><button type="button" data-peace-action="subject-assimilation">Establish common administration</button><button type="button" data-peace-action="subject-autonomy">Protect regional autonomy</button>
         <button type="button" data-peace-action="integrate" ${integrationIssue ? "disabled" : ""}>Integrate subject</button></div>
         ${integrationIssue ? `<p class="society-note">${esc(integrationIssue)}</p>` : ""}` : "");
     if (!enabled || !war) {

@@ -1,3 +1,4 @@
+import type { RegionalIdentityGrievance } from "./identity-grievances";
 import type { DefeatedFormations } from "./defeated-formations";
 import type { WarCampaignState } from "./war-campaign/state";
 import type { PlayerNation } from "./player-nation";
@@ -95,6 +96,7 @@ export interface WorldState {
   agriculturalLand?: Map<MesoRegionId, AgriculturalLand>;
   populationRevision?: number;
   populationPolicyRevision?: number;
+  identityGrievances?: Map<MesoRegionId, RegionalIdentityGrievance>;
   armsAid?: ArmsAidState;
   worldSeed?: number;
   customIdeologies?: Ideology[];

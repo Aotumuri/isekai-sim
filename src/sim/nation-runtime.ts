@@ -1,3 +1,5 @@
+import type { IdentityGovernment, IdentityGroup } from "./identity-policy";
+import type { NationalIdentityStability } from "./identity-grievances";
 import type { TheaterCommander } from "./theater-command";
 import type { DisplacementOrder } from "./forced-displacement";
 import type { NationalFoodSupply } from "./food-supply";
@@ -64,7 +66,10 @@ export type NationRuntime = Nation & {
   treasury?: NationalTreasury;
   displacementOrder?: DisplacementOrder;
   nextDisplacementOrderAt?: number;
+  /** Legacy diplomatic program and official title. Treatment is stored separately. */
   populationPolicy?: PopulationPolicy;
+  identityGovernment?: IdentityGovernment;
+  identityStability?: NationalIdentityStability;
   religiousBan?: { allowedFaith: number; until: number; lastAppliedAt?: number };
   nextReligiousBanAt?: number;
   nationalistMovement?: { targetId: Nation["id"]; group: number; until: number; nextAt: number };
@@ -73,8 +78,10 @@ export type NationRuntime = Nation & {
     stability: number;
     diversity: number;
     alignment: number;
+    alignmentCulture?: IdentityGroup<"culture">;
     since: number;
     manual?: boolean;
+    autonomyLostAt?: number;
   };
   character?: NationCharacter;
   preGovernmentCharacter?: NationCharacter;

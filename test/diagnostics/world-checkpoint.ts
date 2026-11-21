@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { grievanceLevel } from "../../src/sim/identity-grievances";
 import { isNationActive } from "../../src/sim/nation-active";
 import { POPULATION_DIMENSIONS, POPULATION_GROUPS } from "../../src/sim/regional-population";
 import { getUnitCombatStrength } from "../../src/sim/unit-strength";
@@ -65,6 +66,10 @@ export function summarizeWorld(world: WorldState) {
       localMix += region.size - Math.max(...distribution);
     });
   }
+  const identityGrievances = world.identityGrievances;
+  const grievanceValues = [...(identityGrievances?.values() ?? [])].map(grievanceLevel);
+  assert(grievanceValues.every((value) => Number.isFinite(value) && value >= 0 && value <= 1));
+  assert(!identityGrievances || identityGrievances.size <= owners.size);
   const treaties: Record<string, number> = {};
   for (const relation of world.diplomacy?.relations.values() ?? []) {
     for (const { type, expiresAtSlowTick } of relation.treaties) {
@@ -72,6 +77,9 @@ export function summarizeWorld(world: WorldState) {
     }
   }
   for (const nation of world.nations) {
+    const government = nation.identityGovernment;
+    assert(!government || (government.decisions.length <= 6 &&
+      POPULATION_DIMENSIONS.every((dimension) => Object.keys(government.treatments[dimension]).length <= POPULATION_GROUPS[dimension].length)));
     for (const value of Object.values(nation.resources)) assert(Number.isFinite(value) && value >= -1e-8);
     assert(!nation.treasury || (Number.isFinite(nation.treasury.balance) && nation.treasury.balance >= 0));
   }
@@ -84,6 +92,7 @@ export function summarizeWorld(world: WorldState) {
     }
     return { id: nation.id, land: land.get(nation.id) ?? 0, population: nationPopulation.get(nation.id) ?? 0,
       subject: nation.subjectGovernment, governance: nation.governance, ideology: nation.politics?.governingIdeologyId,
+      identityStability: nation.identityStability, identityGovernment: nation.identityGovernment,
       unrest: world.domesticUnrest?.byNationId.get(nation.id), stocks: nation.resources, flow: nation.resourceFlow,
       treasury: nation.treasury?.balance, food: nation.food?.stock, projects: programs.reduce((n, p) => n + p.completedProjects, 0),
       levels: programs.map((p) => Math.max(...Object.values(p.levels))), statuses: programs.map((p) => p.status),
@@ -113,6 +122,9 @@ export function summarizeWorld(world: WorldState) {
     },
     maxShare: Math.max(0, ...land.values()) / Math.max(1, landTotal),
     hhi: [...land.values()].reduce((sum, count) => sum + (count / landTotal) ** 2, 0),
+    identity: { regions: grievanceValues.length, peakGrievance: Math.max(0, ...grievanceValues),
+      governments: world.nations.filter((nation) => nation.identityGovernment).length,
+      decisions: world.nations.reduce((sum, nation) => sum + (nation.identityGovernment?.decisionCount ?? 0), 0) },
     population, populationGroups, localMix: localMix / Math.max(1, population * POPULATION_DIMENSIONS.length),
     wars: world.wars.length, treaties, relations: world.diplomacy?.relations.size ?? 0,
     peace: world.diplomacy?.peaceAgreements ?? 0,

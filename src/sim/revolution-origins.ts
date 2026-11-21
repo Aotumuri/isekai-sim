@@ -1,33 +1,24 @@
 import type { MacroRegionId } from "../worldgen/macro-region";
 import type { MesoRegionId } from "../worldgen/meso-region";
+import { getRegionalIdentityGrievance, grievanceLevel } from "./identity-grievances";
 import type { NationRuntime } from "./nation-runtime";
-import { POPULATION_DIMENSIONS, POPULATION_GROUPS, type PopulationDimension } from "./regional-population";
 import { hasPoliticalTurbulence } from "./simulation-settings";
-import { getReligiousBan } from "./religious-persecution";
-import { getSubjectOverlord } from "./subject-governments";
 import { getMesoById } from "./world-cache";
 import type { WorldState } from "./world-state";
 
 export interface RevolutionOrigin {
   districtId: MesoRegionId;
   provinceId: MacroRegionId;
-  dimension: PopulationDimension;
+  dimension: import("./regional-population").PopulationDimension;
   group: number;
   score: number;
 }
 
 export function rankRevolutionOrigins(world: WorldState, nation: NationRuntime): RevolutionOrigin[] {
   const populations = world.regionalPopulations;
-  const overlord = hasPoliticalTurbulence(world) && nation.governance?.policy === "assimilation" ? getSubjectOverlord(world, nation.id) : undefined;
-  const reference = overlord ? world.nations.find(({ id }) => id === overlord)?.capitalMesoId : undefined;
-  const capital = populations?.get(reference ?? nation.capitalMesoId);
-  if (!populations || !capital?.size) return [];
+  if (!populations || !hasPoliticalTurbulence(world)) return [];
 
   const regions = getMesoById(world);
-  const policy = nation.populationPolicy;
-  const favoredDimension = policy?.type === "homeland" ? "ancestry" : policy?.type === "religious" ? "faith" : undefined;
-  const order = nation.displacementOrder;
-  const ban = getReligiousBan(world, nation);
   const origins: RevolutionOrigin[] = [];
   for (const province of world.macroRegions) {
     if (province.nationId !== nation.id || province.mesoRegionIds.includes(nation.capitalMesoId)) continue;
@@ -36,30 +27,24 @@ export function rankRevolutionOrigins(world: WorldState, nation: NationRuntime):
       return occupier && occupier !== nation.id;
     })) continue;
 
-    const districts = province.mesoRegionIds.flatMap((id) => {
-      const region = regions.get(id), population = populations.get(id);
-      return region && region.type !== "sea" && population && population.size > 0 ? [{ region, population }] : [];
-    });
-    const size = districts.reduce((sum, { population }) => sum + population.size, 0);
-    if (!size) continue;
-
-    for (const dimension of POPULATION_DIMENSIONS) {
-      for (const [group] of POPULATION_GROUPS[dimension].entries()) {
-        if (dimension === favoredDimension && group === policy?.group) continue;
-        const targeted = (order?.dimension === dimension && order.group === group && order.until > world.time.slowTick) ||
-          (dimension === "faith" && ban && group !== ban.allowedFaith);
-        const capitalShare = (capital[dimension][group] ?? 0) / capital.size;
-        const share = districts.reduce((sum, { population }) => sum + (population[dimension][group] ?? 0), 0) / size;
-        const minimumShare = targeted ? 0.25 : 0.5;
-        if (share < minimumShare || (!targeted && share - capitalShare < 0.25)) continue;
-        for (const { region, population } of districts) {
-          if (region.building !== "city" && (region.type !== "land" || region.building !== null)) continue;
-          const localShare = (population[dimension][group] ?? 0) / population.size;
-          if (localShare < minimumShare) continue;
-          origins.push({ districtId: region.id, provinceId: province.id, dimension, group,
-            score: share + localShare - capitalShare + (targeted ? 2 : 0) + (region.building === "city" ? 0.05 : 0) });
-        }
-      }
+    let size = 0, burden = 0;
+    for (const id of province.mesoRegionIds) {
+      const population = populations.get(id);
+      if (!population?.size) continue;
+      size += population.size;
+      burden += population.size * grievanceLevel(getRegionalIdentityGrievance(world, id, nation.id));
+    }
+    if (!size || burden / size < 0.12) continue;
+    for (const id of province.mesoRegionIds) {
+      const region = regions.get(id), state = getRegionalIdentityGrievance(world, id, nation.id);
+      const population = populations.get(id);
+      if (!region || (region.building !== "city" && !(region.type === "land" && region.building === null)) ||
+          !state || !population?.size || grievanceLevel(state) < 0.16) continue;
+      // A historical grievance can survive migration. Avoid attributing a revolt to an absent community.
+      const share = population[state.dimension][state.group]! / population.size;
+      if (share < 0.12 || state.exclusion + state.entrenched < 0.08) continue;
+      origins.push({ districtId: id, provinceId: province.id, dimension: state.dimension, group: state.group,
+        score: burden / size + grievanceLevel(state) + share * 0.1 + (region.building === "city" ? 0.05 : 0) });
     }
   }
   return origins.sort((a, b) => b.score - a.score || a.districtId.localeCompare(b.districtId));

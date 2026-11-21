@@ -1,4 +1,5 @@
 import { getDomesticUnrest } from "./domestic-unrest";
+import { getActiveFaithBan, getEffectiveTreatment, getRecognizedFaith } from "./identity-policy";
 import { getNationCharacter } from "./nation-character";
 import { isNationActive } from "./nation-active";
 import type { NationRuntime } from "./nation-runtime";
@@ -9,19 +10,17 @@ import { getOwnerByMesoId } from "./world-cache";
 import type { WorldState } from "./world-state";
 
 export function getReligiousBan(world: WorldState, nation: NationRuntime): NationRuntime["religiousBan"] {
-  const ban = nation.religiousBan;
-  return hasPoliticalTurbulence(world) && ban && ban.until > world.time.slowTick &&
-    nation.populationPolicy?.type === "religious" && nation.populationPolicy.group === ban.allowedFaith ? ban : undefined;
+  return getActiveFaithBan(world, nation);
 }
 
 export function startReligiousBan(world: WorldState, nation: NationRuntime): boolean {
-  const policy = nation.populationPolicy, now = world.time.slowTick;
-  if (!hasPoliticalTurbulence(world) || policy?.type !== "religious" || !isNationActive(nation) ||
-    nation.religiousBan || (nation.nextReligiousBanAt ?? 0) > now || !POPULATION_GROUPS.faith[policy.group]) return false;
-  nation.religiousBan = { allowedFaith: policy.group, until: now + 150 };
+  const faith = getRecognizedFaith(nation), now = world.time.slowTick;
+  if (!hasPoliticalTurbulence(world) || faith === undefined || !isNationActive(nation) ||
+    nation.religiousBan || (nation.nextReligiousBanAt ?? 0) > now || !POPULATION_GROUPS.faith[faith]) return false;
+  nation.religiousBan = { allowedFaith: faith, until: now + 150 };
   nation.nextReligiousBanAt = now + 450;
   recordSimulationEvent(world, { category: "politics", nationIds: [nation.id],
-    message: `${nation.id} outlawed every religion except ${POPULATION_GROUPS.faith[policy.group]}.` });
+    message: `${nation.id} restricted unprotected religions outside the state faith, ${POPULATION_GROUPS.faith[faith]}.` });
   return true;
 }
 
@@ -53,7 +52,8 @@ export function updateReligiousPersecution(world: WorldState): void {
     if (!entry || !population?.size || (occupier && occupier !== owner)) continue;
     entry.population += population.size;
     for (const [group, count] of population.faith.entries()) {
-      if (group !== entry.nation.religiousBan!.allowedFaith && count > 0) {
+      if (group !== entry.nation.religiousBan!.allowedFaith && count > 0 &&
+          getEffectiveTreatment(world, entry.nation, "faith", group) === "restricted") {
         addPersecutionImpact(entry.impact, population, "faith", group, count * 0.06);
       }
     }
