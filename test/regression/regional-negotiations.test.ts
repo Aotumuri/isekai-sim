@@ -6,6 +6,7 @@ import { getRegionalIdentityGrievance, grievanceLevel } from "../../src/sim/iden
 import { updatePopulationPolitics } from "../../src/sim/population-politics";
 import { getNationalPolitics } from "../../src/sim/politics";
 import { regionalConcession } from "../../src/sim/identity-policy";
+import { mayOpenRegionalNegotiation, openRegionalNegotiation, reviewRegionalNegotiation } from "../../src/sim/regional-negotiations";
 import { startReligiousBan, updateReligiousPersecution } from "../../src/sim/religious-persecution";
 import { rankRevolutionOrigins } from "../../src/sim/revolution-origins";
 import { updateTerritorialGovernance } from "../../src/sim/territorial-governance";
@@ -196,4 +197,31 @@ test("a local faith agreement binds the blanket ban and targeted orders in its d
   assert(unrest.pressure > pressure);
   updateForcedDisplacement(s.world);
   assert(s.population.size < original);
+});
+
+test("intervening demands do not erase a cabinet's refusal of an unchanged mandate", () => {
+  const s = scene(0.2, "cohesionism");
+  s.government.treatments.culture["tide-guilds"] = "restricted";
+  s.government.treatments.faith["nine-wells"] = "restricted";
+  s.population.faith = s.population.faith.map((_, group) => group === 1 ? s.population.size : 0);
+  const first = { dimension: "culture", group: 1, requested: "autonomous", grievance: 0.21, exclusion: 0.12, constituency: 0.9 } as const;
+  const second = { ...first, dimension: "faith", constituency: 1 } as const;
+  const reviewRefusal = (mandate: typeof first | typeof second, now: number) => {
+    s.world.time.slowTick = now;
+    assert(mayOpenRegionalNegotiation(s.world, s.nation, s.id, mandate));
+    openRegionalNegotiation(s.world, s.nation, s.id, mandate);
+    s.world.time.slowTick += 10;
+    reviewRegionalNegotiation(s.world, s.nation, s.id, s.population, false);
+    assert.equal(s.talks()?.status, "rejected");
+  };
+  reviewRefusal(first, 10);
+  reviewRefusal(second, 120);
+  s.world.time.slowTick = 230;
+  assert(!mayOpenRegionalNegotiation(s.world, s.nation, s.id, first));
+  assert(mayOpenRegionalNegotiation(s.world, s.nation, s.id, { ...first, exclusion: 0.20 }));
+  s.government.treatments.culture["tide-guilds"] = "autonomous";
+  assert(!mayOpenRegionalNegotiation(s.world, s.nation, s.id, first));
+  s.government.treatments.culture["tide-guilds"] = "restricted";
+  s.nation.politics!.governingIdeologyId = "capitalism";
+  assert(mayOpenRegionalNegotiation(s.world, s.nation, s.id, first));
 });

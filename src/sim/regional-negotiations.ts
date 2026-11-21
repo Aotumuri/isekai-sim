@@ -1,6 +1,6 @@
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
-import { getGroupTreatment, type GroupTreatment } from "./identity-policy";
+import { getEffectiveTreatment, getGroupTreatment, type GroupTreatment } from "./identity-policy";
 import { getRegionalIdentityGrievance, grievanceLevel, type RegionalIdentityGrievance } from "./identity-grievances";
 import { getNationCharacter } from "./nation-character";
 import type { NationRuntime } from "./nation-runtime";
@@ -17,6 +17,17 @@ interface Mandate {
   exclusion: number;
   constituency: number;
 }
+interface Refusal {
+  ideology?: string;
+  treatment: GroupTreatment;
+  exclusion: number;
+  constituency: number;
+}
+
+const mandateKey = ({ dimension, group, requested }: Mandate) => `${dimension}:${group}:${requested}`;
+const demandSatisfied = (treatment: GroupTreatment, demand: Concession) =>
+  treatment === "autonomous" || (treatment === "protected" && demand === "protected");
+
 export interface RegionalNegotiation extends Mandate {
   owner: NationId;
   status: "demand" | "deferred" | "offer" | "agreed" | "rejected" | "withdrawn" | "violated";
@@ -25,6 +36,7 @@ export interface RegionalNegotiation extends Mandate {
   offer?: Concession;
   nationalTreatment?: GroupTreatment;
   distrust: number;
+  refusals?: Partial<Record<string, Refusal>>;
   reason: string;
 }
 
@@ -55,6 +67,7 @@ export function openRegionalNegotiation(
   const talks: RegionalNegotiation = {
     ...mandate, owner: nation.id, status: "demand", reviewAt: world.time.slowTick + 10,
     distrust: prior?.owner === nation.id ? prior.distrust : 0, ideology: cabinetIdeology(nation),
+    refusals: prior?.owner === nation.id ? prior.refusals : undefined,
     reason: "Sustained unequal treatment mobilized a substantial local constituency.",
   };
   (world.regionalNegotiations ??= new Map()).set(id, talks);
@@ -64,12 +77,21 @@ export function openRegionalNegotiation(
 export function mayOpenRegionalNegotiation(
   world: WorldState, nation: NationRuntime, id: MesoRegionId, mandate: Mandate,
 ): boolean {
+  const treatment = getEffectiveTreatment(world, nation, mandate.dimension, mandate.group);
+  if (demandSatisfied(treatment, mandate.requested)) return false;
   const prior = world.regionalNegotiations?.get(id);
   if (!prior || prior.owner !== nation.id) return true;
   if (!["rejected", "withdrawn", "violated"].includes(prior.status) || world.time.slowTick < prior.reviewAt) return false;
-  return prior.ideology !== cabinetIdeology(nation) || prior.group !== mandate.group ||
-    prior.dimension !== mandate.dimension ||
-    mandate.exclusion - prior.exclusion >= 0.06 || mandate.constituency - prior.constituency >= 0.18;
+  const refusal = prior.refusals?.[mandateKey(mandate)];
+  return !refusal || refusal.ideology !== cabinetIdeology(nation) || refusal.treatment !== treatment ||
+    mandate.exclusion - refusal.exclusion >= 0.06 || mandate.constituency - refusal.constituency >= 0.18;
+}
+
+function rememberRefusal(world: WorldState, nation: NationRuntime, talks: RegionalNegotiation) {
+  (talks.refusals ??= {})[mandateKey(talks)] = {
+    ideology: cabinetIdeology(nation), treatment: getEffectiveTreatment(world, nation, talks.dimension, talks.group),
+    exclusion: talks.exclusion, constituency: talks.constituency,
+  };
 }
 
 function resolve(world: WorldState, id: MesoRegionId, talks: RegionalNegotiation,
@@ -80,8 +102,8 @@ function resolve(world: WorldState, id: MesoRegionId, talks: RegionalNegotiation
   if (status === "rejected") talks.distrust = Math.min(0.35, talks.distrust + 0.10);
   if (status === "violated") {
     talks.distrust = Math.min(0.35, talks.distrust + 0.24);
-    // Require a meaningful change before talks resume. The breach itself changes the mandate.
-    talks.exclusion = 0;
+    // A broken guarantee creates a fresh basis for the affected demand.
+    if (talks.refusals) delete talks.refusals[mandateKey(talks)];
   }
   announce(world, id, talks, {
     agreed: `secured ${talks.offer === "autonomous" ? "local control of institutions" : "statutory protections"}`,
@@ -112,7 +134,7 @@ export function reviewRegionalNegotiation(
     resolve(world, id, talks, "withdrawn", "The movement lost its local constituency.");
     return;
   }
-  if (nationalTreatment === "autonomous" || (nationalTreatment === "protected" && talks.requested === "protected")) {
+  if (demandSatisfied(getEffectiveTreatment(world, nation, talks.dimension, talks.group), talks.requested)) {
     resolve(world, id, talks, "withdrawn", "National reforms already met the movement's demand.");
     return;
   }
@@ -126,6 +148,7 @@ export function reviewRegionalNegotiation(
         "The movement accepted enforceable local guarantees." :
         "The movement accepted protection because it ends the immediate unequal treatment.");
     } else {
+      rememberRefusal(world, nation, talks);
       resolve(world, id, talks, "rejected", "The movement refused protections without control of its institutions after sustained exclusion.");
     }
     return;
@@ -148,6 +171,7 @@ export function reviewRegionalNegotiation(
     (1 - legitimacy) * 0.45 + (democracy ? (1 - support) * 0.20 : 0) - talks.distrust * 0.2 -
     (cohesionist ? 0.30 + support * 0.12 : 0) - (atWar ? 0.12 : 0) - hardship * 0.11;
   if (willing < 0.34) {
+    rememberRefusal(world, nation, talks);
     resolve(world, id, talks, "rejected", cohesionist ?
       "The governing coalition prioritized uniform institutions over the local demand." :
       "The cabinet judged its political and administrative capacity insufficient for concessions.");
