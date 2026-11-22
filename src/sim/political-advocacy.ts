@@ -27,7 +27,8 @@ export const ADVOCACY_RENEWAL_INTERVAL = 160;
 const SPONSOR_COOLDOWN = 200;
 /** A movement that turned a sponsor down will not reconsider at once. */
 const REFUSAL_COOLDOWN = 300;
-const MAX_ACTIVE_PER_SPONSOR = 2;
+/** Simultaneous commitments one sponsor may hold. */
+export const MAX_ACTIVE_PER_SPONSOR = 2;
 /** Support fades unless the sponsor renews it. Applied every ten slow ticks. */
 const BACKING_DECAY = 0.985;
 const MINIMUM_BACKING = 0.05;
@@ -151,6 +152,25 @@ function activeSponsorships(world: WorldState): Map<NationId, number> {
   return counts;
 }
 
+/**
+ * A candidate list is a snapshot. Before every proposal, re-read the state that
+ * authorizes it: the negotiation may have closed, the sponsor may have committed
+ * to another movement or entered its cooldown, and influence may already be spent.
+ */
+function canCommitNow(world: WorldState, offer: AdvocacyOffer, now: number,
+  sponsorships: ReadonlyMap<NationId, number>): boolean {
+  const { id, owner, sponsor, talks } = offer;
+  if (world.regionalNegotiations?.get(id) !== talks) return false;
+  if (!LIVE_STATUSES.has(talks.status) || talks.foreign || talks.owner !== owner.id) return false;
+  if (!isNationActive(owner) || !isNationActive(sponsor)) return false;
+  if (findWar(world.wars, sponsor.id, owner.id) || getRelation(world, sponsor.id, owner.id).crisis) return false;
+  if (getSubjectOverlord(world, sponsor.id) === owner.id || getSubjectOverlord(world, owner.id) === sponsor.id) return false;
+  if ((sponsor.politics?.nextForeignAdvocacyAt ?? 0) > now) return false;
+  if ((talks.foreignRefusals?.[sponsor.id] ?? 0) > now) return false;
+  if ((sponsorships.get(sponsor.id) ?? 0) >= MAX_ACTIVE_PER_SPONSOR) return false;
+  return getInfluence(world, sponsor.id) >= POLITICAL_ADVOCACY_COST;
+}
+
 function endBacking(world: WorldState, id: MesoRegionId, talks: RegionalNegotiation, reason: string) {
   const sponsor = talks.foreign?.sponsorId;
   if (!sponsor) return;
@@ -242,6 +262,7 @@ function candidates(world: WorldState, contacts: ReadonlyMap<NationId, ReadonlyS
       const backlash = repudiation(world, talks, owner, sponsor, interest);
       const list = offers.get(id);
       const offer = { id, owner, sponsor, talks, strength, backlash, interest };
+      world.instrumentation?.incrementCounter("foreignAdvocacy.eligible");
       if (list) list.push(offer);
       else offers.set(id, [offer]);
     }
@@ -296,6 +317,8 @@ export function updatePoliticalAdvocacy(world: WorldState, contacts: ReadonlyMap
   const now = world.time.slowTick;
   if (now < 240) return;
   const offers = candidates(world, contacts, now);
+  // Successful commitments update this cycle's availability immediately.
+  const sponsorships = activeSponsorships(world);
   for (const [id, list] of [...offers].sort((a, b) => a[0].localeCompare(b[0]))) {
     const talks = list[0]!.talks;
     if (talks.foreign) continue;
@@ -305,15 +328,24 @@ export function updatePoliticalAdvocacy(world: WorldState, contacts: ReadonlyMap
         offer.strength, offer.backlash, offer.interest) }))
       .sort((a, b) => (b.decision.value - b.decision.cost) - (a.decision.value - a.decision.cost) ||
         a.offer.sponsor.id.localeCompare(b.offer.sponsor.id));
-    const best = ranked.find(({ decision }) => decision.accepted) ?? ranked[0];
-    if (!best) continue;
+    // Prefer a sponsor the movement would accept. If none would be accepted, still make
+    // the single best offer so a refusal is recorded honestly rather than silently skipped.
+    const willing = ranked.filter(({ decision }) => decision.accepted);
+    const ordered = willing.length ? willing : ranked.slice(0, 1);
+    const best = ordered.find(({ offer }) => canCommitNow(world, offer, now, sponsorships));
+    if (!best) {
+      world.instrumentation?.incrementCounter("foreignAdvocacy.skipped.stale");
+      continue;
+    }
     world.instrumentation?.incrementCounter("foreignAdvocacy.proposals");
     if (!spendInfluence(world, best.offer.sponsor.id, POLITICAL_ADVOCACY_COST)) {
       world.instrumentation?.incrementCounter("foreignAdvocacy.rejected.spend");
       continue;
     }
-    world.instrumentation?.incrementCounter("foreignAdvocacy.negotiationsAffected");
     applyAdvocacy(world, best.offer, best.decision.accepted, best.decision, now);
+    if (best.decision.accepted) {
+      sponsorships.set(best.offer.sponsor.id, (sponsorships.get(best.offer.sponsor.id) ?? 0) + 1);
+    }
   }
 }
 

@@ -173,9 +173,17 @@ export function reviewRegionalNegotiation(
   if (talks.status === "offer") {
     const localGrievance = grievanceLevel(getRegionalIdentityGrievance(world, id, nation.id));
     // Recognized movements hold out for enforceable control rather than a partial guarantee.
-    const external = talks.foreign?.strength ?? 0;
-    const adequate = talks.offer === talks.requested ||
-      (talks.offer === "protected" && Math.max(talks.grievance, localGrievance) + talks.distrust < 0.44 - external * 0.05);
+    const backing = talks.foreign, external = backing?.strength ?? 0;
+    const pressure = Math.max(talks.grievance, localGrievance) + talks.distrust;
+    const adequateWithoutBacking = talks.offer === talks.requested ||
+      (talks.offer === "protected" && pressure < 0.44);
+    const adequate = adequateWithoutBacking ||
+      (talks.offer === "protected" && pressure < 0.44 - external * 0.05);
+    if (backing) {
+      world.instrumentation?.incrementCounter("foreignAdvocacy.negotiationReviewsWithBacking");
+      // An explicit comparison against the same decision with no external support.
+      if (adequate !== adequateWithoutBacking) world.instrumentation?.incrementCounter("foreignAdvocacy.decisionsChanged");
+    }
     if (adequate) {
       talks.nationalTreatment = nationalTreatment;
       resolve(world, id, talks, "agreed", talks.offer === talks.requested ?
@@ -205,11 +213,19 @@ export function reviewRegionalNegotiation(
   const strategic = id === nation.capitalMesoId;
   // Foreign recognition can raise the political cost of refusal, but a government that can
   // repudiate the sponsor's motives may harden instead. Both effects are bounded.
-  const external = talks.foreign?.strength ?? 0, backlash = talks.foreign?.backlash ?? 0;
+  const backing = talks.foreign, external = backing?.strength ?? 0, backlash = backing?.backlash ?? 0;
   const willing = talks.grievance * 0.9 + constituency * 0.22 + character.cooperation * 0.48 +
     (1 - legitimacy) * 0.45 + (democracy ? (1 - support) * 0.20 : 0) - talks.distrust * 0.2 -
     (cohesionist ? 0.30 + support * 0.12 : 0) - (atWar ? 0.12 : 0) - hardship * 0.11 +
     external * (0.12 - backlash * 0.20);
+  if (backing && world.instrumentation) {
+    world.instrumentation.incrementCounter("foreignAdvocacy.negotiationReviewsWithBacking");
+    // Compare the branch this decision takes with and without the same backing. The
+    // counterfactual is only computed for diagnostics and never feeds the decision.
+    const willingWithoutBacking = willing - external * (0.12 - backlash * 0.20);
+    const decision = (value: number) => value < 0.34 ? "reject" : value >= (strategic ? 0.82 : 0.61) ? "full" : "partial";
+    if (decision(willing) !== decision(willingWithoutBacking)) world.instrumentation.incrementCounter("foreignAdvocacy.decisionsChanged");
+  }
   if (willing < 0.34) {
     rememberRefusal(world, nation, talks);
     world.instrumentation?.incrementCounter(cohesionist ? "regionalNegotiations.rejected.uniformity" : "regionalNegotiations.rejected.capacity");

@@ -11,12 +11,15 @@ import {
 } from "../../src/sim/political-influence";
 import {
   ADVOCACY_RENEWAL_INTERVAL,
+  MAX_ACTIVE_PER_SPONSOR,
   POLITICAL_ADVOCACY_COST,
   describeSupportDecision,
   evaluateMovementSupport,
   updateForeignBacking,
   updatePoliticalAdvocacy,
 } from "../../src/sim/political-advocacy";
+import { createFaction, joinFaction } from "../../src/sim/factions";
+import { getNationIdeology } from "../../src/sim/nation-identity";
 import {
   getRegionalMandate,
   openRegionalNegotiation,
@@ -180,10 +183,19 @@ test("recognized support can raise the cabinet's offer but never sets the outcom
   getRelation(s.world, s.sponsor.id, s.target.id).trust = 60;
   updatePoliticalAdvocacy(s.world, getPoliticalContacts(s.world));
   assert.ok(talks.foreign);
+  const counters: Record<string, number> = {};
+  s.world.instrumentation = {
+    recordDuration() {},
+    incrementCounter(name) { counters[name] = (counters[name] ?? 0) + 1; },
+  };
   s.at(310);
+  s.world.instrumentation = undefined;
   assert.equal(talks.status, "offer");
   assert.equal(talks.offer, talks.requested);
   assert.match(talks.reason, /International recognition/);
+  assert.ok((counters["foreignAdvocacy.negotiationReviewsWithBacking"] ?? 0) >= 1);
+  assert.ok((counters["foreignAdvocacy.decisionsChanged"] ?? 0) >= 1,
+    "the counterfactual comparison identifies that backing changed this decision");
   s.at(320);
   assert.equal(talks.status, "agreed");
   assert.equal(talks.foreign, undefined, "a domestic agreement ends the outside involvement");
@@ -371,4 +383,164 @@ test("nationalist and revolutionary systems keep working around a backed demand"
   assert.ok(talks.status === "offer" || talks.status === "agreed" || talks.status === "rejected");
   assert.equal(s.target.nationalistMovement, undefined);
   assert.equal(s.target.identityStability?.legitimacy !== undefined, true);
+});
+
+/** Give several target-owned districts the same grievance-producing population. */
+function openDemands(s: ReturnType<typeof scene>, ids: ReturnType<typeof fixedSocietyDistrict>[]) {
+  for (const id of ids) {
+    const population = s.world.regionalPopulations!.get(id)!;
+    population.culture = [population.size * 0.1, population.size * 0.9, 0, 0, 0, 0];
+  }
+  for (let tick = 10; tick <= 30; tick += 10) s.at(tick);
+  const mandates = ids.map((id) => {
+    const memory = getRegionalIdentityGrievance(s.world, id, s.target.id);
+    assert.ok(memory, `district ${id} must build a genuine grievance`);
+    const mandate = getRegionalMandate(s.world.regionalPopulations!.get(id)!, memory);
+    assert.ok(mandate, `district ${id} must support a regional demand`);
+    return { id, mandate };
+  });
+  s.world.regionalNegotiations?.clear();
+  s.world.time.slowTick = 300;
+  s.world.time.fastTick = 3000;
+  for (const { id, mandate } of mandates) openRegionalNegotiation(s.world, s.target, id, mandate);
+  return mandates.map(({ id }) => s.world.regionalNegotiations!.get(id)!);
+}
+
+function commitCount(s: ReturnType<typeof scene>) {
+  return [...s.world.regionalNegotiations?.values() ?? []]
+    .filter(({ foreign }) => foreign?.sponsorId === s.sponsor.id).length;
+}
+
+test("a sponsor cannot exceed its commitment limit within one evaluation cycle", () => {
+  const s = scene();
+  const demands = openDemands(s, [
+    fixedSocietyDistrict(1, 1), fixedSocietyDistrict(2, 1), fixedSocietyDistrict(4, 1),
+  ]);
+  sponsorFinance(s.world, s.sponsor.id, 90);
+  getRelation(s.world, s.sponsor.id, s.target.id).trust = 60;
+  const counters: Record<string, number> = {};
+  s.world.instrumentation = {
+    recordDuration() {},
+    incrementCounter(name) { counters[name] = (counters[name] ?? 0) + 1; },
+  };
+  const before = getInfluence(s.world, s.sponsor.id);
+  updatePoliticalAdvocacy(s.world, getPoliticalContacts(s.world));
+  s.world.instrumentation = undefined;
+  assert.equal(commitCount(s), 1, "the sponsor cooldown limits it to one new commitment per cycle");
+  assert.ok(commitCount(s) <= MAX_ACTIVE_PER_SPONSOR);
+  assert.equal(getInfluence(s.world, s.sponsor.id), before - POLITICAL_ADVOCACY_COST,
+    "influence is charged once, not once per stale candidate");
+  assert.equal(counters["foreignAdvocacy.accepted"] ?? 0, 1);
+  assert.ok((counters["foreignAdvocacy.skipped.stale"] ?? 0) >= 1,
+    "the remaining stale candidates are rejected by revalidation");
+  assert.equal(demands.filter(({ foreign }) => foreign).length, 1);
+});
+
+test("the per-sponsor commitment limit holds across cycles", () => {
+  const s = scene();
+  openDemands(s, [fixedSocietyDistrict(1, 1), fixedSocietyDistrict(2, 1), fixedSocietyDistrict(4, 1)]);
+  sponsorFinance(s.world, s.sponsor.id, 90);
+  getRelation(s.world, s.sponsor.id, s.target.id).trust = 60;
+  updatePoliticalAdvocacy(s.world, getPoliticalContacts(s.world));
+  assert.equal(commitCount(s), 1);
+  // Let the sponsor's own cooldown expire while the second demand is still open.
+  s.sponsor.politics!.nextForeignAdvocacyAt = 0;
+  s.world.time.slowTick = 360;
+  s.world.time.fastTick = 3600;
+  updatePoliticalAdvocacy(s.world, getPoliticalContacts(s.world));
+  assert.equal(commitCount(s), MAX_ACTIVE_PER_SPONSOR);
+  // Even with no cooldown, the hard limit blocks a third commitment.
+  s.sponsor.politics!.nextForeignAdvocacyAt = 0;
+  s.world.time.slowTick = 420;
+  s.world.time.fastTick = 4200;
+  const before = getInfluence(s.world, s.sponsor.id);
+  updatePoliticalAdvocacy(s.world, getPoliticalContacts(s.world));
+  assert.equal(commitCount(s), MAX_ACTIVE_PER_SPONSOR);
+  assert.equal(getInfluence(s.world, s.sponsor.id), before, "a blocked sponsor spends nothing");
+});
+
+test("a same-cycle refusal is recorded once and does not block a distinct commitment", () => {
+  const s = scene();
+  const [refused, accepted] = openDemands(s, [fixedSocietyDistrict(1, 1), fixedSocietyDistrict(2, 1)]);
+  refused.status = "offer";
+  refused.offer = refused.requested;
+  sponsorFinance(s.world, s.sponsor.id, 90);
+  const relation = getRelation(s.world, s.sponsor.id, s.target.id);
+  relation.trust = 60;
+  relation.opinion = 40;
+  updatePoliticalAdvocacy(s.world, getPoliticalContacts(s.world));
+  assert.equal(refused.foreign, undefined);
+  assert.ok((refused.foreignRefusals?.[s.sponsor.id] ?? 0) > s.world.time.slowTick);
+  assert.equal(accepted.foreign?.sponsorId, s.sponsor.id,
+    "a refusal does not consume the sponsor's cooldown for a different movement");
+  assert.equal(getInfluence(s.world, s.sponsor.id), 90 - 2 * POLITICAL_ADVOCACY_COST,
+    "each proposal is charged exactly once");
+});
+
+test("multi-demand sponsorship is deterministic", () => {
+  const run = () => {
+    const s = scene();
+    const demands = openDemands(s, [
+      fixedSocietyDistrict(1, 1), fixedSocietyDistrict(2, 1), fixedSocietyDistrict(4, 1),
+    ]);
+    sponsorFinance(s.world, s.sponsor.id, 90);
+    getRelation(s.world, s.sponsor.id, s.target.id).trust = 60;
+    updatePoliticalAdvocacy(s.world, getPoliticalContacts(s.world));
+    return {
+      committed: demands.map(({ foreign }) => foreign?.sponsorId ?? null),
+      influence: getInfluence(s.world, s.sponsor.id),
+    };
+  };
+  assert.deepEqual(run(), run());
+});
+
+test("nonadjacent faction members are political contacts and can sponsor a demand", () => {
+  const s = scene();
+  const relation = getRelation(s.world, s.target.id, s.fourth.id);
+  relation.opinion = 60;
+  relation.trust = 80;
+  sponsorFinance(s.world, s.target.id, 90);
+  sponsorFinance(s.world, s.fourth.id, 90);
+  const allowed = [...new Set([getNationIdeology(s.world, s.target.id).id, getNationIdeology(s.world, s.fourth.id).id])];
+  const faction = createFaction(s.world, s.target.id, {
+    allowedIdeologyIds: allowed, defensiveObligation: "mandatory", offensiveObligation: "none", considerPersonality: true,
+  });
+  assert.ok(faction, "the founder must be able to form a faction");
+  assert.equal(joinFaction(s.world, s.fourth.id, faction!.id), true);
+  assert.ok(!getAdjacentNationPairs(s.world).some(([a, b]) =>
+    (a === s.target.id && b === s.fourth.id) || (b === s.target.id && a === s.fourth.id)),
+    "the two members share no border");
+  const contacts = getPoliticalContacts(s.world);
+  assert.ok(contacts.get(s.target.id)?.has(s.fourth.id), "the faction is a two-way contact");
+  assert.ok(contacts.get(s.fourth.id)?.has(s.target.id));
+  assert.ok(!contacts.get(s.rival.id)?.has(s.sponsor.id), "unrelated nonadjacent countries stay excluded");
+  // The fourth government can now discover and support the demand without a border.
+  s.fourth.identityGovernment!.nextReviewAt = Infinity;
+  s.fourth.identityGovernment!.favored.culture = "tide-guilds";
+  const talks = openDemand(s);
+  getRelation(s.world, s.fourth.id, s.target.id).trust = 60;
+  updatePoliticalAdvocacy(s.world, getPoliticalContacts(s.world));
+  assert.equal(talks.foreign?.sponsorId, s.fourth.id);
+});
+
+test("an inactive faction member is not an eligible sponsor", () => {
+  const s = scene();
+  const relation = getRelation(s.world, s.target.id, s.fourth.id);
+  relation.opinion = 60;
+  relation.trust = 80;
+  sponsorFinance(s.world, s.target.id, 90);
+  sponsorFinance(s.world, s.fourth.id, 90);
+  const faction = createFaction(s.world, s.target.id, {
+    allowedIdeologyIds: [getNationIdeology(s.world, s.target.id).id, getNationIdeology(s.world, s.fourth.id).id],
+    defensiveObligation: "mandatory", offensiveObligation: "none", considerPersonality: true,
+  });
+  assert.ok(faction);
+  assert.equal(joinFaction(s.world, s.fourth.id, faction!.id), true);
+  s.fourth.macroRegionIds = [];
+  s.fourth.identityGovernment!.favored.culture = "tide-guilds";
+  const talks = openDemand(s);
+  const before = getInfluence(s.world, s.fourth.id);
+  updatePoliticalAdvocacy(s.world, getPoliticalContacts(s.world));
+  assert.equal(talks.foreign?.sponsorId === s.fourth.id, false);
+  assert.equal(getInfluence(s.world, s.fourth.id), before);
 });

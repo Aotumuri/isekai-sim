@@ -617,17 +617,20 @@ export type SimulationCounterName =
   | "subjectNegotiations.selfGovernmentRefused"
   | "subjectNegotiations.counteroffer"
   | "foreignAdvocacy.candidates"
+  | "foreignAdvocacy.eligible"
   | "foreignAdvocacy.rejected.interest"
   | "foreignAdvocacy.rejected.cost"
   | "foreignAdvocacy.rejected.spend"
   | "foreignAdvocacy.rejected.relation"
   | "foreignAdvocacy.rejected.cooldown"
   | "foreignAdvocacy.proposals"
+  | "foreignAdvocacy.skipped.stale"
   | "foreignAdvocacy.accepted"
   | "foreignAdvocacy.refused"
   | "foreignAdvocacy.expired"
   | "foreignAdvocacy.renewed"
-  | "foreignAdvocacy.negotiationsAffected"
+  | "foreignAdvocacy.negotiationReviewsWithBacking"
+  | "foreignAdvocacy.decisionsChanged"
   | "foreignAdvocacy.agreements";
 
 /**

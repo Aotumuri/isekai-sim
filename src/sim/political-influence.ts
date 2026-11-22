@@ -63,7 +63,8 @@ export function launchPoliticalCampaign(world: WorldState, sponsorId: NationId, 
 
 /**
  * Bounded contact index for foreign political activity: a shared border, an alliance,
- * a trade pact or a common faction. Built once per evaluation pass.
+ * a trade pact or a common faction. Built once per evaluation pass. Faction membership
+ * is grouped by faction so the index never scans every nation pair.
  */
 export function getPoliticalContacts(world: WorldState): Map<NationId, Set<NationId>> {
   const contacts = new Map<NationId, Set<NationId>>();
@@ -82,6 +83,21 @@ export function getPoliticalContacts(world: WorldState): Map<NationId, Set<Natio
       (treaty.type === "trade" || treaty.type === "alliance"))) continue;
     addContact(relation.nationAId, relation.nationBId);
     addContact(relation.nationBId, relation.nationAId);
+  }
+  // Common faction membership is a valid political contact even without a shared border.
+  // Group once by faction instead of scanning every nation pair.
+  const factionMembers = new Map<string, NationId[]>();
+  for (const [nationId, faction] of world.factions?.factionByNationId ?? []) {
+    const members = factionMembers.get(faction.id);
+    if (members) members.push(nationId);
+    else factionMembers.set(faction.id, [nationId]);
+  }
+  for (const factionId of [...factionMembers.keys()].sort()) {
+    const members = factionMembers.get(factionId)!.sort();
+    for (let i = 0; i < members.length; i++) for (let j = i + 1; j < members.length; j++) {
+      addContact(members[i]!, members[j]!);
+      addContact(members[j]!, members[i]!);
+    }
   }
   return contacts;
 }
