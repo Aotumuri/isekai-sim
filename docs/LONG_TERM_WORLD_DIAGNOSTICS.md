@@ -563,22 +563,22 @@ WORLD_SUBJECT_PAIRS=40 WORLD_SUBJECT_ACQUISITIONS=40 \
   node --expose-gc --import tsx test/diagnostics/long-term-world.ts scale 822748319780 100 250 500 1000
 ```
 
-## 15. 領土再配分・地域交渉・国際政治影響の診断（2026-11）
+## 18. 領土再配分・地域交渉・国際政治影響の診断（2026-11）
 
 ### A1. 領土再配分の決定漏斗
 
-221 国規模シナリオ（シード `822748319780`、`WORLD_SUBJECT_PAIRS=40`、`WORLD_SUBJECT_ACQUISITIONS=40`、`WORLD_SUBJECT_AUTONOMY=10`）で 39 の被支配国、1 回の取得バッチ、29 件のレビューを観測した。
+221 国規模シナリオ（シード `822748319780`、`WORLD_SUBJECT_PAIRS=40`、`WORLD_SUBJECT_ACQUISITIONS=40`、`WORLD_SUBJECT_AUTONOMY=10`）では、40 地区が 1 回の取得バッチとして検出され、そのバッチに対して 1 回の審査が行われた。以下の段階は分母が異なるため、単純な逐次漏斗として読まない。
 
-| 段階 | 件数 |
-| --- | ---: |
-| 取得検出 | 40 |
-| 初期適格 | 1 |
-| 既存被支配国 | 39 |
-| 地理的隣接被支配国 | 29 |
-| 有効 parcel | 29 |
-| 候補評価 | 29 |
-| 提案 | 0 |
-| 移譲 | 0 |
+| 段階 | 件数 | 単位 |
+| --- | ---: | --- |
+| 検出された取得地区 | 40 | 地区 |
+| 審査対象の取得バッチ | 1 | バッチ |
+| 審査した既存被支配国 | 39 | 国（バッチ内の合計） |
+| 地理的に隣接した被支配国 | 29 | 国（バッチ内の合計） |
+| 生成された候補 parcel | 29 | parcel |
+| 評価した候補 | 29 | parcel × 被支配国 |
+| 提案 | 0 | 提案 |
+| 成立した移譲 | 0 | 移譲 |
 
 - 全候補のスコアは -1.331 ～ -0.177（閾値 `MIN_DELEGATION_ADVANTAGE = 0.12`）。
 - willing は 0.121 ～ 1.318 と正であり、被支配国側は受諾可能だった。
@@ -606,7 +606,8 @@ medium シナリオ（10,000 日、14 国）では 5 件の需要が発生し、
 - 回帰テスト 17 件を追加（`test/regression/international-political-influence.test.ts`）。
 - 全テスト: 873 件 pass、0 fail。
 - `npm run test:typecheck` クリーン。
-- `npm run build` は実施予定。
+- `npm run build` は成功（既存のチャンクサイズ警告のみ）。
+- その後の正確性修正と、支持の候補・適格・提案・拒否・成立・更新・失効・交渉への関与・決定変化を分離した診断は [自律歴史診断](AUTONOMOUS_HISTORY_DIAGNOSTICS.md) を参照。
 
 ### 性能（medium、10,000 日、14 国）
 
@@ -617,4 +618,4 @@ medium シナリオ（10,000 日、14 国）では 5 件の需要が発生し、
 | peakRssKiB | 732,352 | 821,776 |
 | heapBytes | 301,930,808 | 302,060,120 |
 
-foreignAdvocacy の候補評価は接触関係に限定し、全国家スキャンは行っていない。
+foreignAdvocacy の候補評価は接触関係に限定し、全国家スキャンは行っていない。このピーク RSS 差は単回測定であり、再現性は [自律歴史診断](AUTONOMOUS_HISTORY_DIAGNOSTICS.md) で別途扱う。
