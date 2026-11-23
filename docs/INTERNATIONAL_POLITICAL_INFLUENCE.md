@@ -93,6 +93,7 @@
 - 地区ツールチップ（`src/render/region/tooltip.ts`）に外国支援の表示を追加。
 - 国家政治パネル（`src/app/politics-controls.ts`）に外国支援の表示を追加。
 - 重要な政治行動のみをイベントとして記録し、評価ごとのイベントは生成しません。
+- 長期的な活動量、時間整合性、因果の診断は [自律歴史診断](AUTONOMOUS_HISTORY_DIAGNOSTICS.md) にまとめています。
 
 ## 10. 診断結果（Phase A）
 
