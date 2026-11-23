@@ -93,43 +93,51 @@ for (let pair = 0; pair < args.length; pair += 2) {
     });
   };
 
-  for (let day = 1; day <= days; day++) {
-    stepSimulationDay(world);
-    if (world.time.fastTick % DAYS_PER_SLOW_TICK !== 0) continue;
-    const now = world.time.slowTick;
-    const evaluation = now >= WARMUP && now % EVALUATION_INTERVAL === 0;
-    const review = now >= WARMUP && now % REVIEW_INTERVAL === 0;
-    let liveThisPass = 0;
-    const present = new Set<MesoRegionId>();
-    for (const [id, talks] of world.regionalNegotiations ?? []) {
-      present.add(id);
-      let track = tracks.get(id);
-      if (!track || track.owner !== talks.owner) {
-        track = { id, owner: talks.owner, opened: now, evaluations: 0, reviews: 0, foreignEver: false };
-        tracks.set(id, track);
+  // Simulation battle logs use console.info. Silence them so the diagnostic emits
+  // parseable JSON without changing any simulation behavior.
+  const log = console.info;
+  console.info = () => undefined;
+  try {
+    for (let day = 1; day <= days; day++) {
+      stepSimulationDay(world);
+      if (world.time.fastTick % DAYS_PER_SLOW_TICK !== 0) continue;
+      const now = world.time.slowTick;
+      const evaluation = now >= WARMUP && now % EVALUATION_INTERVAL === 0;
+      const review = now >= WARMUP && now % REVIEW_INTERVAL === 0;
+      let liveThisPass = 0;
+      const present = new Set<MesoRegionId>();
+      for (const [id, talks] of world.regionalNegotiations ?? []) {
+        present.add(id);
+        let track = tracks.get(id);
+        if (!track || track.owner !== talks.owner) {
+          track = { id, owner: talks.owner, opened: now, evaluations: 0, reviews: 0, foreignEver: false };
+          tracks.set(id, track);
+        }
+        if (talks.foreign) track.foreignEver = true;
+        if (LIVE.has(talks.status)) {
+          liveThisPass++;
+          if (evaluation) {
+            track.evaluations++;
+            liveDemandEvaluations++;
+          }
+          if (review) {
+            track.reviews++;
+            liveDemandReviews++;
+          }
+        } else if (TERMINAL.has(talks.status)) close(track, talks.status, now);
       }
-      if (talks.foreign) track.foreignEver = true;
-      if (LIVE.has(talks.status)) {
-        liveThisPass++;
-        if (evaluation) {
-          track.evaluations++;
-          liveDemandEvaluations++;
-        }
-        if (review) {
-          track.reviews++;
-          liveDemandReviews++;
-        }
-      } else if (TERMINAL.has(talks.status)) close(track, talks.status, now);
+      // A negotiation can disappear without a terminal status when its district changes hands.
+      for (const track of tracks.values()) {
+        if (track.closed === undefined && !present.has(track.id)) close(track, "removed", now);
+      }
+      if (evaluation) {
+        evaluationPasses++;
+        if (liveThisPass) evaluationPassesWithLiveDemand++;
+      }
+      if (review) reviewPasses++;
     }
-    // A negotiation can disappear without a terminal status when its district changes hands.
-    for (const track of tracks.values()) {
-      if (track.closed === undefined && !present.has(track.id)) close(track, "removed", now);
-    }
-    if (evaluation) {
-      evaluationPasses++;
-      if (liveThisPass) evaluationPassesWithLiveDemand++;
-    }
-    if (review) reviewPasses++;
+  } finally {
+    console.info = log;
   }
 
   const stillLive = [...tracks.values()].filter((track) => track.closed === undefined && LIVE.has(
