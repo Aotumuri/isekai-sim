@@ -2,7 +2,9 @@ import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import { clamp } from "../utils/math";
 import { getInfluence, getRelation, hasTreaty, spendInfluence } from "./diplomacy";
+import { FIRST_FOREIGN_ADVOCACY_TICK } from "./foreign-advocacy-schedule";
 import { getRegionalIdentityGrievance, grievanceLevel } from "./identity-grievances";
+import type { ForeignAdvocacyExclusion } from "./instrumentation";
 import { identityGroupIndex } from "./identity-policy";
 import { ideologyCompatibility } from "./ideology-relations";
 import { isNationActive } from "./nation-active";
@@ -132,14 +134,21 @@ export function describeSupportDecision(decision: ReturnType<typeof evaluateMove
   return "The movement accepted recognition to reinforce its negotiating position.";
 }
 
-function liveNegotiations(world: WorldState): [MesoRegionId, RegionalNegotiation][] {
+export function liveNegotiations(world: WorldState, districts?: readonly MesoRegionId[]): [MesoRegionId, RegionalNegotiation][] {
+  const negotiations = world.regionalNegotiations;
+  if (!negotiations?.size || districts?.length === 0) return [];
   const owners = world.regionalPopulations ? getOwnerByMesoId(world) : undefined;
   const result: [MesoRegionId, RegionalNegotiation][] = [];
-  for (const entry of world.regionalNegotiations ?? []) {
-    if (!LIVE_STATUSES.has(entry[1].status)) continue;
-    if (owners && owners.get(entry[0]) !== entry[1].owner) continue;
-    result.push(entry);
-  }
+  const consider = (talks: RegionalNegotiation, id: MesoRegionId) => {
+    if (!LIVE_STATUSES.has(talks.status) || (owners && owners.get(id) !== talks.owner)) return;
+    result.push([id, talks]);
+  };
+  if (districts) {
+    for (const id of districts) {
+      const talks = negotiations.get(id);
+      if (talks) consider(talks, id);
+    }
+  } else negotiations.forEach(consider);
   return result.sort((a, b) => a[0].localeCompare(b[0]));
 }
 
@@ -162,7 +171,8 @@ function activeSponsorships(world: WorldState): Map<NationId, number> {
 function canCommitNow(world: WorldState, offer: AdvocacyOffer, now: number,
   sponsorships: ReadonlyMap<NationId, number>): boolean {
   const { id, owner, sponsor, talks } = offer;
-  if (world.regionalNegotiations?.get(id) !== talks) return false;
+  if (world.regionalNegotiations?.get(id) !== talks ||
+    (world.regionalPopulations && getOwnerByMesoId(world).get(id) !== owner.id)) return false;
   if (!LIVE_STATUSES.has(talks.status) || talks.foreign || talks.owner !== owner.id) return false;
   if (!isNationActive(owner) || !isNationActive(sponsor)) return false;
   if (findWar(world.wars, sponsor.id, owner.id) || getRelation(world, sponsor.id, owner.id).crisis) return false;
@@ -187,16 +197,21 @@ function applyAdvocacy(world: WorldState, offer: AdvocacyOffer, accepted: boolea
   const { id, owner, sponsor, talks, backlash } = offer;
   const relation = getRelation(world, sponsor.id, owner.id);
   // Public advocacy is visible: even a refused offer strains the bilateral relationship.
+  let changedRelations = Number(relation.tension < 100 || relation.trust > 0);
   const friction = accepted ? 5 + backlash * 8 : 2 + backlash * 4;
   relation.tension = clamp(relation.tension + friction, 0, 100);
   relation.trust = clamp(relation.trust - (accepted ? 2 + backlash * 5 : 1 + backlash * 2), 0, 100);
   const overlord = getSubjectOverlord(world, owner.id);
   if (overlord) {
     const guardian = getRelation(world, overlord, sponsor.id);
+    if (guardian.tension < 100) changedRelations++;
     guardian.tension = clamp(guardian.tension + 4 + backlash * 6, 0, 100);
     const loyalty = getRelation(world, overlord, owner.id);
+    if (loyalty.trust > 0) changedRelations++;
     loyalty.trust = clamp(loyalty.trust - (accepted ? 1.5 : 0.5), 0, 100);
   }
+  world.instrumentation?.incrementCounter("foreignAdvocacy.relationshipChanges", changedRelations);
+  world.instrumentation?.observeRegionalAdvocacy?.({ kind: "offer", id, talks, accepted });
   const group = POPULATION_GROUPS[talks.dimension][talks.group];
   const demand = talks.requested === "autonomous" ? "local control of institutions" : "institutional protection";
   if (!accepted) {
@@ -217,43 +232,75 @@ function applyAdvocacy(world: WorldState, offer: AdvocacyOffer, accepted: boolea
     message: `${sponsor.id} recognized the ${group} demand for ${demand} in district ${id} (${owner.id}). The movement accepted the diplomatic backing. ${describeSupportDecision(decision)}` });
 }
 
-function candidates(world: WorldState, contacts: ReadonlyMap<NationId, ReadonlySet<NationId>>, now: number) {
-  const nations = new Map(world.nations.filter(isNationActive).map((nation) => [nation.id, nation]));
-  const sponsorships = activeSponsorships(world);
+function candidates(world: WorldState, contacts: ReadonlyMap<NationId, ReadonlySet<NationId>>, now: number,
+  negotiations: readonly [MesoRegionId, RegionalNegotiation][], sponsorships: ReadonlyMap<NationId, number>) {
+  const nations = new Map(world.nations.map((nation) => [nation.id, nation]));
+  const instrumentation = world.instrumentation;
   const rejected = { interest: 0, cost: 0, relation: 0, cooldown: 0 };
   const offers = new Map<MesoRegionId, AdvocacyOffer[]>();
-  for (const [id, talks] of liveNegotiations(world)) {
+  for (const [id, talks] of negotiations) {
+    const exclude = (reason: ForeignAdvocacyExclusion) => {
+      instrumentation?.incrementCounter(`foreignAdvocacy.excluded.${reason}`);
+      instrumentation?.observeRegionalAdvocacy?.({ kind: "excluded", id, talks, reason });
+    };
+    instrumentation?.observeRegionalAdvocacy?.({ kind: "screened", id, talks });
     const owner = nations.get(talks.owner);
-    if (!owner) continue;
+    if (!owner || !isNationActive(owner)) {
+      exclude("targetInactive");
+      continue;
+    }
     const partners = contacts.get(owner.id);
-    if (!partners) continue;
+    if (!partners?.size) {
+      exclude("noContact");
+      continue;
+    }
     for (const sponsorId of [...partners].sort()) {
       if (sponsorId === owner.id) continue;
       const sponsor = nations.get(sponsorId);
-      if (!sponsor) continue;
-      world.instrumentation?.incrementCounter("foreignAdvocacy.candidates");
-      if (talks.foreign?.sponsorId === sponsorId || findWar(world.wars, sponsorId, owner.id) ||
-        getRelation(world, sponsorId, owner.id).crisis ||
-        getSubjectOverlord(world, sponsorId) === owner.id || getSubjectOverlord(world, owner.id) === sponsorId) {
+      if (!sponsor || !isNationActive(sponsor)) {
+        exclude("sponsorInactive");
+        continue;
+      }
+      instrumentation?.incrementCounter("foreignAdvocacy.candidates");
+      if (talks.foreign?.sponsorId === sponsorId) {
+        exclude("alreadySupported");
         rejected.relation++;
         continue;
       }
-      if ((sponsorships.get(sponsorId) ?? 0) >= MAX_ACTIVE_PER_SPONSOR ||
-        (sponsor.politics?.nextForeignAdvocacyAt ?? 0) > now) {
+      if (findWar(world.wars, sponsorId, owner.id) || getRelation(world, sponsorId, owner.id).crisis) {
+        exclude("warOrCrisis");
+        rejected.relation++;
+        continue;
+      }
+      if (getSubjectOverlord(world, sponsorId) === owner.id || getSubjectOverlord(world, owner.id) === sponsor.id) {
+        exclude("subjectRelationship");
+        rejected.relation++;
+        continue;
+      }
+      if ((sponsorships.get(sponsorId) ?? 0) >= MAX_ACTIVE_PER_SPONSOR) {
+        exclude("capacity");
+        rejected.cooldown++;
+        continue;
+      }
+      if ((sponsor.politics?.nextForeignAdvocacyAt ?? 0) > now) {
+        exclude("cooldown");
         rejected.cooldown++;
         continue;
       }
       if ((talks.foreignRefusals?.[sponsorId] ?? 0) > now) {
+        exclude("previousRefusal");
         rejected.cooldown++;
         continue;
       }
       const interest = evaluateInterest(world, id, talks, owner, sponsor);
       if (interest.score < INTEREST_THRESHOLD) {
+        exclude("interest");
         rejected.interest++;
         continue;
       }
       const influence = getInfluence(world, sponsorId);
       if (influence < POLITICAL_ADVOCACY_COST + 20) {
+        exclude("influence");
         rejected.cost++;
         continue;
       }
@@ -264,7 +311,10 @@ function candidates(world: WorldState, contacts: ReadonlyMap<NationId, ReadonlyS
       const backlash = repudiation(world, talks, owner, sponsor, interest);
       const list = offers.get(id);
       const offer = { id, owner, sponsor, talks, strength, backlash, interest };
-      world.instrumentation?.incrementCounter("foreignAdvocacy.eligible");
+      if (!talks.foreign) {
+        instrumentation?.incrementCounter("foreignAdvocacy.eligible");
+        instrumentation?.observeRegionalAdvocacy?.({ kind: "eligible", id, talks });
+      } else exclude("alreadySupported");
       if (list) list.push(offer);
       else offers.set(id, [offer]);
     }
@@ -314,13 +364,14 @@ export function updateForeignBacking(world: WorldState): void {
  * Governments consider whether to recognize an existing regional demand. Only
  * movements that already mobilized can be supported; influence cannot create one.
  */
-export function updatePoliticalAdvocacy(world: WorldState, contacts: ReadonlyMap<NationId, ReadonlySet<NationId>>): void {
+export function updatePoliticalAdvocacy(world: WorldState, contacts: ReadonlyMap<NationId, ReadonlySet<NationId>>,
+  negotiations = liveNegotiations(world)): void {
   if (!hasPoliticalTurbulence(world) || getWarDeclarationMode(world) !== "diplomacy") return;
   const now = world.time.slowTick;
-  if (now < 240) return;
-  const offers = candidates(world, contacts, now);
+  if (now < FIRST_FOREIGN_ADVOCACY_TICK || !negotiations.length) return;
   // Successful commitments update this cycle's availability immediately.
   const sponsorships = activeSponsorships(world);
+  const offers = candidates(world, contacts, now, negotiations, sponsorships);
   for (const [id, list] of [...offers].sort((a, b) => a[0].localeCompare(b[0]))) {
     const talks = list[0]!.talks;
     if (talks.foreign) continue;

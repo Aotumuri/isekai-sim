@@ -1,6 +1,7 @@
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { MobilizationPhase } from "./mobilization";
+import type { RegionalNegotiation } from "./regional-negotiations";
 import type { UnitId } from "./unit";
 
 export type SimulationMetricName =
@@ -10,6 +11,7 @@ export type SimulationMetricName =
   | "production.supplyLookup"
   | "production.supplyIntegration"
   | "trade.procurement"
+  | "politics.foreignAdvocacy"
   | "politics.identityGovernance"
   | "politics.subjectNegotiations"
   | "politics.subjectRedistribution"
@@ -631,7 +633,12 @@ export type SimulationCounterName =
   | "foreignAdvocacy.renewed"
   | "foreignAdvocacy.negotiationReviewsWithBacking"
   | "foreignAdvocacy.decisionsChanged"
-  | "foreignAdvocacy.agreements";
+  | "foreignAdvocacy.agreements"
+  | "foreignAdvocacy.relationshipChanges"
+  | `foreignAdvocacy.excluded.${ForeignAdvocacyExclusion}`;
+
+export type ForeignAdvocacyExclusion = "noContact" | "sponsorInactive" | "targetInactive" | "warOrCrisis" |
+  "subjectRelationship" | "influence" | "cooldown" | "capacity" | "previousRefusal" | "interest" | "alreadySupported";
 
 /**
  * Optional benchmark observer. Production worlds do not install one, so hot paths
@@ -673,7 +680,16 @@ export interface RedistributionReviewSample {
   candidates: RedistributionCandidateSample[];
 }
 
+export type RegionalAdvocacyObservation =
+  | { kind: "opened" | "screened" | "eligible" | "closed" | "review"; id: MesoRegionId; talks: RegionalNegotiation }
+  | { kind: "excluded"; id: MesoRegionId; talks: RegionalNegotiation; reason: ForeignAdvocacyExclusion }
+  | { kind: "governmentDecision"; id: MesoRegionId; talks: RegionalNegotiation;
+      actual: "reject" | "partial" | "full"; withoutBacking: "reject" | "partial" | "full" }
+  | { kind: "offer"; id: MesoRegionId; talks: RegionalNegotiation; accepted: boolean };
+
 export interface SimulationInstrumentation {
+  observeRegionalAdvocacy?(event: RegionalAdvocacyObservation): void;
+  startForeignAdvocacyMeasurement?(): (() => void) | void;
   recordLandUnitLifecycle?(event: LandUnitLifecycleEvent): void;
   recordRedistributionReview?(sample: RedistributionReviewSample): void;
   recordDuration(name: SimulationMetricName, durationMs: number): void;

@@ -5,6 +5,7 @@ import { getRegionalIdentityGrievance, grievanceLevel, type RegionalIdentityGrie
 import { getNationCharacter } from "./nation-character";
 import type { NationRuntime } from "./nation-runtime";
 import { POPULATION_GROUPS, type PopulationDimension, type RegionalPopulation } from "./regional-population";
+import { queueRegionalDemand } from "./foreign-advocacy-schedule";
 import { recordSimulationEvent } from "./simulation-settings";
 import type { WorldState } from "./world-state";
 
@@ -86,6 +87,8 @@ export function openRegionalNegotiation(
     reason: "Sustained unequal treatment mobilized a substantial local constituency.",
   };
   (world.regionalNegotiations ??= new Map()).set(id, talks);
+  queueRegionalDemand(world, id, talks);
+  world.instrumentation?.observeRegionalAdvocacy?.({ kind: "opened", id, talks });
   const reopened = prior?.owner === nation.id && ["rejected", "withdrawn", "violated"].includes(prior.status);
   world.instrumentation?.incrementCounter(reopened ? "regionalNegotiations.reopened" : "regionalNegotiations.opened");
   announce(world, id, talks, talks.requested === "autonomous" ? "demanded local control of institutions" : "demanded institutional protections");
@@ -114,6 +117,7 @@ function rememberRefusal(world: WorldState, nation: NationRuntime, talks: Region
 function resolve(world: WorldState, id: MesoRegionId, talks: RegionalNegotiation,
   status: "agreed" | "rejected" | "withdrawn" | "violated", reason: string) {
   talks.status = status;
+  world.instrumentation?.observeRegionalAdvocacy?.({ kind: "closed", id, talks });
   talks.reason = reason;
   talks.reviewAt = world.time.slowTick + (status === "agreed" ? 10 : 100);
   if (talks.foreign) {
@@ -161,6 +165,7 @@ export function reviewRegionalNegotiation(
     }
     return;
   }
+  world.instrumentation?.observeRegionalAdvocacy?.({ kind: "review", id, talks });
   const constituency = population[talks.dimension][talks.group]! / population.size;
   if (constituency < 0.12) {
     resolve(world, id, talks, "withdrawn", "The movement lost its local constituency.");
@@ -175,15 +180,9 @@ export function reviewRegionalNegotiation(
     // Recognized movements hold out for enforceable control rather than a partial guarantee.
     const backing = talks.foreign, external = backing?.strength ?? 0;
     const pressure = Math.max(talks.grievance, localGrievance) + talks.distrust;
-    const adequateWithoutBacking = talks.offer === talks.requested ||
-      (talks.offer === "protected" && pressure < 0.44);
-    const adequate = adequateWithoutBacking ||
+    const adequate = talks.offer === talks.requested ||
+      (talks.offer === "protected" && pressure < 0.44) ||
       (talks.offer === "protected" && pressure < 0.44 - external * 0.05);
-    if (backing) {
-      world.instrumentation?.incrementCounter("foreignAdvocacy.negotiationReviewsWithBacking");
-      // An explicit comparison against the same decision with no external support.
-      if (adequate !== adequateWithoutBacking) world.instrumentation?.incrementCounter("foreignAdvocacy.decisionsChanged");
-    }
     if (adequate) {
       talks.nationalTreatment = nationalTreatment;
       resolve(world, id, talks, "agreed", talks.offer === talks.requested ?
@@ -214,19 +213,21 @@ export function reviewRegionalNegotiation(
   // Foreign recognition can raise the political cost of refusal, but a government that can
   // repudiate the sponsor's motives may harden instead. Both effects are bounded.
   const backing = talks.foreign, external = backing?.strength ?? 0, backlash = backing?.backlash ?? 0;
-  const willing = talks.grievance * 0.9 + constituency * 0.22 + character.cooperation * 0.48 +
+  const domesticWillingness = talks.grievance * 0.9 + constituency * 0.22 + character.cooperation * 0.48 +
     (1 - legitimacy) * 0.45 + (democracy ? (1 - support) * 0.20 : 0) - talks.distrust * 0.2 -
-    (cohesionist ? 0.30 + support * 0.12 : 0) - (atWar ? 0.12 : 0) - hardship * 0.11 +
-    external * (0.12 - backlash * 0.20);
-  if (backing && world.instrumentation) {
-    world.instrumentation.incrementCounter("foreignAdvocacy.negotiationReviewsWithBacking");
-    // Compare the branch this decision takes with and without the same backing. The
-    // counterfactual is only computed for diagnostics and never feeds the decision.
-    const willingWithoutBacking = willing - external * (0.12 - backlash * 0.20);
-    const decision = (value: number) => value < 0.34 ? "reject" : value >= (strategic ? 0.82 : 0.61) ? "full" : "partial";
-    if (decision(willing) !== decision(willingWithoutBacking)) world.instrumentation.incrementCounter("foreignAdvocacy.decisionsChanged");
+    (cohesionist ? 0.30 + support * 0.12 : 0) - (atWar ? 0.12 : 0) - hardship * 0.11;
+  const decision = (value: number) => value < 0.34 ? "reject" :
+    talks.requested === "protected" || value >= (strategic ? 0.82 : 0.61) ? "full" : "partial";
+  const actual = decision(domesticWillingness + external * (0.12 - backlash * 0.20));
+  if (world.instrumentation) {
+    const withoutBacking = backing ? decision(domesticWillingness) : actual;
+    if (backing) {
+      world.instrumentation.incrementCounter("foreignAdvocacy.negotiationReviewsWithBacking");
+      if (actual !== withoutBacking) world.instrumentation.incrementCounter("foreignAdvocacy.decisionsChanged");
+    }
+    world.instrumentation.observeRegionalAdvocacy?.({ kind: "governmentDecision", id, talks, actual, withoutBacking });
   }
-  if (willing < 0.34) {
+  if (actual === "reject") {
     rememberRefusal(world, nation, talks);
     world.instrumentation?.incrementCounter(cohesionist ? "regionalNegotiations.rejected.uniformity" : "regionalNegotiations.rejected.capacity");
     resolve(world, id, talks, "rejected", cohesionist ?
@@ -234,7 +235,7 @@ export function reviewRegionalNegotiation(
       "The cabinet judged its political and administrative capacity insufficient for concessions.");
     return;
   }
-  talks.offer = willing >= (strategic ? 0.82 : 0.61) ? talks.requested : "protected";
+  talks.offer = actual === "full" ? talks.requested : "protected";
   talks.status = "offer";
   talks.reviewAt = now + 10;
   world.instrumentation?.incrementCounter(talks.offer === talks.requested ? "regionalNegotiations.offered.full" : "regionalNegotiations.offered.partial");

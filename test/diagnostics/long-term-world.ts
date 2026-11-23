@@ -11,6 +11,8 @@ import { withMutedSimulationLogs } from "../helpers/muted-logs";
 import { observeWorldHistory } from "./world-history-observer";
 import { createFlowTotals, sampleFlows, summarizeWorld } from "./world-checkpoint";
 import { seedSubjectAcquisitions } from "./seed-subject-acquisitions";
+import { setForeignAdvocacySchedule } from "../../src/sim/foreign-advocacy-schedule";
+import { observeAdvocacyScheduling } from "./observe-advocacy-scheduling";
 import { worldSignature } from "./world-signature";
 
 const [scenario, rawSeed, ...rawDays] = process.argv.slice(2);
@@ -37,6 +39,11 @@ const world = withMutedSimulationLogs(() => createSeededWorld({
     } : {}),
   },
 }));
+const advocacySchedule = process.env.WORLD_ADVOCACY_SCHEDULE;
+assert(advocacySchedule === undefined || advocacySchedule === "periodic" ||
+  advocacySchedule === "event" || advocacySchedule === "100-day", "Unknown advocacy schedule");
+if (advocacySchedule) setForeignAdvocacySchedule(world, advocacySchedule);
+const advocacy = advocacySchedule ? observeAdvocacyScheduling(world) : undefined;
 // Optional scale fixture gives negotiations work even when the generated world remains at peace.
 const subjectPairs = Number(process.env.WORLD_SUBJECT_PAIRS ?? 0);
 assert(Number.isSafeInteger(subjectPairs) && subjectPairs >= 0);
@@ -66,7 +73,8 @@ const timings: Partial<Record<SimulationMetricName, number>> = {};
 const counters: Partial<Record<SimulationCounterName, number>> = {};
 const mean = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 const redistributionSamples: import("../../src/sim/instrumentation").RedistributionReviewSample[] = [];
-if (process.env.WORLD_METRICS === "1") world.instrumentation = {
+if (process.env.WORLD_METRICS === "1" || advocacy) world.instrumentation = {
+  ...advocacy?.instrumentation,
   recordDuration(name, ms) { timings[name] = (timings[name] ?? 0) + ms; },
   incrementCounter(name, amount = 1) { counters[name] = (counters[name] ?? 0) + amount; },
   ...(process.env.WORLD_REDISTRIBUTION_SAMPLES === "1" ? {
@@ -93,7 +101,10 @@ for (const day of days) {
         else fastMs += performance.now() - t;
       } else stepSimulationDay(world);
       history.sampleDay();
-      if (world.time.fastTick % DAYS_PER_SLOW_TICK === 0) sampleFlows(world, flows);
+      if (world.time.fastTick % DAYS_PER_SLOW_TICK === 0) {
+        sampleFlows(world, flows);
+        advocacy?.sampleDay();
+      }
       warDays += world.wars.length;
       unitDays += world.units.length;
       peakUnits = Math.max(peakUnits, world.units.length);
@@ -133,6 +144,7 @@ for (const day of days) {
   console.log(JSON.stringify({ day, since: previous, ...summarizeWorld(world), peakUnits, warDays, unitDays, flows,
     historyCounts: history.counts, wallMs: elapsed, cpuMs: (usage.user + usage.system) / 1000,
     politicalRecords, heapBeforeGcBytes, peakRssKiB: process.resourceUsage().maxRSS, heapBytes: process.memoryUsage().heapUsed,
+    ...(advocacy ? { advocacySchedule, advocacy: advocacy.summarize() } : {}),
     ...(world.instrumentation ? { fastOnlyMs: fastMs, cycleBoundaryMs: slowMs, timings, counters } : {}),
   }));
   previous = day;

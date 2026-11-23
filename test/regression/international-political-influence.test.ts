@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getDiplomacyState, getInfluence, getRelation } from "../../src/sim/diplomacy";
+import { setForeignAdvocacySchedule } from "../../src/sim/foreign-advocacy-schedule";
+import type { RegionalAdvocacyObservation } from "../../src/sim/instrumentation";
 import { getRegionalIdentityGrievance, grievanceLevel } from "../../src/sim/identity-grievances";
 import { updatePopulationPolitics } from "../../src/sim/population-politics";
 import { getNationalPolitics } from "../../src/sim/politics";
@@ -363,6 +365,7 @@ test("a stale commitment does not consume the sponsor's capacity", () => {
 
 test("foreign advocacy follows the scheduled evaluation cadence", () => {
   const s = scene();
+  setForeignAdvocacySchedule(s.world, "periodic");
   openDemand(s);
   // Enough influence for advocacy, but the campaign cooldown keeps the ideological
   // campaign system from spending first.
@@ -626,4 +629,182 @@ test("an inactive faction member is not an eligible sponsor", () => {
   updatePoliticalAdvocacy(s.world, getPoliticalContacts(s.world));
   assert.equal(talks.foreign?.sponsorId === s.fourth.id, false);
   assert.equal(getInfluence(s.world, s.fourth.id), before);
+});
+
+function observeAdvocacy(s: ReturnType<typeof scene>) {
+  const observations: Array<{ kind: RegionalAdvocacyObservation["kind"]; tick: number; id: string }> = [];
+  const counters: Record<string, number> = {};
+  s.world.instrumentation = {
+    recordDuration() {},
+    incrementCounter(name, amount = 1) { counters[name] = (counters[name] ?? 0) + amount; },
+    observeRegionalAdvocacy({ kind, id }) { observations.push({ kind, id, tick: s.world.time.slowTick }); },
+  };
+  return { observations, counters };
+}
+
+function screenAt(s: ReturnType<typeof scene>, tick: number) {
+  s.world.time.slowTick = tick;
+  s.world.time.fastTick = tick * 10;
+  updateForeignPoliticalInfluence(s.world);
+}
+
+test("schedules screen a 200-day demand at their actual update boundaries", () => {
+  for (const [schedule, expected] of [["periodic", []], ["event", [301]], ["100-day", [310, 320]]] as const) {
+    const s = scene();
+    setForeignAdvocacySchedule(s.world, schedule);
+    const { observations } = observeAdvocacy(s);
+    screenAt(s, 300); // Like stepSlowTick, screen before governance opens a demand.
+    const talks = openDemand(s);
+    for (let tick = 301; tick <= 320; tick++) {
+      screenAt(s, tick);
+      if (tick % 10 === 0) s.at(tick);
+    }
+    const screens = observations.filter(({ kind, id, tick }) => kind === "screened" && id === district && tick >= 300);
+    assert.deepEqual(screens.map(({ tick }) => tick), expected, schedule);
+    assert.equal(talks.status, "agreed");
+    if (schedule !== "periodic") assert.ok(observations.indexOf(screens[0]!) <
+      observations.findIndex(({ kind, tick }) => kind === "governmentDecision" && tick === 310));
+  }
+});
+
+test("event screening discards stale identities and closed demands and clears consumed entries", () => {
+  for (const invalidation of ["replacement", "settled", "transfer"] as const) {
+    const s = scene();
+    setForeignAdvocacySchedule(s.world, "event");
+    const talks = openDemand(s);
+    const { observations } = observeAdvocacy(s);
+    sponsorFinance(s.world, s.sponsor.id);
+    if (invalidation === "replacement") s.world.regionalNegotiations!.set(district, { ...talks, group: 2 });
+    else if (invalidation === "settled") talks.status = "agreed";
+    else s.world.regionalNegotiations!.delete(district);
+
+    screenAt(s, 301);
+    assert.equal(observations.length, 0, invalidation);
+    assert.equal(getInfluence(s.world, s.sponsor.id), 90);
+
+    openRegionalNegotiation(s.world, s.target, district, talks);
+    screenAt(s, 301);
+    assert.equal(observations.filter(({ kind }) => kind === "screened").length, 0);
+    screenAt(s, 302);
+    screenAt(s, 302);
+    screenAt(s, 303);
+    assert.equal(observations.filter(({ kind }) => kind === "screened").length, 1);
+  }
+});
+
+test("event screening recognizes contacts established after the demand opened", () => {
+  const s = scene();
+  setForeignAdvocacySchedule(s.world, "event");
+  const talks = openDemand(s);
+  const { counters } = observeAdvocacy(s);
+  assert.ok(!getPoliticalContacts(s.world).get(s.target.id)?.has(s.fourth.id));
+  s.fourth.identityGovernment!.favored.culture = "tide-guilds";
+  sponsorFinance(s.world, s.fourth.id, 90);
+  const relation = getRelation(s.world, s.target.id, s.fourth.id);
+  relation.opinion = 60;
+  relation.trust = 80;
+  const faction = createFaction(s.world, s.target.id, {
+    allowedIdeologyIds: [getNationIdeology(s.world, s.target.id).id, getNationIdeology(s.world, s.fourth.id).id],
+    defensiveObligation: "mandatory", offensiveObligation: "none", considerPersonality: true,
+  });
+  assert.ok(faction);
+  assert.equal(joinFaction(s.world, s.fourth.id, faction.id), true);
+  screenAt(s, 301);
+  assert.equal(talks.foreign?.sponsorId, s.fourth.id);
+  assert.equal(counters["foreignAdvocacy.accepted"], 1);
+});
+
+test("event screening uses the shared spending, order and commitment checks", () => {
+  const run = (reverse: boolean, instrumented: boolean) => {
+    const s = scene();
+    const ids = [fixedSocietyDistrict(1, 1), fixedSocietyDistrict(2, 1), fixedSocietyDistrict(4, 1)];
+    openDemands(s, reverse ? [...ids].reverse() : ids);
+    if (instrumented) {
+      observeAdvocacy(s);
+      s.world.instrumentation!.startForeignAdvocacyMeasurement = () => undefined;
+    }
+    getRelation(s.world, s.target.id, s.sponsor.id).trust = 60;
+    sponsorFinance(s.world, s.sponsor.id);
+    screenAt(s, 301);
+    assert.equal(commitCount(s), 1);
+    assert.equal(getInfluence(s.world, s.sponsor.id), 90 - POLITICAL_ADVOCACY_COST);
+    return ids.map((id) => s.world.regionalNegotiations!.get(id)?.foreign);
+  };
+  assert.deepEqual(run(false, true), run(true, false));
+});
+
+test("an event with no eligible sponsor is recorded without spending influence", () => {
+  const s = scene();
+  setForeignAdvocacySchedule(s.world, "event");
+  openDemand(s);
+  const { observations, counters } = observeAdvocacy(s);
+  for (const { id } of s.world.nations) sponsorFinance(s.world, id, 0);
+  screenAt(s, 301);
+  assert.equal(observations.filter(({ kind }) => kind === "screened").length, 1);
+  assert.equal(observations.filter(({ kind }) => kind === "offer").length, 0);
+  assert.ok(counters["foreignAdvocacy.excluded.influence"]! > 0);
+  assert.equal(getInfluence(s.world, s.sponsor.id), 0);
+});
+
+test("foreign backing can harden the government's position in the same-state comparison", () => {
+  const s = scene({ cooperation: 0.61 });
+  const talks = openDemand(s);
+  const choices: Array<[string, string]> = [];
+  s.world.instrumentation = {
+    recordDuration() {},
+    incrementCounter() {},
+    observeRegionalAdvocacy(event) {
+      if (event.kind === "governmentDecision") choices.push([event.withoutBacking, event.actual]);
+    },
+  };
+  talks.foreign = { sponsorId: s.sponsor.id, strength: 0.85, backlash: 1, since: 300, renewAt: 460 };
+  s.at(310);
+  assert.deepEqual(choices, [["full", "partial"]]);
+});
+
+test("event screening excludes a treaty contact that expires before evaluation", () => {
+  const s = scene();
+  setForeignAdvocacySchedule(s.world, "event");
+  const talks = openDemand(s);
+  const relation = getRelation(s.world, s.target.id, s.fourth.id);
+  relation.treaties.push({ type: "trade", expiresAtSlowTick: 301 });
+  assert.ok(getPoliticalContacts(s.world).get(s.target.id)?.has(s.fourth.id));
+  s.fourth.identityGovernment!.favored.culture = "tide-guilds";
+  sponsorFinance(s.world, s.fourth.id, 90);
+  const { observations } = observeAdvocacy(s);
+  screenAt(s, 301);
+  assert.ok(!getPoliticalContacts(s.world).get(s.target.id)?.has(s.fourth.id));
+  assert.equal(observations.filter(({ kind }) => kind === "screened").length, 1);
+  assert.equal(talks.foreign, undefined);
+  assert.equal(getInfluence(s.world, s.fourth.id), 90);
+});
+
+test("foreign backing can turn a government rejection into an offer", () => {
+  const s = scene({ cooperation: 0.04 });
+  const talks = openDemand(s);
+  talks.distrust = 0.25;
+  const choices: Array<[string, string]> = [];
+  s.world.instrumentation = {
+    recordDuration() {},
+    incrementCounter() {},
+    observeRegionalAdvocacy(event) {
+      if (event.kind === "governmentDecision") choices.push([event.withoutBacking, event.actual]);
+    },
+  };
+  talks.foreign = { sponsorId: s.sponsor.id, strength: 0.85, backlash: 0, since: 300, renewAt: 460 };
+  s.at(310);
+  assert.deepEqual(choices, [["reject", "partial"]]);
+  assert.equal(talks.offer, "protected");
+});
+
+test("crossing the autonomy threshold does not change an offer of requested protection", () => {
+  const s = scene({ cooperation: 0.49 });
+  const talks = openDemand(s);
+  talks.requested = "protected";
+  talks.foreign = { sponsorId: s.sponsor.id, strength: 0.85, backlash: 0, since: 300, renewAt: 460 };
+  const { counters } = observeAdvocacy(s);
+  s.at(310);
+  assert.equal(talks.offer, "protected");
+  assert.equal(counters["foreignAdvocacy.negotiationReviewsWithBacking"], 1);
+  assert.equal(counters["foreignAdvocacy.decisionsChanged"] ?? 0, 0);
 });

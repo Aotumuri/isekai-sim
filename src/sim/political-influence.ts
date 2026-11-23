@@ -1,11 +1,12 @@
 import { getInfluence, getRelation, hasTreaty, spendInfluence } from "./diplomacy";
 import { areFactionPartners } from "./factions";
+import { FIRST_FOREIGN_ADVOCACY_TICK, getForeignAdvocacySchedule, takePendingRegionalDemands } from "./foreign-advocacy-schedule";
 import { isNationActive } from "./nation-active";
 import { getNationCharacter } from "./nation-character";
 import { getNationIdeology } from "./nation-identity";
-import { updateForeignBacking, updatePoliticalAdvocacy } from "./political-advocacy";
+import { liveNegotiations, updateForeignBacking, updatePoliticalAdvocacy } from "./political-advocacy";
 import { getNationalPolitics, increasePoliticalSupport } from "./politics";
-import { getWarDeclarationMode, recordSimulationEvent } from "./simulation-settings";
+import { getWarDeclarationMode, hasPoliticalTurbulence, recordSimulationEvent } from "./simulation-settings";
 import { getAdjacentNationPairs } from "./world-cache";
 import type { WorldState } from "./world-state";
 import { findWar } from "./war-state";
@@ -66,9 +67,10 @@ export function launchPoliticalCampaign(world: WorldState, sponsorId: NationId, 
  * a trade pact or a common faction. Built once per evaluation pass. Faction membership
  * is grouped by faction so the index never scans every nation pair.
  */
-export function getPoliticalContacts(world: WorldState): Map<NationId, Set<NationId>> {
+export function getPoliticalContacts(world: WorldState, targets?: ReadonlySet<NationId>): Map<NationId, Set<NationId>> {
   const contacts = new Map<NationId, Set<NationId>>();
   const addContact = (a: NationId, b: NationId) => {
+    if (targets && !targets.has(a)) return;
     const partners = contacts.get(a) ?? new Set<NationId>();
     partners.add(b);
     contacts.set(a, partners);
@@ -94,6 +96,13 @@ export function getPoliticalContacts(world: WorldState): Map<NationId, Set<Natio
   }
   for (const factionId of [...factionMembers.keys()].sort()) {
     const members = factionMembers.get(factionId)!.sort();
+    if (targets) {
+      for (const a of members) {
+        if (!targets.has(a)) continue;
+        for (const b of members) if (a !== b) addContact(a, b);
+      }
+      continue;
+    }
     for (let i = 0; i < members.length; i++) for (let j = i + 1; j < members.length; j++) {
       addContact(members[i]!, members[j]!);
       addContact(members[j]!, members[i]!);
@@ -125,11 +134,31 @@ function updateIdeologicalCampaigns(world: WorldState, contacts: ReadonlyMap<Nat
 
 export function updateForeignPoliticalInfluence(world: WorldState): void {
   const now = world.time.slowTick;
+  const schedule = getForeignAdvocacySchedule(world);
+  // Advocacy runs before this slow tick's governance. A queued demand is from
+  // an earlier completed tick, and contacts are read from the current world.
+  const pending = schedule === "event" ? takePendingRegionalDemands(world) : undefined;
   if (getWarDeclarationMode(world) !== "diplomacy" || now < 180) return;
   // Support that is not renewed fades, regardless of the campaign cadence.
   if (now % 10 === 0) updateForeignBacking(world);
-  if (now % 60 !== 0) return;
-  const contacts = getPoliticalContacts(world);
-  updateIdeologicalCampaigns(world, contacts);
-  updatePoliticalAdvocacy(world, contacts);
+  const campaignBoundary = now % 60 === 0;
+  const campaignContacts = campaignBoundary ? getPoliticalContacts(world) : undefined;
+  if (campaignContacts) updateIdeologicalCampaigns(world, campaignContacts);
+  if (!hasPoliticalTurbulence(world) || now < FIRST_FOREIGN_ADVOCACY_TICK) return;
+  const screen = schedule === "periodic" ? campaignBoundary :
+    schedule === "100-day" ? now % 10 === 0 : now === FIRST_FOREIGN_ADVOCACY_TICK || !!pending?.length;
+  if (!screen) return;
+  const evaluate = () => {
+    const negotiations = liveNegotiations(world, schedule === "event" && now !== FIRST_FOREIGN_ADVOCACY_TICK ? pending : undefined);
+    if (!negotiations.length) return;
+    const contacts = campaignContacts ?? getPoliticalContacts(world, new Set(negotiations.map(([, { owner }]) => owner)));
+    updatePoliticalAdvocacy(world, contacts, negotiations);
+  };
+  const instrumentation = world.instrumentation;
+  if (!instrumentation) { evaluate(); return; }
+  const start = performance.now();
+  const finishMeasurement = instrumentation.startForeignAdvocacyMeasurement?.();
+  evaluate();
+  finishMeasurement?.();
+  instrumentation.recordDuration("politics.foreignAdvocacy", performance.now() - start);
 }

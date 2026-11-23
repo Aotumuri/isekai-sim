@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { setForeignAdvocacySchedule } from "../../src/sim/foreign-advocacy-schedule";
 import { createSimulationSettings } from "../../src/sim/simulation-settings";
 import type { SimulationCounterName } from "../../src/sim/instrumentation";
 import { DAYS_PER_SLOW_TICK } from "../../src/sim/time";
@@ -10,7 +11,7 @@ import { withMutedSimulationLogs } from "../helpers/muted-logs";
 
 /**
  * Measures whether regional demands live long enough to meet a foreign advocacy
- * evaluation pass. The engine evaluates advocacy every 60 slow ticks (600 days) and
+ * evaluation pass under the original periodic control. It evaluates every 60 slow ticks (600 days) and
  * reviews a regional demand every 10 slow ticks (100 days), so this diagnostic
  * records each demand's lifetime and how many evaluation passes it overlapped.
  *
@@ -72,6 +73,7 @@ for (let pair = 0; pair < args.length; pair += 2) {
       } : {}),
     },
   }));
+  setForeignAdvocacySchedule(world, "periodic");
   const counters: Partial<Record<SimulationCounterName, number>> = {};
   world.instrumentation = {
     recordDuration() {},
