@@ -145,7 +145,9 @@ function liveNegotiations(world: WorldState): [MesoRegionId, RegionalNegotiation
 
 function activeSponsorships(world: WorldState): Map<NationId, number> {
   const counts = new Map<NationId, number>();
-  for (const [, talks] of world.regionalNegotiations ?? []) {
+  // Only live negotiations consume a sponsor's capacity. A commitment left on a
+  // closed or superseded case must not block new legitimate commitments.
+  for (const [, talks] of liveNegotiations(world)) {
     const sponsor = talks.foreign?.sponsorId;
     if (sponsor) counts.set(sponsor, (counts.get(sponsor) ?? 0) + 1);
   }

@@ -232,6 +232,29 @@ test("support lapses without renewal instead of accumulating forever", () => {
   assert.equal(talks.foreign, undefined);
 });
 
+test("an expired commitment is released without renewal spending", () => {
+  const s = scene();
+  const talks = openDemand(s);
+  sponsorFinance(s.world, s.sponsor.id, 90);
+  getRelation(s.world, s.sponsor.id, s.target.id).trust = 60;
+  updatePoliticalAdvocacy(s.world, getPoliticalContacts(s.world));
+  assert.ok(talks.foreign);
+  const before = getInfluence(s.world, s.sponsor.id);
+  const counters: Record<string, number> = {};
+  s.world.instrumentation = {
+    recordDuration() {},
+    incrementCounter(name) { counters[name] = (counters[name] ?? 0) + 1; },
+  };
+  // The sponsor's interest disappears before the renewal is due.
+  s.sponsor.identityGovernment!.favored.culture = "reed-courts";
+  s.world.time.slowTick = talks.foreign!.renewAt;
+  updateForeignBacking(s.world);
+  s.world.instrumentation = undefined;
+  assert.equal(talks.foreign, undefined);
+  assert.equal(counters["foreignAdvocacy.expired"], 1);
+  assert.equal(getInfluence(s.world, s.sponsor.id), before);
+});
+
 test("shared identity makes a sponsor welcome, not controlling", () => {
   const s = scene();
   const talks = openDemand(s);
@@ -313,6 +336,65 @@ test("support disappears safely when the target demand or government is gone", (
   updateForeignBacking(s.world);
   updatePoliticalAdvocacy(s.world, getPoliticalContacts(s.world));
   assert.equal(getInfluence(s.world, s.sponsor.id), before);
+});
+
+test("a stale commitment does not consume the sponsor's capacity", () => {
+  const s = scene();
+  const demands = openDemands(s, [
+    fixedSocietyDistrict(1, 1), fixedSocietyDistrict(2, 1), fixedSocietyDistrict(4, 1),
+  ]);
+  sponsorFinance(s.world, s.sponsor.id, 90);
+  getRelation(s.world, s.sponsor.id, s.target.id).trust = 60;
+  updatePoliticalAdvocacy(s.world, getPoliticalContacts(s.world));
+  assert.equal(commitCount(s), 1);
+  const committed = demands.find(({ foreign }) => foreign?.sponsorId === s.sponsor.id)!;
+  const stale = demands.find((demand) => demand !== committed)!;
+  // Simulate a commitment left behind on a case that is no longer live. It must not
+  // count against the sponsor's two simultaneous commitments.
+  stale.status = "rejected";
+  stale.foreign = { sponsorId: s.sponsor.id, strength: 0.5, backlash: 0, since: 0, renewAt: 0 };
+  s.sponsor.politics!.nextForeignAdvocacyAt = 0;
+  s.world.time.slowTick = 360;
+  s.world.time.fastTick = 3600;
+  updatePoliticalAdvocacy(s.world, getPoliticalContacts(s.world));
+  assert.equal(commitCount(s), MAX_ACTIVE_PER_SPONSOR,
+    "the live commitment count ignores the closed case");
+});
+
+test("foreign advocacy follows the scheduled evaluation cadence", () => {
+  const s = scene();
+  openDemand(s);
+  // Enough influence for advocacy, but the campaign cooldown keeps the ideological
+  // campaign system from spending first.
+  sponsorFinance(s.world, s.sponsor.id, 50);
+  s.sponsor.politics!.nextForeignCampaignAt = Infinity;
+  getRelation(s.world, s.sponsor.id, s.target.id).trust = 60;
+  s.world.time.slowTick = 310;
+  s.world.time.fastTick = 3100;
+  updateForeignPoliticalInfluence(s.world);
+  assert.equal(s.talks()?.foreign, undefined, "backing maintenance does not create a commitment");
+  s.world.time.slowTick = 360;
+  s.world.time.fastTick = 3600;
+  updateForeignPoliticalInfluence(s.world);
+  assert.equal(s.talks()?.foreign?.sponsorId, s.sponsor.id);
+});
+
+test("no-op instrumentation does not alter advocacy decisions", () => {
+  const run = (instrumented: boolean) => {
+    const s = scene();
+    const talks = openDemand(s);
+    sponsorFinance(s.world, s.sponsor.id);
+    getRelation(s.world, s.sponsor.id, s.target.id).trust = 60;
+    if (instrumented) s.world.instrumentation = { recordDuration() {}, incrementCounter() {} };
+    updatePoliticalAdvocacy(s.world, getPoliticalContacts(s.world));
+    return {
+      sponsor: talks.foreign?.sponsorId ?? null,
+      strength: talks.foreign?.strength ?? null,
+      influence: getInfluence(s.world, s.sponsor.id),
+      cooldown: s.sponsor.politics?.nextForeignAdvocacyAt ?? null,
+    };
+  };
+  assert.deepEqual(run(true), run(false));
 });
 
 test("a subject balances overlord, local demand and an outside sponsor", () => {
@@ -408,7 +490,8 @@ function openDemands(s: ReturnType<typeof scene>, ids: ReturnType<typeof fixedSo
 
 function commitCount(s: ReturnType<typeof scene>) {
   return [...s.world.regionalNegotiations?.values() ?? []]
-    .filter(({ foreign }) => foreign?.sponsorId === s.sponsor.id).length;
+    .filter(({ foreign, status }) => foreign?.sponsorId === s.sponsor.id &&
+      (status === "demand" || status === "deferred" || status === "offer")).length;
 }
 
 test("a sponsor cannot exceed its commitment limit within one evaluation cycle", () => {

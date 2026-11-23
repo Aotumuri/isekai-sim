@@ -26,7 +26,11 @@ export function observeWorldHistory(world: WorldState, limit = 1_000) {
         ? /, district (meso-[0-9]+):/.exec(event.message)?.[1] as import("../../src/worldgen/meso-region").MesoRegionId | undefined
         : undefined;
       const talks = district && world.regionalNegotiations?.get(district);
-      record(kind, { ids: event.nationIds, message: event.message, ...(talks ? { negotiation: { ...talks, refusals: undefined } } : {}) });
+      // Snapshot mutable negotiation state. Event details are kept for the whole run,
+      // so retaining live references would let later reopens and refusals rewrite history.
+      const snapshot = talks ? structuredClone(talks) : undefined;
+      if (snapshot) snapshot.refusals = undefined;
+      record(kind, { ids: [...event.nationIds], message: event.message, ...(snapshot ? { negotiation: snapshot } : {}) });
     }
     return Array.prototype.push.apply(this, items);
   };
