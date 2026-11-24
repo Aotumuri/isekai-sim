@@ -4,7 +4,7 @@ push = "deny"
 pull_request = "deny"
 
 [tracker]
-backend = "local"
+backend = "github"
 
 [tracker.github]
 repository = "Aotumuri/isekai-sim"
@@ -15,5 +15,6 @@ close_issue = "ask"
 close_on = "published"
 
 [execution]
+codex_cli_path = "/opt/homebrew/bin/codex"
 auto_resume = false
 max_active_workers = 1

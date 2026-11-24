@@ -23,7 +23,9 @@ class FrameworkTest(unittest.TestCase):
         self.research.mkdir()
         for path in TOOLS.glob("*.py"):
             shutil.copy(path, self.tools / path.name)
-        shutil.copy(TOOLS.parent / "config.toml", self.tools.parent / "config.toml")
+        settings = (TOOLS.parent / "config.toml").read_text()
+        (self.tools.parent / "config.toml").write_text(
+            settings.replace('backend = "github"', 'backend = "local"'))
         self.save(self.research / "state.json", {"version": 1, "tasks": {}, "reviews": {}})
         self.git("init", "-q")
         (self.root / "source.txt").write_text("committed")
@@ -140,10 +142,37 @@ class FrameworkTest(unittest.TestCase):
                 self.assertIn(error, result.stderr)
                 self.assertFalse(self.manifest(job).parent.exists())
 
+    def test_notification_cli_preference_and_portable_fallback(self):
+        configured = self.root / "standalone"
+        on_path = self.root / "codex"
+        bundled = self.root / "bundled"
+        for path in (configured, on_path, bundled):
+            path.write_text("#!/bin/sh\nprintf '%s\\n' "
+                            "'Queue a message for an existing session --thread --message --resume'\n")
+            path.chmod(0o700)
+        settings = self.tools.parent / "config.toml"
+        settings.write_text(settings.read_text().replace(
+            'codex_cli_path = "/opt/homebrew/bin/codex"',
+            f"codex_cli_path = {json.dumps(str(configured))}"))
+        env = {**os.environ, "PATH": str(self.root), "CODEX_APP_RUNTIME_CLI_PATH": str(bundled)}
+        env.pop("CODEX_CLI_PATH", None)
+
+        def selected_cli():
+            result = self.call("runner", "capabilities", env=env)
+            return json.loads(result.stdout)["notification_cli"]
+
+        self.assertEqual(selected_cli(), str(configured))
+        configured.unlink()
+        self.assertEqual(selected_cli(), str(on_path))
+        on_path.write_text("#!/bin/sh\nexit 1\n")
+        self.assertEqual(selected_cli(), str(bundled))
+        env["CODEX_CLI_PATH"] = str(configured)
+        self.assertIsNone(selected_cli())
+
     def test_notification_result_and_recovery_do_not_send_twice(self):
         fake = self.root / "fake-codex"
         marker = self.root / "deliveries"
-        environment = {**os.environ, "CODEX_APP_RUNTIME_CLI_PATH": str(fake),
+        environment = {**os.environ, "CODEX_CLI_PATH": str(fake),
                        "DELIVERIES": str(marker)}
         self.task("claim", "fixture")
         for exit_code, status in ((0, "accepted"), (9, "failed")):
@@ -176,7 +205,7 @@ class FrameworkTest(unittest.TestCase):
                         " echo 'Queue a message for an existing session --thread --message --resume'\n"
                         "else\n exit 99\nfi\n")
         fake.chmod(0o700)
-        env = {**os.environ, "CODEX_APP_RUNTIME_CLI_PATH": str(fake)}
+        env = {**os.environ, "CODEX_CLI_PATH": str(fake)}
         self.task("claim", "fixture")
         self.assertNotEqual(self.start("denied", "pass", "--notify-thread", "fixture",
                                        check=False, env=env).returncode, 0)
@@ -238,7 +267,7 @@ time.sleep(20)
                         " echo 'Queue a message for an existing session --thread --message --resume'\n"
                         "else\n printf '%s\\n' \"$@\"\nfi\n")
         fake.chmod(0o700)
-        env = {**os.environ, "CODEX_APP_RUNTIME_CLI_PATH": str(fake)}
+        env = {**os.environ, "CODEX_CLI_PATH": str(fake)}
         self.task("claim", "first")
         self.start("graceful", "import time; time.sleep(2); print('result')",
                    "--notify-thread", "first", env=env)

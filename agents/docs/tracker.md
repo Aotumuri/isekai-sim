@@ -1,6 +1,6 @@
 # 課題トラッカー
 
-`agents/config.toml` の `tracker.backend` で選ぶ。現在は `local`。GitHub モードを有効化する場合は、所有者が対象リポジトリ・認証・権限を確認し、移行後に設定を切り替える。
+`agents/config.toml` の `tracker.backend` で選ぶ。現在の正本は `Aotumuri/isekai-sim` の GitHub Issues。既存のローカル課題は履歴として保存している。リポジトリの切り替えや移行を行う場合は対象・認証・権限を確認する。
 
 | 対象 | 正本 |
 | --- | --- |

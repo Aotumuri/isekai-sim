@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 from control import finish_if_no_wake, saved_jobs, settle, TERMINAL
-from policy import CONTROL, LOCK, auto_resume, control, owner, require_running, wake_scope
+from policy import CONTROL, LOCK, auto_resume, config, control, owner, require_running, wake_scope
 from storage import ROOT, RUNTIME, git, lock, now, read, write
 
 JOBS = RUNTIME / "jobs"
@@ -53,7 +53,7 @@ def start(args):
             raise ValueError("Automatic continuation is disabled by repository policy")
         queue_cli = next((cli for cli in cli_candidates() if supports_queue(cli)), None)
         if not queue_cli:
-            raise ValueError("No Codex CLI with --thread/--message queue support")
+            raise ValueError("No Codex CLI with --thread/--message/--resume queue support")
     job = JOBS / args.id
     job.mkdir(parents=True)
     (job / "artifacts").mkdir()
@@ -160,8 +160,16 @@ def finish(job, manifest, status, *, exit_code=None, **details):
 
 
 def cli_candidates():
-    return list(dict.fromkeys(filter(None, (os.environ.get("CODEX_APP_RUNTIME_CLI_PATH"),
-                                             shutil.which("codex")))))
+    override = os.environ.get("CODEX_CLI_PATH")
+    configured = config().get("execution", {}).get("codex_cli_path")
+    candidates = (override,) if override else (
+        configured, "codex", os.environ.get("CODEX_APP_RUNTIME_CLI_PATH"))
+    paths = {}
+    for candidate in filter(None, candidates):
+        executable = shutil.which(os.path.expanduser(candidate))
+        if executable:
+            paths[os.path.abspath(executable)] = None
+    return list(paths)
 
 
 def probe(command):
@@ -179,12 +187,14 @@ def supports_queue(cli):
 
 
 def capabilities():
-    cli = cli_candidates()
+    cli = [{"path": path, "version": probe([path, "--version"]).strip(),
+            "queue": supports_queue(path),
+            "resume": "SESSION_ID" in probe([path, "exec", "resume", "--help"]),
+            "app_server": "--listen" in probe([path, "app-server", "--help"])}
+           for path in cli_candidates()]
     return {
-        "codex": [{"path": path, "version": probe([path, "--version"]).strip(),
-                   "queue": supports_queue(path),
-                   "resume": "SESSION_ID" in probe([path, "exec", "resume", "--help"]),
-                   "app_server": "--listen" in probe([path, "app-server", "--help"])} for path in cli],
+        "codex": cli,
+        "notification_cli": next((entry["path"] for entry in cli if entry["queue"]), None),
         "thread_hint_present": bool(os.environ.get("CODEX_THREAD_ID")),
         "desktop_runtime_present": bool(os.environ.get("CODEX_APP_RUNTIME_CLI_PATH")),
         "tmux": bool(shutil.which("tmux")),
