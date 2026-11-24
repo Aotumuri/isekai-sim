@@ -57,7 +57,7 @@ Developer は担当課題の報告に、意外な観察、未解決の問い、�
 
 ## 運用権限
 
-`agents/config.toml` の `allow` はこのリポジトリ上の許可、`ask` は所有者から対象操作への明示承認が必要、`deny` は禁止。未設定の許可は拒否。プラットフォームの制限と別に適用される。現在はローカルコミット可、push と PR 禁止、Issue の書き込みは個別承認。Issue CLI の `--approved` は承認済み操作を申告する。Git の操作前には `python3 agents/tools/control.py permission git commit` などで確認する。
+`agents/config.toml` の `allow` はこのリポジトリ上の許可、`ask` は所有者から対象操作への明示承認が必要、`deny` は禁止。未設定の許可は拒否。プラットフォームの制限と別に適用される。現在はローカルコミット、Issue の起票・更新・コメント・クローズ、ラベルの作成・削除を設定で許可する。Issue のクローズには公開済みの完了証拠が必要。push と PR は禁止。設定が `ask` の操作では承認を得てから Issue CLI の `--approved` を使う。Git の操作前には `python3 agents/tools/control.py permission git commit` などで確認する。
 
 ## 停止と再開
 
