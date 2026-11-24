@@ -14,6 +14,8 @@ import { seedSubjectAcquisitions } from "./seed-subject-acquisitions";
 import { setForeignAdvocacySchedule } from "../../src/sim/foreign-advocacy-schedule";
 import { observeAdvocacyScheduling } from "./observe-advocacy-scheduling";
 import { observeAdvocacyReassessment } from "./observe-advocacy-reassessment";
+import { observeFoodAndTreasury } from "./observe-food-and-treasury";
+import { observeFuelAccounting } from "./observe-fuel-accounting";
 import { worldSignature } from "./world-signature";
 
 const [scenario, rawSeed, ...rawDays] = process.argv.slice(2);
@@ -74,18 +76,25 @@ const requestedAcquisitions = Number(process.env.WORLD_SUBJECT_ACQUISITIONS ?? 0
 assert(Number.isSafeInteger(requestedAcquisitions) && requestedAcquisitions >= 0);
 const seededAcquisitions = requestedAcquisitions ? seedSubjectAcquisitions(world, requestedAcquisitions) : 0;
 if (requestedAcquisitions) assert(seededAcquisitions > 0, "No eligible borders for the controlled acquisitions");
+const fuelAccounting = process.env.WORLD_FUEL_ACCOUNTING === "1" ? observeFuelAccounting(world) : undefined;
+assert(!fuelAccounting || !disabled, "Fuel accounting requires the standard economic systems");
 const timings: Partial<Record<SimulationMetricName, number>> = {};
 const counters: Partial<Record<SimulationCounterName, number>> = {};
 const mean = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+const fiscalAccounting = fuelAccounting ? observeFoodAndTreasury(world, counters) : undefined;
 const redistributionSamples: import("../../src/sim/instrumentation").RedistributionReviewSample[] = [];
-if (process.env.WORLD_METRICS === "1" || advocacy) world.instrumentation = {
+if (process.env.WORLD_METRICS === "1" || advocacy || fuelAccounting) world.instrumentation = {
   ...advocacy?.instrumentation,
   ...reassessment?.instrumentation,
   observeRegionalAdvocacy(event) {
     advocacy?.instrumentation.observeRegionalAdvocacy?.(event);
     reassessment?.instrumentation.observeRegionalAdvocacy?.(event);
   },
-  recordDuration(name, ms) { timings[name] = (timings[name] ?? 0) + ms; },
+  ...(fuelAccounting ? { observeFuelFlow: fuelAccounting.record } : {}),
+  recordDuration(name, ms) {
+    timings[name] = (timings[name] ?? 0) + ms;
+    if (name === "production.evaluation") fuelAccounting?.afterProduction();
+  },
   incrementCounter(name, amount = 1) { counters[name] = (counters[name] ?? 0) + amount; },
   ...(process.env.WORLD_REDISTRIBUTION_SAMPLES === "1" ? {
     recordRedistributionReview(sample: import("../../src/sim/instrumentation").RedistributionReviewSample) {
@@ -113,6 +122,8 @@ for (const day of days) {
       history.sampleDay();
       if (world.time.fastTick % DAYS_PER_SLOW_TICK === 0) {
         sampleFlows(world, flows);
+        fuelAccounting?.afterCycle();
+        fiscalAccounting?.afterCycle();
         advocacy?.sampleDay();
       }
       warDays += world.wars.length;
@@ -154,6 +165,7 @@ for (const day of days) {
   console.log(JSON.stringify({ day, since: previous, ...summarizeWorld(world), peakUnits, warDays, unitDays, flows,
     historyCounts: history.counts, wallMs: elapsed, cpuMs: (usage.user + usage.system) / 1000,
     politicalRecords, heapBeforeGcBytes, peakRssKiB: process.resourceUsage().maxRSS, heapBytes: process.memoryUsage().heapUsed,
+    ...(fuelAccounting ? { fuelAccounting: fuelAccounting.summarize(), fiscalAccounting: fiscalAccounting?.summarize() } : {}),
     ...(advocacy ? { advocacySchedule, advocacy: advocacy.summarize() } : {}),
     ...(reassessment ? { reassessment: reassessment.summarize() } : {}),
     ...(world.instrumentation ? { fastOnlyMs: fastMs, cycleBoundaryMs: slowMs, timings, counters } : {}),

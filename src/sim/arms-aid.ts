@@ -47,6 +47,8 @@ export function sendArmsAid(world: WorldState, donorId: NationId, recipientId: N
   const route = findTradeRoute(world, donorId, recipientId);
   if (!route) return false;
   const fuel = route.maritime ? Math.max(2, Math.ceil(route.regionIds.length * 0.1)) : 0;
+  if (fuel > 0) world.instrumentation?.observeFuelFlow?.({ category: "aidTransport", nationId: donor.id,
+    stock: donor.resources.fuel, requested: fuel, consumed: donor.resources.fuel >= fuel ? fuel : 0 });
   if (donor.resources.fuel < fuel) return false;
   changeResource(donor, "weapons", -weapons);
   if (fuel) { changeResource(donor, "fuel", -fuel); getInternationalTradeState(world).fuelSpent += fuel; }
@@ -73,6 +75,21 @@ function fieldImportedEquipment(world: WorldState, shipment: ArmsAidShipment): v
   }
 }
 
+function returnArmsAid(world: WorldState, shipment: ArmsAidShipment, donor?: WorldState["nations"][number]): void {
+  if (donor) changeResource(donor, "weapons", shipment.weapons);
+  shipment.status = "returned";
+  getArmsAidState(world).returned++;
+  recordSimulationEvent(world, { category: "aid", nationIds: [shipment.donorId, shipment.recipientId],
+    message: `${shipment.id} returned: aid route or relations unavailable.` });
+}
+
+export function returnArmsAidForGovernment(world: WorldState, nationId: NationId): void {
+  for (const shipment of world.armsAid?.shipments ?? []) {
+    if (shipment.status !== "in-transit" || (shipment.donorId !== nationId && shipment.recipientId !== nationId)) continue;
+    returnArmsAid(world, shipment, world.nations.find(({ id }) => id === shipment.donorId));
+  }
+}
+
 export function updateArmsAid(world: WorldState): void {
   const state = world.armsAid;
   if (state && state.lastSlowTick !== world.time.slowTick) {
@@ -81,9 +98,7 @@ export function updateArmsAid(world: WorldState): void {
       const donor = world.nations.find((nation) => nation.id === shipment.donorId), recipient = world.nations.find((nation) => nation.id === shipment.recipientId);
       if (!world.settings?.armsAidEnabled || !donor || !recipient || !isNationActive(donor) || !isNationActive(recipient) ||
         !canSupportNation(world, shipment.donorId, shipment.recipientId) || !isTradeRouteOpen(world, shipment.donorId, shipment.recipientId, shipment.route)) {
-        if (donor) changeResource(donor, "weapons", shipment.weapons);
-        shipment.status = "returned"; state.returned += 1;
-        recordSimulationEvent(world, { category: "aid", nationIds: [shipment.donorId, shipment.recipientId], message: `${shipment.id} returned: aid route or relations unavailable.` });
+        returnArmsAid(world, shipment, donor);
       } else if (world.time.slowTick >= shipment.arrivesAtSlowTick) {
         changeResource(recipient, "weapons", shipment.weapons);
         fieldImportedEquipment(world, shipment);

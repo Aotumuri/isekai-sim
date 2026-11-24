@@ -70,7 +70,7 @@ function changeTradeStock(nation: NationRuntime, resource: TradeResource, amount
 export function resourceReserve(nation: NationRuntime, resource: TradeResource): number {
   if (resource === "food") return (nation.food?.demand ?? 0) * (nation.food?.protectGrainExports ? 6 : 2);
   if (resource === "cash") return 10;
-  return resource === "fuel" ? Math.max(20, (nation.resourceFlow.industry?.fuelDemand ?? nation.resourceFlow.usage.fuel) * 5)
+  return resource === "fuel" ? Math.max(20, (nation.resourceFlow.industry?.fuelDemand ?? nation.resourceFlow.fuelUpkeepDemand ?? nation.resourceFlow.usage.fuel) * 5)
     : resource === "weapons" ? 25 : isStrategicResource(resource) ? 6 : 20;
 }
 
@@ -199,7 +199,11 @@ function dispatchTrade(world: WorldState, sellerId: NationId, buyerId: NationId,
   if (purchase) {
     const exportFloor = Math.max(resourceReserve(seller, offeredResource), purchase.exportFloor);
     const fuelReserve = Math.max(resourceReserve(seller, "fuel"), purchase.sellerFuelReserve);
-    if (purchase.markup < 1 || (shippingFuel > 0 && seller.resources.fuel < fuelReserve + shippingFuel)) return false;
+    if (purchase.markup < 1) return false;
+    if (shippingFuel > 0 && seller.resources.fuel < fuelReserve + shippingFuel) {
+      observeCharterFuel(world, seller, false, shippingFuel, 0);
+      return false;
+    }
     const costPerUnit = TRADE_RESOURCE_VALUES[offeredResource] * purchase.markup;
     const freight = shippingFuel * TRADE_RESOURCE_VALUES.fuel * purchase.markup;
     const cash = getTradeStock(buyer, "cash") - Math.max(resourceReserve(buyer, "cash"), purchase.cashReserve);
@@ -213,6 +217,7 @@ function dispatchTrade(world: WorldState, sellerId: NationId, buyerId: NationId,
   const carriers = humanitarian || purchase ? [seller] : [seller, buyer];
   const carrier = carriers.find((nation) => nation.resources.fuel -
     (nation.id === sellerId && offeredResource === "fuel" ? offeredAmount : nation.id === buyerId && requestedResource === "fuel" ? requestedAmount : 0) >= shippingFuel);
+  if (shippingFuel > 0) observeCharterFuel(world, carrier ?? seller, humanitarian, shippingFuel, carrier ? shippingFuel : 0);
   if (shippingFuel > 0 && !carrier) return false;
   changeTradeStock(seller, offeredResource, -offeredAmount); changeTradeStock(buyer, requestedResource, -requestedAmount);
   if (shippingFuel > 0) { changeResource(carrier!, "fuel", -shippingFuel); state.fuelSpent += shippingFuel; }
@@ -234,6 +239,7 @@ function rerouteTrade(world: WorldState, deal: TradeDeal, seller: NationRuntime,
   if (deal.industrialPurchase && fuel > 0) return false;
   const carriers = deal.humanitarian ? [seller] : [seller, buyer];
   const carrier = carriers.find((nation) => nation.resources.fuel >= fuel);
+  if (fuel > 0) observeCharterFuel(world, carrier ?? seller, !!deal.humanitarian, fuel, carrier ? fuel : 0);
   if (fuel > 0 && !carrier) return false;
   if (fuel > 0 && carrier) {
     changeResource(carrier, "fuel", -fuel);
@@ -245,6 +251,11 @@ function rerouteTrade(world: WorldState, deal: TradeDeal, seller: NationRuntime,
   recordSimulationEvent(world, { category: "trade", nationIds: [seller.id, buyer.id],
     message: `${deal.id} was diverted to an alternate route. Delivery is delayed.` });
   return true;
+}
+
+function observeCharterFuel(world: WorldState, carrier: NationRuntime, humanitarian: boolean, requested: number, consumed: number): void {
+  world.instrumentation?.observeFuelFlow?.({ category: humanitarian ? "aidTransport" : "commercialTransport",
+    nationId: carrier.id, stock: carrier.resources.fuel, requested, consumed });
 }
 
 function shippingFuelFor(route: TradeRoute): number {

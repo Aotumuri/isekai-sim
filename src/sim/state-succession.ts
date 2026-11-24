@@ -1,5 +1,6 @@
 import type { NationId } from "../worldgen/nation";
 import { cancelIntegratedAmphibiousOperations } from "./amphibious";
+import { returnArmsAidForGovernment } from "./arms-aid";
 import { relationKey } from "./diplomacy";
 import { prisonerGroupKey } from "./defeated-formations";
 import { leaveFaction } from "./factions";
@@ -154,6 +155,7 @@ function settleAgreements(world: WorldState, former: NationRuntime, successor: N
 /** Called once, after the complete peaceful transfer has been validated and applied. */
 export function inheritIntegratedGovernment(world: WorldState, former: NationRuntime, successor: NationRuntime): void {
   returnTradeEscrowForGovernment(world, former.id);
+  returnArmsAidForGovernment(world, former.id);
   inheritStocks(former, successor);
   inheritCompletedResearch(world, former, successor);
   cancelIntegratedAmphibiousOperations(world, former.id);

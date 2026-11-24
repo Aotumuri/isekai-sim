@@ -54,6 +54,8 @@ export function commissionPublicWork(world: WorldState, id: NationId, district: 
   const cost = PUBLIC_WORKS[kind];
   if (!spendTreasury(nation.treasury, "construction", cost.cash)) return false;
   changeResource(nation, "steel", -cost.steel);
+  world.instrumentation?.observeFuelFlow?.({ category: "construction", nationId: id,
+    stock: nation.resources.fuel, requested: cost.fuel, consumed: cost.fuel });
   changeResource(nation, "fuel", -cost.fuel);
   (world.publicWorks ??= new Map()).set(district, { nationId: id, kind, remaining: cost.duration, lastTick: world.time.slowTick, paused: false });
   return true;

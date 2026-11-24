@@ -47,6 +47,7 @@ import {
   updateIsolationEffects,
 } from "../../src/sim/isolation-effects";
 import { createUnitId } from "../../src/sim/unit";
+import { stepSlowTick } from "../../src/sim/update";
 import { createSimTime, FAST_TICK_MS } from "../../src/sim/time";
 import { updateMaritimeLogisticsMovement } from "../../src/sim/maritime-supply";
 import {
@@ -501,7 +502,9 @@ test("an island war bootstraps amphibious capability from zero through naval pro
   assert(world.amphibiousOperations.partialFleetReservationsPrevented > 0);
   assert.equal(world.amphibiousOperations.operations.length, 0);
 
-  nation.nextUnitProductionTick = 0;
+  world.time.slowTick++;
+  world.time.fastTick += 10;
+  nation.nextUnitProductionTick = world.time.slowTick;
   updateProduction(world);
   assert.equal(world.units.filter((unit) => unit.type === "CombatShip").length, 2);
   updateAmphibiousPlanning(world);
@@ -1242,6 +1245,25 @@ test("land supply remains capital-component based without ports", () => {
   assert.equal(world.supplyAssessment.maritimeEscorts.assignments.length, 0);
 });
 
+test("an unfunded transport stops extending maritime supply and can restore it the next cycle", () => {
+  const world = createMaritimeWorld(true, 1);
+  const nation = world.nations[0]!;
+  const transport = world.units[0]!;
+  updateSupplyAssessment(world);
+  assert(isNationRegionSupplied(world, nation.id, id("island-b")));
+  world.time.fastTick = 10;
+  stepSlowTick(world, 0);
+  assert.equal(transport.moveTicksPerRegion, Infinity);
+  assert(!isNationRegionSupplied(world, nation.id, id("island-b")));
+
+  nation.resources.fuel = 2;
+  world.time.fastTick += 10;
+  stepSlowTick(world, 0);
+  assert(Number.isFinite(transport.moveTicksPerRegion));
+  assert.equal(nation.resources.fuel, 0);
+  assert(isNationRegionSupplied(world, nation.id, id("island-b")));
+});
+
 test("naval gameplay does not provide abstract shipping without a physical transport", () => {
   const world = createMaritimeWorld(true, 0);
   assert.equal(world.units.length, 0);
@@ -1594,6 +1616,8 @@ test("zero fleet deliberately bootstraps from a reachable enemy maritime opportu
   const nation = world.nations.find((item) => item.id === NATION_B)!;
   nation.resources.manpower = 100_000;
   nation.resources.weapons = 10_000;
+  nation.resources.fuel = 20;
+  world.nations.find((item) => item.id === NATION_A)!.resources.fuel = 20;
   nation.nextUnitProductionTick = 0;
   updateSupplyAssessment(world);
   const force = world.supplyAssessment.navalStrategy.assessments
@@ -1720,6 +1744,8 @@ test("a destroyed navy rebuilds toward its persistent strategic target", () => {
   const nation = world.nations.find((item) => item.id === NATION_B)!;
   nation.resources.manpower = 100_000;
   nation.resources.weapons = 10_000;
+  nation.resources.fuel = 20;
+  world.nations.find((item) => item.id === NATION_A)!.resources.fuel = 20;
   nation.nextUnitProductionTick = 0;
   updateSupplyAssessment(world);
   updateProduction(world);
@@ -1731,7 +1757,9 @@ test("a destroyed navy rebuilds toward its persistent strategic target", () => {
   const force = world.supplyAssessment.navalStrategy.assessments
     .find((assessment) => assessment.nationId === NATION_B)?.desiredForce;
   assert(force && force.deficit > 0);
-  nation.nextUnitProductionTick = 0;
+  world.time.slowTick++;
+  world.time.fastTick += 10;
+  nation.nextUnitProductionTick = world.time.slowTick;
   updateProduction(world);
   assert(world.units.some((unit) => unit.nationId === NATION_B && unit.type === "CombatShip"));
 });

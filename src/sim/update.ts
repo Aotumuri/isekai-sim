@@ -237,7 +237,10 @@ export function stepSlowTick(world: WorldState, _dtMs: number): void {
   updateSupplyAssessment(world);
   updateAnnexations(world);
   recoverDefeatedFormations(world);
-  updateProduction(world);
+  if (updateProduction(world) && world.supplyAssessment.maritimeLinks.length > 0) {
+    // Recruitment uses the opening supply assessment. Refresh any affected sea links for later systems.
+    updateSupplyAssessment(world);
+  }
   updateIndustrialRecovery(world);
   repatriatePrisoners(world);
   updatePrisonerExchanges(world);

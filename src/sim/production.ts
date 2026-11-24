@@ -15,6 +15,7 @@ import { createUnitForType } from "./create-units";
 import { getAmphibiousNavalProductionDemands } from "./amphibious";
 import { isNationActive } from "./nation-active";
 import { getManualGovernmentId } from "./player-nation";
+import { allocateFuelUpkeep, collectFuelUpkeep, getUnitFuelUse, type UpkeepRequest } from "./fuel-upkeep";
 import { fuelForPrototypes, steelForResearch, weaponReserve } from "./resource-planning";
 import type { NationResourceFlow, NationResources } from "./nation-runtime";
 import { nextScheduledTickRange } from "./schedule";
@@ -149,20 +150,23 @@ export function createProductionDiagnosticsState(
   };
 }
 
-export function updateProduction(world: WorldState): void {
+export function updateProduction(world: WorldState): boolean {
+  if (world.lastProductionSlowTick === world.time.slowTick) return false;
+  world.lastProductionSlowTick = world.time.slowTick;
   const startedAt = world.instrumentation ? performance.now() : 0;
-  updateProductionInternal(world);
+  const transportAvailabilityChanged = updateProductionInternal(world);
   if (world.instrumentation) {
     world.instrumentation.recordDuration(
       "production.evaluation",
       performance.now() - startedAt,
     );
   }
+  return transportAvailabilityChanged;
 }
 
-function updateProductionInternal(world: WorldState): void {
+function updateProductionInternal(world: WorldState): boolean {
   if (world.nations.length === 0) {
-    return;
+    return false;
   }
 
   const previousResources = new Map<NationId, NationResources>();
@@ -188,16 +192,16 @@ function updateProductionInternal(world: WorldState): void {
       for (const resource of STRATEGIC_RESOURCES) nation.resources[resource] ??= 0;
     }
   }
-  const fuelDemandByNation = collectFuelDemandByNation(world.units);
+  const fuelUpkeep = collectFuelUpkeep(world.units, flowByNation);
   const planning = !!world.settings && world.settings.economicPlanningEnabled !== false;
   const wars = planning ? buildWarAdjacency(world.wars) : undefined;
   const manualGovernment = planning ? getManualGovernmentId(world) : undefined;
   const mobilized = allMobilizedUnits(world);
   const unitCountsByNation = collectUnitCountsByNation(mobilized);
-  const fuelAvailableByNation = applyResourceOutputs(
+  let transportAvailabilityChanged = applyResourceOutputs(
     world.nations,
     resourceOutputs,
-    fuelDemandByNation,
+    fuelUpkeep,
     flowByNation,
     world,
     unitCountsByNation,
@@ -209,8 +213,7 @@ function updateProductionInternal(world: WorldState): void {
   const unitRange = production.unitSlowTickRange;
   if (unitRange.min <= 0 || unitRange.max <= 0) {
     finalizeResourceFlows(world, flowByNation, previousResources);
-    applyFuelStatus(world.units, fuelAvailableByNation);
-    return;
+    return transportAvailabilityChanged;
   }
   const minInterval = unitRange.min;
   const maxInterval = unitRange.max;
@@ -546,12 +549,20 @@ function updateProductionInternal(world: WorldState): void {
   }
 
   if (newUnits.length > 0) {
+    const newUpkeep = collectFuelUpkeep(newUnits, flowByNation);
+    for (const nation of world.nations) {
+      const requests = newUpkeep.get(nation.id);
+      if (requests) settleFuelUpkeep(nation.resources, flowByNation.get(nation.id)!, requests);
+    }
+    if (newUnits.some((unit) => unit.type === "TransportShip" && Number.isFinite(unit.moveTicksPerRegion))) {
+      transportAvailabilityChanged = true;
+    }
     world.units.push(...newUnits);
     registerNewCombatShipsAsReserve(world, newUnits);
     updateCapacityDiagnostics(world, unitCountsByNation, mobilized);
   }
   finalizeResourceFlows(world, flowByNation, previousResources);
-  applyFuelStatus(world.units, fuelAvailableByNation);
+  return transportAvailabilityChanged;
 }
 
 function recordResourceBlock(
@@ -676,7 +687,7 @@ function finalizeResourceFlows(
     }
     flow.productionSurplus = {
       steel: Math.max(0, flow.income.steel - flow.usage.steel),
-      fuel: Math.max(0, flow.income.fuel - (flow.industry?.fuelDemand ?? flow.usage.fuel)),
+      fuel: Math.max(0, flow.income.fuel - (flow.industry?.fuelDemand ?? flow.fuelUpkeepDemand ?? 0)),
     };
     for (const resource of STRATEGIC_RESOURCES) {
       if (nation.resources[resource] !== undefined) {
@@ -766,32 +777,20 @@ function collectResourceOutputs(
   return outputs;
 }
 
-function collectFuelDemandByNation(units: UnitState[]): Map<NationId, number> {
-  const demands = new Map<NationId, number>();
-  for (const unit of units) {
-    const fuelUse = getUnitFuelUse(unit.type) * (unit.design?.fuelUse ?? 1);
-    if (fuelUse <= 0) {
-      continue;
-    }
-    demands.set(unit.nationId, (demands.get(unit.nationId) ?? 0) + fuelUse);
-  }
-  return demands;
-}
-
 function applyResourceOutputs(
   nations: WorldState["nations"],
   outputs: Map<NationId, ResourceOutput>,
-  fuelDemandByNation: Map<NationId, number>,
+  upkeep: ReturnType<typeof collectFuelUpkeep>,
   flowByNation: Map<NationId, NationResourceFlow>,
   world: WorldState,
   fielded: Map<NationId, DomainUnitCounts>,
   wars: ReturnType<typeof buildWarAdjacency> | undefined,
   manualGovernment?: NationId,
-): Map<NationId, boolean> {
+): boolean {
   const outputBalance = WORLD_BALANCE.resources.output;
   const baseSteelPerWeapon = Math.max(0, Math.round(outputBalance.steelPerWeapon));
-  const fuelAvailability = new Map<NationId, boolean>();
   const researchEnabled = !!world.settings?.researchEnabled;
+  let transportAvailabilityChanged = false;
 
   for (const nation of nations) {
     if (!isNationActive(nation)) {
@@ -842,45 +841,30 @@ function applyResourceOutputs(
       }
     }
 
-    const demand = fuelDemandByNation.get(nation.id) ?? 0;
     const prototypeFuelReserve = autonomous && researchEnabled && !atWar
       ? fuelForPrototypes(nation, fuelBeforeOutput, flow.income.fuel) : 0;
-    const availableFuel = Math.max(0, resources.fuel - prototypeFuelReserve);
-    const fuelConsumed = Math.min(availableFuel, demand);
-    flow.usage.fuel += wars ? fuelConsumed : demand;
-    resources.fuel -= fuelConsumed;
     if (wars) {
-      flow.industry = { output: { ...flow.income }, fuelDemand: demand, fuelConsumed, weaponsTarget: target,
+      flow.industry = { output: { ...flow.income }, fuelDemand: 0, fuelConsumed: 0, weaponsTarget: target,
         weaponDemandAverage: nation.resourceFlow.industry?.weaponDemandAverage ?? 0, weaponsForRecruitment: 0, prototypeFuelReserve };
     }
-    fuelAvailability.set(nation.id, availableFuel > 0);
+    const requests = upkeep.get(nation.id);
+    if (requests && settleFuelUpkeep(resources, flow, requests)) transportAvailabilityChanged = true;
   }
-
-  return fuelAvailability;
+  return transportAvailabilityChanged;
 }
 
-function applyFuelStatus(
-  units: UnitState[],
-  fuelAvailableByNation: Map<NationId, boolean>,
-): void {
-  for (const unit of units) {
-    const fuelUse = getUnitFuelUse(unit.type) * (unit.design?.fuelUse ?? 1);
-    if (fuelUse <= 0) {
-      continue;
-    }
-    const hasFuel = fuelAvailableByNation.get(unit.nationId) ?? true;
-    if (hasFuel) {
-      unit.moveTicksPerRegion = getBaseMoveTicks(unit.type);
-      unit.combatPower = getBaseCombatPower(unit.type);
-      continue;
-    }
-    unit.moveTicksPerRegion = Number.POSITIVE_INFINITY;
-    unit.combatPower = 0;
-    unit.moveTargetId = null;
-    unit.moveFromId = null;
-    unit.moveToId = null;
-    unit.moveProgressMs = 0;
+function settleFuelUpkeep(resources: NationResources, flow: NationResourceFlow, requests: readonly UpkeepRequest[]): boolean {
+  const available = Math.max(0, resources.fuel - (flow.industry?.prototypeFuelReserve ?? 0));
+  const { demand, consumed, transportAvailabilityChanged } = allocateFuelUpkeep(requests, available);
+  resources.fuel -= consumed;
+  flow.usage.fuel += consumed;
+  if (flow.industry) {
+    flow.industry.fuelDemand += demand;
+    flow.industry.fuelConsumed += consumed;
+  } else {
+    flow.fuelUpkeepDemand = (flow.fuelUpkeepDemand ?? 0) + demand;
   }
+  return transportAvailabilityChanged;
 }
 
 function pickAffordableUnitType(
@@ -957,21 +941,6 @@ function canAffordUnit(resources: NationResources, unitType: UnitType, design?: 
 function getUnitManpowerCost(unitType: UnitType): number {
   const value = WORLD_BALANCE.unit.types[unitType].manpower ?? 0;
   return Math.max(0, Math.round(value));
-}
-
-function getUnitFuelUse(unitType: UnitType): number {
-  const value = WORLD_BALANCE.unit.types[unitType].fuelUse ?? 0;
-  return Math.max(0, Math.round(value));
-}
-
-function getBaseMoveTicks(unitType: UnitType): number {
-  const value = WORLD_BALANCE.unit.types[unitType].moveTicksPerRegion ?? 1;
-  return Math.max(1, Math.round(value));
-}
-
-function getBaseCombatPower(unitType: UnitType): number {
-  const value = WORLD_BALANCE.unit.types[unitType].combatPower ?? 0;
-  return Math.max(0, value);
 }
 
 function clamp(value: number, min: number, max: number): number {

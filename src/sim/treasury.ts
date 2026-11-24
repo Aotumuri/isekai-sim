@@ -64,7 +64,11 @@ export function updateTreasuries(world: WorldState): void {
       continue;
     }
     const { population, taxablePopulation } = totals.get(nation.id) ?? { population: 0, taxablePopulation: 0 };
-    const treasury = nation.treasury ??= createTreasury(20 + population * 0.75);
+    if (!nation.treasury) {
+      nation.treasury = createTreasury(20 + population * 0.75);
+      world.instrumentation?.incrementCounter("economy.treasuryOpened", nation.treasury.balance);
+    }
+    const treasury = nation.treasury;
     treasury.population = population;
     treasury.taxablePopulation = taxablePopulation;
     treasury.lastRevenue = world.time.slowTick === 0 ? 0 : taxablePopulation * treasury.taxRate / 100;

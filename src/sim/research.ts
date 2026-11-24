@@ -1,5 +1,5 @@
 import { changeResource } from "./international-trade";
-import { getPrototypeMaterialRates } from "./research-materials";
+import { getPrototypeMaterialRates, prototypeScienceLimit } from "./research-materials";
 import { effectiveResearchLevel, lateResearchCost, limitEquipmentStat } from "./research-progression";
 import { spendTreasury } from "./treasury";
 import { buildWarAdjacency, type WarAdjacency } from "./war-state";
@@ -7,7 +7,8 @@ import type { NationId } from "../worldgen/nation";
 import type { UnitType } from "./unit";
 import { getNationCharacter } from "./nation-character";
 import { isNationActive, isNationPresent } from "./nation-active";
-import type { NationResources } from "./nation-runtime";
+import type { NationResources, NationRuntime } from "./nation-runtime";
+import { getManualGovernmentId } from "./player-nation";
 import { isNationRegionSupplied } from "./supply-assessment";
 import { recordSimulationEvent } from "./simulation-settings";
 import { getCityTargetsByNation, getPortTargetsByNation } from "./world-cache";
@@ -172,6 +173,45 @@ export function getNationalResearchSummary(world: WorldState, nationId: NationId
   return { lastScience: programs.reduce((sum, program) => sum + program.lastScience, 0), totalScience: programs.reduce((sum, program) => sum + program.totalScience, 0),
     completedProjects: programs.reduce((sum, program) => sum + program.completedProjects, 0) };
 }
+interface ResearchAllocation {
+  family: EquipmentFamily;
+  program: ResearchPortfolio;
+  priorities: ResearchLevels;
+  materials: ReturnType<typeof getPrototypeMaterialRates>;
+  science: number;
+}
+
+function allocateResearch(nation: NationRuntime, allocation: ResearchAllocation, budget: number): number {
+  const science = prototypeScienceLimit(nation.resources, allocation.materials, budget);
+  if (science <= 0) return 0;
+  for (const [resource, rate] of allocation.materials) changeResource(nation, resource, -science * rate);
+  allocation.science += science;
+  return science;
+}
+
+function advanceResearch(world: WorldState, nationId: NationId, { family, program, priorities, science }: ResearchAllocation): void {
+  if (science <= 0) {
+    program.status = "saving resources";
+    return;
+  }
+  const sum = Object.values(priorities).reduce((value, item) => value + item, 0);
+  const branches = FAMILY_RESEARCH_BRANCHES[family];
+  program.primaryBranch = [...branches].sort((a, b) => priorities[b] - priorities[a])[0]!;
+  program.lastScience = science;
+  program.totalScience += science;
+  program.status = "researching";
+  for (const branch of branches) {
+    if (!priorities[branch]) continue;
+    program.progress[branch] += science * priorities[branch] / sum;
+    const cost = getResearchCost(program, branch);
+    if (program.progress[branch] + 1e-9 < cost || !Number.isSafeInteger(program.levels[branch] + 1)) continue;
+    program.progress[branch] = Math.max(0, program.progress[branch] - cost);
+    program.levels[branch]++;
+    program.completedProjects++;
+    recordSimulationEvent(world, { category: "research", nationIds: [nationId], message: `${nationId} completed ${EQUIPMENT_FAMILY_NAMES[family]} / ${RESEARCH_BRANCH_NAMES[branch]} level ${program.levels[branch]}.` });
+  }
+}
+
 export function updateResearch(world: WorldState): void {
   if (!world.settings?.researchEnabled) return;
   // The science budget and material costs apply once per ten-day accounting cycle.
@@ -185,6 +225,7 @@ export function updateResearch(world: WorldState): void {
   }
   const cities = getCityTargetsByNation(world);
   const wars = buildWarAdjacency(world.wars);
+  const manualGovernment = getManualGovernmentId(world);
   for (const nation of world.nations) {
     if (nation.integratedIntoId || !retained.has(nation.id)) continue;
     const programs = EQUIPMENT_FAMILIES.map((family) => getResearchPortfolio(world, nation.id, family));
@@ -210,29 +251,41 @@ export function updateResearch(world: WorldState): void {
     const demand: Partial<NationResources> | undefined = industry ? { steel: desiredBudget * 0.4, weapons: desiredBudget * 0.2 } : undefined;
     if (industry) industry.researchDemand = demand;
     let usedBudget = 0;
+    const observeFuel = world.instrumentation?.observeFuelFlow;
+    const fuelBeforeResearch = observeFuel ? nation.resources.fuel : 0;
+    let requestedFuel = 0;
+    const allocations: ResearchAllocation[] = [];
     for (const family of EQUIPMENT_FAMILIES) {
       if (!weights[family]) continue;
-      const program = getResearchPortfolio(world, nation.id, family), priorities = getResearchPriorities(world, nation.id, family);
-      const sum = Object.values(priorities).reduce((value, item) => value + item, 0);
+      const program = getResearchPortfolio(world, nation.id, family);
       const materials = getPrototypeMaterialRates(nation.resources, family);
-      if (demand) for (const [resource, rate] of materials) {
-        demand[resource] = (demand[resource] ?? 0) + desiredBudget * weights[family] / total * rate;
+      const allocation = { family, program, materials, priorities: getResearchPriorities(world, nation.id, family), science: 0 };
+      allocations.push(allocation);
+      const desiredShare = desiredBudget * weights[family] / total;
+      if (demand || observeFuel) {
+        for (const [resource, rate] of materials) {
+          if (demand) demand[resource] = (demand[resource] ?? 0) + desiredShare * rate;
+          if (observeFuel && resource === "fuel") requestedFuel += desiredShare * rate;
+        }
       }
-      const science = materials.reduce((limit, [resource, rate]) =>
-        Math.min(limit, Math.max(0, (nation.resources[resource] ?? 0) - 2) / rate), budget * weights[family] / total);
-      if (budget < 0.1 || science <= 0) { program.status = "saving resources"; continue; }
-      for (const [resource, rate] of materials) changeResource(nation, resource, -science * rate);
-      usedBudget += science;
-      program.primaryBranch = [...FAMILY_RESEARCH_BRANCHES[family]].sort((a, b) => priorities[b] - priorities[a])[0]!;
-      program.lastScience = science; program.totalScience += science; program.status = "researching";
-      for (const branch of FAMILY_RESEARCH_BRANCHES[family]) {
-        if (!priorities[branch]) continue;
-        program.progress[branch] += science * priorities[branch] / sum;
-        const cost = getResearchCost(program, branch);
-        if (program.progress[branch] + 1e-9 < cost || !Number.isSafeInteger(program.levels[branch] + 1)) continue;
-        program.progress[branch] = Math.max(0, program.progress[branch] - cost); program.levels[branch]++; program.completedProjects++;
-        recordSimulationEvent(world, { category: "research", nationIds: [nation.id], message: `${nation.id} completed ${EQUIPMENT_FAMILY_NAMES[family]} / ${RESEARCH_BRANCH_NAMES[branch]} level ${program.levels[branch]}.` });
+      if (budget >= 0.1) usedBudget += allocateResearch(nation, allocation, budget * weights[family] / total);
+    }
+    // Preserve each program's first share. Allocate unused capacity only to enabled programs that can pay their costs.
+    if (world.settings.economicPlanningEnabled !== false && nation.id !== manualGovernment &&
+      budget >= 0.1 && budget - usedBudget > 1e-9 && allocations.length > 1) {
+      const firstPass = usedBudget;
+      for (const allocation of [...allocations].sort((a, b) => weights[b.family] - weights[a.family])) {
+        if (budget - usedBudget <= 1e-9) break;
+        const fuelBeforeExtra = observeFuel ? nation.resources.fuel : 0;
+        usedBudget += allocateResearch(nation, allocation, budget - usedBudget);
+        if (observeFuel) requestedFuel += fuelBeforeExtra - nation.resources.fuel;
       }
+      if (usedBudget > firstPass) world.instrumentation?.incrementCounter("research.reallocatedScience", usedBudget - firstPass);
+    }
+    for (const allocation of allocations) advanceResearch(world, nation.id, allocation);
+    if (observeFuel && requestedFuel > 0) {
+      world.instrumentation?.observeFuelFlow?.({ category: "research", nationId: nation.id,
+        stock: fuelBeforeResearch, requested: requestedFuel, consumed: fuelBeforeResearch - nation.resources.fuel });
     }
     const steel = usedBudget * 0.4, weapons = usedBudget * 0.2;
     if (usedBudget > 0) {

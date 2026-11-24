@@ -205,10 +205,13 @@ test("a peacetime prototype buffer consumes real domestic fuel and yields to war
     assert.equal(buyer.resourceFlow.productionSurplus!.fuel, 0);
   }
   assert(program.totalScience > 0);
+  // One full upkeep payment in stock, plus one from the next cycle's deposit.
+  buyer.resources.fuel = 3;
   assert(declareWar(world.wars, buyer.id, seller.id, 0));
   world.time.slowTick++;
   updateProduction(world);
   assert.equal(buyer.resourceFlow.industry!.prototypeFuelReserve, 0);
+  assert.equal(buyer.resourceFlow.industry!.fuelConsumed, 6);
   assert.equal(buyer.resources.fuel, 0);
 });
 

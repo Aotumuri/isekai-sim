@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { getArmsAidState, updateArmsAid } from "../../src/sim/arms-aid";
 import { STRATEGIC_RESOURCES } from "../../src/data/strategic-resources";
 import { prisonerGroupKey, repatriatePrisoners } from "../../src/sim/defeated-formations";
 import { getRelation } from "../../src/sim/diplomacy";
@@ -76,6 +77,26 @@ test("peaceful integration conserves every stock, including both sides of trade 
     return { stocks: overlord.resources, funds, food, provinces: world.macroRegions, events: world.events };
   }
   assert.deepEqual(run(), run());
+});
+
+test("integration returns aid cargo to each donor before moving the former government's stocks", () => {
+  const { world, overlord, subject, partner, integrate } = integrationScene();
+  const aid = getArmsAidState(world);
+  const escrow = 12;
+  for (const [donor, recipient] of [[subject, partner], [partner, subject]]) {
+    donor.resources.weapons = 100 - escrow;
+    aid.shipments.push({ id: `aid-${donor.id}`, donorId: donor.id, recipientId: recipient.id,
+      weapons: escrow, design: designFromResearch(donor.id, getResearchPortfolio(world, donor.id).levels),
+      route: { maritime: false, regionIds: [] }, arrivesAtSlowTick: world.time.slowTick + 5, status: "in-transit" });
+  }
+  const expected = overlord.resources.weapons + 100;
+  assert(integrate());
+  updateArmsAid(world);
+  assert.equal(overlord.resources.weapons, expected);
+  assert.equal(subject.resources.weapons, 0);
+  assert.equal(partner.resources.weapons, 100);
+  assert.equal(aid.returned, 2);
+  assert(aid.shipments.every((shipment) => shipment.status === "returned"));
 });
 
 test("integration inherits forces and completed research while preserving cargo and equipment provenance", () => {

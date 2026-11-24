@@ -38,6 +38,10 @@ function supportSubjectIndustry(world: WorldState, overlord: NationRuntime, subj
   let unmet = 0;
   for (const { resource, requested, available } of requests) {
     const delivered = routeBlocked ? 0 : available;
+    if (resource === "fuel" && requested > 0) {
+      world.instrumentation?.observeFuelFlow?.({ category: "subjectSupport", nationId: subject.id,
+        stock: subject.resources.fuel, requested, consumed: 0, transferred: delivered });
+    }
     if (delivered > 0) {
       changeResource(overlord, resource, -delivered);
       changeResource(subject, resource, delivered);

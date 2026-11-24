@@ -30,6 +30,8 @@ export interface NationResourceFlow {
   delta: NationResources;
   /** Domestic output less production and upkeep, before trade and treaty transfers. */
   productionSurplus?: Partial<NationResources>;
+  /** Requested fuel upkeep when industrial planning is disabled. */
+  fuelUpkeepDemand?: number;
   industry?: {
     output: NationResources;
     fuelDemand: number;

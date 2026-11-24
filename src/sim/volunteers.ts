@@ -68,7 +68,14 @@ export function sendVolunteers(world: WorldState, donorId: NationId, recipientId
   if (fielded + incoming + count > (world.settings?.mobilizationEnabled ? WORLD_BALANCE.production.maxMobilizedLandUnits : WORLD_BALANCE.production.maxLandUnits)) return null;
   const route = findTradeRoute(world, donorId, recipientId); if (!route) return null;
   const fuel = route.maritime ? Math.max(2, Math.ceil(route.regionIds.length * 0.1)) : 0;
-  if (donor.resources.fuel < fuel || !spendInfluence(world, donorId, 10)) return null;
+  if (donor.resources.fuel < fuel) {
+    world.instrumentation?.observeFuelFlow?.({ category: "aidTransport", nationId: donorId,
+      stock: donor.resources.fuel, requested: fuel, consumed: 0 });
+    return null;
+  }
+  if (!spendInfluence(world, donorId, 10)) return null;
+  if (fuel > 0) world.instrumentation?.observeFuelFlow?.({ category: "aidTransport", nationId: donorId,
+    stock: donor.resources.fuel, requested: fuel, consumed: fuel });
   if (fuel) changeResource(donor, "fuel", -fuel);
   const units = candidates.slice(0, count), selected = new Set(units.map((unit) => unit.id));
   const mission: VolunteerMission = { id: state.nextId++, donorId, recipientId, unitIds: [...selected], transitUnits: units, route,

@@ -104,7 +104,13 @@ export function updateFoodSupply(world: WorldState): void {
     const ration = RATION_POLICIES[food.rationPolicy ?? "normal"];
     const consumed = Math.min(available, demand * ration);
     food.rationCoverage = consumed / demand;
-    food.stock = Math.min(foodStorageLimit(demand, food.storageLevel), available - consumed);
+    const remaining = available - consumed;
+    food.stock = Math.min(foodStorageLimit(demand, food.storageLevel), remaining);
+    if (world.instrumentation) {
+      world.instrumentation.incrementCounter("economy.foodHarvest", harvest);
+      world.instrumentation.incrementCounter("economy.foodConsumption", consumed);
+      world.instrumentation.incrementCounter("economy.foodStorageOverflow", remaining - food.stock);
+    }
     const wasFamine = food.shortageCycles >= FAMINE_THRESHOLD;
     const famineCoverage = Math.min(0.9, ration - 0.01);
     food.shortageCycles = food.rationCoverage < famineCoverage ? food.shortageCycles + 1 : Math.max(0, food.shortageCycles - 2);

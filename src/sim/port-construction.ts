@@ -42,6 +42,8 @@ export function constructPort(world: WorldState, nationId: NationId, regionId: M
 
   const nation = world.nations.find((item) => item.id === nationId)!;
   changeResource(nation, "steel", -PORT_CONSTRUCTION_COST.steel);
+  world.instrumentation?.observeFuelFlow?.({ category: "construction", nationId,
+    stock: nation.resources.fuel, requested: PORT_CONSTRUCTION_COST.fuel, consumed: PORT_CONSTRUCTION_COST.fuel });
   changeResource(nation, "fuel", -PORT_CONSTRUCTION_COST.fuel);
   completePortConstruction(world, nationId, regionId);
   return true;

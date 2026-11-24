@@ -95,6 +95,7 @@ export interface WorldState {
   industrialRecovery?: Map<MesoRegionId, IndustrialRecovery>;
   regionalPopulations?: Map<MesoRegionId, RegionalPopulation>;
   lastFoodTick?: number;
+  lastProductionSlowTick?: number;
   irrigatedDistricts?: Set<MesoRegionId>;
   agriculturalLand?: Map<MesoRegionId, AgriculturalLand>;
   populationRevision?: number;

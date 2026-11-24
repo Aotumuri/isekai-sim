@@ -105,3 +105,30 @@ test("projects retain early costs and become progressively more expensive", () =
     previousCost = cost;
   }
 });
+
+test("unaffordable prototypes yield unused science to feasible enabled programs without waiving inputs", () => {
+  function run(planningEnabled: boolean, copper: number) {
+    const { world, nation } = fundedWorld();
+    world.settings!.economicPlanningEnabled = planningEnabled;
+    nation.resources.fuel = 0;
+    nation.resources.copper = copper;
+    const tank = getResearchPortfolio(world, nation.id, "Tank");
+    const infantry = getResearchPortfolio(world, nation.id, "Infantry");
+    for (const family of EQUIPMENT_FAMILIES) getResearchPortfolio(world, nation.id, family).priority = "paused";
+    tank.priority = "high";
+    infantry.priority = "normal";
+    const before = { ...nation.resources };
+    updateResearch(world);
+    assert.equal(tank.lastScience, 0);
+    assert.equal(tank.status, "saving resources");
+    assert.equal(nation.resources.fuel, 0);
+    assert(Math.abs(nation.resources.steel - before.steel + infantry.lastScience * 0.4) < 1e-8);
+    assert(Math.abs(nation.resources.weapons - before.weapons + infantry.lastScience * 0.2) < 1e-8);
+    assert(Math.abs(nation.resources.copper! - copper + infantry.lastScience * 0.25) < 1e-8);
+    return infantry.totalScience;
+  }
+  const legacyShare = run(false, 20);
+  assert(legacyShare > 0);
+  assert(Math.abs(run(true, 20) - legacyShare * 5) < 1e-8);
+  assert.equal(run(true, 2), 0);
+});

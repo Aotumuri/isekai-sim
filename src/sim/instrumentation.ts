@@ -87,6 +87,11 @@ export type SimulationMetricName =
   | "surrender";
 
 export type SimulationCounterName =
+  | "research.reallocatedScience"
+  | "economy.foodHarvest"
+  | "economy.foodConsumption"
+  | "economy.foodStorageOverflow"
+  | "economy.treasuryOpened"
   | "territorialClaims.ownerSnapshots"
   | "production.attempted"
   | "production.blocked"
@@ -690,7 +695,19 @@ export type RegionalAdvocacyObservation =
   | { kind: "offer"; id: MesoRegionId; talks: RegionalNegotiation; accepted: boolean;
       sponsorId: NationId; domesticSettlement: boolean; relationshipChanges: number; reassessment: boolean };
 
+export type FuelUseCategory = "research" | "commercialTransport" | "aidTransport" | "construction" | "subjectSupport";
+
+export interface FuelFlowObservation {
+  category: FuelUseCategory;
+  nationId: NationId;
+  stock: number;
+  requested: number;
+  consumed: number;
+  transferred?: number;
+}
+
 export interface SimulationInstrumentation {
+  observeFuelFlow?(sample: FuelFlowObservation): void;
   observeRegionalAdvocacy?(event: RegionalAdvocacyObservation): void;
   selectForeignAdvocacyReassessment?(initial: readonly [MesoRegionId, RegionalNegotiation][]): AdvocacySelection | undefined;
   startForeignAdvocacyMeasurement?(phase?: "reassessment"): (() => void) | void;

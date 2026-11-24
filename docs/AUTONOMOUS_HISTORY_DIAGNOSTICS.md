@@ -375,3 +375,7 @@ WORLD_METRICS=1 WORLD_SIGNATURE=1 node --expose-gc --import tsx \
 # demand lifetime vs foreign advocacy evaluation
 SCENARIO=scale node --import tsx test/diagnostics/political-advocacy-timing.ts 822748319780 3650
 ```
+
+## 追試・燃料の精算と資源制約
+
+旧報の稼働燃料の値は10日周期あたりの平均。固定シードの追試では生産直後の国内需要・実支払・稼働状態と、輸送中の燃料を含めた世界の保存を照合した。鉱床の産出と稼働需要の差は持続しており、一部の支払いで全対象部隊が稼働する別の欠陥が確認された。独立した制御ケース、給油判定の修正、研究枠の再配分、規模別の結果は資源制約の報告に記載した。 [資源制約下の国家経済AI](RESOURCE_CONSTRAINED_ECONOMIC_AI.md)

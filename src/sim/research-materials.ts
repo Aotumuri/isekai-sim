@@ -14,3 +14,9 @@ export function getPrototypeMaterialRates(resources: NationResources, family: Eq
   return (Object.entries(PROTOTYPE_MATERIAL_RATES[family]) as [PrototypeMaterial, number][])
     .filter(([resource]) => resource === "fuel" || resources[resource] !== undefined);
 }
+
+
+export function prototypeScienceLimit(resources: NationResources, materials: ReturnType<typeof getPrototypeMaterialRates>, budget: number): number {
+  return materials.reduce((limit, [resource, rate]) =>
+    Math.min(limit, Math.max(0, (resources[resource] ?? 0) - 2) / rate), budget);
+}
