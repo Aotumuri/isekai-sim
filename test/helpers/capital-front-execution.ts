@@ -10,6 +10,7 @@ import { isPlayerDirectedLandUnit } from "../../src/sim/player-land-orders";
 import { getPlayerNation } from "../../src/sim/player-nation";
 import type { UnitId, UnitState } from "../../src/sim/unit";
 import { getUnitCombatStrength } from "../../src/sim/unit-strength";
+import { getUnitFuelUse } from "../../src/sim/fuel-upkeep";
 import { getWarCampaign } from "../../src/sim/war-campaign/state";
 import { getOwnerByMesoId } from "../../src/sim/world-cache";
 import type { WorldState } from "../../src/sim/world-state";
@@ -122,6 +123,7 @@ export function createCapitalFrontExecutionObserver(nationId: NationId, capitalI
       if (!previousUnits.has(id)) add({ tick, kind: "unit", id, before: null, after, presence: "field", otherNationId: null });
     }
     previousUnits = currentUnits;
+    return current;
   }
 
   return {
@@ -170,6 +172,9 @@ function describeUnit(world: WorldState, unit: UnitState, inOperation: boolean) 
   const coverage = getFrontlineAssignment(world, id);
   return {
     regionId: unit.regionId, targetId: unit.moveTargetId, nextRegionId: unit.moveToId,
+    type: unit.type,
+    fuelDisabled: getUnitFuelUse(unit.type) > 0 && unit.manpower > 0 &&
+      unit.combatPower === 0 && !Number.isFinite(unit.moveTicksPerRegion),
     assignedFront: world.frontAllocations.frontIdByUnitId.get(id) ?? null,
     coverageTarget: coverage?.targetRegionId ?? null,
     hasCombatStrength: getUnitCombatStrength(unit) > 0,

@@ -1,12 +1,15 @@
 import type { WorldState } from "../../src/sim/world-state";
+import type { NationId } from "../../src/worldgen/nation";
 import { getOwnerByMesoId } from "../../src/sim/world-cache";
 import { campaignWarKey, type WarCampaign } from "../../src/sim/war-campaign/state";
 import { createCapitalFrontExecutionObserver } from "../helpers/capital-front-execution";
 import { createOpeningGovernmentObserver } from "../helpers/war-government-outcome-observer";
 import { createWarOutcomeObserver } from "./war-outcome-observer";
+import { createCampaignWarExposureObserver, type CapitalDaySample } from "./campaign-war-exposure";
 
 export function createCampaignBaselineObserver() {
   const outcomes = createWarOutcomeObserver();
+  const exposure = createCampaignWarExposureObserver();
   const governments = new Map<string, ReturnType<typeof createOpeningGovernmentObserver>>();
   const capitals = new Map<string, ReturnType<typeof createCapitalFrontExecutionObserver>>();
   const planSamples = new Map<string, ReturnType<typeof snapshotPlan>[]>();
@@ -21,6 +24,7 @@ export function createCampaignBaselineObserver() {
     }
     for (const observer of governments.values()) observer.observe(world);
 
+    const capitalSamples = new Map<NationId, CapitalDaySample>();
     for (const nation of world.nations) {
       if (!activeNations.has(nation.id) || !nation.macroRegionIds.length) continue;
       const key = JSON.stringify([nation.id, nation.capitalMesoId]);
@@ -29,8 +33,10 @@ export function createCampaignBaselineObserver() {
         capital = createCapitalFrontExecutionObserver(nation.id, nation.capitalMesoId);
         capitals.set(key, capital);
       }
-      capital.observe(world);
+      const sample = capital.observe(world);
+      if (sample) capitalSamples.set(nation.id, sample);
     }
+    exposure.observe(world, capitalSamples);
 
     for (const plan of world.warCampaigns?.byNationId.values() ?? []) {
       const samples = planSamples.get(plan.nationId) ?? [];
@@ -50,6 +56,7 @@ export function createCampaignBaselineObserver() {
   function result() {
     return {
       ...outcomes.result(),
+      warExposure: exposure.result(),
       governments: [...governments.values()].flatMap((observer) => observer.result()),
       capitals: [...capitals.values()].map((observer) => observer.result()),
       planSamples: Object.fromEntries(planSamples),
@@ -68,6 +75,7 @@ function snapshotCommand(world: WorldState, operation: Operation, decision: NonN
     operationId: operation.id, nationId: operation.nationId, opponentId: operation.enemyNationId,
     ...decision, sampledAtTick: world.time.fastTick, sampledNationalMode: plan?.mode ?? null,
     sampledNationalRevision: plan?.revision ?? null,
+    sampledMilitaryMode: plan?.militaryMode ?? null,
   };
 }
 
@@ -79,6 +87,9 @@ function snapshotPlan(world: WorldState, plan: WarCampaign) {
     evaluatedAtTick: plan.evaluatedAtTick, adoptedAtTick: plan.adoptedAtTick,
     revision: plan.revision, mode: plan.mode, militaryMode: plan.militaryMode, reason: plan.reason,
     primaryOpponentId: plan.primaryOpponentId, constraints: { ...plan.constraints },
+    alternatives: plan.alternatives?.map((alternative) => ({ ...alternative })) ?? [],
+    settlementReadyOpponentIds: [...(plan.settlementReadyOpponentIds ?? [])],
+    lossFractionPerDay: plan.observation?.lossFractionPerDay ?? null,
     territoryVersion: world.territoryVersion, ideologyId: nation?.ideologyId ?? null,
     coalition: [...(nation?.politics?.coalition ?? [])],
     capitalId: nation?.capitalMesoId ?? null, fuelStock: nation?.resources.fuel ?? null,
