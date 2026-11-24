@@ -13,6 +13,8 @@ Codex はリポジトリ直下の `.agents/skills/` から起動定義を読み�
 
 ## Developer の起動
 
+人間が Developer の CLI セッションを開き、そのスレッドで開始または再開を指示する。Coordinator の起票、優先度変更、依存の解除は起動や wake の契機に使わない。既に許可された実験の完了通知は [ランナーの再開条件](runner.md#再開の安全条件) に従う。
+
 Coordinator は Codex Desktop でこのチェックアウトを開き、`$coordinator` を送る。Developer はこのマシンのターミナルで次を実行する。
 
 ```sh
@@ -40,6 +42,12 @@ Developer は利用可能なら GPT-6.2 Sol Medium を選ぶ。任意の Worker 
 - 検証済み変更はパスを明示してローカルコミットし、`git log` で確認する。既存のステージ済み変更を混ぜない。Git が保護されている環境では解除せず、変更と検証結果を報告する。意図的な停止時は保留理由を残し、実行できる課題がなければその根拠を報告する。
 
 課題・提案・進捗の正本は GitHub Issues。従来のローカル記録は `agents/research/state.json` と `agents/research/inbox/` に保存してある。現在の課題は `python3 agents/tools/research.py github show NUMBER` で確認し、実行状態は `github checkpoint NUMBER OWNER PHASE NEXT` で保存する。研究結果は `agents/research/reports/`、ログ・チェックポイント・ローカル所有権は `agents/runtime/` に置く。チャット交代には同じチェックアウトが必要。別マシンへの移行では必要なローカル実験成果とチェックポイントを個別に引き継ぐ。
+
+## 継続的な研究の記録
+
+Developer は担当課題の報告に、意外な観察、未解決の問い、再現上の制約、次に試す価値のある仮説を残す。関連 Issue、固定リビジョン、実験条件、観測と推測の区別、反例、次に必要な証拠を記録する。範囲外の発見は再現に必要な情報を保存し、作業の区切りで Coordinator に渡す。Coordinator は重複と依存先を確認し、承認された提案を Issue にする。依存先の結果が出たときや保留理由を見直せる証拠が得られたときに関連課題を確認する。
+
+人から出た提案の意図と出典、不採用・保留の理由、否定的・不確定な結果は、担当 Developer が版管理する [提案履歴](../research/PROPOSAL_REGISTRY.md) または `agents/research/reports/` に残す。大量のログ・生成物は実行記録に保持し、版管理する報告には保存場所、再現手順と判定に必要な結果を記載する。課題の状態、優先度、現在の担当や進捗はトラッカーから参照する。この方式を別の研究リポジトリで使う場合は、そのリポジトリのトラッカー、権限、報告先に読み替える。
 
 ## 利用量と再利用
 
