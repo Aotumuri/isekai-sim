@@ -7,7 +7,7 @@ import { getOwnerByMesoId } from "../../src/sim/world-cache";
 import { getUnitCombatStrength } from "../../src/sim/unit-strength";
 import { getBaseTerritorialValue } from "../../src/sim/territorial-value";
 
-export const WAR_OUTCOME_SCHEMA = 2;
+export const WAR_OUTCOME_SCHEMA = 3;
 
 export interface WarOutcome {
   key: string;
@@ -23,6 +23,7 @@ export interface WarOutcome {
   objectiveKind: "opening-limited-target" | "territorial-defense";
   firstAchievedTick: number | null;
   objectiveHeld: boolean;
+  objectiveLegallyHeld: boolean;
   survived: boolean;
   casualties: number;
   netOwnedRegions: number;
@@ -115,7 +116,7 @@ function openWar(world: WorldState, war: WarState, nationId: NationId, key: stri
     openingStrengthRatio: strength(nationId) / Math.max(1, strength(opponentId)),
     openingRegionCount: homeIds.length, objectiveIds,
     objectiveKind: aggressor ? "opening-limited-target" : "territorial-defense",
-    firstAchievedTick: null, objectiveHeld: false, survived: true, casualties: 0, netOwnedRegions: 0,
+    firstAchievedTick: null, objectiveHeld: false, objectiveLegallyHeld: false, survived: true, casualties: 0, netOwnedRegions: 0,
     openingTerritorialValue: [...homeValues.values()].reduce((sum, value) => sum + value, 0),
     opponentTerritorySecuredValue: 0, homelandLostValue: 0,
   } };
@@ -134,6 +135,8 @@ function updateWarOutcome(
       outcome.casualties = getWarCasualties(war, outcome.nationId);
       if (item.territoryVersion !== world.territoryVersion) {
         item.territoryVersion = world.territoryVersion;
+        outcome.objectiveLegallyHeld = outcome.objectiveIds.length > 0 &&
+          outcome.objectiveIds.every((id) => owners.get(id) === outcome.nationId);
         outcome.netOwnedRegions = world.mesoRegions.filter((region) => owners.get(region.id) === outcome.nationId).length - outcome.openingRegionCount;
         outcome.opponentTerritorySecuredValue = [...item.opponentValues].reduce((sum, [id, value]) => sum + (owners.get(id) === outcome.nationId ? value : 0), 0);
         outcome.homelandLostValue = [...item.homeValues].reduce((sum, [id, value]) => sum + (owners.get(id) !== outcome.nationId ? value : 0), 0);

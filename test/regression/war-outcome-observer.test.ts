@@ -17,6 +17,13 @@ test("war outcome observer retains opening targets and records terminal wars", (
   assert.ok(observer.result().wars.every((war) => war.openingTerritorialValue > 0));
   const goals = observer.result().wars.map((outcome) => [...outcome.objectiveIds]);
   assert.equal(goals.length, world.wars.length * 2);
+  const attacker = observer.result().wars.find((outcome) => outcome.aggressor)!;
+  assert.ok(attacker.objectiveIds.length > 0);
+  for (const region of attacker.objectiveIds) world.occupation.mesoById.set(region, attacker.nationId);
+  observer.observe(world);
+  const occupation = observer.result().wars.find((outcome) => outcome.key === attacker.key)!;
+  assert.equal(occupation.objectiveHeld, true);
+  assert.equal(occupation.objectiveLegallyHeld, false);
   world.wars[0].ultimatumRegionIds = [world.nations[0].capitalMesoId];
   world.time.fastTick = 8;
   world.wars = [];
