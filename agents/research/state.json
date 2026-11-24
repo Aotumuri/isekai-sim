@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "tasks": {
+    "R-001": {
+      "title": "燃料の国内赤字と産地・買い手の偏りを追加標本で測る",
+      "status": "done",
+      "origin": "ai",
+      "next": "報告 agents/research/reports/R-001.md。二標本とも観測の有無で世界署名一致。国別の原因切り分けは R-002。",
+      "revision": "6da36afa18cff9bc47a6ba0cbfc6b5054bf6eecd",
+      "jobs": [
+        "R-001-103-node24",
+        "R-001-107-node24",
+        "R-001-103-control",
+        "R-001-107-control"
+      ]
+    },
+    "R-002": {
+      "title": "工業調達の不成立と燃料の到着量を国別に追えるか検討する",
+      "status": "done",
+      "origin": "ai",
+      "next": "agents/research/reports/R-002.md。買い手別計測の段階と分母を定義し、既存制御ケース15件をランナーで確認。計測実装を次の提案に分離。",
+      "revision": "6da36afa18cff9bc47a6ba0cbfc6b5054bf6eecd",
+      "jobs": [
+        "R-002-controls"
+      ]
+    },
+    "I-7e20a6cf53d644fb8c11ec127058b31f": {
+      "title": "国別工業調達ファネルの診断を実装する",
+      "status": "done",
+      "next": "agents/research/reports/industrial-procurement-funnel.md。固定ケース5種、シード109の署名一致と世界集計の整合、全回帰927件を確認。",
+      "origin": "ai",
+      "updated_at": "2026-11-24T08:39:20Z",
+      "branch": "main",
+      "revision": "6da36afa18cff9bc47a6ba0cbfc6b5054bf6eecd",
+      "changes": [
+        " M .gitignore",
+        " M AGENTS.md",
+        " M src/sim/industrial-procurement.ts",
+        " M src/sim/instrumentation.ts",
+        " M src/sim/international-trade.ts",
+        " M test/diagnostics/long-term-world.ts",
+        " M test/regression/economic-planning.test.ts",
+        "?? agents/config.toml",
+        "?? agents/docs/OPERATIONS.md",
+        "?? agents/docs/roles/coordinator.md",
+        "?? agents/docs/roles/developer.md",
+        "?? agents/docs/runner.md",
+        "?? agents/docs/tracker.md",
+        "?? agents/research/ROADMAP.md",
+        "?? agents/research/inbox/I-7e20a6cf53d644fb8c11ec127058b31f.json",
+        "?? agents/research/reports/R-001.md",
+        "?? agents/research/reports/R-002.md",
+        "?? agents/research/reports/industrial-procurement-funnel.md",
+        "?? agents/research/state.json",
+        "?? agents/tools/control.py",
+        "?? agents/tools/github_tracker.py",
+        "?? agents/tools/policy.py",
+        "?? agents/tools/research.py",
+        "?? agents/tools/runner.py",
+        "?? agents/tools/storage.py",
+        "?? agents/tools/tests/test_framework.py",
+        "?? agents/tools/tests/test_github_tracker.py",
+        "?? codex/agents/worker.toml",
+        "?? codex/config.toml"
+      ]
+    }
+  },
+  "reviews": {}
+}

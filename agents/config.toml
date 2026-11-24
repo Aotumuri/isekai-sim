@@ -1,0 +1,19 @@
+[git]
+commit = "allow"
+push = "deny"
+pull_request = "deny"
+
+[tracker]
+backend = "local"
+
+[tracker.github]
+repository = "Aotumuri/isekai-sim"
+create_issue = "ask"
+update_issue = "ask"
+comment = "ask"
+close_issue = "ask"
+close_on = "published"
+
+[execution]
+auto_resume = false
+max_active_workers = 1

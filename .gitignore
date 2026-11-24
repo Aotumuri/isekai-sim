@@ -5,3 +5,7 @@ dist
 設計図
 .設計図
 benchmark-results/
+
+# Local research execution and Python caches
+/agents/runtime/
+__pycache__/
