@@ -5,8 +5,10 @@ import json
 import re
 import subprocess
 
+from issue_checklist import check_tasks
 from policy import config, permit
 from storage import ROOT, RUNTIME, lock, read, write
+from work_labels import WORK_LABELS, label_names, update_work_labels
 
 STATES = ("proposed", "ready", "in-progress", "experimenting", "validating", "paused",
           "blocked", "local-done", "completed")
@@ -65,7 +67,7 @@ class GitHubTracker:
         _, metadata = split_body(issue)
         status = "completed" if issue["state"] == "closed" else metadata.get("status", "proposed")
         return {"number": issue["number"], "title": issue["title"], "url": issue["html_url"],
-                "status": status, "metadata": metadata}
+                "status": status, "metadata": metadata, "labels": label_names(issue)}
 
     def issue(self, number):
         issue = self.api("GET", f"issues/{number}")
@@ -120,15 +122,34 @@ class GitHubTracker:
             self.issue(parent)
             text += f"\n\nParent: #{parent}"
             metadata["parent"] = parent
-        payload = {"title": title, "body": body_with_metadata(text, metadata)}
+        labels = update_work_labels([], "proposed" if status == "completed" else status)
+        payload = {"title": title, "body": body_with_metadata(text, metadata), "labels": labels}
         return self.once("create", key,
                          lambda: next((i for i in self.issues() if split_body(i)[1].get("key") == key), None),
                          lambda: self.api("POST", "issues", payload))
 
-    def progress(self, number, status, approved, published=False):
+    def setup_labels(self, approved):
+        permit("tracker.github", "create_label", approved, self.settings)
+        definitions = [{"name": name, "color": color, "description": description}
+                       for name, (color, description) in WORK_LABELS.items()]
+        with lock(RUNTIME / "github.lock"):
+            existing = {label["name"].casefold(): label
+                        for label in self.api("GET", "labels?per_page=100", paginate=True)}
+            for definition in definitions:
+                label = existing.get(definition["name"])
+                if label and any(label.get(field) != value for field, value in definition.items()):
+                    raise ValueError(f"Existing GitHub label definition differs: {definition['name']}")
+            return [existing[definition["name"]] if definition["name"] in existing
+                    else self.api("POST", "labels", definition) for definition in definitions]
+
+    def progress(self, number, status, approved, published=False, tasks=()):
         permit("tracker.github", "update_issue", approved, self.settings)
         if status not in STATES:
             raise ValueError(f"Unknown task status: {status}")
+        with lock(RUNTIME / "github.lock"):
+            return self._progress(number, status, approved, published, tasks)
+
+    def _progress(self, number, status, approved, published, tasks):
         issue = self.issue(number)
         text, metadata = split_body(issue)
         if issue["state"] == "closed" or metadata.get("status") == "completed":
@@ -140,11 +161,39 @@ class GitHubTracker:
             if close_on not in ("published", "local") or (close_on == "published" and not published):
                 raise ValueError("Closure requires the configured published completion evidence; use local-done")
             payload.update(state="closed", state_reason="completed")
-        if metadata.get("status") == status and not payload:
-            return issue
-        metadata["status"] = status
-        payload["body"] = body_with_metadata(text, metadata)
-        return self.api("PATCH", f"issues/{number}", payload)
+        checked = check_tasks(text, tasks)
+        previous = metadata.get("status")
+        if previous != status:
+            metadata["status"] = status
+            payload["body"] = body_with_metadata(checked, metadata)
+        elif checked != text:
+            payload["body"] = checked + issue["body"][len(text):]
+        labels = label_names(issue)
+        desired_labels = update_work_labels(labels, status, previous)
+        if set(desired_labels) != set(labels):
+            payload["labels"] = desired_labels
+        return self.api("PATCH", f"issues/{number}", payload) if payload else issue
+
+    def checklist(self, number, tasks, approved, result_comment=None):
+        permit("tracker.github", "update_issue", approved, self.settings)
+        if not tasks:
+            raise ValueError("Checklist requires at least one --check-task")
+        endpoint = f"issues/{number}"
+        with lock(RUNTIME / "github.lock"):
+            issue = self.issue(number)
+            text, _ = split_body(issue)
+            checked = check_tasks(text, tasks)
+            if result_comment is not None:
+                comments = self.api("GET", endpoint + "/comments?per_page=100", paginate=True)
+                result = next((c for c in comments if c["id"] == result_comment), None)
+                if result is None:
+                    raise ValueError(f"Result comment {result_comment} not found on issue #{number}")
+                link = f"[試験結果]({result['html_url']})"
+                if link not in checked.splitlines():
+                    checked = checked.rstrip() + f"\n\n{link}"
+            if checked == text:
+                return issue
+            return self.api("PATCH", endpoint, {"body": checked + issue["body"][len(text):]})
 
     def comment(self, number, text, key, approved):
         permit("tracker.github", "comment", approved, self.settings)
@@ -216,7 +265,8 @@ class GitHubTracker:
                 text, metadata = split_body(item)
                 metadata["status"] = "completed"
                 self.api("PATCH", f"issues/{number}", {"state": "closed", "state_reason": "completed",
-                                                       "body": body_with_metadata(text, metadata)})
+                                                       "body": body_with_metadata(text, metadata),
+                                                       "labels": update_work_labels(label_names(item), "completed")})
             if entry.get("parent"):
                 pending.append((entry["parent"], number))
         for parent, child in pending:

@@ -139,6 +139,8 @@ def github_command(args, settings):
             raise ValueError("Migrate from local mode before selecting GitHub as the tracker")
         entries = migration_entries(read(STATE), {p.stem: read(p) for p in INBOX.glob("I-*.json")})
         return tracker.migration(entries, args.apply, args.approved)
+    if operation == "setup-labels":
+        return tracker.setup_labels(args.approved)
     if settings["tracker"]["backend"] != "github":
         raise ValueError("Select GitHub as the authoritative tracker for issue changes")
     if operation == "create":
@@ -151,7 +153,9 @@ def github_command(args, settings):
     if operation == "progress":
         if args.status != "paused":
             require_running()
-        return tracker.progress(args.number, args.status, args.approved, args.published)
+        return tracker.progress(args.number, args.status, args.approved, args.published, args.check_task)
+    if operation == "checklist":
+        return tracker.checklist(args.number, args.check_task, args.approved, args.result_comment)
     with lock(LOCK):
         saved = read(REMOTE_CHECKPOINT) if REMOTE_CHECKPOINT.exists() else {}
         if not OWNER.exists() or read(OWNER)["id"] != args.owner:
@@ -185,7 +189,8 @@ def number(value):
 def github_parser(commands):
     actions = commands.add_parser("github").add_subparsers(dest="operation", required=True)
     actions.add_parser("list")
-    for name in ("show", "checkpoint", "comment", "progress", "link"):
+    actions.add_parser("setup-labels")
+    for name in ("show", "checkpoint", "comment", "progress", "link", "checklist"):
         actions.add_parser(name).add_argument("number", type=number)
     create = actions.add_parser("create")
     create.add_argument("title")
@@ -197,6 +202,10 @@ def github_parser(commands):
     progress = actions.choices["progress"]
     progress.add_argument("status", choices=GITHUB_STATES)
     progress.add_argument("--published", action="store_true")
+    progress.add_argument("--check-task", action="append", default=[], metavar="TEXT")
+    checklist = actions.choices["checklist"]
+    checklist.add_argument("--check-task", action="append", required=True, metavar="TEXT")
+    checklist.add_argument("--result-comment", type=number, metavar="ID")
     link = actions.choices["link"]
     link.add_argument("related", type=number)
     link.add_argument("relation", choices=("child", "blocked-by"))
@@ -208,7 +217,7 @@ def github_parser(commands):
     save.add_argument("--job", action="append", default=[])
     save.add_argument("--processed", action="append", default=[])
     actions.add_parser("migrate").add_argument("--apply", action="store_true")
-    for name in ("create", "comment", "progress", "link", "migrate"):
+    for name in ("create", "comment", "progress", "link", "migrate", "checklist", "setup-labels"):
         actions.choices[name].add_argument("--approved", action="store_true")
 
 

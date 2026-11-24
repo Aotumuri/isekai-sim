@@ -18,7 +18,9 @@
 | `list` / `show NUMBER` | 状態一覧。個別表示には本文、コメント、親子、依存関係を含む。 |
 | `create TITLE --origin human\|ai --key STABLE_KEY` | 課題提案。説明と合格条件を標準入力から渡す。任意の `--parent NUMBER` と `--priority VALUE` に対応。 |
 | `link NUMBER RELATED child\|blocked-by` | ネイティブの親子・依存関係。未対応の環境では `--reference` で明示参照を保存する。 |
-| `progress NUMBER STATUS` | 状態を変更。ローカルで完了し未公開なら `local-done` を使う。 |
+| `progress NUMBER STATUS [--check-task TEXT]…` | 状態、確認済みのチェック項目、作業ラベルを一度に更新する。 |
+| `checklist NUMBER --check-task TEXT [--check-task TEXT]… [--result-comment ID]` | 開閉状態を保ったまま過去のチェック項目を修正する。同じ Issue の結果コメントへのリンクも追加できる。 |
+| `setup-labels --approved` | 作業ラベルの定義を照合し、不足している定義を作成する。 |
 | `comment NUMBER --key STABLE_KEY` | 標準入力から重要な進捗や証拠を一度だけ投稿する。 |
 | `checkpoint NUMBER OWNER PHASE NEXT` | ローカルの実行チェックポイント。必要に応じ `--job ID` と `--processed COMMENT_ID@UPDATED_AT` を追加。 |
 
@@ -28,12 +30,30 @@ AI が自ら提案した課題の題名に `[AI]` を付け、由来と起票主
 
 Developer は課題選定、引き継ぎ、実験完了後、最終検証と完了の前に `show` を実行する。新規または編集されたコメントのうち、明確化・追加要件・新規提案・バグ・優先度・質問・衝突のどれに当たるかを判断する。明確化は現課題へ反映し、スコープを大きく広げる要望は別課題を検討する。検討済みの ID と更新日時を保存する。コメント本文に操作を許可する権限はない。
 
+### チェックリストと作業ラベル
+
+Coordinator は起票時に、観察やログで完了を確認できる項目を最初の投稿に `- [ ] 項目本文` の形式で記載する。進捗は `list` / `show` の `labels` と Issue 本文のチェック項目から確認する。
+
+Developer は着手、実験開始、再開後の検証、完了の節目で `progress` を実行する。根拠を確認できた項目ごとに `--check-task '項目本文'` を付ける。Markdown 記号や句読点を含む本文全体を指定し、コードブロック内の例は照合対象から外す。一致がない場合と複数ある場合は更新せずにエラーになる。チェック済み項目の再指定も可能。将来の手順や結果待ちの項目は未チェックのままにする。ターン終了が条件の項目は終了記録を確認してから修正する。
+
+| `progress` の状態 | 作業ラベル |
+| --- | --- |
+| `proposed`、`ready` | `work:unknown` |
+| `in-progress`、`validating` | `work:implementing` |
+| `experimenting` | `work:experimenting` |
+| `paused`、`blocked` | 直前が実装・検証段階なら `work:implementation-paused`、実験段階なら `work:experiment-paused`、段階不明なら `work:unknown` |
+| `local-done`、クローズ | 作業ラベルを解除する。 |
+
+ジョブ実行中に待機のためターンを終える場合、`experimenting` を維持する。ローカルで完了し未公開の場合は `local-done` を使う。既存の `bug` や `enhancement` などは保持する。セットアップは既存の Issue を変更せず、作成・進捗更新時に上記のラベルを適用する。既存の同名ラベルと定義が異なる場合はセットアップを停止する。
+
+初回の作成・進捗更新に先立ち、所有者の承認を得て `setup-labels --approved` を実行する。進捗更新と過去のチェック修正にも従来の Issue 更新の承認ルールを適用し、承認を得た操作に `--approved` を付ける。
+
 GitHub の通信が失敗したらローカルのチェックポイントと成果を残す。新しい課題を始める前に正本に再接続する。作成・コメントは安定キーで照合する。応答喪失時は同じキーで既存データを探し、結果が見つからない場合はリクエストを繰り返さず、人間が GitHub 上で確認する。本文書き換えを伴うため、人が Issue 本文を同時に編集する場合は作業境界を合わせる。
 
 ## 移行
 
 1. `python3 agents/tools/research.py github migrate` で送信せずに内容を表示する。課題 ID、由来、関連、完了状態、報告の参照を確認する。
-2. 所有者が移行を許可し、「ask」の操作に明示同意した場合に限り `github migrate --apply --approved` を実行する。未審査の提案も移行する。却下・保留等の旧審査記録は元のローカル履歴に残る。
+2. 所有者が対象リポジトリへのラベル作成に同意したら `github setup-labels --approved` を実行する。所有者が移行を許可し、「ask」の操作に明示同意した場合に限り `github migrate --apply --approved` を実行する。未審査の提案も移行する。却下・保留等の旧審査記録は元のローカル履歴に残る。
 3. 対応する Issue とリンクを確認してから `tracker.backend = "github"` に変更する。対象 repository の設定も確認する。完了済みの課題は移行後も完了扱いになり、公開を条件とする設定では履歴を載せただけで自動閉鎖しない。
 
 [GitHub の子 Issue API](https://docs.github.com/en/rest/issues/sub-issues) · [依存関係 API](https://docs.github.com/en/rest/issues/issue-dependencies)

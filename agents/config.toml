@@ -9,6 +9,7 @@ backend = "github"
 [tracker.github]
 repository = "Aotumuri/isekai-sim"
 create_issue = "ask"
+create_label = "ask"
 update_issue = "ask"
 comment = "ask"
 close_issue = "ask"

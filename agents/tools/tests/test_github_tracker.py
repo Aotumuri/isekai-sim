@@ -14,7 +14,9 @@ class FakeGitHub:
         self.issues = {}
         self.comments = {}
         self.edges = {}
+        self.labels = {}
         self.writes = 0
+        self.last_write = None
         self.offline = False
         self.lose_response = False
 
@@ -24,6 +26,12 @@ class FakeGitHub:
         route = path.partition("?")[0].split("/")[3:]
         if method != "GET":
             self.writes += 1
+            self.last_write = (method, route, copy.deepcopy(payload))
+        if route == ["labels"]:
+            if method == "GET":
+                return [list(copy.deepcopy(self.labels).values())]
+            self.labels[payload["name"]] = copy.deepcopy(payload)
+            return copy.deepcopy(payload)
         if route == ["issues"]:
             if method == "GET":
                 return [list(copy.deepcopy(self.issues).values())]
@@ -69,6 +77,7 @@ class GitHubTrackerTest(unittest.TestCase):
             self.addCleanup(change.stop)
         self.remote = FakeGitHub()
         self.settings = {"tracker": {"github": {"repository": "owner/repo", "create_issue": "ask",
+                          "create_label": "ask",
                           "update_issue": "allow", "comment": "ask", "close_issue": "deny",
                           "close_on": "published"}}}
         self.tracker = module.GitHubTracker(self.settings, self.remote)
@@ -81,6 +90,7 @@ class GitHubTrackerTest(unittest.TestCase):
         child = self.tracker.create("human idea", "Description", "human", "human-idea", True,
                                     parent=parent["number"], priority="high")
         self.assertEqual(parent["title"], "proposal [AI]")
+        self.assertEqual(parent["labels"], ["work:unknown"])
         self.assertEqual(child["title"], "human idea")
         self.assertEqual(self.tracker.summary(child)["metadata"]["origin"], "human")
         self.tracker.link(parent["number"], child["number"], "child", False)
@@ -127,3 +137,101 @@ class GitHubTrackerTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "offline"):
             self.tracker.issues()
         self.assertEqual(self.tracker.migration(entries), entries)
+
+
+    def test_setup_labels_only_creates_missing_definitions(self):
+        self.remote.labels["bug"] = {"name": "bug", "color": "d73a4a", "description": "Bug"}
+        self.remote.labels["work:unknown"] = {"name": "work:unknown", "color": "000000"}
+        with self.assertRaisesRegex(ValueError, "explicit owner approval"):
+            self.tracker.setup_labels(False)
+        with self.assertRaisesRegex(ValueError, "definition differs"):
+            self.tracker.setup_labels(True)
+        self.assertEqual(self.remote.writes, 0)
+        del self.remote.labels["work:unknown"]
+        definitions = self.tracker.setup_labels(True)
+        self.assertEqual(len(definitions), 5)
+        self.assertEqual(self.tracker.setup_labels(True), definitions)
+        self.assertEqual(self.remote.writes, 5)
+        self.assertEqual(self.remote.labels["bug"]["color"], "d73a4a")
+
+    def test_progress_updates_checklist_and_work_labels_together(self):
+        body = (
+            "- [ ] Build it\n- [ ] Build it again\n"
+            "\n````md\n> - [x] Build it\n- [ ] Build it\n```\n- [x] Build it\n````\n"
+            "\n- ~~~md\n  - [ ] Build it\n  ~~~\n"
+            "\nParagraph\n\n    - [ ] Build it\n\n- Group\n  1. [ ] Verify it"
+        )
+        number = self.tracker.create("proposal", body, "human", "p", True)["number"]
+        self.remote.issues[number]["labels"] = [
+            {"name": "bug"}, {"name": "enhancement"}, {"name": "work:custom"}, {"name": "work:unknown"},
+        ]
+        writes = self.remote.writes
+        expected = body.replace("- [ ] Build it\n", "- [x] Build it\n", 1).replace(
+            "1. [ ] Verify it", "1. [x] Verify it"
+        )
+        result = self.tracker.progress(number, "in-progress", False, tasks=["Build it", "Verify it"])
+        self.assertEqual(self.remote.writes, writes + 1)
+        self.assertEqual(self.remote.last_write[:2], ("PATCH", ["issues", str(number)]))
+        self.assertEqual(set(self.remote.last_write[2]), {"body", "labels"})
+        self.assertEqual(module.split_body(result)[0], expected)
+        self.assertEqual(self.tracker.summary(result)["status"], "in-progress")
+        self.assertEqual(result["labels"], ["bug", "enhancement", "work:custom", "work:implementing"])
+        self.tracker.progress(number, "in-progress", False, tasks=["Build it", "Verify it", "Build it"])
+        self.assertEqual(self.remote.writes, writes + 1)
+
+    def test_invalid_checklist_item_prevents_every_update(self):
+        body = "- [ ] Unique\n- [ ] Repeated\n- [X] Repeated"
+        number = self.tracker.create("proposal", body, "human", "p", True)["number"]
+        for task, error in (("Uni", "not found"), ("Repeated", "ambiguous")):
+            with self.subTest(task=task), self.assertRaisesRegex(ValueError, error):
+                self.tracker.progress(number, "in-progress", False, tasks=["Unique", task])
+        self.assertEqual(self.remote.writes, 1)
+        self.assertEqual(self.tracker.detail(number)["body"], body)
+
+    def test_pause_resume_and_completion_labels(self):
+        self.settings["tracker"]["github"]["close_issue"] = "ask"
+        number = self.tracker.create("proposal", "- [ ] Finish", "human", "p", True)["number"]
+        self.remote.issues[number]["labels"].append("bug")
+        for status, label in (
+            ("paused", "work:unknown"),
+            ("in-progress", "work:implementing"),
+            ("paused", "work:implementation-paused"),
+            ("blocked", "work:implementation-paused"),
+            ("validating", "work:implementing"),
+            ("experimenting", "work:experimenting"),
+            ("blocked", "work:experiment-paused"),
+            ("paused", "work:experiment-paused"),
+            ("experimenting", "work:experimenting"),
+        ):
+            with self.subTest(status=status, label=label):
+                self.assertCountEqual(self.tracker.progress(number, status, False)["labels"], ["bug", label])
+        self.assertEqual(self.tracker.progress(number, "local-done", False)["labels"], ["bug"])
+        self.tracker.progress(number, "validating", False)
+        with self.assertRaisesRegex(ValueError, "published completion evidence"):
+            self.tracker.progress(number, "completed", True)
+        result = self.tracker.progress(number, "completed", True, True, ["Finish"])
+        self.assertEqual(result["state"], "closed")
+        self.assertEqual(result["labels"], ["bug"])
+        self.assertEqual(module.split_body(result)[0], "- [x] Finish")
+
+    def test_correct_closed_issue_and_link_result(self):
+        body = '- [ ] Verify\r\n\n<!-- research-meta: {"status":"completed"} -->'
+        number = self.tracker.create("proposal", "Criteria", "human", "p", True)["number"]
+        self.remote.issues[number].update(body=body, state="closed", state_reason="completed", labels=["bug"])
+        url = "https://example.invalid/issues/1#issuecomment-9"
+        self.remote.comments[number] = [{"id": 9, "html_url": url}]
+        self.settings["tracker"]["github"]["update_issue"] = "ask"
+        with self.assertRaisesRegex(ValueError, "explicit owner approval"):
+            self.tracker.checklist(number, ["Verify"], False)
+        with self.assertRaisesRegex(ValueError, "not found on issue"):
+            self.tracker.checklist(number, ["Verify"], True, 33)
+        self.assertEqual(self.remote.writes, 1)
+        result = self.tracker.checklist(number, ["Verify"], True, 9)
+        self.assertEqual(result["state"], "closed")
+        self.assertEqual(result["state_reason"], "completed")
+        self.assertEqual(result["labels"], ["bug"])
+        self.assertEqual(set(self.remote.last_write[2]), {"body"})
+        self.assertEqual(result["body"], '- [x] Verify\n\n[試験結果](' + url
+                         + ')\n\n<!-- research-meta: {"status":"completed"} -->')
+        self.assertEqual(self.tracker.checklist(number, ["Verify"], True, 9), result)
+        self.assertEqual(self.remote.writes, 2)
