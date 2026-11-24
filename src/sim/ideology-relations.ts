@@ -11,8 +11,8 @@ export function ideologyCompatibility(a: string, b: string): number {
   if (a === "cohesionism" || b === "cohesionism") return -0.35;
   return -0.25;
 }
-export function getIdeologicalAffinity(world: WorldState, a: NationId, b: NationId): number {
-  return ideologyCompatibility(getNationIdeology(world, a).id, getNationIdeology(world, b).id);
+export function getIdeologicalAffinity(world: WorldState, a: NationId, b: NationId, readOnly = false): number {
+  return ideologyCompatibility(getNationIdeology(world, a, readOnly).id, getNationIdeology(world, b, readOnly).id);
 }
 export function ideologyAffinityLabel(affinity: number): string {
   return affinity >= 0.75 ? "Aligned" : affinity <= -0.75 ? "Opposed" : affinity <= -0.5 ? "Conflicting" : "Different";

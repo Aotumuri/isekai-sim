@@ -20,12 +20,12 @@ const PROFILES: readonly NationCharacter[] = [
 ];
 
 /** Stable across iteration order; does not consume the simulation RNG. */
-export function getNationCharacter(world: WorldState, nationId: NationId): NationCharacter {
+export function getNationCharacter(world: WorldState, nationId: NationId, readOnly = false): NationCharacter {
   const nation = world.nations.find((item) => item.id === nationId);
   if (nation?.character) return nation.character;
   let hash = 2166136261;
   for (const char of `${world.worldSeed ?? 0}:${nationId}`) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
   const profile = { ...PROFILES[(hash >>> 0) % PROFILES.length] };
-  if (nation) nation.character = profile;
+  if (nation && !readOnly) nation.character = profile;
   return profile;
 }

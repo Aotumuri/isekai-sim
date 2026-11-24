@@ -1,3 +1,4 @@
+import type { AdvocacySelection } from "./political-advocacy";
 import type { MesoRegionId } from "../worldgen/meso-region";
 import type { NationId } from "../worldgen/nation";
 import type { MobilizationPhase } from "./mobilization";
@@ -11,6 +12,7 @@ export type SimulationMetricName =
   | "production.supplyLookup"
   | "production.supplyIntegration"
   | "trade.procurement"
+  | "politics.foreignAdvocacyReassessment"
   | "politics.foreignAdvocacy"
   | "politics.identityGovernance"
   | "politics.subjectNegotiations"
@@ -685,11 +687,13 @@ export type RegionalAdvocacyObservation =
   | { kind: "excluded"; id: MesoRegionId; talks: RegionalNegotiation; reason: ForeignAdvocacyExclusion }
   | { kind: "governmentDecision"; id: MesoRegionId; talks: RegionalNegotiation;
       actual: "reject" | "partial" | "full"; withoutBacking: "reject" | "partial" | "full" }
-  | { kind: "offer"; id: MesoRegionId; talks: RegionalNegotiation; accepted: boolean };
+  | { kind: "offer"; id: MesoRegionId; talks: RegionalNegotiation; accepted: boolean;
+      sponsorId: NationId; domesticSettlement: boolean; relationshipChanges: number; reassessment: boolean };
 
 export interface SimulationInstrumentation {
   observeRegionalAdvocacy?(event: RegionalAdvocacyObservation): void;
-  startForeignAdvocacyMeasurement?(): (() => void) | void;
+  selectForeignAdvocacyReassessment?(initial: readonly [MesoRegionId, RegionalNegotiation][]): AdvocacySelection | undefined;
+  startForeignAdvocacyMeasurement?(phase?: "reassessment"): (() => void) | void;
   recordLandUnitLifecycle?(event: LandUnitLifecycleEvent): void;
   recordRedistributionReview?(sample: RedistributionReviewSample): void;
   recordDuration(name: SimulationMetricName, durationMs: number): void;

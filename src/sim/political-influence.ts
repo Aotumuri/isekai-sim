@@ -147,14 +147,31 @@ export function updateForeignPoliticalInfluence(world: WorldState): void {
   if (!hasPoliticalTurbulence(world) || now < FIRST_FOREIGN_ADVOCACY_TICK) return;
   const screen = schedule === "periodic" ? campaignBoundary :
     schedule === "100-day" ? now % 10 === 0 : now === FIRST_FOREIGN_ADVOCACY_TICK || !!pending?.length;
-  if (!screen) return;
-  const evaluate = () => {
-    const negotiations = liveNegotiations(world, schedule === "event" && now !== FIRST_FOREIGN_ADVOCACY_TICK ? pending : undefined);
-    if (!negotiations.length) return;
-    const contacts = campaignContacts ?? getPoliticalContacts(world, new Set(negotiations.map(([, { owner }]) => owner)));
-    updatePoliticalAdvocacy(world, contacts, negotiations);
-  };
   const instrumentation = world.instrumentation;
+  const selectReassessment = instrumentation?.selectForeignAdvocacyReassessment;
+  if (!screen && !selectReassessment) return;
+  const initial = screen
+    ? liveNegotiations(world, schedule === "event" && now !== FIRST_FOREIGN_ADVOCACY_TICK ? pending : undefined)
+    : [];
+  const selection = selectReassessment?.(initial);
+  if (!screen && !selection?.size) return;
+  const evaluate = () => {
+    if (initial.length) {
+      const contacts = campaignContacts ?? getPoliticalContacts(world, new Set(initial.map(([, { owner }]) => owner)));
+      updatePoliticalAdvocacy(world, contacts, initial);
+    }
+    if (selection?.size) {
+      const start = performance.now();
+      const finishReassessment = instrumentation?.startForeignAdvocacyMeasurement?.("reassessment");
+      const reassess = liveNegotiations(world, [...selection.keys()]);
+      if (reassess.length) {
+        const contacts = getPoliticalContacts(world, new Set(reassess.map(([, { owner }]) => owner)));
+        updatePoliticalAdvocacy(world, contacts, reassess, selection);
+      }
+      finishReassessment?.();
+      instrumentation?.recordDuration("politics.foreignAdvocacyReassessment", performance.now() - start);
+    }
+  };
   if (!instrumentation) { evaluate(); return; }
   const start = performance.now();
   const finishMeasurement = instrumentation.startForeignAdvocacyMeasurement?.();

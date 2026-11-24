@@ -73,24 +73,24 @@ export function getDiplomacyState(world: WorldState): DiplomacyState {
 }
 
 export function relationKey(a: NationId, b: NationId): string { return normalizeWarPair(a, b).join(":"); }
-export function getRelation(world: WorldState, a: NationId, b: NationId): DiplomaticRelation {
-  const state = getDiplomacyState(world);
+export function getRelation(world: WorldState, a: NationId, b: NationId, readOnly = false): DiplomaticRelation {
+  const state = readOnly ? world.diplomacy : getDiplomacyState(world);
   const key = relationKey(a, b);
-  let relation = state.relations.get(key);
+  let relation = state?.relations.get(key);
   if (!relation) {
     const [nationAId, nationBId] = normalizeWarPair(a, b);
-    const first = getNationCharacter(world, a), second = getNationCharacter(world, b);
+    const first = getNationCharacter(world, a, readOnly), second = getNationCharacter(world, b, readOnly);
     const affinity = (first.cooperation + second.cooperation - 1) * 35 -
-      Math.abs(first.aggression - second.aggression) * 15 + getIdeologicalAffinity(world, a, b) * 14;
+      Math.abs(first.aggression - second.aggression) * 15 + getIdeologicalAffinity(world, a, b, readOnly) * 14;
     relation = { nationAId, nationBId, opinion: affinity, trust: 40, tension: 10,
       grievance: 0, treaties: [], crisis: null, cooldownUntilSlowTick: 0 };
-    state.relations.set(key, relation);
+    if (!readOnly) state!.relations.set(key, relation);
   }
   return relation;
 }
 
-export function hasTreaty(world: WorldState, a: NationId, b: NationId, type: TreatyType): boolean {
-  return getDiplomacyState(world).relations.get(relationKey(a, b))?.treaties.some((treaty) =>
+export function hasTreaty(world: WorldState, a: NationId, b: NationId, type: TreatyType, readOnly = false): boolean {
+  return (readOnly ? world.diplomacy : getDiplomacyState(world))?.relations.get(relationKey(a, b))?.treaties.some((treaty) =>
     treaty.type === type && treaty.expiresAtSlowTick > world.time.slowTick) ?? false;
 }
 /** Exile governments oppose occupiers through their host's continuing war. */
@@ -112,9 +112,12 @@ export function getDefensePact(world: WorldState, a: NationId, b: NationId): Dip
   const pact = world.diplomacy?.relations.get(relationKey(a, b))?.defensePact;
   return pact && pact.expiresAt > world.time.slowTick ? pact : undefined;
 }
-export function getInfluence(world: WorldState, nationId: NationId): number {
+const INITIAL_DIPLOMATIC_INFLUENCE = 30;
+
+export function getInfluence(world: WorldState, nationId: NationId, readOnly = false): number {
+  if (readOnly) return world.diplomacy?.influenceByNationId.get(nationId) ?? INITIAL_DIPLOMATIC_INFLUENCE;
   const influence = getDiplomacyState(world).influenceByNationId;
-  if (!influence.has(nationId)) influence.set(nationId, 30);
+  if (!influence.has(nationId)) influence.set(nationId, INITIAL_DIPLOMATIC_INFLUENCE);
   return influence.get(nationId)!;
 }
 export function spendInfluence(world: WorldState, nationId: NationId, amount: number): boolean {

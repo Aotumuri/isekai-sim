@@ -59,6 +59,10 @@ export function createIdeology(world: WorldState, name: string): Ideology | null
   (world.customIdeologies ??= []).push(ideology);
   return ideology;
 }
+function initialIdeology(hash: number): Ideology {
+  return BUILTIN_IDEOLOGIES[(hash >>> 16) % BUILTIN_IDEOLOGIES.length]!;
+}
+
 export function assignNationIdentities(world: WorldState): void {
   const used = new Set(world.nations.filter((nation) => nation.name).map((nation) => nation.name!.toLowerCase()));
   for (const nation of [...world.nations].sort((a, b) => a.id.localeCompare(b.id))) {
@@ -67,7 +71,7 @@ export function assignNationIdentities(world: WorldState): void {
       const name = chooseNationName(hash, used);
       nation.name = name; used.add(name.toLowerCase());
     }
-    nation.ideologyId ??= BUILTIN_IDEOLOGIES[(hash >>> 16) % BUILTIN_IDEOLOGIES.length]!.id;
+    nation.ideologyId ??= initialIdeology(hash).id;
   }
 }
 export function getNationName(world: WorldState, nationId: NationId, form: "official" | "short" = "official"): string {
@@ -76,8 +80,11 @@ export function getNationName(world: WorldState, nationId: NationId, form: "offi
   if (form === "official" && nation?.populationPolicy) return `${nation.name} · ${populationPolicyTitle(nation.populationPolicy)}`;
   return nation?.name ?? "Unknown nation";
 }
-export function getNationIdeology(world: WorldState, nationId: NationId): Ideology {
+export function getNationIdeology(world: WorldState, nationId: NationId, readOnly = false): Ideology {
   const nation = world.nations.find((item) => item.id === nationId);
-  if (nation && !nation.ideologyId) assignNationIdentities(world);
+  if (nation && !nation.ideologyId) {
+    if (readOnly) return initialIdeology(identityHash(`${world.worldSeed ?? 0}:${nation.id}:identity`));
+    assignNationIdentities(world);
+  }
   return getIdeologies(world).find((item) => item.id === nation?.ideologyId) ?? BUILTIN_IDEOLOGIES[0]!;
 }

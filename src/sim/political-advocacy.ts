@@ -22,6 +22,7 @@ import type { WorldState } from "./world-state";
 
 /** Diplomatic influence spent to recognize and support an existing political demand. */
 export const POLITICAL_ADVOCACY_COST = 22;
+export const ADVOCACY_INFLUENCE_REQUIRED = POLITICAL_ADVOCACY_COST + 20;
 export const POLITICAL_ADVOCACY_RENEWAL_COST = 12;
 /** Slow ticks between renewals of an active commitment (160 slow ticks = 1,600 days). */
 export const ADVOCACY_RENEWAL_INTERVAL = 160;
@@ -61,9 +62,9 @@ function preferredGroup(nation: NationRuntime, dimension: "ancestry" | "culture"
   return name ? identityGroupIndex(dimension, name) : -1;
 }
 
-function treatyCost(world: WorldState, sponsor: NationId, partner: NationId): number {
-  if (hasTreaty(world, sponsor, partner, "alliance")) return 0.9;
-  if (hasTreaty(world, sponsor, partner, "non-aggression") || hasTreaty(world, sponsor, partner, "trade")) return 0.45;
+function treatyCost(world: WorldState, sponsor: NationId, partner: NationId, readOnly: boolean): number {
+  if (hasTreaty(world, sponsor, partner, "alliance", readOnly)) return 0.9;
+  if (hasTreaty(world, sponsor, partner, "non-aggression", readOnly) || hasTreaty(world, sponsor, partner, "trade", readOnly)) return 0.45;
   return 0;
 }
 
@@ -73,31 +74,36 @@ function treatyCost(world: WorldState, sponsor: NationId, partner: NationId): nu
  * political character of the cabinet.
  */
 function evaluateInterest(world: WorldState, id: MesoRegionId, talks: RegionalNegotiation,
-  owner: NationRuntime, sponsor: NationRuntime): Interest {
-  const character = getNationCharacter(world, sponsor.id);
-  const affinity = ideologyCompatibility(getNationIdeology(world, sponsor.id).id, getNationIdeology(world, owner.id).id);
+  owner: NationRuntime, sponsor: NationRuntime, readOnly = false): Interest & { factors?: Record<string, number> } {
+  const character = getNationCharacter(world, sponsor.id, readOnly);
+  const affinity = ideologyCompatibility(getNationIdeology(world, sponsor.id, readOnly).id, getNationIdeology(world, owner.id, readOnly).id);
   const population = world.regionalPopulations?.get(id);
   const share = population?.size ? population[talks.dimension][talks.group]! / population.size : 0;
   const kinship = preferredGroup(sponsor, talks.dimension) === talks.group ? 1 : 0;
   // Culture ties can follow the administrative alignment recorded by governance.
   const alignedCulture = talks.dimension === "culture" && sponsor.governance?.alignmentCulture === POPULATION_GROUPS.culture[talks.group];
-  const claim = getTerritorialClaim(world, sponsor.id, id) / 100;
-  const relation = getRelation(world, sponsor.id, owner.id);
+  const claim = getTerritorialClaim(world, sponsor.id, id, readOnly) / 100;
+  const relation = getRelation(world, sponsor.id, owner.id, readOnly);
   const rivalry = relation.opinion < 0 ? Math.min(1, -relation.opinion / 100) : 0;
-  const directCost = treatyCost(world, sponsor.id, owner.id);
+  const directCost = treatyCost(world, sponsor.id, owner.id, readOnly);
   const overlord = getSubjectOverlord(world, owner.id);
-  const subjectOverlordCost = overlord ? treatyCost(world, sponsor.id, overlord) : 0;
+  const subjectOverlordCost = overlord ? treatyCost(world, sponsor.id, overlord, readOnly) : 0;
   const score = kinship * 0.55 + (alignedCulture && !kinship ? 0.18 : 0) + claim * 0.30 + rivalry * 0.30 +
     Math.max(0, -affinity) * 0.16 + share * 0.16 + character.aggression * 0.18 - character.cooperation * 0.22 -
     directCost * 0.55 - subjectOverlordCost * 0.35;
-  return { score, kinship, share, treatyCost: directCost, subjectOverlordCost };
+  const factors = readOnly ? {
+    kinship, alignedCulture: Number(alignedCulture && !kinship), claim, rivalry,
+    ideology: Math.max(0, -affinity), share, aggression: character.aggression, cooperation: character.cooperation,
+    directTreaty: directCost, overlordTreaty: subjectOverlordCost,
+  } : undefined;
+  return { score, kinship, share, treatyCost: directCost, subjectOverlordCost, factors };
 }
 
 /** How strongly the target government can portray the sponsor as an illegitimate meddler. */
 function repudiation(world: WorldState, talks: RegionalNegotiation, owner: NationRuntime, sponsor: NationRuntime,
-  interest: Interest): number {
-  const affinity = ideologyCompatibility(getNationIdeology(world, sponsor.id).id, getNationIdeology(world, owner.id).id);
-  const relation = getRelation(world, sponsor.id, owner.id);
+  interest: Interest, readOnly = false): number {
+  const affinity = ideologyCompatibility(getNationIdeology(world, sponsor.id, readOnly).id, getNationIdeology(world, owner.id, readOnly).id);
+  const relation = getRelation(world, sponsor.id, owner.id, readOnly);
   const legitimacy = (owner.identityStability?.legitimacy ?? 100) / 100;
   return clamp(0.15 + legitimacy * 0.35 + (1 - Math.max(0, affinity)) * 0.15 +
     (interest.kinship ? -0.22 : 0.12) + (relation.opinion < 0 ? 0.12 : 0) +
@@ -110,8 +116,8 @@ function repudiation(world: WorldState, talks: RegionalNegotiation, owner: Natio
  * undercut a credible domestic settlement.
  */
 export function evaluateMovementSupport(world: WorldState, id: MesoRegionId, talks: RegionalNegotiation,
-  owner: NationRuntime, sponsor: NationRuntime, strength: number, backlash: number, interest: Interest) {
-  const relation = getRelation(world, sponsor.id, owner.id);
+  owner: NationRuntime, sponsor: NationRuntime, strength: number, backlash: number, interest: Interest, readOnly = false) {
+  const relation = getRelation(world, sponsor.id, owner.id, readOnly);
   const grievance = Math.max(talks.grievance,
     grievanceLevel(getRegionalIdentityGrievance(world, id, owner.id)));
   const domesticPath = talks.status === "offer" && talks.offer === talks.requested;
@@ -152,7 +158,7 @@ export function liveNegotiations(world: WorldState, districts?: readonly MesoReg
   return result.sort((a, b) => a[0].localeCompare(b[0]));
 }
 
-function activeSponsorships(world: WorldState): Map<NationId, number> {
+export function activeSponsorships(world: WorldState): Map<NationId, number> {
   const counts = new Map<NationId, number>();
   // Only live negotiations consume a sponsor's capacity. A commitment left on a
   // closed or superseded case must not block new legitimate commitments.
@@ -180,6 +186,8 @@ function canCommitNow(world: WorldState, offer: AdvocacyOffer, now: number,
   if ((sponsor.politics?.nextForeignAdvocacyAt ?? 0) > now) return false;
   if ((talks.foreignRefusals?.[sponsor.id] ?? 0) > now) return false;
   if ((sponsorships.get(sponsor.id) ?? 0) >= MAX_ACTIVE_PER_SPONSOR) return false;
+  // Contacts and interest were read for this cycle. Proposals in the same
+  // batch can spend the screened reserve without changing either of those inputs.
   return getInfluence(world, sponsor.id) >= POLITICAL_ADVOCACY_COST;
 }
 
@@ -193,7 +201,7 @@ function endBacking(world: WorldState, id: MesoRegionId, talks: RegionalNegotiat
 }
 
 function applyAdvocacy(world: WorldState, offer: AdvocacyOffer, accepted: boolean,
-  decision: ReturnType<typeof evaluateMovementSupport>, now: number): void {
+  decision: ReturnType<typeof evaluateMovementSupport>, now: number, reassessment: boolean): void {
   const { id, owner, sponsor, talks, backlash } = offer;
   const relation = getRelation(world, sponsor.id, owner.id);
   // Public advocacy is visible: even a refused offer strains the bilateral relationship.
@@ -211,7 +219,8 @@ function applyAdvocacy(world: WorldState, offer: AdvocacyOffer, accepted: boolea
     loyalty.trust = clamp(loyalty.trust - (accepted ? 1.5 : 0.5), 0, 100);
   }
   world.instrumentation?.incrementCounter("foreignAdvocacy.relationshipChanges", changedRelations);
-  world.instrumentation?.observeRegionalAdvocacy?.({ kind: "offer", id, talks, accepted });
+  world.instrumentation?.observeRegionalAdvocacy?.({ kind: "offer", id, talks, accepted,
+    sponsorId: sponsor.id, domesticSettlement: decision.domesticPath, relationshipChanges: changedRelations, reassessment });
   const group = POPULATION_GROUPS[talks.dimension][talks.group];
   const demand = talks.requested === "autonomous" ? "local control of institutions" : "institutional protection";
   if (!accepted) {
@@ -232,16 +241,78 @@ function applyAdvocacy(world: WorldState, offer: AdvocacyOffer, accepted: boolea
     message: `${sponsor.id} recognized the ${group} demand for ${demand} in district ${id} (${owner.id}). The movement accepted the diplomatic backing. ${describeSupportDecision(decision)}` });
 }
 
-function candidates(world: WorldState, contacts: ReadonlyMap<NationId, ReadonlySet<NationId>>, now: number,
-  negotiations: readonly [MesoRegionId, RegionalNegotiation][], sponsorships: ReadonlyMap<NationId, number>) {
+// The first failure preserves the production screening order. Diagnostics can
+// continue through the same checks to distinguish simultaneous blockers.
+function* sponsorBlockers(world: WorldState, owner: NationRuntime, sponsor: NationRuntime,
+  talks: RegionalNegotiation, sponsorships: ReadonlyMap<NationId, number>, readOnly: boolean): Generator<ForeignAdvocacyExclusion> {
+  const now = world.time.slowTick;
+  const sponsorId = sponsor.id;
+  if (!isNationActive(sponsor)) yield "sponsorInactive";
+  if (talks.foreign?.sponsorId === sponsorId) yield "alreadySupported";
+  if (findWar(world.wars, sponsorId, owner.id) || getRelation(world, sponsorId, owner.id, readOnly).crisis) yield "warOrCrisis";
+  if (getSubjectOverlord(world, sponsorId) === owner.id || getSubjectOverlord(world, owner.id) === sponsorId) yield "subjectRelationship";
+  if ((sponsorships.get(sponsorId) ?? 0) >= MAX_ACTIVE_PER_SPONSOR) yield "capacity";
+  if ((sponsor.politics?.nextForeignAdvocacyAt ?? 0) > now) yield "cooldown";
+  if ((talks.foreignRefusals?.[sponsorId] ?? 0) > now) yield "previousRefusal";
+}
+
+function buildOffer(world: WorldState, id: MesoRegionId, talks: RegionalNegotiation, owner: NationRuntime,
+  sponsor: NationRuntime, interest: Interest, influence: number, readOnly = false): AdvocacyOffer {
+  const character = getNationCharacter(world, sponsor.id, readOnly);
+  const credibility = clamp(0.15 + influence / 250 + getRelation(world, sponsor.id, owner.id, readOnly).trust / 250 +
+    character.cooperation * 0.2, 0, 1);
+  const strength = clamp(0.2 + interest.score * 0.55 + credibility * 0.35 - interest.treatyCost * 0.25, 0.05, 0.85);
+  const backlash = repudiation(world, talks, owner, sponsor, interest, readOnly);
+  return { id, owner, sponsor, talks, strength, backlash, interest };
+}
+
+export interface AdvocacyEligibility {
+  blockers: ForeignAdvocacyExclusion[];
+  score: number;
+  factors?: Record<string, number>;
+  influence: number;
+  movement: "willing" | "domesticSettlement" | "movementRejected";
+}
+
+export function inspectAdvocacyCandidate(world: WorldState, id: MesoRegionId, talks: RegionalNegotiation,
+  owner: NationRuntime, sponsor: NationRuntime, sponsorships: ReadonlyMap<NationId, number>): AdvocacyEligibility {
+  const blockers = [...sponsorBlockers(world, owner, sponsor, talks, sponsorships, true)];
+  const interest = evaluateInterest(world, id, talks, owner, sponsor, true);
+  const influence = getInfluence(world, sponsor.id, true);
+  if (interest.score < INTEREST_THRESHOLD) blockers.push("interest");
+  if (influence < ADVOCACY_INFLUENCE_REQUIRED) blockers.push("influence");
+  if (talks.foreign && !blockers.includes("alreadySupported")) blockers.push("alreadySupported");
+  const { strength, backlash } = buildOffer(world, id, talks, owner, sponsor, interest, influence, true);
+  const decision = evaluateMovementSupport(world, id, talks, owner, sponsor, strength, backlash, interest, true);
+  return { blockers, score: interest.score, factors: interest.factors, influence,
+    movement: decision.domesticPath ? "domesticSettlement" : decision.accepted ? "willing" : "movementRejected" };
+}
+
+const rejectionCounters = {
+  alreadySupported: "relation", warOrCrisis: "relation", subjectRelationship: "relation",
+  capacity: "cooldown", cooldown: "cooldown", previousRefusal: "cooldown", interest: "interest", influence: "cost",
+} as const;
+
+export type AdvocacySelection = ReadonlyMap<MesoRegionId, {
+  talks: RegionalNegotiation;
+  sponsors: ReadonlySet<NationId>;
+}>;
+
+function candidates(world: WorldState, contacts: ReadonlyMap<NationId, ReadonlySet<NationId>>,
+  negotiations: readonly [MesoRegionId, RegionalNegotiation][], sponsorships: ReadonlyMap<NationId, number>,
+  selection?: AdvocacySelection) {
   const nations = new Map(world.nations.map((nation) => [nation.id, nation]));
   const instrumentation = world.instrumentation;
   const rejected = { interest: 0, cost: 0, relation: 0, cooldown: 0 };
   const offers = new Map<MesoRegionId, AdvocacyOffer[]>();
   for (const [id, talks] of negotiations) {
-    const exclude = (reason: ForeignAdvocacyExclusion) => {
+    const selected = selection?.get(id);
+    if (selection && selected?.talks !== talks) continue;
+    const exclude = (reason: ForeignAdvocacyExclusion, count = true) => {
       instrumentation?.incrementCounter(`foreignAdvocacy.excluded.${reason}`);
       instrumentation?.observeRegionalAdvocacy?.({ kind: "excluded", id, talks, reason });
+      const key = rejectionCounters[reason as keyof typeof rejectionCounters];
+      if (count && key) rejected[key]++;
     };
     instrumentation?.observeRegionalAdvocacy?.({ kind: "screened", id, talks });
     const owner = nations.get(talks.owner);
@@ -255,72 +326,40 @@ function candidates(world: WorldState, contacts: ReadonlyMap<NationId, ReadonlyS
       continue;
     }
     for (const sponsorId of [...partners].sort()) {
-      if (sponsorId === owner.id) continue;
+      if (sponsorId === owner.id || (selected && !selected.sponsors.has(sponsorId))) continue;
       const sponsor = nations.get(sponsorId);
       if (!sponsor || !isNationActive(sponsor)) {
         exclude("sponsorInactive");
         continue;
       }
       instrumentation?.incrementCounter("foreignAdvocacy.candidates");
-      if (talks.foreign?.sponsorId === sponsorId) {
-        exclude("alreadySupported");
-        rejected.relation++;
-        continue;
-      }
-      if (findWar(world.wars, sponsorId, owner.id) || getRelation(world, sponsorId, owner.id).crisis) {
-        exclude("warOrCrisis");
-        rejected.relation++;
-        continue;
-      }
-      if (getSubjectOverlord(world, sponsorId) === owner.id || getSubjectOverlord(world, owner.id) === sponsor.id) {
-        exclude("subjectRelationship");
-        rejected.relation++;
-        continue;
-      }
-      if ((sponsorships.get(sponsorId) ?? 0) >= MAX_ACTIVE_PER_SPONSOR) {
-        exclude("capacity");
-        rejected.cooldown++;
-        continue;
-      }
-      if ((sponsor.politics?.nextForeignAdvocacyAt ?? 0) > now) {
-        exclude("cooldown");
-        rejected.cooldown++;
-        continue;
-      }
-      if ((talks.foreignRefusals?.[sponsorId] ?? 0) > now) {
-        exclude("previousRefusal");
-        rejected.cooldown++;
+      const blocker = sponsorBlockers(world, owner, sponsor, talks, sponsorships, false).next();
+      if (!blocker.done) {
+        exclude(blocker.value);
         continue;
       }
       const interest = evaluateInterest(world, id, talks, owner, sponsor);
       if (interest.score < INTEREST_THRESHOLD) {
         exclude("interest");
-        rejected.interest++;
         continue;
       }
       const influence = getInfluence(world, sponsorId);
-      if (influence < POLITICAL_ADVOCACY_COST + 20) {
+      if (influence < ADVOCACY_INFLUENCE_REQUIRED) {
         exclude("influence");
-        rejected.cost++;
         continue;
       }
-      const character = getNationCharacter(world, sponsorId);
-      const credibility = clamp(0.15 + influence / 250 + getRelation(world, sponsorId, owner.id).trust / 250 +
-        character.cooperation * 0.2, 0, 1);
-      const strength = clamp(0.2 + interest.score * 0.55 + credibility * 0.35 - interest.treatyCost * 0.25, 0.05, 0.85);
-      const backlash = repudiation(world, talks, owner, sponsor, interest);
       const list = offers.get(id);
-      const offer = { id, owner, sponsor, talks, strength, backlash, interest };
+      const offer = buildOffer(world, id, talks, owner, sponsor, interest, influence);
       if (!talks.foreign) {
         instrumentation?.incrementCounter("foreignAdvocacy.eligible");
         instrumentation?.observeRegionalAdvocacy?.({ kind: "eligible", id, talks });
-      } else exclude("alreadySupported");
+      } else exclude("alreadySupported", false);
       if (list) list.push(offer);
       else offers.set(id, [offer]);
     }
   }
   for (const key of Object.keys(rejected) as (keyof typeof rejected)[]) {
-    if (rejected[key]) world.instrumentation?.incrementCounter(`foreignAdvocacy.rejected.${key}`, rejected[key]);
+    if (rejected[key]) instrumentation?.incrementCounter(`foreignAdvocacy.rejected.${key}`, rejected[key]);
   }
   return offers;
 }
@@ -365,13 +404,13 @@ export function updateForeignBacking(world: WorldState): void {
  * movements that already mobilized can be supported; influence cannot create one.
  */
 export function updatePoliticalAdvocacy(world: WorldState, contacts: ReadonlyMap<NationId, ReadonlySet<NationId>>,
-  negotiations = liveNegotiations(world)): void {
+  negotiations = liveNegotiations(world), selection?: AdvocacySelection): void {
   if (!hasPoliticalTurbulence(world) || getWarDeclarationMode(world) !== "diplomacy") return;
   const now = world.time.slowTick;
   if (now < FIRST_FOREIGN_ADVOCACY_TICK || !negotiations.length) return;
   // Successful commitments update this cycle's availability immediately.
   const sponsorships = activeSponsorships(world);
-  const offers = candidates(world, contacts, now, negotiations, sponsorships);
+  const offers = candidates(world, contacts, negotiations, sponsorships, selection);
   for (const [id, list] of [...offers].sort((a, b) => a[0].localeCompare(b[0]))) {
     const talks = list[0]!.talks;
     if (talks.foreign) continue;
@@ -395,7 +434,7 @@ export function updatePoliticalAdvocacy(world: WorldState, contacts: ReadonlyMap
       world.instrumentation?.incrementCounter("foreignAdvocacy.rejected.spend");
       continue;
     }
-    applyAdvocacy(world, best.offer, best.decision.accepted, best.decision, now);
+    applyAdvocacy(world, best.offer, best.decision.accepted, best.decision, now, !!selection);
     if (best.decision.accepted) {
       sponsorships.set(best.offer.sponsor.id, (sponsorships.get(best.offer.sponsor.id) ?? 0) + 1);
     }

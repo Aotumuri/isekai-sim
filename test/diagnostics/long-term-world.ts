@@ -13,6 +13,7 @@ import { createFlowTotals, sampleFlows, summarizeWorld } from "./world-checkpoin
 import { seedSubjectAcquisitions } from "./seed-subject-acquisitions";
 import { setForeignAdvocacySchedule } from "../../src/sim/foreign-advocacy-schedule";
 import { observeAdvocacyScheduling } from "./observe-advocacy-scheduling";
+import { observeAdvocacyReassessment } from "./observe-advocacy-reassessment";
 import { worldSignature } from "./world-signature";
 
 const [scenario, rawSeed, ...rawDays] = process.argv.slice(2);
@@ -43,7 +44,11 @@ const advocacySchedule = process.env.WORLD_ADVOCACY_SCHEDULE;
 assert(advocacySchedule === undefined || advocacySchedule === "periodic" ||
   advocacySchedule === "event" || advocacySchedule === "100-day", "Unknown advocacy schedule");
 if (advocacySchedule) setForeignAdvocacySchedule(world, advocacySchedule);
-const advocacy = advocacySchedule ? observeAdvocacyScheduling(world) : undefined;
+const strategy = process.env.WORLD_ADVOCACY_REASSESSMENT || undefined;
+assert(strategy === undefined || strategy === "initial" || strategy === "threshold" || strategy === "fallback", "Unknown reassessment strategy");
+assert(!strategy || !advocacySchedule || advocacySchedule === "event", "Reassessment requires event screening");
+const advocacy = advocacySchedule || strategy ? observeAdvocacyScheduling(world) : undefined;
+const reassessment = strategy ? observeAdvocacyReassessment(world, strategy) : undefined;
 // Optional scale fixture gives negotiations work even when the generated world remains at peace.
 const subjectPairs = Number(process.env.WORLD_SUBJECT_PAIRS ?? 0);
 assert(Number.isSafeInteger(subjectPairs) && subjectPairs >= 0);
@@ -75,6 +80,11 @@ const mean = (values: number[]) => values.length ? values.reduce((sum, value) =>
 const redistributionSamples: import("../../src/sim/instrumentation").RedistributionReviewSample[] = [];
 if (process.env.WORLD_METRICS === "1" || advocacy) world.instrumentation = {
   ...advocacy?.instrumentation,
+  ...reassessment?.instrumentation,
+  observeRegionalAdvocacy(event) {
+    advocacy?.instrumentation.observeRegionalAdvocacy?.(event);
+    reassessment?.instrumentation.observeRegionalAdvocacy?.(event);
+  },
   recordDuration(name, ms) { timings[name] = (timings[name] ?? 0) + ms; },
   incrementCounter(name, amount = 1) { counters[name] = (counters[name] ?? 0) + amount; },
   ...(process.env.WORLD_REDISTRIBUTION_SAMPLES === "1" ? {
@@ -145,6 +155,7 @@ for (const day of days) {
     historyCounts: history.counts, wallMs: elapsed, cpuMs: (usage.user + usage.system) / 1000,
     politicalRecords, heapBeforeGcBytes, peakRssKiB: process.resourceUsage().maxRSS, heapBytes: process.memoryUsage().heapUsed,
     ...(advocacy ? { advocacySchedule, advocacy: advocacy.summarize() } : {}),
+    ...(reassessment ? { reassessment: reassessment.summarize() } : {}),
     ...(world.instrumentation ? { fastOnlyMs: fastMs, cycleBoundaryMs: slowMs, timings, counters } : {}),
   }));
   previous = day;

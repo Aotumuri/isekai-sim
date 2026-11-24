@@ -8,6 +8,8 @@ import { getRelation } from "./diplomacy";
 import { getNationCharacter } from "./nation-character";
 import { recordSimulationEvent } from "./simulation-settings";
 
+const INITIAL_OWNER_ATTACHMENT = 20;
+
 export interface TerritorialMemory { heldTicks: number; attachment: number }
 export interface TerritorialClaimsState {
   history: Map<MesoRegionId, Map<NationId, TerritorialMemory>>;
@@ -20,21 +22,23 @@ export function getTerritorialClaims(world: WorldState): TerritorialClaimsState 
   if (world.territorialClaims) return world.territorialClaims;
   const owners = new Map(getOwnerByMesoId(world));
   const history = new Map<MesoRegionId, Map<NationId, TerritorialMemory>>();
-  for (const [id, owner] of owners) history.set(id, new Map([[owner, { heldTicks: 0, attachment: 20 }]]));
+  for (const [id, owner] of owners) history.set(id, new Map([[owner, { heldTicks: 0, attachment: INITIAL_OWNER_ATTACHMENT }]]));
   return world.territorialClaims = { history, owners, controllers: new Map(owners), lastSlowTick: world.time.slowTick, version: 0 };
 }
 
 /** Claims express political preferences; they never automatically change ownership. */
-export function getTerritorialClaim(world: WorldState, nationId: NationId, regionId: MesoRegionId): number {
-  const memory = getTerritorialClaims(world).history.get(regionId)?.get(nationId);
+export function getTerritorialClaim(world: WorldState, nationId: NationId, regionId: MesoRegionId, readOnly = false): number {
+  const memory = (readOnly ? world.territorialClaims : getTerritorialClaims(world))?.history.get(regionId)?.get(nationId);
   const region = getMesoById(world).get(regionId);
   if (!region || region.type === "sea") return 0;
   const owners = getOwnerByMesoId(world);
   const nearby = owners.get(regionId) === nationId || region.neighbors.some((item) => owners.get(item.id) === nationId);
   const nationalistBonus = getNationalistClaimBonus(world, nationId, regionId);
   if (!memory && !nearby && !nationalistBonus) return 0;
-  const character = getNationCharacter(world, nationId);
-  return Math.min(100, nationalistBonus + (memory?.attachment ?? 0) + (region.resource ? 18 + character.thrift * 10 : 0) +
+  const character = getNationCharacter(world, nationId, readOnly);
+  const attachment = memory?.attachment ??
+    (readOnly && !world.territorialClaims && owners.get(regionId) === nationId ? INITIAL_OWNER_ATTACHMENT : 0);
+  return Math.min(100, nationalistBonus + attachment + (region.resource ? 18 + character.thrift * 10 : 0) +
     (nearby ? 8 + character.aggression * 8 + getHomelandClaimBonus(world, nationId, regionId) : 0));
 }
 export function getForeignClaims(world: WorldState, nationId: NationId, ownerId?: NationId): { regionId: MesoRegionId; strength: number; heldTicks: number }[] {

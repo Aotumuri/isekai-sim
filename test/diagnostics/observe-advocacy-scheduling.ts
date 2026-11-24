@@ -30,18 +30,19 @@ export function observeAdvocacyScheduling(world: WorldState) {
   const identities = new WeakMap<RegionalAdvocacyObservation["talks"], Demand>();
   const live = new Map<Demand["id"], Demand>();
   const decisions: Record<string, number> = {};
-  let cpuMicros = 0;
+  let cpuMicros = 0, reassessmentCpuMicros = 0;
   const close = (demand: Demand, reason: string) => {
     demand.closed = world.time.fastTick;
     demand.closure = reason;
     live.delete(demand.id);
   };
   const instrumentation: Pick<SimulationInstrumentation, "startForeignAdvocacyMeasurement" | "observeRegionalAdvocacy"> = {
-    startForeignAdvocacyMeasurement() {
+    startForeignAdvocacyMeasurement(phase) {
       const start = process.cpuUsage();
       return () => {
         const { user, system } = process.cpuUsage(start);
-        cpuMicros += user + system;
+        if (phase === "reassessment") reassessmentCpuMicros += user + system;
+        else cpuMicros += user + system;
       };
     },
     observeRegionalAdvocacy(event) {
@@ -100,7 +101,7 @@ export function observeAdvocacyScheduling(world: WorldState) {
         closedUnscreened: closed.filter(({ firstScreen }) => firstScreen === undefined).length,
         medianLatency: median(screened.map(({ created, firstScreen }) => firstScreen! - created)),
         medianLifetime: median(closed.map(({ created, closed }) => closed! - created)),
-        decisions, cpuMs: cpuMicros / 1000, demands,
+        decisions, cpuMs: cpuMicros / 1000, reassessmentCpuMs: reassessmentCpuMicros / 1000, demands,
       };
     },
   };
