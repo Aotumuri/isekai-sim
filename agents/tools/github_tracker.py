@@ -5,13 +5,11 @@ import json
 import re
 import subprocess
 
+from issue_classification import DEFINITIONS, STATES, classification, label_names, replace_classification
 from issue_checklist import check_tasks
 from policy import config, permit
 from storage import ROOT, RUNTIME, lock, read, write
-from work_labels import WORK_LABELS, label_names, update_work_labels
 
-STATES = ("proposed", "ready", "in-progress", "experimenting", "validating", "paused",
-          "blocked", "local-done", "completed")
 MARKER = re.compile(r"\n\n<!-- research-meta: (\{[^\n]*\}) -->\s*\Z")
 OPERATIONS = RUNTIME / "github-operations.json"
 
@@ -19,13 +17,19 @@ OPERATIONS = RUNTIME / "github-operations.json"
 def body_with_metadata(text, metadata):
     # Encode angle brackets to keep metadata inside an HTML comment.
     encoded = json.dumps(metadata, ensure_ascii=False, sort_keys=True)
-    return text.rstrip() + "\n\n<!-- research-meta: " + encoded.replace("<", "\\u003c").replace(">", "\\u003e") + " -->"
+    return text + "\n\n<!-- research-meta: " + encoded.replace("<", "\\u003c").replace(">", "\\u003e") + " -->"
 
 
 def split_body(issue):
     body = issue.get("body") or ""
     match = MARKER.search(body)
-    return (body[:match.start()], json.loads(match.group(1))) if match else (body, {})
+    if not match:
+        return body, {}
+    try:
+        metadata = json.loads(match.group(1))
+    except ValueError as error:
+        raise ValueError(f"Issue #{issue.get('number', '?')} has invalid research-meta JSON") from error
+    return body[:match.start()], metadata
 
 
 class GitHubTracker:
@@ -65,9 +69,9 @@ class GitHubTracker:
     @staticmethod
     def summary(issue):
         _, metadata = split_body(issue)
-        status = "completed" if issue["state"] == "closed" else metadata.get("status", "proposed")
         return {"number": issue["number"], "title": issue["title"], "url": issue["html_url"],
-                "status": status, "metadata": metadata, "labels": label_names(issue)}
+                **classification(issue), "state_reason": issue.get("state_reason"),
+                "metadata": metadata, "labels": label_names(issue)}
 
     def issue(self, number):
         issue = self.api("GET", f"issues/{number}")
@@ -109,38 +113,87 @@ class GitHubTracker:
             write(OPERATIONS, journal)
             return result
 
-    def create(self, title, text, origin, key, approved, *, status="proposed", parent=None, priority=None):
+    def create(self, title, text, origin, key, approved, *, parent=None, priority=None, kind=None):
         permit("tracker.github", "create_issue", approved, self.settings)
         if not title.strip() or not text.strip() or origin not in ("ai", "human") or not key:
             raise ValueError("Issue requires a title, description, provenance, and stable key")
         if origin == "ai" and not title.rstrip().endswith("[AI]"):
             title = title.rstrip() + " [AI]"
-        metadata = {"key": key, "origin": origin, "created_by": "ai", "status": status}
-        if priority is not None:
-            metadata["priority"] = priority
+        metadata = {"key": key, "origin": origin, "created_by": "ai"}
         if parent:
             self.issue(parent)
             text += f"\n\nParent: #{parent}"
             metadata["parent"] = parent
-        labels = update_work_labels([], "proposed" if status == "completed" else status)
+        labels = replace_classification([], status="proposed", priority=priority, kind=kind)
         payload = {"title": title, "body": body_with_metadata(text, metadata), "labels": labels}
+        def send():
+            result = self.api("POST", "issues", payload)
+            if set(label_names(result)) != set(labels):
+                raise ValueError(f"Issue #{result['number']} created without the requested labels; reconcile on GitHub")
+            return result
+
         return self.once("create", key,
                          lambda: next((i for i in self.issues() if split_body(i)[1].get("key") == key), None),
-                         lambda: self.api("POST", "issues", payload))
+                         send)
 
     def setup_labels(self, approved):
         permit("tracker.github", "create_label", approved, self.settings)
-        definitions = [{"name": name, "color": color, "description": description}
-                       for name, (color, description) in WORK_LABELS.items()]
         with lock(RUNTIME / "github.lock"):
-            existing = {label["name"].casefold(): label
-                        for label in self.api("GET", "labels?per_page=100", paginate=True)}
-            for definition in definitions:
+            existing = {label["name"].casefold(): label for label in self.labels()}
+            for definition in DEFINITIONS:
                 label = existing.get(definition["name"])
                 if label and any(label.get(field) != value for field, value in definition.items()):
                     raise ValueError(f"Existing GitHub label definition differs: {definition['name']}")
             return [existing[definition["name"]] if definition["name"] in existing
-                    else self.api("POST", "labels", definition) for definition in definitions]
+                    else self.api("POST", "labels", definition) for definition in DEFINITIONS]
+
+    def labels(self):
+        return self.api("GET", "labels?per_page=100", paginate=True)
+
+    def patch_issue(self, issue, payload):
+        if not payload:
+            return issue
+        result = self.api("PATCH", f"issues/{issue['number']}", payload)
+        for field, value in payload.items():
+            matches = (set(label_names(result)) == set(value) if field == "labels"
+                       else result.get(field) == value)
+            if not matches:
+                raise ValueError(f"Issue #{issue['number']} update did not confirm {field}; reread before retry")
+        return result
+
+    def classify(self, number, approved, **changes):
+        permit("tracker.github", "update_issue", approved, self.settings)
+        if changes.keys() - {"priority", "kind"}:
+            raise ValueError("Use progress to change status")
+        with lock(RUNTIME / "github.lock"):
+            issue = self.issue(number)
+            before = label_names(issue)
+            labels = replace_classification(before, **changes)
+            classification({**issue, "labels": labels})
+            return self.patch_issue(issue, {"labels": labels} if set(labels) != set(before) else {})
+
+    def candidates(self):
+        issues = {issue["number"]: issue for issue in self.issues()}
+        candidates = []
+        for issue in issues.values():
+            item = self.summary(issue)
+            if item["status"] != "ready" and not (item["status"] == "proposed" and item["priority"] == "P1"):
+                continue
+            dependencies = self.api("GET", f"issues/{item['number']}/dependencies/blocked_by?per_page=100",
+                                    paginate=True)
+            blockers = {dep["html_url"] for dep in dependencies
+                        if classification(dep)["status"] not in ("completed", "local-done")}
+            references = item["metadata"].get("references", {})
+            numbers = references.get("blocked-by", []) if isinstance(references, dict) else None
+            if not isinstance(numbers, list) or any(type(number) is not int or number < 1 for number in numbers):
+                raise ValueError(f"Issue #{item['number']} has invalid hard dependency references")
+            for number in numbers:
+                dependency = issues.get(number)
+                if dependency is None or classification(dependency)["status"] not in ("completed", "local-done"):
+                    blockers.add(f"#{number}")
+            candidates.append({**item, "unresolved_dependencies": sorted(blockers),
+                               "eligible": item["status"] == "ready" and not blockers})
+        return sorted(candidates, key=lambda item: (item["priority"] or "P4", item["number"]))
 
     def progress(self, number, status, approved, published=False, tasks=()):
         permit("tracker.github", "update_issue", approved, self.settings)
@@ -151,9 +204,11 @@ class GitHubTracker:
 
     def _progress(self, number, status, approved, published, tasks):
         issue = self.issue(number)
-        text, metadata = split_body(issue)
-        if issue["state"] == "closed" or metadata.get("status") == "completed":
-            raise ValueError("Issue is already completed")
+        text, _ = split_body(issue)
+        if issue["state"] == "closed":
+            if status == "completed" and issue.get("state_reason") == "completed" and check_tasks(text, tasks) == text:
+                return issue
+            raise ValueError("Issue is already closed; use checklist for historical corrections")
         payload = {}
         if status == "completed":
             permit("tracker.github", "close_issue", approved, self.settings)
@@ -162,17 +217,14 @@ class GitHubTracker:
                 raise ValueError("Closure requires the configured published completion evidence; use local-done")
             payload.update(state="closed", state_reason="completed")
         checked = check_tasks(text, tasks)
-        previous = metadata.get("status")
-        if previous != status:
-            metadata["status"] = status
-            payload["body"] = body_with_metadata(checked, metadata)
-        elif checked != text:
+        if checked != text:
             payload["body"] = checked + issue["body"][len(text):]
         labels = label_names(issue)
-        desired_labels = update_work_labels(labels, status, previous)
-        if set(desired_labels) != set(labels):
-            payload["labels"] = desired_labels
-        return self.api("PATCH", f"issues/{number}", payload) if payload else issue
+        desired = replace_classification(labels, status=None if status == "completed" else status)
+        if set(desired) != set(labels):
+            payload["labels"] = desired
+        classification({**issue, **payload})
+        return self.patch_issue(issue, payload)
 
     def checklist(self, number, tasks, approved, result_comment=None):
         permit("tracker.github", "update_issue", approved, self.settings)
@@ -233,61 +285,3 @@ class GitHubTracker:
         if any(item["id"] == other["id"] for item in existing):
             return other
         return self.api("POST", endpoint, {field: other["id"]})
-
-    def migration(self, entries, apply=False, approved=False):
-        if not apply:
-            return entries
-        permit("tracker.github", "create_issue", approved, self.settings)
-        parents = {item["id"]: item.get("parent") for item in entries}
-        for entry in entries:
-            chain = {entry["id"]}
-            parent = entry.get("parent")
-            while parent:
-                if parent not in parents or parent in chain:
-                    raise ValueError(f"Invalid migration parent chain for {entry['id']}")
-                chain.add(parent)
-                parent = parents[parent]
-        if any(parents.values()):
-            permit("tracker.github", "update_issue", approved, self.settings)
-        close_imports = self.options.get("close_on") == "local"
-        if close_imports and any(item["status"] == "completed" for item in entries):
-            permit("tracker.github", "update_issue", approved, self.settings)
-            permit("tracker.github", "close_issue", approved, self.settings)
-        numbers = {}
-        pending = []
-        for entry in entries:
-            item = self.create(entry["title"], entry["body"], entry["origin"], entry["key"],
-                               approved, status=entry["status"])
-            number = item["number"]
-            numbers[entry["id"]] = number
-            if close_imports and entry["status"] == "completed" and item["state"] != "closed":
-                # Preserve imported historical completion, without asserting a new publication.
-                text, metadata = split_body(item)
-                metadata["status"] = "completed"
-                self.api("PATCH", f"issues/{number}", {"state": "closed", "state_reason": "completed",
-                                                       "body": body_with_metadata(text, metadata),
-                                                       "labels": update_work_labels(label_names(item), "completed")})
-            if entry.get("parent"):
-                pending.append((entry["parent"], number))
-        for parent, child in pending:
-            if parent not in numbers:
-                raise ValueError(f"Unknown migration parent: {parent}")
-            self.link(numbers[parent], child, "child", approved)
-        return numbers
-
-
-def migration_entries(state, inbox):
-    states = {"active": "in-progress", "waiting": "experimenting", "done": "completed"}
-    entries = []
-    for identity, task in state["tasks"].items():
-        proposal = inbox.get(identity, {})
-        entries.append({"id": identity, "key": f"local:{identity}", "title": task["title"],
-                        "origin": task.get("origin", proposal.get("origin", "human")),
-                        "status": states.get(task["status"], task["status"]), "parent": task.get("parent"),
-                        "body": (proposal.get("body", "") + "\n\n" + task["next"]).strip()})
-    for identity, item in inbox.items():
-        if identity not in state["tasks"] and identity not in state["reviews"]:
-            entries.append({"id": identity, "key": f"local:{identity}", "title": item["title"],
-                            "origin": item.get("origin", "human"), "status": "proposed",
-                            "parent": item.get("parent"), "body": item["body"]})
-    return entries

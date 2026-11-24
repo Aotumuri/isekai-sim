@@ -7,7 +7,8 @@ import sys
 import uuid
 
 from control import recovery_context, settle
-from github_tracker import GitHubTracker, STATES as GITHUB_STATES, migration_entries
+from github_tracker import GitHubTracker
+from issue_classification import KINDS, PRIORITIES, STATES as GITHUB_STATES
 from policy import LOCK, config, control, new_generation, require_running
 from storage import RESEARCH, RUNTIME, git, lock, now, read, write
 
@@ -128,24 +129,27 @@ def checkpoint(args, state):
 def github_command(args, settings):
     tracker = GitHubTracker(settings)
     operation = args.operation
+    if operation == "candidates":
+        return tracker.candidates()
     if operation == "list":
         return [tracker.summary(issue) for issue in tracker.issues()]
     saved = read(REMOTE_CHECKPOINT) if REMOTE_CHECKPOINT.exists() else {}
     if operation == "show":
         processed = saved.get("processed", []) if saved.get("issue") == args.number else []
         return tracker.detail(args.number, processed)
-    if operation == "migrate":
-        if args.apply and settings["tracker"]["backend"] != "local":
-            raise ValueError("Migrate from local mode before selecting GitHub as the tracker")
-        entries = migration_entries(read(STATE), {p.stem: read(p) for p in INBOX.glob("I-*.json")})
-        return tracker.migration(entries, args.apply, args.approved)
     if operation == "setup-labels":
         return tracker.setup_labels(args.approved)
     if settings["tracker"]["backend"] != "github":
         raise ValueError("Select GitHub as the authoritative tracker for issue changes")
     if operation == "create":
         return tracker.create(args.title, sys.stdin.read(), args.origin, args.key, args.approved,
-                              parent=args.parent, priority=args.priority)
+                              parent=args.parent, priority=args.priority, kind=args.kind)
+    if operation == "classify":
+        changes = {axis: None if value == "none" else value
+                   for axis in ("priority", "kind") if (value := getattr(args, axis)) is not None}
+        if not changes:
+            raise ValueError("Specify --priority or --kind")
+        return tracker.classify(args.number, args.approved, **changes)
     if operation == "link":
         return tracker.link(args.number, args.related, args.relation, args.approved, args.reference)
     if operation == "comment":
@@ -189,15 +193,19 @@ def number(value):
 def github_parser(commands):
     actions = commands.add_parser("github").add_subparsers(dest="operation", required=True)
     actions.add_parser("list")
+    actions.add_parser("candidates")
     actions.add_parser("setup-labels")
-    for name in ("show", "checkpoint", "comment", "progress", "link", "checklist"):
+    for name in ("show", "checkpoint", "comment", "progress", "link", "checklist", "classify"):
         actions.add_parser(name).add_argument("number", type=number)
     create = actions.add_parser("create")
     create.add_argument("title")
     create.add_argument("--origin", required=True, choices=("human", "ai"))
     create.add_argument("--key", required=True)
     create.add_argument("--parent", type=number)
-    create.add_argument("--priority")
+    create.add_argument("--priority", choices=PRIORITIES)
+    create.add_argument("--kind", choices=KINDS)
+    actions.choices["classify"].add_argument("--priority", choices=(*PRIORITIES, "none"))
+    actions.choices["classify"].add_argument("--kind", choices=(*KINDS, "none"))
     actions.choices["comment"].add_argument("--key", required=True)
     progress = actions.choices["progress"]
     progress.add_argument("status", choices=GITHUB_STATES)
@@ -216,8 +224,7 @@ def github_parser(commands):
     save.add_argument("next")
     save.add_argument("--job", action="append", default=[])
     save.add_argument("--processed", action="append", default=[])
-    actions.add_parser("migrate").add_argument("--apply", action="store_true")
-    for name in ("create", "comment", "progress", "link", "migrate", "checklist", "setup-labels"):
+    for name in ("create", "comment", "progress", "link", "classify", "checklist", "setup-labels"):
         actions.choices[name].add_argument("--approved", action="store_true")
 
 

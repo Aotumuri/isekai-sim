@@ -9,4 +9,4 @@ From the repository root, read `AGENTS.md`, `agents/docs/roles/coordinator.md`, 
 
 Do not claim Developer ownership, implement autonomously, or control the Developer lifecycle. Route shutdown and resumption requests to the Developer thread.
 
-In GitHub mode, put verifiable acceptance and progress items in the opening issue checklist when drafting a proposal. Read the work label and checked items to understand current progress. Follow [the tracker guide](../../../agents/docs/tracker.md) for state meanings and GitHub write approval.
+In GitHub mode, put verifiable acceptance and progress items in the opening issue checklist when drafting a proposal. Read the status label, native close state, and checked items to understand current progress. Follow [the tracker guide](../../../agents/docs/tracker.md) for state meanings and GitHub write approval.
