@@ -155,9 +155,13 @@ function runProcurementReview(world: WorldState, state: InternationalTradeState,
   for (const { nation, needs, cashReserve } of buyers) {
     let attempts = 0;
     purchase: for (const { resource, quantity, offers } of needs) {
+      const observation = world.instrumentation;
+      observation?.observeIndustrialProcurement?.({ buyerId: nation.id, resource, phase: "considered" });
+      let candidateFound = false;
       for (const { seller, floor, fuelFloor, markup } of offers) {
         const pair = relationKey(seller.id, nation.id);
         if (excluded.has(pair) || (seller.resources[resource] ?? 0) - floor < 1) continue;
+        candidateFound = true;
         if (attempts++ >= ROUTE_ATTEMPTS_PER_BUYER) break purchase;
         stats.attempted++;
         const dispatched = purchaseIndustrialResource(world, seller, nation, resource, quantity,
@@ -172,6 +176,11 @@ function runProcurementReview(world: WorldState, state: InternationalTradeState,
           stats.retryAfter.set(pair, world.time.slowTick + FAILED_ROUTE_RETRY);
           excluded.add(pair);
         }
+        observation?.observeIndustrialProcurement?.({ buyerId: nation.id, resource,
+          phase: dispatched === "no-route" ? "noRoute" : "rejected" });
+      }
+      if (!candidateFound) {
+        observation?.observeIndustrialProcurement?.({ buyerId: nation.id, resource, phase: "noCandidate" });
       }
     }
     if (busyPairs.size >= 32) break;

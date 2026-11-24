@@ -221,10 +221,12 @@ function dispatchTrade(world: WorldState, sellerId: NationId, buyerId: NationId,
   if (shippingFuel > 0 && !carrier) return false;
   changeTradeStock(seller, offeredResource, -offeredAmount); changeTradeStock(buyer, requestedResource, -requestedAmount);
   if (shippingFuel > 0) { changeResource(carrier!, "fuel", -shippingFuel); state.fuelSpent += shippingFuel; }
-  state.deals.push({ id: `trade-${state.nextDealNumber++}`, sellerId, buyerId, offeredResource, offeredAmount,
+  const deal: TradeDeal = { id: `trade-${state.nextDealNumber++}`, sellerId, buyerId, offeredResource, offeredAmount,
     requestedResource, requestedAmount, route, ...(humanitarian ? { humanitarian: true } : {}),
     ...(purchase ? { industrialPurchase: true } : {}),
-    arrivesAtSlowTick: world.time.slowTick + transitTicks(route), status: "in-transit" });
+    arrivesAtSlowTick: world.time.slowTick + transitTicks(route), status: "in-transit" };
+  state.deals.push(deal);
+  observeIndustrialDeal(world, deal, "dispatched");
   recordSimulationEvent(world, { category: "trade", nationIds: [sellerId, buyerId],
     message: humanitarian ? `${sellerId} sent ${offeredAmount.toFixed(1)} grain as relief to ${buyerId}.` : `${sellerId} dispatched ${offeredAmount.toFixed(1)} ${offeredResource} for ${requestedAmount.toFixed(1)} ${requestedResource} from ${buyerId}.` });
   return true;
@@ -266,6 +268,15 @@ function transitTicks(route: TradeRoute): number {
   return Math.max(3, Math.ceil(route.regionIds.length * 1.5));
 }
 
+function observeIndustrialDeal(world: WorldState, deal: TradeDeal, phase: "dispatched" | "delivered" | "returned"): void {
+  if (deal.industrialPurchase) {
+    world.instrumentation?.observeIndustrialProcurement?.({
+      phase, buyerId: deal.buyerId, resource: deal.offeredResource as IndustrialResource,
+      dealId: deal.id, quantity: deal.offeredAmount,
+    });
+  }
+}
+
 function returnTradeEscrow(world: WorldState, deal: TradeDeal, seller: NationRuntime | undefined, buyer: NationRuntime | undefined): void {
   if (seller) changeTradeStock(seller, deal.offeredResource, deal.offeredAmount);
   if (buyer) changeTradeStock(buyer, deal.requestedResource, deal.requestedAmount);
@@ -273,6 +284,7 @@ function returnTradeEscrow(world: WorldState, deal: TradeDeal, seller: NationRun
   const state = getInternationalTradeState(world);
   state.returned++;
   if (deal.industrialPurchase && state.procurement) state.procurement.returned++;
+  observeIndustrialDeal(world, deal, "returned");
   recordSimulationEvent(world, { category: "trade", nationIds: [deal.sellerId, deal.buyerId],
     message: `${deal.id} returned: route or agreement unavailable.` });
 }
@@ -312,6 +324,7 @@ export function updateInternationalTrade(world: WorldState): void {
           state.procurement.paid += deal.requestedAmount;
           state.procurement.quantities[resource] = (state.procurement.quantities[resource] ?? 0) + deal.offeredAmount;
         }
+        observeIndustrialDeal(world, deal, "delivered");
         const relation = getRelation(world, deal.sellerId, deal.buyerId);
         relation.opinion = Math.min(100, relation.opinion + 2); relation.trust = Math.min(100, relation.trust + 1);
         recordSimulationEvent(world, { category: "trade", nationIds: [deal.sellerId, deal.buyerId], message: `${deal.id} delivered to ${deal.sellerId} and ${deal.buyerId}.` });

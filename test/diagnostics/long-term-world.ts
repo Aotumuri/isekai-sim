@@ -77,13 +77,18 @@ assert(Number.isSafeInteger(requestedAcquisitions) && requestedAcquisitions >= 0
 const seededAcquisitions = requestedAcquisitions ? seedSubjectAcquisitions(world, requestedAcquisitions) : 0;
 if (requestedAcquisitions) assert(seededAcquisitions > 0, "No eligible borders for the controlled acquisitions");
 const fuelAccounting = process.env.WORLD_FUEL_ACCOUNTING === "1" ? observeFuelAccounting(world) : undefined;
+const procurement = process.env.WORLD_PROCUREMENT_FUNNEL === "1"
+  ? new Map<string, { buyerId: string; resource: string; considered: number; noCandidate: number;
+      noRoute: number; rejected: number; dispatched: number; delivered: number; returned: number;
+      quantities: { dispatched: number; delivered: number; returned: number } }>()
+  : undefined;
 assert(!fuelAccounting || !disabled, "Fuel accounting requires the standard economic systems");
 const timings: Partial<Record<SimulationMetricName, number>> = {};
 const counters: Partial<Record<SimulationCounterName, number>> = {};
 const mean = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 const fiscalAccounting = fuelAccounting ? observeFoodAndTreasury(world, counters) : undefined;
 const redistributionSamples: import("../../src/sim/instrumentation").RedistributionReviewSample[] = [];
-if (process.env.WORLD_METRICS === "1" || advocacy || fuelAccounting) world.instrumentation = {
+if (process.env.WORLD_METRICS === "1" || advocacy || fuelAccounting || procurement) world.instrumentation = {
   ...advocacy?.instrumentation,
   ...reassessment?.instrumentation,
   observeRegionalAdvocacy(event) {
@@ -91,6 +96,20 @@ if (process.env.WORLD_METRICS === "1" || advocacy || fuelAccounting) world.instr
     reassessment?.instrumentation.observeRegionalAdvocacy?.(event);
   },
   ...(fuelAccounting ? { observeFuelFlow: fuelAccounting.record } : {}),
+  ...(procurement ? {
+    observeIndustrialProcurement(event: import("../../src/sim/instrumentation").IndustrialProcurementObservation) {
+      const { buyerId, resource, phase } = event;
+      const key = `${buyerId}/${resource}`;
+      let entry = procurement.get(key);
+      if (!entry) {
+        entry = { buyerId, resource, considered: 0, noCandidate: 0, noRoute: 0, rejected: 0,
+          dispatched: 0, delivered: 0, returned: 0, quantities: { dispatched: 0, delivered: 0, returned: 0 } };
+        procurement.set(key, entry);
+      }
+      entry[phase]++;
+      if ("quantity" in event) entry.quantities[event.phase] += event.quantity;
+    },
+  } : {}),
   recordDuration(name, ms) {
     timings[name] = (timings[name] ?? 0) + ms;
     if (name === "production.evaluation") fuelAccounting?.afterProduction();
@@ -166,6 +185,7 @@ for (const day of days) {
     historyCounts: history.counts, wallMs: elapsed, cpuMs: (usage.user + usage.system) / 1000,
     politicalRecords, heapBeforeGcBytes, peakRssKiB: process.resourceUsage().maxRSS, heapBytes: process.memoryUsage().heapUsed,
     ...(fuelAccounting ? { fuelAccounting: fuelAccounting.summarize(), fiscalAccounting: fiscalAccounting?.summarize() } : {}),
+    ...(procurement ? { procurementFunnel: [...procurement.values()] } : {}),
     ...(advocacy ? { advocacySchedule, advocacy: advocacy.summarize() } : {}),
     ...(reassessment ? { reassessment: reassessment.summarize() } : {}),
     ...(world.instrumentation ? { fastOnlyMs: fastMs, cycleBoundaryMs: slowMs, timings, counters } : {}),

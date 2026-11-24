@@ -4,6 +4,7 @@ import type { NationId } from "../worldgen/nation";
 import type { MobilizationPhase } from "./mobilization";
 import type { RegionalNegotiation } from "./regional-negotiations";
 import type { UnitId } from "./unit";
+import type { IndustrialResource } from "./resource-planning";
 
 export type SimulationMetricName =
   | "warCampaign.evaluation"
@@ -706,7 +707,16 @@ export interface FuelFlowObservation {
   transferred?: number;
 }
 
+export type IndustrialProcurementObservation = {
+  buyerId: NationId;
+  resource: IndustrialResource;
+} & (
+  | { phase: "considered" | "noCandidate" | "noRoute" | "rejected" }
+  | { phase: "dispatched" | "delivered" | "returned"; dealId: string; quantity: number }
+);
+
 export interface SimulationInstrumentation {
+  observeIndustrialProcurement?(sample: IndustrialProcurementObservation): void;
   observeFuelFlow?(sample: FuelFlowObservation): void;
   observeRegionalAdvocacy?(event: RegionalAdvocacyObservation): void;
   selectForeignAdvocacyReassessment?(initial: readonly [MesoRegionId, RegionalNegotiation][]): AdvocacySelection | undefined;

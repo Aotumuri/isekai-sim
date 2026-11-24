@@ -3,6 +3,7 @@ import test from "node:test";
 import { createUnitForType } from "../../src/sim/create-units";
 import { getRelation } from "../../src/sim/diplomacy";
 import { findTradeRoute, getInternationalTradeState, updateInternationalTrade } from "../../src/sim/international-trade";
+import type { IndustrialProcurementObservation } from "../../src/sim/instrumentation";
 import { updateProduction } from "../../src/sim/production";
 import { EQUIPMENT_FAMILIES, getResearchPortfolio, updateResearch } from "../../src/sim/research";
 import { assessIndustrialReserve } from "../../src/sim/resource-planning";
@@ -270,6 +271,45 @@ test("a maritime exporter keeps its own fuel reserve and a new embargo refunds e
   assert.equal(buyer.treasury!.balance, initialCash);
   assert.equal(buyer.resources.fuel, 0);
   assert.equal(seller.resources.fuel + state.fuelSpent, 120);
+});
+
+test("procurement observations distinguish demand, rejected routes, delivery, and returns", () => {
+  for (const outcome of ["noCandidate", "noRoute", "rejected", "delivered", "returned"] as const) {
+    const { world, buyer, seller } = fuelShortage(
+      outcome === "noRoute" ? "unreachable" : outcome === "rejected" ? "sea" : "land");
+    const samples: IndustrialProcurementObservation[] = [];
+    world.instrumentation = {
+      observeIndustrialProcurement: (sample) => samples.push(sample),
+      recordDuration() {},
+      incrementCounter() {},
+    };
+    if (outcome === "noCandidate") assert(setTradeEmbargo(world, buyer.id, seller.id, true));
+    if (outcome === "rejected") {
+      buyer.food = undefined;
+      buyer.treasury!.lastRevenue = 0;
+      buyer.treasury!.balance = 13;
+    }
+    updateInternationalTrade(world);
+    const state = getInternationalTradeState(world);
+    if (outcome === "delivered" || outcome === "returned") {
+      const deal = state.deals[0]!;
+      if (outcome === "returned") assert(setTradeEmbargo(world, buyer.id, seller.id, true));
+      state.procurement!.lastReview = deal.arrivesAtSlowTick;
+      world.time.slowTick = deal.arrivesAtSlowTick;
+      updateInternationalTrade(world);
+      const linked = samples.filter((sample) => "dealId" in sample && sample.dealId === deal.id);
+      assert.deepEqual(linked.map((sample) => sample.phase), ["dispatched", outcome]);
+      for (const sample of linked) {
+        assert("quantity" in sample);
+        assert.equal(sample.quantity, deal.offeredAmount);
+      }
+    }
+    const observed = samples.filter((sample) => sample.buyerId === buyer.id && sample.resource === "fuel");
+    assert.equal(observed[0]?.phase, "considered", outcome);
+    assert(observed.some((sample) => sample.phase === outcome), outcome);
+    assert.equal(samples.filter((sample) => ["dispatched", "rejected", "noRoute"].includes(sample.phase)).length,
+      state.procurement!.attempted, outcome);
+  }
 });
 
 test("prototype shortages lead to actual material purchases and restored research", () => {
