@@ -6,7 +6,13 @@ Before architectural or gameplay changes, read [the project vision](docs/PROJECT
 
 Key policies: 1 fastTick is intended to represent one in-world day; 1 slowTick, ten days; years have 365 days. Engine milliseconds are scheduling units, not calendar time. Research is intended to progress beyond level 10, with controlled costs and effects. Design and validate for hundreds of nations and long runs, measuring behavior and computational cost with deterministic representative benchmarks.
 
-Follow existing repository conventions and preserve behavior unless a task requires change. On `main` when instructed, make focused local commits. Never push or open a PR unless explicitly authorized.
+Follow existing repository conventions and preserve behavior unless a task requires change. Never push or open a PR unless explicitly authorized.
+
+## Commits
+
+- Commit each completed, verified unit of work locally. Keep each feature, fix, or independent documentation change in a focused commit. Developer must commit completed changes before reporting completion, releasing ownership, or moving to another task.
+- Use Conventional Commits with a scope: `type(scope): summary`. Choose the type and scope that describe the change, such as `feat(tracker): sync issue checklists`, `fix(runner): preserve wake receipts`, or `docs(agents): define commit rules`.
+- Stage only the files needed for the commit. Check `git status --short` before ending the turn or handing off. If a commit cannot be made, keep this task's edits unstaged and record the blocker and next action. Preserve any staging that belongs to another task or person.
 
 ## Autonomous research
 
