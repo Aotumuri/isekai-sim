@@ -123,6 +123,23 @@ class FrameworkTest(unittest.TestCase):
         self.assertEqual(json.loads(self.call("runner", "recover", "timeout").stdout)["status"],
                          "interrupted")
 
+    def test_acceptance_probe_requires_explicit_positive_timeout_and_current_owner(self):
+        self.task("claim", "fixture")
+        cases = (
+            ("missing-timeout", ["--notify-thread", "fixture"], "--timeout"),
+            ("zero-timeout", ["--timeout", "0", "--notify-thread", "fixture"], "positive integer"),
+            ("infinite-timeout", ["--timeout", "inf", "--notify-thread", "fixture"], "--timeout"),
+            ("missing-target", ["--timeout", "330"], "requires --notify-thread"),
+            ("wrong-owner", ["--timeout", "330", "--notify-thread", "other"], "current Developer owner"),
+        )
+        for job, options, error in cases:
+            with self.subTest(job=job):
+                result = self.call("runner", "start", job, "--acceptance-probe", *options,
+                                   "--", sys.executable, "-c", "pass", check=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(error, result.stderr)
+                self.assertFalse(self.manifest(job).parent.exists())
+
     def test_notification_result_and_recovery_do_not_send_twice(self):
         fake = self.root / "fake-codex"
         marker = self.root / "deliveries"
@@ -133,15 +150,21 @@ class FrameworkTest(unittest.TestCase):
             fake.write_text("#!/bin/sh\nif [ \"$1\" = help ]; then\n"
                             "  echo 'Queue a message for an existing session --thread --message --resume'\n"
                             "  exit 0\nfi\nprintf 'attempt\\n' >> \"$DELIVERIES\"\n"
+                            "printf '%s\\n' \"$@\"\n"
                             f"exit {exit_code}\n")
             fake.chmod(0o700)
             self.start(status, "print('short job')", "--notify-thread", "fixture",
-                       "--acceptance-probe", env=environment)
+                       "--acceptance-probe", timeout=330, env=environment)
             state = self.wait_for(status, lambda entry: entry["notification"]["status"] == status)
             self.assertEqual(state["status"], "succeeded")
+            self.assertEqual(state["timeout_s"], 330)
             self.call("runner", "recover", status, env=environment)
             if status == "accepted":
                 generation = state["notification"]["generation"]
+                args = (self.manifest(status).parent / "notification.log").read_text().splitlines()
+                self.assertEqual(args[:5], ["queue", "--resume", "--thread", "fixture", "--message"])
+                self.assertIn(f"validate-wake {status} {generation}", args[5])
+                self.assertIn("end the turn without starting research", args[5])
                 self.call("control", "validate-wake", status, generation)
                 self.assertNotEqual(self.call("control", "validate-wake", status, generation,
                                               check=False).returncode, 0)

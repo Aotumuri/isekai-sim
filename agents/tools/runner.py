@@ -44,8 +44,8 @@ def start(args):
                          (ROOT / "package-lock.json").read_text().strip()):
         raise ValueError("Expected installed node_modules and a matching workspace package-lock.json")
     queue_cli = None
-    if args.acceptance_probe and (not args.notify_thread or args.timeout > 120):
-        raise ValueError("An acceptance probe requires a current Developer thread and timeout up to 120 seconds")
+    if args.acceptance_probe and not args.notify_thread:
+        raise ValueError("An acceptance probe requires --notify-thread for the current Developer owner")
     if args.notify_thread:
         if args.notify_thread != owner():
             raise ValueError("Notification target must be the current Developer owner")
