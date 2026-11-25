@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import subprocess
+from urllib.parse import quote
 
 from issue_classification import DEFINITIONS, STATES, classification, label_names, replace_classification
 from issue_checklist import check_tasks
@@ -166,11 +167,30 @@ class GitHubTracker:
         if changes.keys() - {"priority", "kind"}:
             raise ValueError("Use progress to change status")
         with lock(RUNTIME / "github.lock"):
-            issue = self.issue(number)
-            before = label_names(issue)
-            labels = replace_classification(before, **changes)
-            classification({**issue, "labels": labels})
-            return self.patch_issue(issue, {"labels": labels} if set(labels) != set(before) else {})
+            return self._update_classification(self.issue(number), changes)
+
+    def _update_classification(self, issue, changes, payload=None):
+        names = label_names(issue)
+        before = {name.lower(): name for name in names}
+        desired = {name.lower() for name in replace_classification(names, **changes)}
+        payload = payload or {}
+        classification({**issue, **payload, "labels": sorted(desired)})
+        added, removed = desired - before.keys(), before.keys() - desired
+        endpoint = f"issues/{issue['number']}/labels"
+        failure = f"Issue #{issue['number']} update did not confirm labels; reread before retry"
+        if added:
+            labels = self.api("POST", endpoint, {"labels": sorted(added)})
+            if not added.issubset(name.lower() for name in label_names({"labels": labels})):
+                raise ValueError(failure)
+        for name in sorted(removed):
+            self.api("DELETE", f"{endpoint}/{quote(before[name], safe='')}")
+        if added or removed:
+            issue = self.issue(issue["number"])
+        prefixes = tuple(f"{axis}:" for axis in changes)
+        if ({name.lower() for name in label_names(issue) if name.lower().startswith(prefixes)}
+                != {name for name in desired if name.startswith(prefixes)}):
+            raise ValueError(failure)
+        return self.patch_issue(issue, payload)
 
     def candidates(self):
         issues = {issue["number"]: issue for issue in self.issues()}
@@ -221,12 +241,7 @@ class GitHubTracker:
         checked = check_tasks(text, tasks)
         if checked != text:
             payload["body"] = checked + issue["body"][len(text):]
-        labels = label_names(issue)
-        desired = replace_classification(labels, status=None if status == "completed" else status)
-        if set(desired) != set(labels):
-            payload["labels"] = desired
-        classification({**issue, **payload})
-        return self.patch_issue(issue, payload)
+        return self._update_classification(issue, {"status": None if status == "completed" else status}, payload)
 
     def checklist(self, number, tasks, approved, result_comment=None):
         permit("tracker.github", "update_issue", approved, self.settings)

@@ -9,7 +9,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import github_tracker as module
 import migrate_tracker as migration
-from issue_classification import DEFINITIONS
+from issue_classification import DEFINITIONS, label_names
 
 
 class FakeGitHub:
@@ -24,6 +24,8 @@ class FakeGitHub:
         self.lose_response = False
         self.lose_patch_for = None
         self.ignore_labels_for = None
+        self.before_write = None
+        self.fail_label_removal = False
 
     def __call__(self, method, path, payload, paginate):
         if self.offline:
@@ -32,6 +34,9 @@ class FakeGitHub:
         if method != "GET":
             self.writes += 1
             self.last_write = (method, route, copy.deepcopy(payload))
+            if self.before_write:
+                self.before_write()
+                self.before_write = None
         if route == ["labels"]:
             if method == "GET":
                 return [list(copy.deepcopy(self.labels).values())]
@@ -51,6 +56,17 @@ class FakeGitHub:
                 raise ValueError("response lost after create")
             return copy.deepcopy(issue)
         identity = int(route[1])
+        if len(route) >= 3 and route[2] == "labels":
+            issue = self.issues[identity]
+            labels = label_names(issue)
+            if method == "POST":
+                labels = list(dict.fromkeys([*labels, *payload["labels"]]))
+            elif method == "DELETE":
+                if self.fail_label_removal:
+                    raise ValueError("label removal failed")
+                labels.remove(unquote(route[3]))
+            issue["labels"] = labels
+            return [{"name": name} for name in labels]
         if len(route) == 2:
             if method == "PATCH":
                 accepted = {key: value for key, value in payload.items()
@@ -246,14 +262,48 @@ class GitHubTrackerTest(unittest.TestCase):
             "1. [ ] Verify it", "1. [x] Verify it"
         )
         result = self.tracker.progress(number, "in-progress", False, tasks=["Build it", "Verify it"])
-        self.assertEqual(self.remote.writes, writes + 1)
+        self.assertEqual(self.remote.writes, writes + 3)
         self.assertEqual(self.remote.last_write[:2], ("PATCH", ["issues", str(number)]))
-        self.assertEqual(set(self.remote.last_write[2]), {"body", "labels"})
+        self.assertEqual(set(self.remote.last_write[2]), {"body"})
         self.assertEqual(module.split_body(result)[0], expected)
         self.assertEqual(self.tracker.summary(result)["status"], "in-progress")
         self.assertEqual(result["labels"], ["bug", "enhancement", "work:custom", "status:in-progress"])
         self.tracker.progress(number, "in-progress", False, tasks=["Build it", "Verify it", "Build it"])
-        self.assertEqual(self.remote.writes, writes + 1)
+        self.assertEqual(self.remote.writes, writes + 3)
+
+    def test_classification_updates_preserve_concurrent_unrelated_label_edits(self):
+        number = self.tracker.create("proposal", "Criteria", "human", "p", True,
+                                     priority="P2", kind="research")["number"]
+        issue = self.remote.issues[number]
+        issue["labels"].append("bug")
+
+        def edit_labels():
+            issue["labels"].remove("priority:p2")
+            issue["labels"].append("priority:p1")
+            issue["labels"].append("help wanted")
+
+        self.remote.before_write = edit_labels
+        result = self.tracker.progress(number, "validating", False)
+        self.assertCountEqual(label_names(result),
+                              ["status:validating", "priority:p1", "kind:research", "bug", "help wanted"])
+
+        self.remote.before_write = lambda: issue["labels"].remove("bug")
+        result = self.tracker.classify(number, False, priority="P3")
+        self.assertCountEqual(label_names(result), ["status:validating", "priority:p3", "kind:research", "help wanted"])
+
+    def test_progress_retry_finishes_partial_label_update(self):
+        number = self.tracker.create("proposal", "- [ ] Verify", "human", "p", True, priority="P2")["number"]
+        self.remote.fail_label_removal = True
+        with self.assertRaisesRegex(ValueError, "label removal failed"):
+            self.tracker.progress(number, "validating", False, tasks=["Verify"])
+        pending = self.tracker.issue(number)
+        self.assertCountEqual(label_names(pending), ["status:proposed", "status:validating", "priority:p2"])
+        self.assertEqual(module.split_body(pending)[0], "- [ ] Verify")
+
+        self.remote.fail_label_removal = False
+        result = self.tracker.progress(number, "validating", False, tasks=["Verify"])
+        self.assertCountEqual(label_names(result), ["status:validating", "priority:p2"])
+        self.assertEqual(module.split_body(result)[0], "- [x] Verify")
 
     def test_invalid_checklist_item_prevents_every_update(self):
         body = "- [ ] Unique\n- [ ] Repeated\n- [X] Repeated"
