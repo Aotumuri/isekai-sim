@@ -4,8 +4,11 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+import time
+import uuid
+from unittest.mock import patch
 
-from adf.ipc import Client, receive
+from adf.ipc import Client, receive, write
 from adf.service import Service
 from adf.store import Store, private_dir
 
@@ -146,6 +149,43 @@ class OrchestratorTest(unittest.IsolatedAsyncioTestCase):
         await self.state("developer", "quota")
         await asyncio.sleep(0.2)
         self.assertEqual(self.service.session_for(self.project, "developer")["turn_requests"], 1)
+
+    async def test_send_to_paused_and_interrupted_sessions(self):
+        await self.service.message(self.project, "developer", "first")
+        first = await self.state("developer", "idle")
+        await self.service.stop_role(self.project, "developer")
+        await self.state("developer", "paused")
+        await self.service.message(self.project, "developer", "after pause")
+        await self.state("developer", "idle")
+        self.store.recover()
+        await self.state("developer", "interrupted")
+        await self.service.message(self.project, "developer", "after interruption")
+        final = await self.state("developer", "idle")
+        self.assertEqual((final["thread"], final["turn_requests"]), (first["thread"], 3))
+
+    async def test_failed_ipc_request_preserves_daemon_and_current_turn(self):
+        client = Client(self.store.home)
+        receiver = asyncio.create_task(receive(self.service, client.box))
+        try:
+            await self.service.message(self.project, "coordinator", "hold")
+            active = await self.wait(lambda: (row := self.service.session_for(self.project, "coordinator"))["turn"] and row)
+            for raw in ({"args": {}, "action": "status", "deadline": "later"},
+                        {"args": [], "action": "status", "deadline": time.time() + 5}):
+                request = client.box / f"{uuid.uuid4().hex}.request"
+                write(request, raw)
+                response = await self.wait(lambda: request.with_suffix(".response").is_file()
+                                           and request.with_suffix(".response"))
+                self.assertIn("error", json.loads(response.read_text()))
+            with patch.object(self.service, "status", side_effect=NameError("private diagnostic")):
+                with self.assertRaisesRegex(ValueError, "NameError") as failure:
+                    await asyncio.to_thread(client.call, "status", launch=False)
+                self.assertNotIn("private diagnostic", str(failure.exception))
+            status = await asyncio.to_thread(client.call, "status", launch=False, project=self.project)
+            self.assertEqual(status["sessions"][0]["turn"], active["turn"])
+            self.assertFalse(receiver.done())
+        finally:
+            await self.service.stop_all(immediate=True)
+            await asyncio.wait_for(receiver, 12)
 
     async def test_reconnect_does_not_restart_daemon_or_turn(self):
         client_a = Client(self.store.home)

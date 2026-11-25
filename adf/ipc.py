@@ -2,10 +2,13 @@
 
 import asyncio
 import json
+import logging
+import math
 import os
 from pathlib import Path
 import re
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -72,23 +75,48 @@ class Client:
             response.unlink(missing_ok=True)
 
 
+def read_request(path):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, "rb") as handle:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            raise ValueError("IPC 要求には通常ファイルを使用してください")
+        raw = handle.read(MAX_REQUEST + 1)
+    if len(raw) > MAX_REQUEST:
+        raise ValueError("IPC 要求のサイズが上限を超えています")
+    return json.loads(raw)
+
+
+def validate_request(data):
+    if (not isinstance(data, dict) or set(data) != {"action", "args", "deadline"}
+            or not isinstance(data["action"], str) or not isinstance(data["args"], dict)
+            or type(data["deadline"]) not in (int, float)
+            or not math.isfinite(data["deadline"])):
+        raise ValueError("IPC 要求の形式が不正です")
+
+
 async def handle(service, path):
     try:
-        with path.open("rb") as handle:
-            data = json.loads(handle.read(MAX_REQUEST + 1))
-        path.unlink()
-    except (OSError, ValueError):
-        path.unlink(missing_ok=True)
-        return
-    if not isinstance(data, dict) or data.get("deadline", 0) < time.time():
-        return
-    try:
+        try:
+            data = read_request(path)
+        finally:
+            path.unlink(missing_ok=True)
+        validate_request(data)
+        if data["deadline"] < time.time():
+            return
         value = {"value": await service.dispatch(data["action"], data["args"])}
+    except (json.JSONDecodeError, UnicodeError, RecursionError):
+        value = {"error": "IPC の JSON が不正です"}
     except (ValueError, RuntimeError) as error:
         value = {"error": str(error)}
-    except (OSError, TimeoutError, TypeError, KeyError) as error:
+    except Exception as error:
+        # One request is never allowed to terminate the service. Do not emit
+        # payloads, local paths or authenticated subprocess output in diagnostics.
+        logging.warning("ADF IPC operation failed (%s)", type(error).__name__)
         value = {"error": f"ADF の操作に失敗しました ({type(error).__name__})"}
-    write(path.with_suffix(".response"), value)
+    try:
+        write(path.with_suffix(".response"), value)
+    except Exception as error:
+        logging.warning("ADF IPC response failed (%s)", type(error).__name__)
 
 
 async def serve(home, binary):

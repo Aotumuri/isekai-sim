@@ -198,8 +198,13 @@ class Sessions:
     async def message(self, project, role, text, experiment=None):
         if self.shutdown:
             raise ValueError("ADF は停止処理中です")
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("指示を入力してください")
+        if experiment is not None and (role != "developer" or not isinstance(experiment, str) or not self.store.one(
+                "SELECT 1 FROM template WHERE project=? AND name=?", (project, experiment))):
+            raise ValueError("Developer 向けの登録済み実験を指定してください")
         row = self.session_for(project, role)
-        if not row or (row["state"] not in ACTIVE and not self.active_jobs(session)):
+        if not row or row["state"] not in ACTIVE:
             return self.reserve(project, role, text, False, experiment)
         if row["state"] == "running" and row["turn"] and self.runtime:
             if experiment:
