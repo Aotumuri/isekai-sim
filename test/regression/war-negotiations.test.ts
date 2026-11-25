@@ -36,9 +36,14 @@ test("domestic crisis makes pragmatic governments accept an exit while intransig
   b.warCooperation = 0; const unrest = getDomesticUnrest(world, b.id); unrest.pressure = 85; unrest.lowSupportSlowTicks = 250;
   b.character = { doctrine: "merchant", aggression: 0.25, cooperation: 0.9, innovation: 0.5, thrift: 0.8 };
   const pragmatic = assessPeaceOffer(world, b.id, a.id, whitePeaceTerms()); assert(pragmatic.accepts);
+  assert.match(pragmatic.reason, /continued losses and domestic danger/);
   const urgency = getPeaceUrgency(world, b.id);
   b.character = { doctrine: "expansionist", aggression: 0.9, cooperation: 0.3, innovation: 0.5, thrift: 0.3 };
-  assert(!assessPeaceOffer(world, b.id, a.id, whitePeaceTerms()).accepts); assert(getPeaceUrgency(world, b.id) < urgency);
+  const intransigent = assessPeaceOffer(world, b.id, a.id, whitePeaceTerms());
+  assert(!intransigent.accepts);
+  assert.match(intransigent.reason, /a better outcome by continuing the war/);
+  assert(intransigent.score < pragmatic.score);
+  assert(getPeaceUrgency(world, b.id) < urgency);
 });
 test("territory demands and reparations make acceptance harder and a winning country rejects an early unreasonable demand", () => {
   const { world, a, b, parcel } = scene();

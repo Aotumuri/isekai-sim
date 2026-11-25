@@ -4,6 +4,7 @@ import { getDiplomacyState, getRelation, hasTreaty, proposeTreaty } from "../../
 import { startDiplomaticWar, updateDiplomaticCrises } from "../../src/sim/diplomatic-crises";
 import { createFaction, getNationFaction } from "../../src/sim/factions";
 import { getMilitaryRoutingOwners, hasMilitaryAccess } from "../../src/sim/military-access";
+import { isNationActive } from "../../src/sim/nation-active";
 import { getNationIdeology } from "../../src/sim/nation-identity";
 import { getSubjectOverlord, releaseSubjectGovernment, updateSubjectGovernments } from "../../src/sim/subject-governments";
 import { acceptPeaceOffer, getPeaceTermsIssue, getWarNegotiation, proposePeaceTerms, updateWarNegotiations, whitePeaceTerms } from "../../src/sim/war-negotiations";
@@ -63,6 +64,38 @@ test("puppet peace preserves the defeated country and replaces its foreign milit
   assert.ok(startDiplomaticWar(world, third.id, target.id));
   updateDiplomaticCrises(world);
   assert.equal(findWar(world.wars, overlord.id, third.id)?.cause, "defensive-alliance");
+});
+
+test("the overlord honors its own truce before intervening for an attacked subject", () => {
+  for (const hasTruce of [false, true]) {
+    const { world, overlord, target, third, occupy } = scene();
+    occupy();
+    assert.ok(proposePeaceTerms(world, overlord.id, target.id, terms));
+    assert.ok(acceptPeaceOffer(world, target.id, overlord.id));
+    world.time.fastTick = 100;
+    world.time.slowTick = 10;
+    if (hasTruce) {
+      getRelation(world, overlord.id, third.id).treaties.push({
+        type: "truce", expiresAtSlowTick: 20, negotiatedPeace: true,
+      });
+    }
+    assert.ok(startDiplomaticWar(world, third.id, target.id));
+    const stocks = [overlord, target, third].map(({ resources }) => ({ ...resources }));
+    updateDiplomaticCrises(world);
+
+    assert.equal(findWar(world.wars, overlord.id, third.id)?.cause, hasTruce ? undefined : "defensive-alliance");
+    assert.equal(getDiplomacyState(world).defensiveInterventions, hasTruce ? 0 : 1);
+    assert.ok(findWar(world.wars, third.id, target.id));
+    assert.equal(getSubjectOverlord(world, target.id), overlord.id);
+    assert.ok(isNationActive(target));
+    assert.deepEqual([overlord, target, third].map(({ resources }) => resources), stocks);
+
+    world.time.fastTick = 210;
+    world.time.slowTick = 21;
+    updateDiplomaticCrises(world);
+    assert.equal(findWar(world.wars, overlord.id, third.id)?.cause, "defensive-alliance");
+    assert.equal(getDiplomacyState(world).defensiveInterventions, 1);
+  }
 });
 
 test("puppet terms are revalidated at acceptance and grant independence removes access", () => {
