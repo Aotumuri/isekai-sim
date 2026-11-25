@@ -9,21 +9,27 @@ import shutil
 import sys
 
 from .codex import PATH, Codex, RuntimeError
+from .evidence import Evidence
 from .experiments import Experiments
+from .git_review import GitReview
+from .github_research import GitHubResearch
 from .legacy import Legacy
 from .projects import clean_name, identify, issues
 from .research import Research
 from .sessions import Sessions
 from .store import ACTIVE
 from .tracker import GitHub
+from .tracker_policy import policy_map
+from .usage import Usage
 
 
-class Service(Legacy, GitHub, Research, Experiments, Sessions):
+class Service(Legacy, GitHubResearch, GitHub, GitReview, Evidence, Usage, Research, Experiments, Sessions):
     def __init__(self, store, binary, runtime_factory=None, lease=None):
         super().__init__(store, runtime_factory or (lambda *callbacks: Codex(binary, *callbacks, lease=lease)))
         self.binary = binary
         self.executing = set()
         self.cancelled_jobs = set()
+        self.stop_epochs = {}
 
     async def register(self, path, name="", github=""):
         path, identity = await identify(Path(path).expanduser().resolve(strict=True))
@@ -98,11 +104,15 @@ class Service(Legacy, GitHub, Research, Experiments, Sessions):
         return True
 
     def status(self, project=None, after=0):
+        tracker = self.store.one("SELECT operations FROM tracker_policy WHERE project=?", (project,))
         return {
+            "tracker_policy": policy_map(json.loads(tracker["operations"])) if tracker else {},
             "legacy_imports": self.store.all("SELECT fingerprint,path FROM legacy_import WHERE project=?", (project,)),
             "tracker_operations": self.store.all("SELECT * FROM tracker_operation WHERE project=? "
                                                  "ORDER BY created DESC LIMIT 100", (project,)),
-            "research_tasks": self.store.all("SELECT * FROM research_task WHERE project=? ORDER BY priority,id", (project,)),
+            "research_tasks": self.store.all("SELECT * FROM research_task WHERE project=? AND id NOT IN (SELECT task FROM github_task) ORDER BY priority,id", (project,)),
+            "github_runs": self.store.all("SELECT github_run.* FROM github_run JOIN session "
+                                           "ON session.id=github_run.session WHERE project=?", (project,)),
             "research_runs": self.store.all("SELECT research_run.* FROM research_run JOIN session "
                                            "ON session.id=research_run.session WHERE project=?", (project,)),
             "projects": self.store.all("SELECT * FROM project WHERE archived=0 ORDER BY id"),
@@ -126,6 +136,8 @@ class Service(Legacy, GitHub, Research, Experiments, Sessions):
 
     async def stop_role(self, project, role, immediate=False):
         self.project(project)
+        if role == "developer":
+            self.stop_epochs[project] = self.stop_epochs.get(project, 0) + 1
         row = self.session_for(project, role)
         if row:
             await self.stop(row["id"], immediate)
@@ -149,9 +161,11 @@ class Service(Legacy, GitHub, Research, Experiments, Sessions):
             "template": self.set_template, "status": self.status, "log": self.read_log,
             "send": self.message, "stop": self.stop_role, "resume": self.resume_role,
             "shutdown": self.stop_all, "issues": self.list_issues, "limits": self.get_limits,
-            "task": self.add_task, "task-reopen": self.reopen_task, "research-start": self.start_research, "research-resume": self.resume_research,
-            "artifacts": self.artifacts, "tracker-policy": self.set_tracker_policy,
-            "tracker-draft": self.draft_tracker, "tracker-review": self.review_tracker, "tracker-issue": self.tracker_issue,
+            "task": self.add_task, "task-reopen": self.reopen_task, "research-start": self.start_project_research, "research-resume": self.resume_project_research,
+            "artifacts": self.artifacts, "experiment-inputs": self.experiment_inputs,
+            "commit-preview": self.commit_preview, "usage": self.usage_report, "tracker-policy": self.set_tracker_policy,
+            "tracker-draft": self.draft_tracker, "tracker-review": self.review_tracker, "tracker-reconcile": self.reconcile_tracker,
+            "tracker-issue": self.tracker_issue,
             "legacy-preview": self.legacy_preview, "legacy-import": self.legacy_import,
         }
         if action not in operations:

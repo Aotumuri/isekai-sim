@@ -32,9 +32,9 @@ class Integration(unittest.IsolatedAsyncioTestCase):
         payload = {"title": "Research proposal", "body": "- [ ] Test", "priority": "P1"}
         with self.assertRaisesRegex(ValueError, "操作ポリシー"):
             self.service.draft_tracker(self.project, "proposal", payload)
-        self.service.set_tracker_policy(self.project, ["proposal", "comment"])
+        self.service.set_tracker_policy(self.project, ["proposal", "comment", "depends"])
         with self.assertRaisesRegex(ValueError, "ロール"):
-            self.service.save_tracker_draft(self.project, "proposal", payload, "developer")
+            self.service.save_tracker_draft(self.project, "depends", {"issue": 1, "blocked_by": 2}, "developer")
         draft = self.service.save_tracker_draft(self.project, "proposal", payload, "coordinator")
         self.assertEqual(draft, self.service.save_tracker_draft(self.project, "proposal", payload, "coordinator"))
         remote = AsyncMock(return_value=[{"title": "research proposal [AI]", "number": 8}])
@@ -58,7 +58,7 @@ class Integration(unittest.IsolatedAsyncioTestCase):
         (folder / "config.toml").write_text('[tracker]\nbackend="github"\n[tracker.github]\n'
                                             'repository="example/synthetic"\ncomment="deny"\n')
         self.service.set_tracker_policy(self.project, ["comment"])
-        with self.assertRaisesRegex(ValueError, "トラッカーポリシー"):
+        with self.assertRaisesRegex(ValueError, "ポリシー"):
             self.service.draft_tracker(self.project, "comment", {"issue": 1, "body": "test"})
 
     def test_checklist_preserves_other_lines(self):

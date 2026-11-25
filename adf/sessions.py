@@ -2,6 +2,7 @@
 
 import asyncio
 from collections import Counter
+import json
 from pathlib import Path
 import sqlite3
 import time
@@ -151,9 +152,20 @@ class Sessions:
                           f"{'The working tree changed since the checkpoint. ' if changed else ''}"
                           "Inspect actual files and reconcile saved work before changing anything.\n" + prompt)
             research = self.research_for(row)
+            if research:
+                scope = json.loads(research["scope"])
+                if "commit_base" not in scope:
+                    scope["commit_base"] = revision
+                    with self.store.db:
+                        self.store.db.execute("UPDATE research_run SET scope=? WHERE session=?",
+                                              (json.dumps(scope), session))
             if ((settings["budget"] and row["tokens"] >= settings["budget"])
                     or (research and self.research_limit(row, research))):
                 self.fail(session, generation, "予算に達しました", state="paused")
+                return
+            if not await self.before_github_turn(row):
+                return
+            if not self.visible(session, generation, ("running",)):
                 return
             runtime = await self.connect()
             thread = await self.load(row, settings, runtime)
@@ -184,6 +196,8 @@ class Sessions:
             if row["allowed_template"]:
                 prompt += f"\nADF authorization for this turn: one experiment named {row['allowed_template']}."
             turn = await runtime.start({**row, "thread": thread}, settings, prompt)
+            self.associate_usage(row, thread, turn, row["turn_requests"] + 1,
+                                 research["task"] if research else None, job, limits, row["thread"] is None)
             if job:
                 with self.store.db:
                     self.store.db.execute("UPDATE job SET wake='sent' WHERE id=? AND wake='claimed'", (job,))
@@ -239,7 +253,7 @@ class Sessions:
             with self.store.db:
                 self.store.event(row["id"], "user", text)
             return row["id"]
-        if row["state"] != "idle":
+        if row["state"] != "idle" or self.research_for(row):
             raise ValueError("待機・停止中のセッションです。状態を確認してください")
         with self.store.db:
             self.store.update_session(row["id"], state="running", prompt=text, allowed_template=experiment)
@@ -248,7 +262,13 @@ class Sessions:
 
     async def stop(self, session, immediate):
         row = self.store.session(session)
-        if not row or (row["state"] not in ACTIVE and not self.active_jobs(session)):
+        if not row:
+            return
+        if row["state"] not in ACTIVE and not self.active_jobs(session):
+            if row["state"] == "paused" and self.github_run(row):
+                with self.store.db:
+                    self.store.update_session(session, generation=row["generation"] + 1)
+                    self.store.event(session, "stop", "停止要求で保留中の承認を失効しました")
             return
         if row["state"] == "stopping" or (row["state"] == "draining" and not immediate):
             return
@@ -323,10 +343,7 @@ class Sessions:
             with self.store.db:
                 self.store.event(session, "assistant", params.get("delta", ""))
         elif method == "thread/tokenUsage/updated":
-            count = params.get("tokenUsage", {}).get("total", {}).get("totalTokens")
-            if type(count) is int and count >= 0:
-                with self.store.db:
-                    self.store.update_session(session, tokens=max(row["token_floor"] + count, row["tokens"]))
+            self.receive_usage(row, params)
         elif method == "adf/approvalDenied":
             with self.store.db:
                 self.store.event(session, "approval", "Codex の権限拡張を拒否しました")
@@ -357,8 +374,10 @@ class Sessions:
         if status == "completed" and state == "running":
             if job:
                 self.wake(session)
+            elif self.github_run(row):
+                self.background(self.finish_github(row, turn["id"]))
             else:
-                self.advance_research(row, turn["id"])
+                self.background(self.finalize_local(row, turn["id"]))
         self.settle(session)
         self.release_inactive_legacy(session)
 
@@ -381,7 +400,7 @@ class Sessions:
                 if not has_credits(limits) and all(window["usedPercent"] < 100 for window in windows):
                     if self.research_for(row):
                         try:
-                            self.resume_research(row["project"])
+                            await self.resume_project_research(row["project"])
                         except ValueError:
                             return
                     else:

@@ -75,6 +75,24 @@ CREATE TABLE IF NOT EXISTS tracker_operation (
     id TEXT PRIMARY KEY, project INTEGER NOT NULL REFERENCES project(id), repository TEXT NOT NULL,
     kind TEXT NOT NULL, payload TEXT NOT NULL, actor TEXT NOT NULL, state TEXT NOT NULL, result TEXT, created REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS github_task (
+    project INTEGER NOT NULL REFERENCES project(id), repository TEXT NOT NULL, number INTEGER NOT NULL,
+    task INTEGER NOT NULL UNIQUE REFERENCES research_task(id), PRIMARY KEY(project, repository, number)
+);
+CREATE TABLE IF NOT EXISTS github_run (
+    session INTEGER PRIMARY KEY REFERENCES session(id), generation INTEGER NOT NULL,
+    repository TEXT NOT NULL, issue INTEGER NOT NULL, fingerprint TEXT NOT NULL,
+    operation TEXT REFERENCES tracker_operation(id), phase TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS tracker_guard (
+    operation TEXT PRIMARY KEY REFERENCES tracker_operation(id), session INTEGER NOT NULL REFERENCES session(id),
+    generation INTEGER NOT NULL, fingerprint TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS turn_usage (
+    session INTEGER NOT NULL REFERENCES session(id), thread TEXT NOT NULL, turn TEXT NOT NULL, sequence INTEGER,
+    task INTEGER, job TEXT, quota TEXT, total TEXT, last TEXT, initial INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(session,turn)
+);
 CREATE TABLE IF NOT EXISTS event (
     id INTEGER PRIMARY KEY AUTOINCREMENT, session INTEGER REFERENCES session(id),
     time REAL NOT NULL, kind TEXT NOT NULL, detail TEXT NOT NULL

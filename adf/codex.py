@@ -7,7 +7,9 @@ import os
 from pathlib import Path
 
 from .artifacts import ARTIFACTS
+from .runtimes import runtime_files, runtime_name
 import signal
+import subprocess
 import sys
 
 PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -15,7 +17,7 @@ TOOL = "adf_start_experiment"
 RESEARCH_EXPERIMENT = "adf_research_experiment"
 RESEARCH_FINISH = "adf_finish_research_task"
 ARTIFACT_READ = "adf_read_experiment_output"
-TOOL_VERSION = 2
+TOOL_VERSION = 3
 
 
 def environment():
@@ -26,16 +28,20 @@ def environment():
 
 def profile_options():
     profiles = []
-    for name, mode in (("adf-reader", "read"), ("adf-writer", "write"), ("adf-experiment", "write")):
+    for name, mode in (("adf-reader", "read"), ("adf-writer", "write"), ("adf-experiment", "write"), ("adf-node", "write")):
         rules = {".": mode, ".git": "read", ".agents": "read", ".codex": "read", ".aws": "read",
                  ".env": "deny", "**/.env": "deny", "**/.env.*": "deny"}
         paths = ", ".join(f"{json.dumps(path)}={json.dumps(access)}" for path, access in rules.items())
         interpreter = ""
-        if name == "adf-experiment":
-            # Use the installed interpreter and standard library. This profile
-            # adds only read access and is not assigned to agent turns.
-            prefixes = {str(Path(sys.base_prefix).resolve()), str(Path(sys.executable).resolve())}
-            interpreter = "".join(f', {json.dumps(path)}="read"' for path in sorted(prefixes))
+        if name in ("adf-experiment", "adf-node"):
+            kind = "node" if name == "adf-node" else "python"
+            try:
+                interpreter = "".join(f', {json.dumps(str(path))}="read"' for path in runtime_files(kind))
+            except (OSError, ValueError, subprocess.SubprocessError):
+                if kind != "node":
+                    raise
+                # Failure to inspect Node cannot disable the Python runtime.
+                continue
         profiles.append(f'{name}={{filesystem={{":root"="deny", ":minimal"="read", '
                         f'":workspace_roots"={{{paths}}}{interpreter}}}, network={{enabled=false}}}}')
     return "-c", "permissions={" + ", ".join(profiles) + "}", "-c", 'default_permissions="adf-reader"'
@@ -200,7 +206,7 @@ class Codex:
     async def execute(self, job, source, template):
         return await self.rpc("command/exec", {
             "command": template["argv"], "cwd": str(source), "processId": job,
-            "permissionProfile": "adf-experiment" if template.get("research") else "adf-writer",
+            "permissionProfile": runtime_name(template["plan"]["runtime"]) if template.get("research") else "adf-writer",
             "timeoutMs": template["timeout"] * 1000,
             "env": {"PATH": PATH, "HOME": str(source), "TMPDIR": str(source),
                     "ADF_ARTIFACTS": str(source / ARTIFACTS)},
@@ -242,9 +248,9 @@ def runtime_tools(writable):
     definitions = [
         (TOOL, "Launch the template selected by the user. End the turn immediately after acceptance.",
          {"template": "string"}, ["template"]),
-        (RESEARCH_EXPERIMENT, "Launch one Python program on committed HEAD within an approved research run. "
+        (RESEARCH_EXPERIMENT, "Launch one program or script in the approved research runtime. "
          "Write results to ADF_ARTIFACTS and end the turn immediately after acceptance.",
-         {"name": "string", "program": "string", "timeout": "integer"}, ["name", "program", "timeout"]),
+         {"name": "string", "program": "string", "script": "string", "timeout": "integer"}, ["name", "timeout"]),
         (RESEARCH_FINISH, "Record an active research task's completed or blocked outcome and verification summary.",
          {"outcome": "string", "summary": "string"}, ["outcome", "summary"]),
         (ARTIFACT_READ, "Inspect experiment output for this session. Omit path to list result files, or use "

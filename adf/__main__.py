@@ -54,6 +54,10 @@ def parser():
     research.add_argument("tasks", type=int, nargs="+")
     for name, default in (("jobs", 4), ("timeout", 120), ("turns", 8), ("tokens", 40000)):
         research.add_argument(f"--{name}", type=int, default=default)
+    research.add_argument("--runtime", choices=("python", "node"), default="python")
+    research.add_argument("--file", dest="files", action="append")
+    research.add_argument("--dependencies", default="")
+    research.add_argument("--evidence", action="append")
     research = sub.add_parser("research-resume")
     research.add_argument("project", type=int)
     artifacts = sub.add_parser("artifacts")
@@ -61,9 +65,15 @@ def parser():
     artifacts.add_argument("path", nargs="?")
     artifacts.add_argument("--offset", type=int, default=0)
     artifacts.add_argument("--size", type=int, default=4096)
+    inputs = sub.add_parser("experiment-inputs")
+    inputs.add_argument("job")
+    usage = sub.add_parser("usage")
+    usage.add_argument("project", type=int)
+    preview = sub.add_parser("commit-preview")
+    preview.add_argument("project", type=int)
     tracker = sub.add_parser("tracker-policy")
     tracker.add_argument("project", type=int)
-    tracker.add_argument("operations", nargs="*")
+    tracker.add_argument("operations", nargs="*", metavar="OPERATION[=LEVEL]")
     tracker = sub.add_parser("tracker-draft")
     tracker.add_argument("project", type=int)
     tracker.add_argument("kind")
@@ -73,6 +83,8 @@ def parser():
     answer = tracker.add_mutually_exclusive_group(required=True)
     answer.add_argument("--approve", action="store_true", dest="approve")
     answer.add_argument("--decline", action="store_false", dest="approve")
+    tracker = sub.add_parser("tracker-reconcile")
+    tracker.add_argument("operation")
     tracker = sub.add_parser("tracker-issue")
     tracker.add_argument("project", type=int)
     tracker.add_argument("issue", type=int)
@@ -100,6 +112,9 @@ def parser():
 def main():
     args = vars(parser().parse_args())
     action = args.pop("action")
+    if action == "tracker-policy":
+        args["operations"] = {key: level or "ask"
+                              for key, _, level in (value.partition("=") for value in args["operations"])}
     try:
         home = private_dir(default_home())
         if action == "daemon":

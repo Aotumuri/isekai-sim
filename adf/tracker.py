@@ -6,20 +6,16 @@ import json
 from pathlib import Path
 import re
 import time
-import tomllib
 from urllib.parse import quote
 
-from .artifacts import read_result
 from .codex import environment
 from .research import plain_text
+from .tracker_policy import TrackerPolicy
 
 STATUS = {"proposed", "ready", "in-progress", "experimenting", "validating", "paused", "blocked", "local-done"}
 PRIORITY = {"P1", "P2", "P3"}
-PERMISSIONS = {"proposal": "create_issue", "comment": "comment", "progress": "update_issue",
-               "depends": "update_issue", "label": "update_issue", "checklist": "update_issue",
-               "complete": "close_issue"}
 ROLE_ACTIONS = {"coordinator": {"proposal", "comment", "depends", "label"},
-                "developer": {"comment", "progress", "checklist", "complete"}}
+                "developer": {"proposal", "comment", "progress", "checklist", "complete"}}
 CHECKBOX = re.compile(r"^(\s*[-*+] \[)([xX ])(\] +)(.+)$")
 VALID_REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 
@@ -98,44 +94,19 @@ async def gh_api(repository, method, endpoint, payload=None, paginate=False):
     return [item for page in result for item in page] if paginate else result
 
 
-class GitHub:
-    def set_tracker_policy(self, project, operations):
-        repo = self.project(project)
-        if (not repo["github"] or not isinstance(operations, list)
-                or any(not isinstance(op, str) or op not in PERMISSIONS for op in operations)):
-            raise ValueError("GitHub リポジトリと許可する操作を指定してください")
-        with self.store.db:
-            self.store.db.execute("INSERT OR REPLACE INTO tracker_policy VALUES (?,?)",
-                                  (project, json.dumps(sorted(set(operations)))))
-        return True
-
-    def tracker_allowed(self, project, kind):
-        policy = self.store.one("SELECT operations FROM tracker_policy WHERE project=?", (project["id"],))
-        if project["archived"] or not policy or kind not in json.loads(policy["operations"]):
-            raise ValueError("この操作は ADF の操作ポリシーで許可されていません")
-        try:
-            configured = read_result(Path(project["path"]) / "agents", "config.toml", size=65536)
-        except FileNotFoundError:
-            return
-        if configured["next"] != configured["total"]:
-            raise ValueError("トラッカー設定ファイルが大きすぎます")
-        options = tomllib.loads(configured["text"]).get("tracker", {})
-        github = options.get("github", {})
-        if (options.get("backend") != "github" or github.get("repository") != project["github"]
-                or github.get(PERMISSIONS[kind]) not in ("allow", "ask")):
-            raise ValueError("プロジェクトのトラッカーポリシーが操作を許可していません")
-
+class GitHub(TrackerPolicy):
     def draft_tracker(self, project, kind, payload):
         return self.save_tracker_draft(project, kind, payload, "human")
 
-    def save_tracker_draft(self, project, kind, payload, actor):
+    def save_tracker_draft(self, project, kind, payload, actor, *, nonce=""):
         row = self.project(project)
         validate(kind, payload)
         self.tracker_allowed(row, kind)
         if actor != "human" and kind not in ROLE_ACTIONS.get(actor, set()):
             raise ValueError("このロールでは操作を提案できません")
         request = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-        identity = hashlib.sha256(f"{row['github']}\0{kind}\0{request}".encode()).hexdigest()
+        material = f"{row['github']}\0{kind}\0{request}"
+        identity = hashlib.sha256((material + (f"\0{nonce}" if nonce else "")).encode()).hexdigest()
         with self.store.db:
             self.store.db.execute("INSERT OR IGNORE INTO tracker_operation "
                                   "VALUES (?,?,?,?,?,?,'pending',NULL,?)",
@@ -155,6 +126,9 @@ class GitHub:
                 "comments": [str(item.get("body") or "")[:1500] for item in comments[-8:]]}
 
     async def review_tracker(self, operation, approve):
+        return await self.send_tracker(operation, approve, automatic=False)
+
+    async def send_tracker(self, operation, approve, *, automatic):
         if not isinstance(operation, str) or type(approve) is not bool:
             raise ValueError("承認要求 ID と承認・却下を指定してください")
         draft = self.store.one("SELECT * FROM tracker_operation WHERE id=?", (operation,))
@@ -167,7 +141,18 @@ class GitHub:
         project = self.project(draft["project"])
         if project["github"] != draft["repository"]:
             raise ValueError("登録リポジトリが変わりました。承認内容を見直してください")
-        self.tracker_allowed(project, draft["kind"])
+        policy = self.tracker_allowed(project, draft["kind"])
+        if automatic and policy != "allow":
+            return {"approval": operation}
+        expected = None
+        if guard := self.store.one("SELECT * FROM tracker_guard WHERE operation=?", (operation,)):
+            expected = await self.check_tracker_guard(guard, draft)
+            draft = self.store.one("SELECT * FROM tracker_operation WHERE id=?", (operation,))
+            if draft["state"] != "pending":
+                raise ValueError("この操作は既に処理されています")
+            policy = self.tracker_allowed(self.project(draft["project"]), draft["kind"])
+            if automatic and policy != "allow":
+                return {"approval": operation}
         with self.store.db:
             self.store.db.execute("UPDATE tracker_operation SET state='sending' WHERE id=?", (operation,))
         # Retain 'sending' across transport failures or daemon restarts. This
@@ -179,15 +164,64 @@ class GitHub:
                                   (json.dumps(result, ensure_ascii=False), operation))
         return result
 
+    async def reconcile_tracker(self, operation):
+        if not isinstance(operation, str):
+            raise ValueError("操作 ID を指定してください")
+        draft = self.store.one("SELECT * FROM tracker_operation WHERE id=? AND state='sending'", (operation,))
+        if not draft or draft["kind"] not in ("progress", "complete"):
+            raise ValueError("結果不明の進捗または完了操作を指定してください")
+        payload = json.loads(draft["payload"])
+        issue = await fetch_issue(draft["repository"], payload["issue"])
+        names = {item["name"] for item in issue.get("labels", [])}
+        if draft["kind"] == "complete":
+            confirmed = issue["state"] == "closed" and issue.get("state_reason") == "completed"
+        else:
+            confirmed = issue["state"] == "open" and {
+                name for name in names if name.startswith("status:")} == {f"status:{payload['status']}"}
+            if payload["priority"]:
+                confirmed = confirmed and {name for name in names if name.startswith("priority:")} == {
+                    "priority:" + payload["priority"].lower()}
+        if not confirmed:
+            raise ValueError("GitHub の現在の状態で操作結果を確認できません")
+        result = {"number": payload["issue"], "reconciled": True}
+        with self.store.db:
+            self.store.db.execute("UPDATE tracker_operation SET state='confirmed',result=? WHERE id=? AND state='sending'",
+                                  (json.dumps(result), operation))
+        return result
+
     async def tracker_tool(self, row, tool, args):
         try:
             if tool == "adf_read_github_issue" and set(args) == {"issue"}:
                 issue = await self.tracker_issue(row["project"], args["issue"])
                 return True, json.dumps({"untrusted_github_data": issue}, ensure_ascii=False)
             if tool == "adf_draft_github" and set(args) == {"kind", "payload_json"}:
-                operation = self.save_tracker_draft(row["project"], args["kind"], json.loads(args["payload_json"]),
-                                                    row["role"])
-                return True, f"Draft {operation} is stored locally for human review. No GitHub change was made."
+                kind = args["kind"]
+                payload = json.loads(args["payload_json"])
+                validate(kind, payload)
+                if kind == "complete":
+                    return False, "Use the research completion tool for completion, or request human review separately."
+                project = self.project(row["project"])
+                policy = self.tracker_allowed(project, kind)
+                run = self.github_run(row)
+                if run and kind != "proposal" and payload.get("issue") != run["issue"]:
+                    return False, "Writes in a research run are restricted to the currently owned issue."
+                operation = self.save_tracker_draft(row["project"], kind, payload, row["role"],
+                                                    nonce=f"{row['id']}:{row['generation']}:{run['issue']}"
+                                                    if run and kind != "proposal" else "")
+                if policy == "allow":
+                    if row["role"] == "developer" and kind != "proposal" and not run:
+                        return True, f"Draft {operation} requires human review outside GitHub research."
+                    if run and kind != "proposal":
+                        self.guard_tracker(operation, row, run)
+                    prior = self.store.one("SELECT state,result FROM tracker_operation WHERE id=?", (operation,))
+                    if prior["state"] == "confirmed":
+                        return True, "Already confirmed. " + prior["result"]
+                    result = await self.send_tracker(operation, True, automatic=True)
+                    return True, json.dumps(result, ensure_ascii=False)
+                if run and kind != "proposal":
+                    self.guard_tracker(operation, row, run)
+                return True, f"Draft {operation} requires human review."
+
         except (TypeError, ValueError, OSError, TimeoutError):
             return False, "Issue read or draft rejected by the repository or ADF policy."
         return False, "Invalid tracker request."
@@ -249,6 +283,9 @@ async def perform(repository, kind, payload, key, actor):
         content = checklist(issue.get("body") or "", payload["criterion"], payload["checked"])
         await gh_api(repository, "PATCH", endpoint, {"body": content})
     elif kind == "complete":
+        if any(match[2] == " " for line in (issue.get("body") or "").splitlines()
+               if (match := CHECKBOX.fullmatch(line))):
+            raise ValueError("未完了のチェック項目があるためクローズできません")
         await gh_api(repository, "PATCH", endpoint, {"state": "closed", "state_reason": "completed"})
     else:
         current = {item["name"] for item in issue.get("labels", [])}
