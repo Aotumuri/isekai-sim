@@ -20,7 +20,7 @@ python3 agents/tools/runner.py recover probe-1
 
 通知 CLI は `agents/config.toml` の `execution.codex_cli_path` で指定する。このマシンでは `/opt/homebrew/bin/codex` を使用する。別環境では設定を書き換えるか、`CODEX_CLI_PATH` に実行ファイルの絶対パスを指定して上書きする。環境変数を指定した場合はその CLI だけを検査する。環境変数が空の場合は設定値、PATH 上の `codex`、Desktop の `CODEX_APP_RUNTIME_CLI_PATH` の順に、`queue` の `--thread`、`--message`、`--resume` をサポートする最初の実行ファイルを採用する。`capabilities` の `notification_cli` で選択結果を確認できる。ランナーは選択したパスを起動時にマニフェストへ保存する。
 
-スタンドアロン CLI 0.172.0 は上記の Queue 引数に対応し、所有者の手動試験では通知と再開に成功した。今回の管理下では、隔離した短時間ジョブが終了コード 0 で完走した後、切り離し監督プロセスから起動した同じ CLI が `failed to start embedded app server: Operation not permitted` で終了コード 1 を返した。以前の Desktop 同梱 CLI による試験も状態 DB へのアクセスで失敗した。CLI ベースの Developer セッションからの実配送を試験する際は、そのセッションでランナーが継承する実効権限で確認する。
+スタンドアロン CLI 0.172.0 は上記の Queue 引数に対応する。Issue #28 の通常実験では、実験は完走し、切り離し通知は SQLite の初期化で失敗した。現行の実効権限では同じ状態 DB の読み書き用 open と既定の app-server ソケットへの接続が拒否される。調査結果と手動端末の権限との差は[通常実験の完了通知](../research/reports/issue-28-normal-completion-notification.md)を参照。
 
 既定では通知なし。下の再開条件を満たし、後続ターンの起動が許可されている場合だけ `start` に `--notify-thread THREAD_ID` を指定する。完了を書き込んだ後に呼び出す。接続の成否が不明な失敗では重複したターンを避けるため再送しない。起動前と判明した失敗は最大3回。その後は通常どおり手動で続けられる。コマンド成功時の `accepted` は CLI の終了コードを示し、ターンが始まった証拠ではない。
 
@@ -40,6 +40,27 @@ python3 agents/tools/runner.py recover probe-1
 5. 自動再開が確認できなければ `runner.py status JOB_ID`、`notification.log`、`research.py status` を確認し、必要なら Developer を明示的に再開する。半端な `sending` は `recover` で `unknown` にできる。
 
 回帰検証は `python3 -m unittest discover -s agents/tools/tests -v`。通知テストには模擬 CLI を使う。
+
+### Issue #28 の通常通知
+
+人間が通常使う端末で `HOME`、`CODEX_HOME`、`CODEX_SQLITE_HOME`、有効な `sqlite_home`、CLI のバージョンを確認し、実験監督が継承する値と照合する。直接配送の候補は、通常スレッドを保持するローカル daemon に通知プロセスが接続できる構成。既定の daemon は `codex app-server daemon version` で接続を確認できる。ヘルプの表示は引数の確認に使う。
+
+明示接続を採用する場合は、所有者が既存の状態と現行の権限で使える app-server を用意し、同じエンドポイントに `codex --remote unix://PATH -C "$PWD"` で手動接続して Developer を開始する。通知も `codex queue --remote unix://PATH --resume --thread THREAD_ID --message TEXT` で同じサーバーを選ぶ。既定の制御ソケットを選ぶ場合は `unix://` を使う。明示接続にはランナーへのエンドポイント指定の実装と、切り離した子からの接続が現在の権限で許可されていることの確認が必要。サーバーの起動や接続先の変更を行う前に所有者の承認を得る。現時点では通知子から利用できるエンドポイントが確認できていない。[Codex CLI](https://learn.chatgpt.com/docs/developer-commands?surface=cli#codex-queue) · [Codex App Server](https://learn.chatgpt.com/docs/app-server)
+
+通常の配送経路が使える環境で、所有者が今回限りの `auto_resume = true` を承認した後に試験する。
+
+1. 人間が Developer を手動で起動する。Developer は古い所有者と保存済みジョブを確認し、自分のスレッド ID を登録する。実験前に一意のジョブ ID、固定リビジョン、成功時に保存する証拠と終了条件を準備する。
+2. 通常の通知付きジョブを起動する。次のコマンドは約45秒の実験に60秒の上限を設定する。
+
+   ```sh
+   python3 agents/tools/runner.py start "$job_id" --revision "$revision" \
+     --timeout 60 --notify-thread "$thread_id" \
+     -- /bin/sh -c 'sleep 45 && echo ISSUE_28_COMPLETED'
+   ```
+
+3. `research.py github checkpoint 28 THREAD_ID experimenting NEXT --job JOB_ID` で、次の行動を wake 検証と結果の保存に限定して記録する。保存を確認したら、実験が終了する前にターンを終える。CLI を接続したままにし、人間からの追加メッセージや推論による照会を使わない。
+4. 再開ターンは最初に通知内の `validate-wake` を実行する。初回ターン終了 → ジョブ完了 → 同じスレッドの新しいターンの順と、通知の投入・消費、ジョブ ID と世代、終了コード 0、完了マーカー、受領記録、結果の保存が各1回であることを照合する。CLI の終了コードや `accepted` だけでは合格にしない。証拠を保存して、そのターンを終える。
+5. 試験後は一時設定を元に戻す。通常経路の合格が記録された後に既定値の変更を判断する。配送されなかった場合は、元の Developer スレッドで手動再開する。必要に応じて `runner.py status JOB_ID`、`notification.log`、保存済みチェックポイントを照合し、完了済み結果を回収する。
 
 ### 再開の安全条件
 
