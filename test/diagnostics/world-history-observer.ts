@@ -5,7 +5,7 @@ import type { WorldState } from "../../src/sim/world-state";
 
 type Entry = { day: number; kind: string; detail: unknown };
 
-export function observeWorldHistory(world: WorldState, limit = 1_000) {
+export function observeWorldHistory(world: WorldState, limit = 1_000, onEvent?: (event: SimulationEvent) => void) {
   const counts: Record<string, number> = {};
   const timeline: Entry[] = [];
   function record(kind: string, detail: unknown): void {
@@ -20,6 +20,7 @@ export function observeWorldHistory(world: WorldState, limit = 1_000) {
   const events = world.events ??= [];
   events.push = function (...items: SimulationEvent[]): number {
     for (const event of items) {
+      onEvent?.(event);
       const kind = classify(event.message);
       if (!kind) continue;
       const district = kind.startsWith("regional-")

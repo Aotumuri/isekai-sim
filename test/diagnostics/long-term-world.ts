@@ -17,6 +17,7 @@ import { observeAdvocacyReassessment } from "./observe-advocacy-reassessment";
 import { observeFoodAndTreasury } from "./observe-food-and-treasury";
 import { observeFuelAccounting } from "./observe-fuel-accounting";
 import { worldSignature } from "./world-signature";
+import { observePeaceFollowthrough } from "./observe-peace-followthrough";
 
 const [scenario, rawSeed, ...rawDays] = process.argv.slice(2);
 assert(["quick", "quick-default", "medium", "scale", "dense"].includes(scenario ?? ""),
@@ -121,7 +122,9 @@ if (process.env.WORLD_METRICS === "1" || advocacy || fuelAccounting || procureme
     },
   } : {}),
 };
-const history = observeWorldHistory(world);
+const peaceFollowthrough = process.env.WORLD_PEACE_FOLLOWTHROUGH === "1" ? observePeaceFollowthrough(world) : undefined;
+const history = observeWorldHistory(world, undefined, peaceFollowthrough?.recordEvent);
+peaceFollowthrough?.sampleCycle();
 const flows = createFlowTotals();
 let previous = 0, peakUnits = world.units.length, warDays = 0, unitDays = 0;
 let fastMs = 0, slowMs = 0;
@@ -140,6 +143,7 @@ for (const day of days) {
       } else stepSimulationDay(world);
       history.sampleDay();
       if (world.time.fastTick % DAYS_PER_SLOW_TICK === 0) {
+        peaceFollowthrough?.sampleCycle();
         sampleFlows(world, flows);
         fuelAccounting?.afterCycle();
         fiscalAccounting?.afterCycle();
@@ -198,3 +202,6 @@ if (process.env.WORLD_SIGNATURE === "1") {
 }
 if (redistributionSamples.length) console.log(JSON.stringify({ redistributionSamples }));
 console.log(JSON.stringify({ history: history.timeline, historyCounts: history.counts }));
+if (peaceFollowthrough) {
+  console.log(JSON.stringify({ peaceFollowthrough: { samples: peaceFollowthrough.samples, events: peaceFollowthrough.events } }));
+}
