@@ -85,3 +85,7 @@ python3 -m adf tracker-review OPERATION_ID --approve
 旧 Developer を停止して所有権を解放し、ジョブの終了を確認する。停止中に旧 `agents/runtime/` と研究記録を別の保管場所へバックアップする。`legacy-preview PROJECT` で JSON または SQLite の所有者、チェックポイントと実験履歴を確認する。`legacy-import PROJECT DIGEST` は確認した内容が変わっていない場合に、Desktop の私有領域に整合性検証済みの参照用スナップショットを作る。旧結果を参照し、必要な課題を新たに登録する。
 
 [統合方針と今回の実測](PRODUCTION.md)
+
+## 現行の実運用手順
+
+GitHub の課題選択、操作別承認、オフライン実験環境、未コミットファイルの固定、差分確認と利用量内訳は[実運用手順](OPERATING_RESEARCH.md)を参照。
