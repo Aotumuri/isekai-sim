@@ -14,7 +14,7 @@
 | 通知 | `notify` と `wake_scope` が宛先、停止世代、チェックポイント、配送状態を確認。配送が不明な要求は重ねて送らない。 |
 | Runtime Adapter | 現行実装の接点は `runner.py` の CLI 検出と Queue 呼び出し。ADF は、ランタイムを独立のアダプターから起動し、プロトコル全体を受け持つ。 |
 
-Issue #7 では専用 DB・ソケットと受付試験用経路で、300 秒の実験後に元の TUI スレッドを再開できた。Issue #28 の通常経路では実験は成功し、通知は SQLite オープン拒否で失敗した。追加調査では既定ソケット接続にも制限があり、Seatbelt に優先拒否があった。今回も管理された開発環境の中では 0.172.0 の起動時に SQLite コード 14 を再現した。ユーザーとして起動した独立プロセスでは同じ公式バイナリの標準入出力で初期化に成功した。 [Issue #7](https://github.com/Aotumuri/isekai-sim/issues/7) · [Issue #28](https://github.com/Aotumuri/isekai-sim/issues/28) · [既存の実測報告](../agents/research/reports/issue-28-normal-completion-notification.md)
+Issue #7 では専用 DB・ソケットと受付試験用経路で、300 秒の実験後に元の TUI スレッドを再開できた。Issue #28 の通常経路では実験は成功し、通知は SQLite オープン拒否で失敗した。追加調査では既定ソケット接続にも制限があり、Seatbelt に優先拒否があった。今回も管理された開発環境の中では 0.172.0 の起動時に SQLite コード 14 を再現した。ユーザーとして起動した独立プロセスでは同じ公式バイナリの標準入出力で初期化に成功した。 [Issue #7](https://github.com/Aotumuri/isekai-sim/issues/7) · [Issue #28](https://github.com/Aotumuri/isekai-sim/issues/28) · [既存の実測報告](https://github.com/Aotumuri/isekai-sim/blob/94fb666/agents/research/reports/issue-28-normal-completion-notification.md)
 
 ## 選定
 

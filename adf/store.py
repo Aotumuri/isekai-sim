@@ -46,6 +46,35 @@ CREATE TABLE IF NOT EXISTS job (
     initial_tokens INTEGER NOT NULL, waiting_since REAL, waiting_requests INTEGER, waiting_tokens INTEGER,
     UNIQUE(session, turn), UNIQUE(session, call)
 );
+
+CREATE TABLE IF NOT EXISTS research_task (
+    id INTEGER PRIMARY KEY, project INTEGER NOT NULL REFERENCES project(id),
+    title TEXT NOT NULL, criteria TEXT NOT NULL, priority INTEGER NOT NULL,
+    dependencies TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'ready', result TEXT,
+    UNIQUE(project, title)
+);
+CREATE TABLE IF NOT EXISTS research_run (
+    session INTEGER PRIMARY KEY REFERENCES session(id), generation INTEGER NOT NULL,
+    scope TEXT NOT NULL, task INTEGER REFERENCES research_task(id), state TEXT NOT NULL,
+    job_limit INTEGER NOT NULL, timeout INTEGER NOT NULL, turn_limit INTEGER NOT NULL,
+    token_limit INTEGER NOT NULL, start_turns INTEGER NOT NULL, start_tokens INTEGER NOT NULL,
+    jobs INTEGER NOT NULL DEFAULT 0, decision_turn TEXT, decision TEXT
+);
+CREATE TABLE IF NOT EXISTS research_experiment (
+    job TEXT PRIMARY KEY REFERENCES job(id), task INTEGER NOT NULL REFERENCES research_task(id),
+    program TEXT NOT NULL, timeout INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS legacy_import (
+    project INTEGER NOT NULL REFERENCES project(id), fingerprint TEXT NOT NULL, path TEXT NOT NULL,
+    PRIMARY KEY(project, fingerprint)
+);
+CREATE TABLE IF NOT EXISTS tracker_policy (
+    project INTEGER PRIMARY KEY REFERENCES project(id), operations TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS tracker_operation (
+    id TEXT PRIMARY KEY, project INTEGER NOT NULL REFERENCES project(id), repository TEXT NOT NULL,
+    kind TEXT NOT NULL, payload TEXT NOT NULL, actor TEXT NOT NULL, state TEXT NOT NULL, result TEXT, created REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS event (
     id INTEGER PRIMARY KEY AUTOINCREMENT, session INTEGER REFERENCES session(id),
     time REAL NOT NULL, kind TEXT NOT NULL, detail TEXT NOT NULL
@@ -83,6 +112,10 @@ class Store:
         self.db.execute("PRAGMA synchronous = FULL")
         self.db.executescript(SCHEMA)
         with self.db:
+            columns = {row["name"] for row in self.all("PRAGMA table_info(session)")}
+            for column in ("thread_tools", "token_floor"):
+                if column not in columns:
+                    self.db.execute(f"ALTER TABLE session ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0")
             self.db.executemany("INSERT OR IGNORE INTO role(name) VALUES (?)", [(role,) for role in DEFAULTS])
 
     def recover(self):

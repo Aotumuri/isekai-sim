@@ -51,3 +51,37 @@ python3 -m adf shutdown
 - 利用枠の自動回復は、公式状態で枯渇した枠とリセット時刻を取得できた場合にのみ、リセット後に一度確認する。回復が確認できなければ明示的な再開を待つ。
 
 [設計判断と受け入れ試験](DESIGN.md)
+
+## 自律研究
+
+「研究」で課題名、受け入れ条件、優先度、依存先を登録する。「承認範囲で開始」で対象課題、研究範囲、実験数、時間、ターン、観測トークンの上限を確認する。Developer はその範囲で Python 実験を設計できる。検証結果を返した課題に続いて、依存を満たした承認済み課題へ進む。根拠付き判断や実験が返らない場合は停止する。
+
+```sh
+python3 -m adf task 1 '基準値を測定' '同じ条件で 2 回計算し、結果を比較する' --priority 1
+python3 -m adf task 1 '再現条件を整理' '測定結果と再現条件を記録する' --depends-on 1
+python3 -m adf research-start 1 '対象は測定と手順の記録' 1 2 --jobs 2 --timeout 60 --turns 4 --tokens 250000
+python3 -m adf artifacts JOB_ID
+python3 -m adf artifacts JOB_ID result.txt --offset 0 --size 4096
+python3 -m adf research-resume 1
+```
+
+保留中の課題は `task-reopen PROJECT TASK 新しい受け入れ条件` で再登録できる。停止後の再開は既存の承認範囲と予算を維持する。中断した実験の結果が不明な場合は、履歴を確認して新規実行として承認する。以前の Desktop Developer スレッドは、最初の自律研究開始時に新しい公式ツールを備えたスレッドへ移る。旧 ID は履歴に残る。
+
+## GitHub Issues の承認
+
+中央の操作ポリシーは既定で空。登録先に `agents/config.toml` があれば、そのリポジトリの許可も照合する。「承認待ち」で対象と正確な入力を確認し、「GitHub に送信」を選んだ操作だけを既存の GitHub CLI で送る。通信障害などで結果が不明な操作は GitHub 上の実際の状態を確認する。
+
+```sh
+python3 -m adf tracker-policy 1 proposal comment progress checklist depends label complete
+python3 -m adf tracker-issue 1 123
+python3 -m adf tracker-draft 1 proposal '{"title":"仮説","body":"- [ ] 対照群を測定","priority":"P2"}'
+python3 -m adf tracker-review OPERATION_ID --approve
+```
+
+操作の入力は `proposal` が `title/body/priority`、`comment` が `issue/body`、`progress` が `issue/status/priority`、`depends` が `issue/blocked_by`、`label` が `issue/name/enabled`、`checklist` が `issue/criterion/checked`、`complete` が `issue`。ラベルは既存の GitHub ラベルを使う。`--decline` で却下できる。
+
+## 旧 ADF の取り込み
+
+旧 Developer を停止して所有権を解放し、ジョブの終了を確認する。停止中に旧 `agents/runtime/` と研究記録を別の保管場所へバックアップする。`legacy-preview PROJECT` で JSON または SQLite の所有者、チェックポイントと実験履歴を確認する。`legacy-import PROJECT DIGEST` は確認した内容が変わっていない場合に、Desktop の私有領域に整合性検証済みの参照用スナップショットを作る。旧結果を参照し、必要な課題を新たに登録する。
+
+[統合方針と今回の実測](PRODUCTION.md)

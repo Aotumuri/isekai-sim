@@ -79,7 +79,7 @@ class OrchestratorTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(job["waiting_requests"] - job["initial_requests"], 0)
         self.assertEqual(job["waiting_tokens"] - job["initial_tokens"], 0)
         self.assertEqual(job["state"], "succeeded")
-        self.assertEqual(job["wake"], "claimed")
+        self.assertEqual(job["wake"], "sent")
         self.assertIn("EXPERIMENT_COMPLETED", self.service.read_log(job["id"]))
         snapshot = self.service.log_path(job["id"]).parent / "source/fixture.txt"
         self.assertEqual(snapshot.read_text(), "committed data\n")
@@ -149,6 +149,40 @@ class OrchestratorTest(unittest.IsolatedAsyncioTestCase):
         await self.state("developer", "quota")
         await asyncio.sleep(0.2)
         self.assertEqual(self.service.session_for(self.project, "developer")["turn_requests"], 1)
+
+    async def test_autonomous_cycles_and_dependent_task(self):
+        first = self.service.add_task(self.project, "Calibration", "Compute two checksums", priority=4)
+        second = self.service.add_task(self.project, "Review", "NO_EXPERIMENT", priority=1, dependencies=[first])
+        unrelated = self.service.add_task(self.project, "Unapproved", "Must stay ready", priority=1)
+        await self.service.message(self.project, "coordinator", "hold")
+        coordinator = await self.wait(lambda: (row := self.service.session_for(self.project, "coordinator"))["turn"] and row)
+        self.service.start_research(self.project, [second, first], "FIXTURE_RESEARCH", jobs=2, turns=5)
+        waiting = await self.state("developer", "waiting")
+        done = await self.state("developer", "paused")
+        self.assertEqual((done["turn_requests"], done["thread"]), (4, waiting["thread"]))
+        self.assertEqual(self.service.session_for(self.project, "coordinator")["turn"], coordinator["turn"])
+        jobs = self.jobs()
+        self.assertEqual(len(jobs), 2)
+        for job in jobs:
+            self.assertEqual((job["state"], job["wake"]), ("succeeded", "sent"))
+            self.assertEqual(job["waiting_requests"], job["initial_requests"])
+            self.assertEqual(job["waiting_tokens"], job["initial_tokens"])
+            self.assertEqual(self.service.artifacts(job["id"], "result.txt")["text"], "332833500")
+            with self.assertRaises(ValueError):
+                self.service.artifacts(job["id"], "../../../state.sqlite3")
+            target = self.service.log_path(job["id"]).parent / "source/.adf-artifacts/link"
+            target.symlink_to(self.store.home / "state.sqlite3")
+            with self.assertRaises(OSError):
+                self.service.artifacts(job["id"], "link")
+        states = {row["id"]: row["state"] for row in self.service.status(self.project)["research_tasks"]}
+        self.assertEqual(states, {first: "completed", second: "completed", unrelated: "ready"})
+
+    async def test_research_turn_without_signal_stops(self):
+        task = self.service.add_task(self.project, "No evidence", "Report fact")
+        self.service.start_research(self.project, [task], "No fixture directive")
+        row = await self.state("developer", "paused")
+        self.assertEqual(row["turn_requests"], 1)
+        self.assertEqual(self.service.status(self.project)["research_runs"][0]["state"], "blocked")
 
     async def test_send_to_paused_and_interrupted_sessions(self):
         await self.service.message(self.project, "developer", "first")

@@ -65,6 +65,7 @@ async def main(args):
                     assert job["state"] == "succeeded", job["state"]
                     assert job["waiting_since"] and job["finished"] > job["waiting_since"]
                     assert job["waiting_requests"] == job["initial_requests"] == 1
+                    assert job["waiting_tokens"] == job["initial_tokens"] > 0
                     assert row["turn_requests"] == 2
                     assert any(e["kind"] == "assistant" for e in service.status(project)["events"])
                     print(f"turns={row['turn_requests']} wait_new_turns=0 "

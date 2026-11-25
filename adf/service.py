@@ -10,12 +10,15 @@ import sys
 
 from .codex import PATH, Codex, RuntimeError
 from .experiments import Experiments
+from .legacy import Legacy
 from .projects import clean_name, identify, issues
+from .research import Research
 from .sessions import Sessions
 from .store import ACTIVE
+from .tracker import GitHub
 
 
-class Service(Experiments, Sessions):
+class Service(Legacy, GitHub, Research, Experiments, Sessions):
     def __init__(self, store, binary, runtime_factory=None, lease=None):
         super().__init__(store, runtime_factory or (lambda *callbacks: Codex(binary, *callbacks, lease=lease)))
         self.binary = binary
@@ -96,6 +99,12 @@ class Service(Experiments, Sessions):
 
     def status(self, project=None, after=0):
         return {
+            "legacy_imports": self.store.all("SELECT fingerprint,path FROM legacy_import WHERE project=?", (project,)),
+            "tracker_operations": self.store.all("SELECT * FROM tracker_operation WHERE project=? "
+                                                 "ORDER BY created DESC LIMIT 100", (project,)),
+            "research_tasks": self.store.all("SELECT * FROM research_task WHERE project=? ORDER BY priority,id", (project,)),
+            "research_runs": self.store.all("SELECT research_run.* FROM research_run JOIN session "
+                                           "ON session.id=research_run.session WHERE project=?", (project,)),
             "projects": self.store.all("SELECT * FROM project WHERE archived=0 ORDER BY id"),
             "roles": self.store.all("SELECT * FROM role ORDER BY name"),
             "sessions": self.store.all("SELECT id,project,role,state,thread,turn,revision,tokens,turn_requests "
@@ -140,6 +149,10 @@ class Service(Experiments, Sessions):
             "template": self.set_template, "status": self.status, "log": self.read_log,
             "send": self.message, "stop": self.stop_role, "resume": self.resume_role,
             "shutdown": self.stop_all, "issues": self.list_issues, "limits": self.get_limits,
+            "task": self.add_task, "task-reopen": self.reopen_task, "research-start": self.start_research, "research-resume": self.resume_research,
+            "artifacts": self.artifacts, "tracker-policy": self.set_tracker_policy,
+            "tracker-draft": self.draft_tracker, "tracker-review": self.review_tracker, "tracker-issue": self.tracker_issue,
+            "legacy-preview": self.legacy_preview, "legacy-import": self.legacy_import,
         }
         if action not in operations:
             raise ValueError("未対応の操作です")
@@ -161,6 +174,9 @@ class Service(Experiments, Sessions):
         for task in self.tasks.copy():
             task.cancel()
         await asyncio.gather(*self.tasks.copy(), return_exceptions=True)
+        for lease in self.legacy_leases.values():
+            lease.__exit__(None, None, None)
+        self.legacy_leases.clear()
 
 
 def runtime_path():

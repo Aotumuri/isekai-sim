@@ -1,11 +1,13 @@
 """Role ownership, turn admission, checkpointing and stop transitions."""
 
 import asyncio
+from collections import Counter
 from pathlib import Path
 import sqlite3
 import time
 
-from .codex import RuntimeError
+from .codex import TOOL_VERSION, RuntimeError
+from .legacy import legacy_lease
 from .projects import checkpoint
 from .store import ACTIVE, DEFAULTS
 
@@ -18,7 +20,8 @@ class Sessions:
         self.runtime_lock = asyncio.Lock()
         self.retiring = None
         self.live = {}
-        self.dispatching = set()
+        self.legacy_leases = {}
+        self.dispatching = Counter()
         self.tasks = set()
         self.shutdown = False
 
@@ -58,7 +61,12 @@ class Sessions:
         self.live.clear()
         self.store.recover()
         if not runtime.closing:
-            self.retiring = self.background(runtime.close())
+            self.retiring = self.background(self.retire_runtime(runtime))
+
+    async def retire_runtime(self, runtime):
+        await runtime.close()
+        for session in list(self.legacy_leases):
+            self.release_inactive_legacy(session)
 
     def settings(self, role):
         settings = self.store.one("SELECT * FROM role WHERE name=?", (role,))
@@ -73,7 +81,7 @@ class Sessions:
         row = self.store.session(session)
         return row if row and row["generation"] == generation and row["state"] in states else None
 
-    def reserve(self, project, role, prompt, resume, experiment=None):
+    def reserve(self, project, role, prompt, resume, experiment=None, *, launch=True):
         if self.shutdown:
             raise ValueError("ADF は停止処理中です")
         settings = self.settings(role)
@@ -93,7 +101,8 @@ class Sessions:
             except sqlite3.IntegrityError:
                 raise ValueError("同じロールが別のプロジェクトで稼働中です") from None
             self.store.event(row["id"], "resume" if resume else "start", "開始を受け付けました")
-        self.background(self.run_turn(row["id"], row["generation"] + 1, prompt, settings, resume=resume))
+        if launch:
+            self.background(self.run_turn(row["id"], row["generation"] + 1, prompt, settings, resume=resume))
         return row["id"]
 
     def instructions(self, row, settings):
@@ -112,22 +121,27 @@ class Sessions:
         if self.runtime is not runtime:
             raise RuntimeError("Codex の接続が失われました")
         with self.store.db:
-            self.store.update_session(row["id"], thread=thread)
+            fields = {"thread": thread}
+            if not row["thread"]:
+                fields["thread_tools"] = TOOL_VERSION
+            self.store.update_session(row["id"], **fields)
         self.live[thread] = row["id"]
         return thread
 
     async def run_turn(self, session, generation, prompt, settings, *, resume=False, job=None):
         if not self.visible(session, generation, ("running",)):
             return
-        self.dispatching.add(session)
+        self.dispatching[session] += 1
         dispatched = False
         runtime = None
         try:
             row = self.visible(session, generation, ("running",))
             if not row:
                 return
-            if row["role"] == "developer" and (Path(row["path"]) / "agents/runtime/developer.json").is_file():
-                raise RuntimeError("既存の Developer 所有権を確認し、旧実行を停止・解放してください")
+            if row["role"] == "developer" and session not in self.legacy_leases:
+                lease = legacy_lease(Path(row["path"]))
+                lease.__enter__()
+                self.legacy_leases[session] = lease
             revision, working = await checkpoint(row)
             if not self.visible(session, generation, ("running",)):
                 return
@@ -136,7 +150,9 @@ class Sessions:
                 prompt = (f"Continue from the ADF checkpoint. HEAD is {revision}. "
                           f"{'The working tree changed since the checkpoint. ' if changed else ''}"
                           "Inspect actual files and reconcile saved work before changing anything.\n" + prompt)
-            if settings["budget"] and row["tokens"] >= settings["budget"]:
+            research = self.research_for(row)
+            if ((settings["budget"] and row["tokens"] >= settings["budget"])
+                    or (research and self.research_limit(row, research))):
                 self.fail(session, generation, "予算に達しました", state="paused")
                 return
             runtime = await self.connect()
@@ -168,31 +184,41 @@ class Sessions:
             if row["allowed_template"]:
                 prompt += f"\nADF authorization for this turn: one experiment named {row['allowed_template']}."
             turn = await runtime.start({**row, "thread": thread}, settings, prompt)
+            if job:
+                with self.store.db:
+                    self.store.db.execute("UPDATE job SET wake='sent' WHERE id=? AND wake='claimed'", (job,))
             current = self.store.session(session)
             if current["state"] == "stopping":
                 if not current["turn"] and current["last_turn"] != turn:
                     with self.store.db:
                         self.store.update_session(session, turn=turn)
                     await self.interrupt({**current, "thread": thread}, turn)
-            elif current["generation"] == generation and current["state"] in ("running", "draining"):
+            elif (current["generation"] == generation and current["state"] in ("running", "draining")
+                  and current["turn_requests"] == row["turn_requests"] + 1):
                 if not current["turn"] and current["last_turn"] != turn:
                     with self.store.db:
                         self.store.update_session(session, turn=turn)
-        except (OSError, ValueError, RuntimeError, TimeoutError) as error:
+        except Exception as error:
             if dispatched and runtime is self.runtime:
                 await self.abort_runtime(runtime)
-            self.fail(session, generation, str(error))
+            detail = str(error) if isinstance(error, (ValueError, RuntimeError)) else type(error).__name__
+            self.fail(session, generation, f"ターン開始に失敗しました: {detail}")
         finally:
-            self.dispatching.discard(session)
+            self.dispatching[session] -= 1
+            if not self.dispatching[session]:
+                del self.dispatching[session]
             current = self.store.session(session)
             if current["state"] in ("draining", "stopping") and not current["turn"]:
                 self.settle(session)
+            self.release_inactive_legacy(session)
 
     def fail(self, session, generation, message, *, state="interrupted"):
         row = self.visible(session, generation, ("running", "waiting", "quota"))
         if row:
             with self.store.db:
                 self.store.update_session(session, state=state, turn=None, generation=generation + 1)
+                self.store.db.execute("UPDATE research_run SET state='paused' WHERE session=? AND state='active'",
+                                      (session,))
                 self.store.event(session, "error", message)
 
     async def message(self, project, role, text, experiment=None):
@@ -230,6 +256,8 @@ class Sessions:
             self.store.update_session(session, state="stopping" if immediate else "draining",
                                       generation=row["generation"] + 1)
             self.store.db.execute("UPDATE job SET wake='suppressed' WHERE session=? AND wake='pending'", (session,))
+            self.store.db.execute("UPDATE research_run SET state='paused' WHERE session=? AND state='active'",
+                                  (session,))
             self.store.event(session, "stop", "即時停止" if immediate else "穏やかな停止")
         if immediate:
             if row["turn"]:
@@ -237,6 +265,7 @@ class Sessions:
             for job in self.active_jobs(session):
                 self.background(self.cancel_job(job["id"]))
         self.settle(session)
+        self.release_inactive_legacy(session)
 
     async def interrupt(self, row, turn):
         runtime = self.runtime
@@ -272,6 +301,12 @@ class Sessions:
             self.store.update_session(session, state="paused")
             self.store.event(session, "paused", "チェックポイントを保存しました")
 
+    def release_inactive_legacy(self, session):
+        row = self.store.session(session)
+        if row["state"] not in ACTIVE and not self.active_jobs(session):
+            if lease := self.legacy_leases.pop(session, None):
+                lease.__exit__(None, None, None)
+
     def turn_event(self, method, params):
         session = self.live.get(params.get("threadId"))
         if session is None:
@@ -291,7 +326,7 @@ class Sessions:
             count = params.get("tokenUsage", {}).get("total", {}).get("totalTokens")
             if type(count) is int and count >= 0:
                 with self.store.db:
-                    self.store.update_session(session, tokens=max(count, row["tokens"]))
+                    self.store.update_session(session, tokens=max(row["token_floor"] + count, row["tokens"]))
         elif method == "adf/approvalDenied":
             with self.store.db:
                 self.store.event(session, "approval", "Codex の権限拡張を拒否しました")
@@ -320,8 +355,12 @@ class Sessions:
                     self.store.update_session(session, state="interrupted", generation=row["generation"] + 1)
                     self.store.db.execute("UPDATE job SET wake='suppressed' WHERE session=? AND wake='pending'", (session,))
         if status == "completed" and state == "running":
-            self.wake(session)
+            if job:
+                self.wake(session)
+            else:
+                self.advance_research(row, turn["id"])
         self.settle(session)
+        self.release_inactive_legacy(session)
 
     async def quota(self, row):
         settings = self.settings(row["role"])
@@ -340,7 +379,13 @@ class Sessions:
                 return
             if attempt:
                 if not has_credits(limits) and all(window["usedPercent"] < 100 for window in windows):
-                    self.reserve(row["project"], row["role"], row["prompt"], True)
+                    if self.research_for(row):
+                        try:
+                            self.resume_research(row["project"])
+                        except ValueError:
+                            return
+                    else:
+                        self.reserve(row["project"], row["role"], row["prompt"], True)
                 return
             blocked = [window for window in windows if window["usedPercent"] >= 100]
             if not blocked or any(type(window.get("resetsAt")) is not int for window in blocked):

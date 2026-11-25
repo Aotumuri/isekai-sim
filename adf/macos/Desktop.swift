@@ -18,6 +18,7 @@ final class Desktop: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let logs = NSTextView()
     private let issues = NSTextView()
     private let history = NSTextView()
+    private let research = NSTextView()
     private let input = NSTextField()
     private var snapshot: Record = [:]
     private var events = [Record]()
@@ -27,6 +28,7 @@ final class Desktop: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var closing = false
     private var timer: Timer?
     private var refreshing = false
+    private var showingArtifact = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let menu = NSMenu()
@@ -75,10 +77,20 @@ final class Desktop: NSObject, NSApplicationDelegate, NSWindowDelegate {
                  button("即時停止", #selector(interrupt)), NSView(), label("許可する実験"), experiments]),
             activity, scroll(chat), row([input, button("開始 / 送信", #selector(send))]),
         ])
-        tab(tabs, "実験", [
-            row([jobs, button("テンプレートを登録", #selector(addExperiment)), NSView()]), scroll(logs),
+        tab(tabs, "研究", [
+            row([button("課題を登録", #selector(addTask)), button("承認範囲で開始", #selector(startResearch)),
+                 button("研究を再開", #selector(resumeResearch)), button("穏やかに停止", #selector(stopResearch)),
+                 button("即時停止", #selector(interruptResearch)), NSView()]), scroll(research),
         ])
-        tab(tabs, "GitHub Issues", [row([button("一覧を取得", #selector(loadIssues)), NSView()]), scroll(issues)])
+        tab(tabs, "実験", [
+            row([jobs, button("テンプレートを登録", #selector(addExperiment)),
+                 button("成果物を確認", #selector(loadArtifact)), NSView()]), scroll(logs),
+        ])
+        tab(tabs, "GitHub Issues", [
+            row([button("一覧", #selector(loadIssues)), button("詳細", #selector(loadIssue)),
+                 button("操作ポリシー", #selector(trackerPolicy)), button("下書き", #selector(trackerDraft)),
+                 button("承認待ち", #selector(trackerReview)), NSView()]), scroll(issues),
+        ])
         tab(tabs, "履歴と利用量", [row([button("購読枠を取得", #selector(loadLimits)), NSView()]), scroll(history)])
         let content = column([top, tabs, status])
         content.edgeInsets = NSEdgeInsets(top: 14, left: 16, bottom: 14, right: 16)
@@ -179,10 +191,11 @@ final class Desktop: NSObject, NSApplicationDelegate, NSWindowDelegate {
         events.append(contentsOf: records("events"))
         cursor = events.last?["id"] as? Int ?? cursor
         renderChat()
+        renderResearch()
         if status.stringValue == "ADF に接続中" || status.stringValue == "ADF に接続済み" {
             status.stringValue = result["shutting_down"] as? Bool == true ? "停止処理中" : "ADF に接続済み"
         }
-        if jobs.indexOfSelectedItem >= 0 && !logs.string.isEmpty { loadLog() }
+        if !showingArtifact && jobs.indexOfSelectedItem >= 0 && !logs.string.isEmpty { loadLog() }
     }
 
     private func refill(_ menu: NSPopUpButton, _ titles: [String]) {
@@ -227,6 +240,7 @@ final class Desktop: NSObject, NSApplicationDelegate, NSWindowDelegate {
         selected = value
         events.removeAll()
         cursor = 0
+        showingArtifact = false
         logs.string = ""
         issues.string = ""
         experiments.selectItem(at: 0)
@@ -274,6 +288,73 @@ final class Desktop: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func drain() { projectRequest("stop", ["role": role, "immediate": false]) }
     @objc private func interrupt() { projectRequest("stop", ["role": role, "immediate": true]) }
 
+    private func renderResearch() {
+        let run = records("research_runs").first ?? [:]
+        let lines = records("research_tasks").map {
+            "#\($0["id"] ?? "")  P\($0["priority"] ?? "")  \($0["state"] ?? "")  \($0["title"] ?? "")"
+        }
+        if run.isEmpty {
+            research.string = lines.joined(separator: "\n")
+        } else {
+            research.string = "研究 \(run["state"] ?? "")  ·  現在の課題 #\(run["task"] ?? "")  ·  実験 \(run["jobs"] ?? 0) / \(run["job_limit"] ?? 0)\n\n"
+                + lines.joined(separator: "\n")
+        }
+    }
+
+    @objc private func addTask() {
+        guard selected != nil, let fields = form("研究課題を登録", [
+            ("課題名", ""), ("受け入れ条件", ""), ("優先度（1〜5）", "3"), ("依存課題 ID（カンマ区切り）", ""),
+        ]), let priority = Int(fields[2]), let dependencies = identifiers(fields[3]) else { return }
+        projectRequest("task", ["title": fields[0], "criteria": fields[1],
+                                 "priority": priority, "dependencies": dependencies])
+    }
+
+    @objc private func startResearch() {
+        guard selected != nil, let fields = form("自律研究を承認", [
+            ("研究範囲と制約", ""), ("承認する課題 ID（カンマ区切り）", ""),
+            ("実験回数の上限", "4"), ("実験単位の秒数上限", "120"),
+            ("ターン上限", "8"), ("観測トークン予算", "40000"),
+        ]), let ids = identifiers(fields[1]), !ids.isEmpty,
+              let jobs = Int(fields[2]), let timeout = Int(fields[3]),
+              let turns = Int(fields[4]), let tokens = Int(fields[5]) else { return }
+        projectRequest("research-start", ["tasks": ids, "scope": fields[0], "jobs": jobs,
+                                           "timeout": timeout, "turns": turns, "tokens": tokens])
+    }
+
+    private func identifiers(_ text: String) -> [Int]? {
+        let parts = text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let numbers = parts.compactMap { Int($0) }
+        return numbers.count == parts.count ? numbers : nil
+    }
+
+    @objc private func resumeResearch() { projectRequest("research-resume") }
+    @objc private func stopResearch() { projectRequest("stop", ["role": "developer", "immediate": false]) }
+    @objc private func interruptResearch() { projectRequest("stop", ["role": "developer", "immediate": true]) }
+
+    @objc private func loadArtifact() {
+        let index = jobs.indexOfSelectedItem
+        let values = records("jobs")
+        guard values.indices.contains(index), let job = values[index]["id"] as? String else { return }
+        request("artifacts", ["job": job]) { [weak self] value in
+            guard let self else { return }
+            let files = (value as? [Record] ?? []).compactMap { $0["name"] as? String }
+            guard let name = files.first else {
+                self.status.stringValue = "この実験の成果物はありません"
+                return
+            }
+            guard let fields = self.form("成果物  \(files.joined(separator: "、"))",
+                                         [("ファイル名", name), ("開始バイト", "0")]),
+                  let offset = Int(fields[1]) else { return }
+            self.request("artifacts", ["job": job, "path": fields[0], "offset": offset, "size": 16384]) { result in
+                if let page = result as? Record {
+                    self.logs.string = "\(fields[0]) · \(page["offset"] ?? 0)–\(page["next"] ?? 0) / \(page["total"] ?? 0) バイト\n\n"
+                        + (page["text"] as? String ?? "")
+                    self.showingArtifact = true
+                }
+            }
+        }
+    }
+
     @objc private func addExperiment() {
         guard selected != nil, let fields = form("実験テンプレート",
               [("識別名", ""), ("コマンド引数（JSON 配列）", #"["/bin/sleep","35"]"#), ("制限時間（秒）", "60")]),
@@ -283,6 +364,7 @@ final class Desktop: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func loadLog() {
+        showingArtifact = false
         let index = jobs.indexOfSelectedItem
         let values = records("jobs")
         guard values.indices.contains(index), let job = values[index]["id"] as? String else { return }
@@ -300,6 +382,65 @@ final class Desktop: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 "#\($0["number"] ?? "") \($0["state"] ?? "") \($0["title"] ?? "")\n\($0["url"] ?? "")"
             }.joined(separator: "\n\n")
         }
+    }
+
+    @objc private func loadIssue() {
+        guard let fields = form("GitHub Issue", [("Issue 番号", "")]), let issue = Int(fields[0]) else { return }
+        projectRequest("tracker-issue", ["issue": issue]) { [weak self] value in
+            self?.issues.string = self?.jsonText(value) ?? ""
+        }
+    }
+
+    @objc private func trackerPolicy() {
+        guard let fields = form("ローカルのトラッカーポリシー", [
+            ("許可する操作（proposal, comment, progress, depends, label, checklist, complete）", ""),
+        ]) else { return }
+        let operations = fields[0].split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        projectRequest("tracker-policy", ["operations": operations])
+    }
+
+    @objc private func trackerDraft() {
+        guard let fields = form("GitHub 操作の下書き", [
+            ("操作の種類", "proposal"), ("操作内容（JSON）", #"{"title":"","body":"","priority":"P2"}"#),
+        ]), let payload = (try? JSONSerialization.jsonObject(with: Data(fields[1].utf8))) as? Record
+        else { return }
+        projectRequest("tracker-draft", ["kind": fields[0], "payload": payload]) { [weak self] value in
+            self?.status.stringValue = "承認待ち: \(value)"
+        }
+    }
+
+    @objc private func trackerReview() {
+        let drafts = records("tracker_operations").filter { ($0["state"] as? String) == "pending" }
+        guard let first = drafts.first else {
+            status.stringValue = "承認待ちの操作はありません"
+            return
+        }
+        let summary = drafts.map { "\(($0["id"] as? String ?? "").prefix(12)) · \($0["kind"] ?? "")" }
+        guard let fields = form("承認待ち  \(summary.prefix(8).joined(separator: "、"))",
+              [("操作 ID または先頭12文字", String((first["id"] as? String ?? "").prefix(12)))]),
+              let draft = drafts.first(where: { ($0["id"] as? String)?.hasPrefix(fields[0]) == true }),
+              fields[0].count >= 12, let id = draft["id"] as? String else { return }
+        let alert = NSAlert()
+        alert.messageText = "\(draft["repository"] ?? "") · \(draft["kind"] ?? "")"
+        let text = NSTextView(frame: NSRect(x: 0, y: 0, width: 510, height: 210))
+        text.string = draft["payload"] as? String ?? ""
+        let accessory = scroll(text)
+        accessory.frame = NSRect(x: 0, y: 0, width: 510, height: 210)
+        alert.accessoryView = accessory
+        alert.addButton(withTitle: "保留")
+        alert.addButton(withTitle: "GitHub に送信")
+        alert.addButton(withTitle: "却下")
+        switch alert.runModal() {
+        case .alertSecondButtonReturn: request("tracker-review", ["operation": id, "approve": true])
+        case .alertThirdButtonReturn: request("tracker-review", ["operation": id, "approve": false])
+        default: break
+        }
+    }
+
+    private func jsonText(_ value: Any) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys])
+        else { return "" }
+        return String(decoding: data, as: UTF8.self)
     }
 
     @objc private func loadLimits() {

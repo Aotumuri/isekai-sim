@@ -11,25 +11,15 @@ import signal
 import stat
 import subprocess
 import sys
-import tempfile
 import time
 import uuid
 
 from .service import Service
 from .store import Store, owner_lock, private_dir
 from .codex import RuntimeError
+from .ipc_support import atomic_json as write
 
 MAX_REQUEST = 65536
-
-
-def write(path, data):
-    fd, name = tempfile.mkstemp(dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, ensure_ascii=False)
-        os.replace(name, path)
-    finally:
-        Path(name).unlink(missing_ok=True)
 
 
 def mailbox(home):
@@ -155,6 +145,6 @@ async def receive(service, box):
                 try:
                     if response.stat().st_mtime < time.time() - 300:
                         response.unlink(missing_ok=True)
-                except FileNotFoundError:
+                except OSError:
                     pass
         await asyncio.sleep(0.15)
