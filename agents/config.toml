@@ -18,5 +18,5 @@ close_on = "local"
 
 [execution]
 codex_cli_path = "/opt/homebrew/bin/codex"
-auto_resume = true
+auto_resume = false
 max_active_workers = 1
