@@ -43,9 +43,9 @@ python3 agents/tools/runner.py recover probe-1
 
 ### Issue #28 の通常通知
 
-人間が通常使う端末で `HOME`、`CODEX_HOME`、`CODEX_SQLITE_HOME`、有効な `sqlite_home`、CLI のバージョンを確認し、実験監督が継承する値と照合する。直接配送の候補は、通常スレッドを保持するローカル daemon に通知プロセスが接続できる構成。既定の daemon は `codex app-server daemon version` で接続を確認できる。ヘルプの表示は引数の確認に使う。
+Codex 0.172.0 の macOS 版は、ファイルシステム制限のあるコマンドから既定の app-server 制御ソケットへのアクセスを強制的に拒否する。この拒否はカスタム権限プロファイルの `network.unix_sockets` やファイルシステムの許可より優先される。既定ソケットを許可リストに追加する手順は採用できない。[調査報告](../research/reports/issue-28-normal-completion-notification.md#カスタム権限プロファイル)
 
-明示接続を採用する場合は、所有者が既存の状態と現行の権限で使える app-server を用意し、同じエンドポイントに `codex --remote unix://PATH -C "$PWD"` で手動接続して Developer を開始する。通知も `codex queue --remote unix://PATH --resume --thread THREAD_ID --message TEXT` で同じサーバーを選ぶ。既定の制御ソケットを選ぶ場合は `unix://` を使う。明示接続にはランナーへのエンドポイント指定の実装と、切り離した子からの接続が現在の権限で許可されていることの確認が必要。サーバーの起動や接続先の変更を行う前に所有者の承認を得る。現時点では通知子から利用できるエンドポイントが確認できていない。[Codex CLI](https://learn.chatgpt.com/docs/developer-commands?surface=cli#codex-queue) · [Codex App Server](https://learn.chatgpt.com/docs/app-server)
+公式の `codex queue --remote ENDPOINT --resume --thread THREAD_ID --message TEXT` は、通知側の SQLite 初期化を省き、接続先のサーバーに状態管理を委ねる。通常運用では、管理ポリシー上で通知に使えるエンドポイントが用意され、同サーバーが Developer スレッドを保持することが前提。現時点で該当する経路は確認できていない。人間の端末からの `codex app-server daemon version` はサーバー側の確認に使える。サンドボックス内の通知経路は別途確認が必要。[Codex CLI](https://learn.chatgpt.com/docs/developer-commands?surface=cli#codex-queue) · [Codex App Server](https://learn.chatgpt.com/docs/app-server)
 
 通常の配送経路が使える環境で、所有者が今回限りの `auto_resume = true` を承認した後に試験する。
 

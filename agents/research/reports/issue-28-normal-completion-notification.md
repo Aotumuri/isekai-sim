@@ -36,3 +36,11 @@ Codex は有効な `sqlite_home`、`CODEX_SQLITE_HOME`、Codex ホームの順�
 親と切り離した子で `codex app-server daemon version` が既定の制御ソケットへの接続時に `EPERM` で失敗した。ワークスペース内と `/private/tmp` でも Unix ソケットの bind が `EPERM` だった。CLI のヘルプに配送機能が表示されても、通知プロセスから通常スレッドを保持するサーバーに接続できることは確認できていない。標準の同一 app-server 経路を採用するには、現在の権限で通知子から接続できるエンドポイントと、人間による同じサーバー上での Developer の手動起動が必要。[通常通知の再試験手順](../../docs/runner.md#issue-28-の通常通知)に前提と合格条件を記載した。
 
 通常試験は起動前にブロックした。この調査スレッドの ID は保存済み Developer 所有者と異なり、実行チェックポイントと所有権は保持した。30〜60 秒のジョブ、通常配送、同一スレッドでの wake と結果の一回限りの回収は未実施。既定の `execution.auto_resume = false` と手動再開を維持する。テストのコピーで既定を true にすると旧回帰 `test_stop_drain_resume_and_stale_notification` の最初の拒否アサーションが失敗した。設定をテストごとに明示し、無効時の拒否、有効時の通常通知、graceful shutdown 専用 wake、重複拒否、手動再開を模擬 CLI で検証した。運用回帰 24 件が通過した（`cfcc8c9`）。モデル利用量は未取得。
+
+## カスタム権限プロファイル
+
+インストール済み CLI 0.172.0 の `codex sandbox --permission-profile NAME --include-managed-config` で、一時的な `-c` 設定を与えた。名前付きプロファイル、`extends = ":workspace"`、明示的なファイルシステム規則、`network.unix_sockets` の `allow` は設定解決を通過した。無効な親名、ファイルシステムの値、ソケットの値は設定エラーになった。有効な設定も、このセッションでは Seatbelt の二重適用時に `sandbox_apply: Operation not permitted` で停止したため、作成したプロファイルでコマンドが実行できたという実測はない。診断のソケット名には未使用のパスを指定した。 [公式 Permissions](https://learn.chatgpt.com/docs/permissions) · [0.172.0 の設定スキーマ](https://github.com/openai/codex/blob/rust-v0.172.0/codex-rs/core/config.schema.json)
+
+`:workspace` の継承はワークスペースと一時ディレクトリへの書き込みを継承し、`.git`、`.agents`、`.codex`、`.aws` の保護を維持できる。管理設定は引き続き上位にある。Unix ソケット許可が有効な場合、対象パスへの接続を許すが、プロファイルには RPC メソッドやスレッド ID を制限する機能がない。app-server は Queue を含むセッション操作 API を公開するので、ソケットの許可を wake 一件分の権限として扱えない。 [公式 Permissions](https://learn.chatgpt.com/docs/permissions) · [App Server](https://learn.chatgpt.com/docs/app-server)
+
+0.172.0 の Seatbelt 実装は、ファイルシステム制限のあるプロセスに対し、共有 daemon ソケットのディレクトリへのファイルアクセスと Unix ソケットへの接続を、許可規則の後で明示的に拒否する。インストール済みバイナリにもこの拒否規則が含まれる。既定の制御ソケットはそのディレクトリ内を指す。したがって、ユーザー権限のプロファイルで既存 daemon を許可する構成は採用できない。明示的な remote Queue が SQLite を直接開かない点は確認できたが、現在の権限で利用できる配信用エンドポイントは未確認。グローバル設定、所有権、ライフサイクルとチェックポイントは保持し、通常の受け入れ試験は保留した。 [0.172.0 の Seatbelt ルール適用順](https://github.com/openai/codex/blob/rust-v0.172.0/codex-rs/sandboxing/src/seatbelt.rs#L876) · [daemon の拒否規則](https://github.com/openai/codex/blob/rust-v0.172.0/codex-rs/sandboxing/src/seatbelt_daemon.rs#L5)
