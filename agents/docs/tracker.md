@@ -13,7 +13,7 @@
 | `is:issue is:open label:"status:validating"` | 成果や受入条件の検証中 |
 | `is:issue is:open label:"status:blocked"` | 先行成果、環境、承認などの前提待ち |
 | `is:issue is:open label:"status:paused"` | 意図的な延期、保留、中断 |
-| `is:issue is:open label:"status:local-done"` | ローカルの作業は完了し、公開またはクローズ待ち |
+| `is:issue is:open label:"status:local-done"` | ローカルで受入・検証・証拠・コミットを完了し、ローカル完了としてクローズを待つ |
 | `is:issue is:closed reason:completed` | 完了としてクローズ済み |
 
 GitHub の開閉とクローズ理由を直接使う。未計画・重複などで閉じた Issue は `closed` と表示され、`state_reason` で理由を確認できる。開いている課題には `status:*` を一つ付ける。手動起票直後に未設定なら `proposed` として扱う。手動で閉じる場合は `status:*` を外し、再オープンする場合は適切な状態を設定する。開閉操作とラベルの編集はどちらも GitHub 上で行える。
@@ -46,7 +46,7 @@ GitHub の開閉とクローズ理由を直接使う。未計画・重複など�
 
 Coordinator は由来、既存の結果、未確認事項、着手条件、確認できる受入項目を起票時に記録する。人の提案の代理起票には `--origin human` を使う。AI 自身の提案は `--origin ai` で起票すると題名に `[AI]` が付く。重複を調べ、独立して判断できる範囲で提案を分ける。
 
-Developer は担当決定、引き継ぎ、実験完了、最終検証の節目で `show` から最新の本文とコメントを読む。明確化とスコープ拡張を区別し、処理したコメント ID と更新日時を保存する。実験の結果待ちでターンを終える場合は `experimenting` を維持する。公開がクローズの条件なら公開の証拠を確認してから `progress NUMBER completed --published` を使う。公開とローカルの成果をコメントで区別する。
+Developer は担当決定、引き継ぎ、実験完了、最終検証の節目で `show` から最新の本文とコメントを読む。明確化とスコープ拡張を区別し、処理したコメント ID と更新日時を保存する。実験の結果待ちでターンを終える場合は `experimenting` を維持する。Issue を完了としてクローズするには、受入基準を満たし、必要な検証を通過し、研究結果と証拠を保存し、該当するソース・文書をローカルコミットしていることを確認する。`close_on = "local"` の場合は push を完了条件にせず、`progress NUMBER completed` を使う。`close_on = "published"` の互換設定では `--published` の公開証拠を確認する。完了コメントではローカル検証済みの状態と、公開済み成果がある場合に限る公開状態を明確に分ける。push と PR の認証ポリシーは変更しない。
 
 チェック項目は `- [ ] 項目本文` を使い、検証済みの項目ごとに Markdown 記号や句読点を含む本文全体を `--check-task` に渡す。コード例中の項目は照合から外れる。一致がゼロまたは複数なら更新前に停止する。
 

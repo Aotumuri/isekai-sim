@@ -8,7 +8,7 @@ OPEN_STATES = {
     "validating": ("006b75", "Verifying results or acceptance criteria"),
     "paused": ("fbca04", "Intentionally deferred or interrupted"),
     "blocked": ("b60205", "Waiting for a prerequisite"),
-    "local-done": ("c5def5", "Local work complete; publication or closure pending"),
+    "local-done": ("c5def5", "Locally verified work complete; closure pending"),
 }
 PRIORITIES = {
     "P1": ("b60205", "Highest priority: important prerequisite or urgent evidence"),

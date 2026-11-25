@@ -281,6 +281,15 @@ class GitHubTrackerTest(unittest.TestCase):
         self.assertEqual(result["labels"], ["bug"])
         self.assertEqual(module.split_body(result)[0], "- [x] Finish")
 
+    def test_local_close_policy_does_not_require_publication(self):
+        self.settings["tracker"]["github"]["close_issue"] = "allow"
+        self.settings["tracker"]["github"]["close_on"] = "local"
+        number = self.tracker.create("proposal", "- [ ] Finish locally", "human", "p", True)["number"]
+        result = self.tracker.progress(number, "completed", False, False, ["Finish locally"])
+        self.assertEqual(result["state"], "closed")
+        self.assertEqual(result["state_reason"], "completed")
+        self.assertEqual(module.split_body(result)[0], "- [x] Finish locally")
+
     def test_correct_closed_issue_and_link_result(self):
         body = '- [ ] Verify\r\n\n<!-- research-meta: {"origin":"human"} -->'
         number = self.tracker.create("proposal", "Criteria", "human", "p", True)["number"]

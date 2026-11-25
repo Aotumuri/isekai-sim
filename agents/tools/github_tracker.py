@@ -213,8 +213,10 @@ class GitHubTracker:
         if status == "completed":
             permit("tracker.github", "close_issue", approved, self.settings)
             close_on = self.options.get("close_on", "published")
-            if close_on not in ("published", "local") or (close_on == "published" and not published):
-                raise ValueError("Closure requires the configured published completion evidence; use local-done")
+            if close_on not in ("published", "local"):
+                raise ValueError("Unknown close_on policy")
+            if close_on == "published" and not published:
+                raise ValueError("Closure requires the configured published completion evidence")
             payload.update(state="closed", state_reason="completed")
         checked = check_tasks(text, tasks)
         if checked != text:

@@ -14,7 +14,7 @@ delete_label = "allow"
 update_issue = "allow"
 comment = "allow"
 close_issue = "allow"
-close_on = "published"
+close_on = "local"
 
 [execution]
 codex_cli_path = "/opt/homebrew/bin/codex"

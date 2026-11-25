@@ -209,7 +209,7 @@ def github_parser(commands):
     actions.choices["comment"].add_argument("--key", required=True)
     progress = actions.choices["progress"]
     progress.add_argument("status", choices=GITHUB_STATES)
-    progress.add_argument("--published", action="store_true")
+    progress.add_argument("--published", action="store_true", help=argparse.SUPPRESS)
     progress.add_argument("--check-task", action="append", default=[], metavar="TEXT")
     checklist = actions.choices["checklist"]
     checklist.add_argument("--check-task", action="append", required=True, metavar="TEXT")
