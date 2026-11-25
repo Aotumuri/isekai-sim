@@ -23,9 +23,7 @@ class FrameworkTest(unittest.TestCase):
         self.research.mkdir()
         for path in TOOLS.glob("*.py"):
             shutil.copy(path, self.tools / path.name)
-        settings = (TOOLS.parent / "config.toml").read_text()
-        (self.tools.parent / "config.toml").write_text(
-            settings.replace('backend = "github"', 'backend = "local"'))
+        self.write_config()
         self.save(self.research / "state.json", {"version": 1, "tasks": {}, "reviews": {}})
         self.git("init", "-q")
         (self.root / "source.txt").write_text("committed")
@@ -33,6 +31,13 @@ class FrameworkTest(unittest.TestCase):
         self.git("-c", "user.name=Test", "-c", "user.email=test@example.invalid",
                  "-c", "commit.gpgsign=false", "commit", "-qm", "Fixture")
         self.revision = self.git("rev-parse", "HEAD").stdout.strip()
+
+    def write_config(self, *, auto_resume=False, codex_cli_path=""):
+        (self.tools.parent / "config.toml").write_text(
+            '[tracker]\nbackend = "local"\n'
+            f'[execution]\nauto_resume = {str(auto_resume).lower()}\n'
+            f'codex_cli_path = {json.dumps(codex_cli_path)}\n'
+        )
 
     def git(self, *args):
         return subprocess.run(["git", *args], cwd=self.root, check=True,
@@ -150,10 +155,7 @@ class FrameworkTest(unittest.TestCase):
             path.write_text("#!/bin/sh\nprintf '%s\\n' "
                             "'Queue a message for an existing session --thread --message --resume'\n")
             path.chmod(0o700)
-        settings = self.tools.parent / "config.toml"
-        settings.write_text(settings.read_text().replace(
-            'codex_cli_path = "/opt/homebrew/bin/codex"',
-            f"codex_cli_path = {json.dumps(str(configured))}"))
+        self.write_config(codex_cli_path=str(configured))
         env = {**os.environ, "PATH": str(self.root), "CODEX_APP_RUNTIME_CLI_PATH": str(bundled)}
         env.pop("CODEX_CLI_PATH", None)
 
@@ -175,31 +177,38 @@ class FrameworkTest(unittest.TestCase):
         environment = {**os.environ, "CODEX_CLI_PATH": str(fake),
                        "DELIVERIES": str(marker)}
         self.task("claim", "fixture")
-        for exit_code, status in ((0, "accepted"), (9, "failed")):
+        cases = (("probe-accepted", 0, "accepted", True),
+                 ("probe-failed", 9, "failed", True),
+                 ("ordinary-accepted", 0, "accepted", False))
+        for job, exit_code, status, probe in cases:
+            self.write_config(auto_resume=not probe)
             fake.write_text("#!/bin/sh\nif [ \"$1\" = help ]; then\n"
                             "  echo 'Queue a message for an existing session --thread --message --resume'\n"
                             "  exit 0\nfi\nprintf 'attempt\\n' >> \"$DELIVERIES\"\n"
                             "printf '%s\\n' \"$@\"\n"
                             f"exit {exit_code}\n")
             fake.chmod(0o700)
-            self.start(status, "print('short job')", "--notify-thread", "fixture",
-                       "--acceptance-probe", timeout=330, env=environment)
-            state = self.wait_for(status, lambda entry: entry["notification"]["status"] == status)
+            options = ["--acceptance-probe"] if probe else []
+            self.start(job, "print('short job')", "--notify-thread", "fixture",
+                       *options, timeout=330, env=environment)
+            state = self.wait_for(job, lambda entry: entry["notification"]["status"] == status)
             self.assertEqual(state["status"], "succeeded")
             self.assertEqual(state["timeout_s"], 330)
-            self.call("runner", "recover", status, env=environment)
+            self.call("runner", "recover", job, env=environment)
             if status == "accepted":
                 generation = state["notification"]["generation"]
-                args = (self.manifest(status).parent / "notification.log").read_text().splitlines()
+                args = (self.manifest(job).parent / "notification.log").read_text().splitlines()
                 self.assertEqual(args[:5], ["queue", "--resume", "--thread", "fixture", "--message"])
-                self.assertIn(f"validate-wake {status} {generation}", args[5])
-                self.assertIn("end the turn without starting research", args[5])
-                self.call("control", "validate-wake", status, generation)
-                self.assertNotEqual(self.call("control", "validate-wake", status, generation,
+                self.assertIn(f"validate-wake {job} {generation}", args[5])
+                self.assertEqual("end the turn without starting research" in args[5], probe)
+                self.assertEqual(state["notification"]["wake_scope"], "research")
+                self.call("control", "validate-wake", job, generation)
+                self.assertNotEqual(self.call("control", "validate-wake", job, generation,
                                               check=False).returncode, 0)
-        self.assertEqual(marker.read_text().splitlines(), ["attempt", "attempt"])
+        self.assertEqual(marker.read_text().splitlines(), ["attempt"] * len(cases))
 
     def test_stop_drain_resume_and_stale_notification(self):
+        self.write_config(auto_resume=False)
         fake = self.root / "fake-codex"
         fake.write_text("#!/bin/sh\nif [ \"$1\" = help ]; then\n"
                         " echo 'Queue a message for an existing session --thread --message --resume'\n"
@@ -207,8 +216,10 @@ class FrameworkTest(unittest.TestCase):
         fake.chmod(0o700)
         env = {**os.environ, "CODEX_CLI_PATH": str(fake)}
         self.task("claim", "fixture")
-        self.assertNotEqual(self.start("denied", "pass", "--notify-thread", "fixture",
-                                       check=False, env=env).returncode, 0)
+        denied = self.start("denied", "pass", "--notify-thread", "fixture", check=False, env=env)
+        self.assertNotEqual(denied.returncode, 0)
+        self.assertIn("Automatic continuation is disabled by repository policy", denied.stderr)
+        self.assertFalse(self.manifest("denied").parent.exists())
         self.start("drained", "import time; time.sleep(1)", "--notify-thread", "fixture",
                    "--acceptance-probe", env=env)
         self.call("control", "drain", "test")
@@ -260,8 +271,7 @@ time.sleep(20)
         self.assertEqual((result_path / "experiment.log").read_text().splitlines(), ["out", "err"])
 
     def test_graceful_external_wake_only_finalizes_and_new_thread_can_resume(self):
-        settings = self.tools.parent / "config.toml"
-        settings.write_text(settings.read_text().replace("auto_resume = false", "auto_resume = true"))
+        self.write_config(auto_resume=True)
         fake = self.root / "fake-codex"
         fake.write_text("#!/bin/sh\nif [ \"$1\" = help ]; then\n"
                         " echo 'Queue a message for an existing session --thread --message --resume'\n"
