@@ -43,9 +43,14 @@ final class Desktop: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         if CommandLine.arguments.contains("--smoke") {
             apply(["projects": [["id": 1, "name": "動作確認"]], "roles": [["name": "coordinator"]],
-                   "sessions": [], "jobs": [], "templates": [], "events": [], "shutting_down": false])
+                   "sessions": [["role": "developer", "tokens": 17, "turn_requests": 1]],
+                   "research_preset": ["name": "autonomous", "jobs": 0, "turns": 0, "tokens": 0, "recovery": "confirmed"],
+                   "research_runs": [["state": "queued", "job_limit": 0, "turn_limit": 0, "token_limit": 0]],
+                   "jobs": [], "templates": [], "events": [], "shutting_down": false])
             window.displayIfNeeded()
             precondition(window.isVisible && projects.numberOfItems == 1 && roles.numberOfItems == 1)
+            precondition(research.string.contains("autonomous") && research.string.contains("課題待機")
+                         && research.string.contains("17 / 無制限"))
             print("AppKit desktop constructed and rendered")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.terminate(nil) }
             return
@@ -80,7 +85,8 @@ final class Desktop: NSObject, NSApplicationDelegate, NSWindowDelegate {
         tab(tabs, "研究", [
             row([button("課題を登録", #selector(addTask)), button("承認範囲で開始", #selector(startResearch)),
                  button("研究を再開", #selector(resumeResearch)), button("穏やかに停止", #selector(stopResearch)),
-                 button("即時停止", #selector(interruptResearch)), button("差分確認", #selector(commitPreview)), NSView()]), scroll(research),
+                 button("即時停止", #selector(interruptResearch)), button("差分確認", #selector(commitPreview)), NSView()]),
+            row([button("運用プリセット", #selector(changeResearchPreset)), NSView()]), scroll(research),
         ])
         tab(tabs, "実験", [
             row([jobs, button("テンプレートを登録", #selector(addExperiment)),
@@ -288,16 +294,36 @@ final class Desktop: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func drain() { projectRequest("stop", ["role": role, "immediate": false]) }
     @objc private func interrupt() { projectRequest("stop", ["role": role, "immediate": true]) }
 
+    private func limitText(_ limit: Int?) -> String {
+        guard let limit else { return "要指定" }
+        return limit == 0 ? "無制限" : limit.formatted()
+    }
+
     private func renderResearch() {
         let run = records("research_runs").first ?? [:]
         let remote = records("github_runs").first ?? [:]
         let lines = records("research_tasks").map {
             "#\($0["id"] ?? "")  P\($0["priority"] ?? "")  \($0["state"] ?? "")  \($0["title"] ?? "")"
         }
+        let preset = snapshot["research_preset"] as? Record ?? [:]
+        let settings = "次回の設定: \(preset["name"] ?? "未設定")  ·  観測トークン \(limitText(preset["tokens"] as? Int))  ·  ターン \(limitText(preset["turns"] as? Int))  ·  実験 \(limitText(preset["jobs"] as? Int))  ·  公式利用枠回復 \(preset["recovery"] ?? "ロール設定")\n"
         if run.isEmpty {
-            research.string = lines.joined(separator: "\n")
+            research.string = settings + "\n" + lines.joined(separator: "\n")
         } else {
-            research.string = "研究 \(run["state"] ?? "")  ·  現在の課題 #\(remote["issue"] ?? run["task"] ?? "")  ·  実験 \(run["jobs"] ?? 0) / \(run["job_limit"] ?? 0)\n\n"
+            let developer = records("sessions").first { ($0["role"] as? String) == "developer" } ?? [:]
+            let used = max(0, (developer["tokens"] as? Int ?? 0) - (run["start_tokens"] as? Int ?? 0))
+            let limit = run["token_limit"] as? Int ?? 0
+            let config = (run["scope"] as? String).flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? Record }
+            let activePreset = config?["preset"] as? Record
+            let turns = max(0, (developer["turn_requests"] as? Int ?? 0) - (run["start_turns"] as? Int ?? 0))
+            let reason = limit > 0 && used >= limit ? " · 予算到達（研究を再開して合計予算を指定）" : ""
+            let state = run["state"] as? String == "queued" ? "課題待機" : (run["state"] as? String ?? "")
+            let recovery = activePreset?["recovery"] ?? "ロール設定"
+            let review = activePreset?["github_review"] as? String == "ask" || preset["github_review"] as? String == "ask"
+                ? "個別承認" : "プロジェクトポリシー"
+            research.string = settings + "\n研究 \(state)  ·  \(activePreset?["name"] ?? "個別設定")  ·  課題 #\(remote["issue"] ?? run["task"] ?? "")  ·  実験 \(run["jobs"] ?? 0) / \(limitText(run["job_limit"] as? Int))  ·  ターン \(turns) / \(limitText(run["turn_limit"] as? Int))\n"
+                + "観測トークン \(used.formatted()) / \(limitText(limit))（キャッシュ済み入力を含む）\(reason)\n"
+                + "実験 1 回 \(run["timeout"] ?? "-") 秒  ·  公式利用枠回復 \(recovery)  ·  GitHub 書き込み \(review)\n\n"
                 + lines.joined(separator: "\n")
         }
     }
@@ -310,14 +336,51 @@ final class Desktop: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                  "priority": priority, "dependencies": dependencies])
     }
 
+    @objc private func changeResearchPreset() {
+        let current = snapshot["research_preset"] as? Record ?? [:]
+        guard let project = selected, let choice = form("運用プリセットを選択", [
+            ("manual / controlled / autonomous", current["name"] as? String ?? "controlled"),
+        ]) else { return }
+        projectRequest("research-preset", ["name": choice[0]]) { [weak self] value in
+            guard let self, self.selected == project, let defaults = value as? Record else { return }
+            let same = current["name"] as? String == choice[0]
+            let preset = same ? current : defaults
+            func field(_ key: String) -> String { (preset[key] as? Int).map { String($0) } ?? "" }
+            let review = defaults["github_review"] as? String == "ask" ? "書き込みは個別承認" : "既存の GitHub ポリシーを適用"
+            guard let fields = self.form("\(choice[0]) を適用 · \(review)", [
+                ("観測トークン（0 は無制限）", field("tokens")),
+                ("ターン（0 は無制限）", field("turns")),
+                ("実験回数（0 は無制限）", field("jobs")),
+                ("実験 1 回の上限秒数", field("timeout")),
+                ("公式利用枠の回復（manual / confirmed）", preset["recovery"] as? String ?? "manual"),
+            ]) else { return }
+            guard let tokens = Int(fields[0]), let turns = Int(fields[1]), let jobs = Int(fields[2]),
+                  let timeout = Int(fields[3]) else {
+                self.status.stringValue = "上限の各欄に整数を指定してください"
+                return
+            }
+            self.projectRequest("research-preset", ["name": choice[0], "apply": true, "tokens": tokens,
+                                                  "turns": turns, "jobs": jobs, "timeout": timeout,
+                                                  "recovery": fields[4]])
+        }
+    }
+
     @objc private func startResearch() {
+        let preset = snapshot["research_preset"] as? Record ?? [:]
         guard selected != nil, let fields = form("自律研究を承認", [
             ("研究範囲と制約", ""), ("承認する GitHub Issue 番号またはローカル課題 ID", ""),
-            ("実験回数の上限", "4"), ("実験単位の秒数上限", "120"),
-            ("ターン上限", "8"), ("観測トークン予算", "40000"),
-        ]), let ids = identifiers(fields[1]), !ids.isEmpty,
+            ("実験回数の上限（0 は無制限）", String(preset["jobs"] as? Int ?? 4)),
+            ("実験単位の秒数上限", String(preset["timeout"] as? Int ?? 120)),
+            ("ターン上限（0 は無制限）", String(preset["turns"] as? Int ?? 8)),
+            ("観測トークン合計（0 は無制限。開始と評価を含む）", (preset["tokens"] as? Int).map { String($0) } ?? ""),
+        ]) else { return }
+        guard let ids = identifiers(fields[1]), !ids.isEmpty,
               let jobs = Int(fields[2]), let timeout = Int(fields[3]),
-              let turns = Int(fields[4]), let tokens = Int(fields[5]) else { return }
+              let turns = Int(fields[4]), let tokens = Int(fields[5].trimmingCharacters(in: .whitespaces)),
+              (0...1_000_000).contains(tokens) else {
+            status.stringValue = "課題 ID と実行上限を確認してください。観測トークン合計は 0〜1,000,000 を指定します（0 は無制限）"
+            return
+        }
         guard let inputs = form("実験環境と検証条件", [
             ("ランタイム（python または node）", "python"), ("承認する作業ファイル（カンマ区切り）", ""),
             ("依存フォルダ（例 node_modules、任意）", ""), ("必須成果物（カンマ区切り、任意）", ""),
@@ -337,7 +400,19 @@ final class Desktop: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return numbers.count == parts.count ? numbers : nil
     }
 
-    @objc private func resumeResearch() { projectRequest("research-resume") }
+    @objc private func resumeResearch() {
+        guard selected != nil, let fields = form("研究を再開", [
+            ("新しい合計予算（0 は無制限、空欄は現在の予算）", ""),
+        ]) else { return }
+        let input = fields[0].trimmingCharacters(in: .whitespaces)
+        if input.isEmpty {
+            projectRequest("research-resume")
+        } else if let tokens = Int(input), (0...1_000_000).contains(tokens) {
+            projectRequest("research-resume", ["tokens": tokens])
+        } else {
+            status.stringValue = "観測トークン合計は 0〜1,000,000 を指定します（0 は無制限）"
+        }
+    }
     @objc private func stopResearch() { projectRequest("stop", ["role": "developer", "immediate": false]) }
     @objc private func interruptResearch() { projectRequest("stop", ["role": "developer", "immediate": true]) }
 

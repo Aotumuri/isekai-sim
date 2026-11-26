@@ -56,13 +56,13 @@ def begin(key, params):
             }
         else:
             tool, arguments = "adf_finish_research_task", {"outcome": "completed", "summary": "Verified fixture"}
-        requests[request] = (thread, turn)
+        requests[request] = (thread, turn, 34 if "BUDGET_FIXTURE" in text else None)
         send({"id": request, "method": "item/tool/call", "params": {
             "threadId": thread, "turnId": turn, "tool": tool, "callId": request, "arguments": arguments,
         }})
     elif text.startswith("launch experiment"):
         request = f"call-{turn}"
-        requests[request] = (thread, turn)
+        requests[request] = (thread, turn, None)
         send({"id": request, "method": "item/tool/call", "params": {
             "threadId": thread, "turnId": turn, "tool": "adf_start_experiment",
             "callId": request, "arguments": {"template": "trial"},
@@ -98,7 +98,10 @@ for line in sys.stdin:
     method = frame.get("method")
     args = frame.get("params", {})
     if not method and key in requests:
-        thread, turn = requests.pop(key)
+        thread, turn, final_usage = requests.pop(key)
+        if final_usage:
+            event("thread/tokenUsage/updated", threadId=thread, turnId=turn,
+                  tokenUsage={"total": {"totalTokens": final_usage}})
         complete(thread, turn)
         complete(thread, turn)  # Replayed completion must not generate a second wake.
     elif method == "initialize":

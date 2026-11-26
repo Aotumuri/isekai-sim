@@ -1,10 +1,18 @@
 """Bounded research runs and dependency-ordered, explicitly approved tasks."""
 
+import asyncio
 import json
 
 from .codex import TOOL_VERSION
 from .runtimes import experiment_command
 from .snapshots import capture, hashes, options, relative
+
+QUEUE_INTERVAL = 60
+
+
+def autonomous(scope):
+    return scope.get("preset", {}).get("name") == "autonomous"
+
 
 def plain_text(value, limit):
     return isinstance(value, str) and 0 < len(value.strip()) <= limit and "\0" not in value
@@ -73,20 +81,22 @@ class Research:
                 or not plain_text(scope, 8000)):
             raise ValueError("研究範囲と承認済み課題を指定してください")
         task = self.next_task(project, tasks)
-        if not task:
+        if not task and not autonomous({"preset": limits.get("preset_settings") or {}}):
             raise ValueError("承認範囲に着手可能な課題がありません")
         return self.begin_research(project, task, {"ids": tasks, "instructions": scope},
                                    **limits)
 
     def begin_research(self, project, task, scope, jobs=4, timeout=120, turns=8, tokens=40000, github=None,
-                       runtime="python", files=None, dependencies="", evidence=None):
-        limits = ((jobs, 1, 20), (timeout, 1, 86400), (turns, 1, 40), (tokens, 1, 1000000))
+                       runtime="python", files=None, dependencies="", evidence=None, preset_settings=None):
+        limits = ((jobs, 0, 20), (timeout, 1, 86400), (turns, 0, 40), (tokens, 0, 1000000))
         if any(type(n) is not int or not lower <= n <= upper for n, lower, upper in limits):
             raise ValueError("実験数、秒数、ターン数またはトークン予算が不正です")
         plan = options(runtime, files or [], dependencies, evidence or [])
         plan["baseline"] = hashes(capture(self.project(project)["path"], plan["files"]))
         scope["experiment"] = plan
-        prompt = self.research_prompt(task, scope["instructions"], plan)
+        if preset_settings:
+            scope["preset"] = preset_settings
+        prompt = self.research_prompt(task, scope["instructions"], plan) if task else "ADF approved task queue"
         session = self.reserve(project, "developer", prompt, False, launch=False)
         row = self.store.session(session)
         with self.store.db:
@@ -97,35 +107,143 @@ class Research:
                 self.store.update_session(session, thread=None, token_floor=row["tokens"])
             self.store.db.execute(
                 "INSERT OR REPLACE INTO research_run(session,generation,scope,task,state,job_limit,timeout,"
-                "turn_limit,token_limit,start_turns,start_tokens) VALUES(?,?,?,?,'active',?,?,?,?,?,?)",
-                (session, row["generation"], json.dumps(scope), task["id"],
+                "turn_limit,token_limit,start_turns,start_tokens) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                (session, row["generation"], json.dumps(scope), task["id"] if task else None, "active",
                  jobs, timeout, turns, tokens, row["turn_requests"], row["tokens"]))
             if github:
                 self.pin_issue(session, row["generation"], github)
             else:
                 self.store.db.execute("DELETE FROM github_run WHERE session=?", (session,))
-            self.store.event(session, "research_task", github["issue"] if github else task["id"])
-        self.background(self.run_turn(session, row["generation"], prompt, self.settings("developer")))
+            if task:
+                self.store.event(session, "research_task", github["issue"] if github else task["id"])
+        if task:
+            self.background(self.run_turn(session, row["generation"], prompt, self.settings("developer")))
+        else:
+            self.queue_research(row)
         return session
+
+    def queue_research(self, row):
+        session, generation = row["id"], row["generation"]
+        with self.store.db:
+            self.store.db.execute("UPDATE research_run SET state='queued',task=NULL,decision=NULL,decision_turn=NULL,"
+                                  "generation=? WHERE session=?", (generation, session))
+            self.store.db.execute("DELETE FROM github_run WHERE session=?", (session,))
+            self.store.update_session(session, state="waiting")
+            self.store.event(session, "research_wait", "承認範囲に着手可能な課題がありません")
+        self.background(self.watch_research_queue(session, generation))
+
+    async def watch_research_queue(self, session, generation):
+        run = self.store.one("SELECT * FROM research_run WHERE session=?", (session,))
+        scope = json.loads(run["scope"])
+        try:
+            while self.visible(session, generation, ("waiting",)) and not self.shutdown:
+                await asyncio.sleep(QUEUE_INTERVAL)
+                if not self.visible(session, generation, ("waiting",)) or self.shutdown:
+                    return
+                if await self.check_research_queue(session, generation, run, scope):
+                    return
+        except (OSError, TimeoutError, ValueError) as error:
+            self.fail(session, generation, f"承認済み課題の取得を中断しました ({type(error).__name__})")
+
+    async def check_research_queue(self, session, generation, run, scope):
+        row = self.visible(session, generation, ("waiting",))
+        if not row or self.shutdown:
+            return True
+        repository = scope.get("repository", "")
+        if self.project(row["project"])["github"] != repository:
+            raise ValueError("研究対象のリポジトリが変更されました")
+        issue = deps = None
+        if repository:
+            selected, all_done = await self.select_issue(repository, scope["ids"])
+            if not self.visible(session, generation, ("waiting",)) or self.shutdown:
+                return True
+            if selected:
+                issue, deps = selected
+            task = self.issue_task(row["project"], repository, issue, deps) if issue else None
+        else:
+            task = self.next_task(row["project"], scope["ids"])
+            all_done = not task and all(self.store.one("SELECT state FROM research_task WHERE id=?", (key,))[
+                "state"] == "completed" for key in scope["ids"])
+        if all_done:
+            with self.store.db:
+                self.store.db.execute("UPDATE research_run SET state='completed' WHERE session=?", (session,))
+                self.store.update_session(session, state="paused")
+            self.release_inactive_legacy(session)
+            return True
+        if not task:
+            return False
+        if reason := self.research_budget_reason(row, run):
+            self.fail(session, generation, reason, state="paused")
+            return True
+        prompt = self.research_prompt(task, scope["instructions"], scope.get("experiment"))
+        with self.store.db:
+            self.store.db.execute("UPDATE research_run SET state='active',task=? WHERE session=?", (task["id"], session))
+            if issue:
+                self.pin_issue(session, generation, {"repository": repository, "issue": issue["number"],
+                                                     "fingerprint": self.issue_fingerprint(issue, deps)})
+            self.store.update_session(session, state="running", prompt=prompt)
+            self.store.event(session, "research_task", issue["number"] if issue else task["id"])
+        self.background(self.run_turn(session, generation, prompt, self.settings("developer")))
+        return True
+
+    def extend_token_budget(self, row, run, tokens):
+        if tokens is None:
+            return run
+        if (not row or not run or run["state"] in ("completed", "blocked")
+                or row["state"] not in ("paused", "interrupted", "quota")):
+            raise ValueError("停止中の未完了研究を指定してください")
+        used = row["tokens"] - run["start_tokens"]
+        if (type(tokens) is not int or not run["token_limit"]
+                or (tokens != 0 and not max(used, run["token_limit"]) < tokens <= 1000000)):
+            raise ValueError(f"合計予算は現在の上限と使用済み {used:,} の両方を超え、1,000,000 以下にするか 0（無制限）を指定してください")
+        scope = json.loads(run["scope"])
+        if "preset" in scope:
+            scope["preset"]["tokens"] = tokens
+        saved_scope = json.dumps(scope)
+        with self.store.db:
+            self.store.db.execute("UPDATE research_run SET token_limit=?,scope=? WHERE session=?",
+                                  (tokens, saved_scope, row["id"]))
+            self.store.event(row["id"], "research_budget_extended", {"total": tokens, "used": used})
+        return dict(run, token_limit=tokens, scope=saved_scope)
+
+    def deferred_evaluation(self, row, run):
+        cutoff = max(run["start_turns"], json.loads(run["scope"]).get("evidence_after", 0))
+        return self.store.one("SELECT j.* FROM job j JOIN research_experiment e ON e.job=j.id "
+                             "WHERE j.session=? AND e.task=? AND j.initial_requests>? AND j.wake='deferred' "
+                             "ORDER BY j.finished DESC LIMIT 1", (row["id"], run["task"], cutoff))
+
+    def claim_deferred_evaluation(self, job):
+        if job:
+            self.store.db.execute("UPDATE job SET wake='claimed' WHERE id=? AND wake='deferred'", (job["id"],))
 
     def resume_research(self, project):
         row = self.session_for(project, "developer")
         run = self.store.one("SELECT * FROM research_run WHERE session=?", (row["id"],)) if row else None
         if not run or run["state"] in ("completed", "blocked"):
             raise ValueError("再開可能な研究実行がありません")
+        if run["state"] == "queued":
+            session = self.reserve(project, "developer", row["prompt"], True, launch=False)
+            self.queue_research(self.store.session(session))
+            return session
         task = self.store.one("SELECT * FROM research_task WHERE id=?", (run["task"],))
-        if not task or task["state"] != "ready" or self.research_limit(row, run):
-            raise ValueError("未完了課題と残りの予算を確認してください")
+        if not task or task["state"] != "ready":
+            raise ValueError("未完了課題を確認してください")
+        if reason := self.research_budget_reason(row, run):
+            raise ValueError(reason)
         if self.uncertain_experiment(row, task, run):
             raise ValueError("中断時の実験結果が不確定です。履歴を確認し、新しい研究実行として承認してください")
         scope = json.loads(run["scope"])
-        prompt = self.research_prompt(task, scope["instructions"], scope.get("experiment"))
+        job = self.deferred_evaluation(row, run)
+        prompt = (self.evaluation_prompt(job) if job else
+                  self.research_prompt(task, scope["instructions"], scope.get("experiment")))
         session = self.reserve(project, "developer", prompt, True, launch=False)
         generation = self.store.session(session)["generation"]
         with self.store.db:
             self.store.db.execute("UPDATE research_run SET generation=?,state='active',decision_turn=NULL,"
                                   "decision=NULL WHERE session=?", (generation, session))
-        self.background(self.run_turn(session, generation, prompt, self.settings("developer"), resume=True))
+            self.claim_deferred_evaluation(job)
+        self.background(self.run_turn(session, generation, prompt, self.settings("developer"), resume=not job,
+                                      job=job["id"] if job else None))
         return session
 
     def uncertain_experiment(self, row, task, run):
@@ -135,13 +253,21 @@ class Research:
                               (row["id"], task["id"], run["start_turns"]))
 
     @staticmethod
-    def research_limit(row, run):
-        return (row["turn_requests"] - run["start_turns"] >= run["turn_limit"]
-                or row["tokens"] - run["start_tokens"] >= run["token_limit"])
+    def research_budget_reason(row, run):
+        used = row["tokens"] - run["start_tokens"]
+        if run["turn_limit"] and row["turn_requests"] - run["start_turns"] >= run["turn_limit"]:
+            return f"研究のターン上限 ({run['turn_limit']}) に達しました"
+        if run["token_limit"] and used >= run["token_limit"]:
+            return (f"観測トークン予算に達しました ({used:,}/{run['token_limit']:,})。"
+                    "研究を再開する際に、使用済み分を含む合計予算を指定できます")
+        return None
+
+    def research_limit(self, row, run):
+        return self.research_budget_reason(row, run) is not None
 
     def design_experiment(self, row, args):
         run = self.research_for(row)
-        if (not run or run["jobs"] >= run["job_limit"] or run["decision_turn"] == row["turn"]
+        if (not run or (run["job_limit"] and run["jobs"] >= run["job_limit"]) or run["decision_turn"] == row["turn"]
                 or self.research_limit(row, run)):
             raise ValueError("Research scope, remaining experiment budget, or turn is unavailable.")
         inline = "program" in args
@@ -203,6 +329,9 @@ class Research:
                     next_task = self.next_task(row["project"], scope["ids"])
                     if not next_task and any(self.store.one("SELECT state FROM research_task WHERE id=?", (task,))[
                             "state"] != "completed" for task in scope["ids"]):
+                        if autonomous(scope):
+                            self.queue_research(row)
+                            return
                         state = "blocked"
                         self.store.event(session, "research_blocked", "承認済み課題に未解決の依存があります")
             if next_task:

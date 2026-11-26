@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import json
 
-from .research import plain_text
+from .research import autonomous, plain_text
 from .tracker import CHECKBOX, checklist, fetch_issue, gh_api, number
 
 ACTIVE_STATUS = {"in-progress", "experimenting", "validating", "local-done"}
@@ -30,6 +30,8 @@ def fingerprint(issue, deps):
 
 
 class GitHubResearch:
+    issue_fingerprint = staticmethod(fingerprint)
+
     def github_run(self, row):
         return self.store.one("SELECT * FROM github_run WHERE session=? AND generation=?",
                               (row["id"], row["generation"]))
@@ -73,6 +75,7 @@ class GitHubResearch:
 
     async def start_project_research(self, project, tasks, scope, **limits):
         repo = self.project(project)
+        limits = self.research_settings(project, **limits)
         if not repo["github"]:
             return self.start_research(project, tasks, scope, **limits)
         if not isinstance(tasks, list) or not 1 <= len(tasks) <= 20 or not plain_text(scope, 8000):
@@ -85,11 +88,14 @@ class GitHubResearch:
             raise ValueError("課題取得中に停止が指定されました")
         if self.project(project)["github"] != repo["github"]:
             raise ValueError("課題取得中にリポジトリが変更されました")
+        approved = {"ids": ids, "instructions": scope, "repository": repo["github"]}
         if result is None:
+            if autonomous({"preset": limits.get("preset_settings") or {}}):
+                return self.begin_research(project, None, approved, **limits)
             raise ValueError("承認範囲に着手可能な GitHub Issue がありません")
         issue, deps = result
         task = self.issue_task(project, repo["github"], issue, deps)
-        return self.begin_research(project, task, {"ids": ids, "instructions": scope}, github={
+        return self.begin_research(project, task, approved, github={
             "repository": repo["github"], "issue": issue["number"], "fingerprint": fingerprint(issue, deps),
         }, **limits)
 
@@ -249,18 +255,21 @@ class GitHubResearch:
                                "issue": item["number"], "fingerprint": fingerprint(item, deps)})
                 self.store.update_session(row["id"], state="running", prompt=prompt)
                 self.background(self.run_turn(row["id"], row["generation"], prompt, self.settings("developer")))
+            elif not selected and autonomous(scope):
+                self.queue_research(row)
             else:
                 self.pause_github(row, "研究予算に到達、または承認範囲に着手可能な課題がありません")
         self.release_inactive_legacy(row["id"])
 
-    async def resume_project_research(self, project, accept_issue_changes=False):
+    async def resume_project_research(self, project, accept_issue_changes=False, tokens=None):
         if type(accept_issue_changes) is not bool:
             raise ValueError("Issue の変更を確認した場合だけ承認してください")
         row = self.session_for(project, "developer")
+        current = self.store.one("SELECT * FROM research_run WHERE session=?", (row["id"],)) if row else None
+        current = self.extend_token_budget(row, current, tokens)
         remote = self.store.one("SELECT * FROM github_run WHERE session=?", (row["id"],)) if row else None
         if not remote:
             return self.resume_research(project)
-        current = self.store.one("SELECT * FROM research_run WHERE session=?", (row["id"],))
         if current["state"] == "completed" or row["state"] not in ("paused", "interrupted", "quota"):
             raise ValueError("再開可能な GitHub 研究実行がありません")
         op = self.store.one("SELECT state FROM tracker_operation WHERE id=?", (remote["operation"],))
@@ -287,11 +296,15 @@ class GitHubResearch:
                     raise ValueError("再開確認中に停止が指定されました")
                 return await self.renew_completion(row, current, remote)
         task = self.issue_task(project, remote["repository"], issue, deps)
-        if self.research_limit(row, current) or self.uncertain_experiment(row, task, current):
-            raise ValueError("残り予算または中断した実験を確認してください")
+        if reason := self.research_budget_reason(row, current):
+            raise ValueError(reason)
+        if self.uncertain_experiment(row, task, current):
+            raise ValueError("中断した実験を確認してください")
         if changed:
             scope["evidence_after"] = row["turn_requests"]
-        prompt = self.research_prompt(task, scope["instructions"], scope.get("experiment"))
+        job = None if changed else self.deferred_evaluation(row, current)
+        prompt = (self.evaluation_prompt(job) if job else
+                  self.research_prompt(task, scope["instructions"], scope.get("experiment")))
         session = self.reserve(project, "developer", prompt, True, launch=False)
         generation = self.store.session(session)["generation"]
         with self.store.db:
@@ -299,7 +312,9 @@ class GitHubResearch:
                                   "WHERE session=?", (generation, json.dumps(scope), session))
             self.store.db.execute("UPDATE github_run SET generation=?,phase=?,operation=NULL,fingerprint=? WHERE session=?",
                                   (generation, "work" if progressed else "claim", fingerprint(issue, deps), session))
-        self.background(self.run_turn(session, generation, prompt, self.settings("developer"), resume=True))
+            self.claim_deferred_evaluation(job)
+        self.background(self.run_turn(session, generation, prompt, self.settings("developer"), resume=not job,
+                                      job=job["id"] if job else None))
         return session
 
     async def resume_confirmed_completion(self, row, current, remote):

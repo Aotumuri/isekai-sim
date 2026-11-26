@@ -14,6 +14,7 @@ from .experiments import Experiments
 from .git_review import GitReview
 from .github_research import GitHubResearch
 from .legacy import Legacy
+from .presets import Presets
 from .projects import clean_name, identify, issues
 from .research import Research
 from .sessions import Sessions
@@ -23,7 +24,7 @@ from .tracker_policy import policy_map
 from .usage import Usage
 
 
-class Service(Legacy, GitHubResearch, GitHub, GitReview, Evidence, Usage, Research, Experiments, Sessions):
+class Service(Presets, Legacy, GitHubResearch, GitHub, GitReview, Evidence, Usage, Research, Experiments, Sessions):
     def __init__(self, store, binary, runtime_factory=None, lease=None):
         super().__init__(store, runtime_factory or (lambda *callbacks: Codex(binary, *callbacks, lease=lease)))
         self.binary = binary
@@ -107,6 +108,7 @@ class Service(Legacy, GitHubResearch, GitHub, GitReview, Evidence, Usage, Resear
     def status(self, project=None, after=0):
         tracker = self.store.one("SELECT operations FROM tracker_policy WHERE project=?", (project,))
         return {
+            "research_preset": self.saved_preset(project),
             "tracker_policy": policy_map(json.loads(tracker["operations"])) if tracker else {},
             "legacy_imports": self.store.all("SELECT fingerprint,path FROM legacy_import WHERE project=?", (project,)),
             "tracker_operations": self.store.all("SELECT * FROM tracker_operation WHERE project=? "
@@ -166,7 +168,7 @@ class Service(Legacy, GitHubResearch, GitHub, GitReview, Evidence, Usage, Resear
             "artifacts": self.artifacts, "experiment-inputs": self.experiment_inputs,
             "commit-preview": self.commit_preview, "usage": self.usage_report, "tracker-policy": self.set_tracker_policy,
             "tracker-draft": self.draft_tracker, "tracker-review": self.review_tracker, "tracker-reconcile": self.reconcile_tracker,
-            "tracker-issue": self.tracker_issue,
+            "tracker-issue": self.tracker_issue, "research-preset": self.research_preset,
             "legacy-preview": self.legacy_preview, "legacy-import": self.legacy_import,
         }
         if action not in operations:

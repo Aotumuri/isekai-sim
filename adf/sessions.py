@@ -159,9 +159,12 @@ class Sessions:
                     with self.store.db:
                         self.store.db.execute("UPDATE research_run SET scope=? WHERE session=?",
                                               (json.dumps(scope), session))
-            if ((settings["budget"] and row["tokens"] >= settings["budget"])
-                    or (research and self.research_limit(row, research))):
-                self.fail(session, generation, "予算に達しました", state="paused")
+            budget_reason = self.research_budget_reason(row, research) if research else None
+            if settings["budget"] and row["tokens"] >= settings["budget"]:
+                budget_reason = (f"ロールの累計予算に達しました ({row['tokens']:,}/{settings['budget']:,})。"
+                                 "ロール設定を確認してください")
+            if budget_reason:
+                self.fail(session, generation, budget_reason, state="paused", deferred_job=job if research else None)
                 return
             if not await self.before_github_turn(row):
                 return
@@ -181,6 +184,8 @@ class Sessions:
                 if current:
                     with self.store.db:
                         self.store.update_session(session, state="quota", turn=None)
+                        if job and research:
+                            self.store.db.execute("UPDATE job SET wake='deferred' WHERE id=? AND wake='claimed'", (job,))
                         self.store.event(session, "quota", "Codex の利用枠に達しました")
                     self.background(self.quota(current))
                 return
@@ -226,7 +231,7 @@ class Sessions:
                 self.settle(session)
             self.release_inactive_legacy(session)
 
-    def fail(self, session, generation, message, *, state="interrupted"):
+    def fail(self, session, generation, message, *, state="interrupted", deferred_job=None):
         row = self.visible(session, generation, ("running", "waiting", "quota"))
         if row:
             with self.store.db:
@@ -234,6 +239,9 @@ class Sessions:
                 self.store.expire_tracker_approvals(session)
                 self.store.db.execute("UPDATE research_run SET state='paused' WHERE session=? AND state='active'",
                                       (session,))
+                if deferred_job:
+                    self.store.db.execute("UPDATE job SET wake='deferred' WHERE id=? AND wake='claimed'",
+                                          (deferred_job,))
                 self.store.event(session, "error", message)
 
     async def message(self, project, role, text, experiment=None):
@@ -387,7 +395,9 @@ class Sessions:
 
     async def quota(self, row):
         settings = self.settings(row["role"])
-        if settings["recovery"] != "confirmed":
+        run = self.research_for(row)
+        preset = json.loads(run["scope"]).get("preset", {}) if run else (self.saved_preset(row["project"]) or {})
+        if preset.get("recovery", settings["recovery"]) != "confirmed":
             return
         row_id, generation = row["id"], row["generation"]
         for attempt in range(2):

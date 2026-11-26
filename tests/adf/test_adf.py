@@ -150,6 +150,28 @@ class OrchestratorTest(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0.2)
         self.assertEqual(self.service.session_for(self.project, "developer")["turn_requests"], 1)
 
+    async def test_budget_extension_resumes_deferred_evaluation_on_same_thread_once(self):
+        task = self.service.add_task(self.project, "Calibration", "Check the result")
+        self.service.start_research(self.project, [task], "FIXTURE_RESEARCH BUDGET_FIXTURE",
+                                    jobs=2, turns=4, tokens=30)
+        paused = await self.state("developer", "paused")
+        job = self.jobs()[0]
+        self.assertEqual((job["wake"], paused["turn_requests"], paused["tokens"]), ("deferred", 1, 34))
+        for tokens in (None, 34):
+            with self.assertRaisesRegex(ValueError, "予算"):
+                await self.service.resume_project_research(self.project, tokens=tokens)
+        with self.store.db:
+            self.store.update_session(paused["id"], prompt="An unrelated chat prompt")
+        await self.service.resume_project_research(self.project, tokens=100)
+        done = await self.state("developer", "paused")
+        self.assertEqual((done["thread"], done["turn_requests"]), (paused["thread"], 3))
+        self.assertEqual(self.store.one("SELECT wake FROM job WHERE id=?", (job["id"],))["wake"], "sent")
+        run = self.service.status(self.project)["research_runs"][0]
+        self.assertEqual((run["state"], run["token_limit"], run["start_tokens"]), ("completed", 100, 0))
+        wake_count = self.store.one("SELECT count(*) AS n FROM event WHERE kind='wake' AND detail=?",
+                                    (json.dumps(f"Experiment {job['id']}"),))
+        self.assertEqual(wake_count["n"], 1)
+
     async def test_autonomous_cycles_and_dependent_task(self):
         first = self.service.add_task(self.project, "Calibration", "Compute two checksums", priority=4)
         second = self.service.add_task(self.project, "Review", "NO_EXPERIMENT", priority=1, dependencies=[first])

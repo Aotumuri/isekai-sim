@@ -161,7 +161,7 @@ class GitHub(TrackerPolicy):
         policy = self.tracker_allowed(project, draft["kind"])
         payload = json.loads(draft["payload"])
         guard = self.store.one("SELECT * FROM tracker_guard WHERE operation=?", (operation,))
-        if automatic and policy != "allow":
+        if automatic and (policy != "allow" or self.tracker_requires_review(draft, guard)):
             return {"approval": operation}
         expected = await self.check_tracker_guard(guard, draft) if guard else None
         before = expected[0] if expected else None
@@ -177,7 +177,7 @@ class GitHub(TrackerPolicy):
             if project["github"] != draft["repository"]:
                 raise ValueError("登録リポジトリが変わりました。承認内容を見直してください")
             policy = self.tracker_allowed(project, draft["kind"])
-            if automatic and policy != "allow":
+            if automatic and (policy != "allow" or self.tracker_requires_review(draft, guard)):
                 return {"approval": operation}
         if payload.get("issue") is not None and self.unknown_tracker_operation(draft["repository"], payload["issue"]):
             raise ValueError("同じ Issue の送信結果が不明です。先に照合してください")
