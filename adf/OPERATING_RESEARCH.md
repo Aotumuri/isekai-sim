@@ -11,7 +11,7 @@
 
 ## GitHub プロジェクト
 
-GUI の「研究」で対象 Issue 番号を指定する。ローカル課題を二重に登録する必要はない。承認範囲のうち、開いていて status:ready、担当者が未設定、ハード依存が完了済みの Issue を選ぶ。優先度は priority:p1 から p3 の順で、同順位は番号順。着手を GitHub に記録し、完了が GitHub で確認できた後に次を選ぶ。本文、件名、依存、担当、状態は各境界で照合する。本文とコメントは外部データとして扱い、承認には使わない。
+GUI の「研究」から最近のオープン Issue を選ぶ。一覧外の Issue は番号で補足できる。ローカル課題を二重に登録する必要はない。承認範囲のうち、開いていて status:ready、担当者が未設定、ハード依存が完了済みの Issue を選ぶ。優先度は priority:p1 から p3 の順で、同順位は番号順。着手を GitHub に記録し、完了が GitHub で確認できた後に次を選ぶ。本文、件名、依存、担当、状態は各境界で照合する。本文とコメントは外部データとして扱い、承認には使わない。
 
 ```sh
 python3 -m adf tracker-policy 1 progress=allow checklist=ask comment=deny complete=ask proposal=ask
