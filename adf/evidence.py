@@ -1,9 +1,11 @@
 """Machine checks use the data recorded by the supervisor, not model assertions."""
 
+import asyncio
 import json
 
 from .projects import checkpoint
-from .snapshots import capture, hashes
+from .runtimes import experiment_command, runtime_stamp
+from .snapshots import capture, hashes, scan_dependencies
 
 
 class Evidence:
@@ -16,21 +18,37 @@ class Evidence:
         return json.loads(path.read_text())
 
     async def verified_job(self, row, run):
-        plan = json.loads(run["scope"]).get("experiment") or {}
+        scope = json.loads(run["scope"])
+        plan = scope.get("experiment") or {}
         artifacts = plan.get("artifacts", [])
         if not artifacts:
             return None
         revision, _ = await checkpoint(row)
         overlay = hashes(capture(row["path"], plan["files"]))
         results = self.store.all(
-            "SELECT job.* FROM job JOIN research_experiment rx ON rx.job=job.id "
+            "SELECT job.*, rx.program, rx.timeout FROM job JOIN research_experiment rx ON rx.job=job.id "
             "WHERE session=? AND rx.task=? AND initial_requests>? AND state='succeeded' AND exit_code=0 "
-            "AND revision=? ORDER BY finished DESC", (row["id"], run["task"], run["start_turns"], revision))
+            "AND revision=? ORDER BY finished DESC", (row["id"], run["task"], max(run["start_turns"], scope.get("evidence_after", 0)), revision))
+        if not results:
+            return None
+        dependency = plan["dependencies"]
+        try:
+            environment = await asyncio.to_thread(runtime_stamp, plan["runtime"])
+            installation = await asyncio.to_thread(scan_dependencies, row["path"], dependency) if dependency else None
+        except (OSError, ValueError):
+            return None
         for result in results:
             try:
                 manifest = self.experiment_inputs(result["id"])
-                if manifest["overlay"] == overlay and all(
-                        self.artifacts(result["id"], path, size=1)["total"] > 0 for path in artifacts):
+                recorded = manifest["runtime"]
+                script = recorded["script"]
+                argv = experiment_command(plan["runtime"], result["program"], script, dependency, result["timeout"])
+                if (manifest["overlay"] == overlay and manifest["dependency_source"] == dependency
+                        and manifest["dependency_stamp"] == installation
+                        and recorded["kind"] == plan["runtime"] and recorded["stamp"] == environment
+                        and recorded["argv"] == argv and manifest["conditions"] == {"timeout": result["timeout"]}
+                        and result["timeout"] <= run["timeout"]
+                        and all(self.artifacts(result["id"], path, size=1)["total"] > 0 for path in artifacts)):
                     return result["id"]
             except (OSError, ValueError, KeyError):
                 continue

@@ -9,7 +9,7 @@ import uuid
 from .artifacts import ARTIFACTS, list_results, read_result
 from .codex import ARTIFACT_READ, RESEARCH_EXPERIMENT, RESEARCH_FINISH, RuntimeError, TOOL, output_delta
 from .projects import checkpoint, clean_name, snapshot
-from .runtimes import prepare_node, runtime_identity
+from .runtimes import prepare_node, runtime_identity, runtime_stamp
 from .snapshots import capture, prepare_inputs
 
 MAX_LOG = 262144
@@ -136,11 +136,15 @@ class Experiments:
                 raise ValueError("Insufficient free disk space for a snapshot")
             source = await snapshot(row["path"], revision, self.log_path(job).parent)
             if plan := template.get("plan"):
+                stamp = await asyncio.to_thread(runtime_stamp, plan["runtime"])
                 metadata = await (asyncio.to_thread(prepare_node, source) if plan["runtime"] == "node"
                                   else asyncio.to_thread(runtime_identity, plan["runtime"]))
-                metadata.update(script=template["script"], argv=json.loads(template["argv"]))
+                if await asyncio.to_thread(runtime_stamp, plan["runtime"]) != stamp:
+                    raise ValueError("コピー中にランタイムが変更されました")
+                metadata.update(script=template["script"], argv=json.loads(template["argv"]), stamp=stamp)
                 await asyncio.to_thread(prepare_inputs, source, row["path"], plan, template["capture"],
-                                        revision, metadata)
+                                        revision, metadata,
+                                        {"timeout": template["timeout"]})
                 if template["script"] and not (source / template["script"]).is_file():
                     raise ValueError("実験スクリプトがスナップショットにありません")
             current = self.store.session(row["id"])

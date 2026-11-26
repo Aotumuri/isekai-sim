@@ -99,7 +99,11 @@ def write_capture(root, captured, *, delete=False):
         target.chmod(0o600 | mode)
 
 
-def copy_dependencies(root, dependency, target):
+def metadata(info):
+    return [info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns, info.st_mode]
+
+
+def scan_dependencies(root, dependency, visitor=None):
     fd = directory(root, relative(dependency).parts)
     entries = {}
     remaining = MAX_DEPENDENCIES
@@ -114,41 +118,62 @@ def copy_dependencies(root, dependency, target):
                     continue
                 name = str(prefix / item.name)
                 relative(name)
-                if item.is_dir(follow_symlinks=False):
+                info = item.stat(follow_symlinks=False)
+                if stat.S_ISDIR(info.st_mode):
                     child = os.open(item.name, DIR, dir_fd=parent)
                     try:
                         walk(child, prefix / item.name, depth + 1)
                     finally:
                         os.close(child)
                     continue
-                if len(entries) >= 20000:
-                    raise ValueError("依存ファイル数が上限を超えました")
-                data, mode = regular(parent, item.name, remaining)
-                remaining -= len(data)
-                write_capture(target, {name: (data, mode)})
-                entries.update(hashes({name: (data, mode)}))
+                if (len(entries) >= 20000 or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                        or info.st_size > remaining):
+                    raise ValueError("依存ファイル数・容量の上限を超えたか、通常ファイル以外が含まれます")
+                if visitor:
+                    data, mode = regular(parent, item.name, remaining)
+                    after = os.stat(item.name, dir_fd=parent, follow_symlinks=False)
+                    if metadata(info) != metadata(after):
+                        raise ValueError("コピー中に依存ファイルが変更されました")
+                    visitor(name, data, mode)
+                remaining -= info.st_size
+                entries[name] = metadata(info)
 
     try:
-        target.mkdir(parents=True, mode=0o700)
         walk(fd, PurePosixPath(), 0)
     finally:
         os.close(fd)
-    return entries
+    raw = json.dumps(entries, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(raw).hexdigest()
 
 
-def prepare_inputs(source, project, plan, captured, revision, environment):
+def copy_dependencies(root, dependency, target):
+    entries = {}
+    target.mkdir(parents=True, mode=0o700)
+
+    def save(name, data, mode):
+        write_capture(target, {name: (data, mode)})
+        entries.update(hashes({name: (data, mode)}))
+
+    stamp = scan_dependencies(root, dependency, save)
+    return entries, stamp
+
+
+def prepare_inputs(source, project, plan, captured, revision, environment, conditions=None):
     staging = source.parent / "input"
     staging.mkdir(mode=0o700, exist_ok=True)
     write_capture(staging / "overlay", captured)
     write_capture(source, captured, delete=True)
-    dependencies = {}
+    dependencies, dependency_stamp = {}, None
     if plan["dependencies"]:
         target = "node_modules" if plan["runtime"] == "node" else ".adf-site"
         if (source / target).exists():
             raise ValueError("コミット済みの依存ディレクトリと衝突しています")
-        dependencies = copy_dependencies(project, plan["dependencies"], staging / target)
+        dependencies, dependency_stamp = copy_dependencies(project, plan["dependencies"], staging / target)
+        if scan_dependencies(project, plan["dependencies"]) != dependency_stamp:
+            raise ValueError("コピー中に依存ディレクトリが変更されました")
         shutil.copytree(staging / target, source / target)
     manifest = {"revision": revision, "overlay": hashes(captured), "dependencies": dependencies,
-                "dependency_source": plan["dependencies"], "runtime": environment}
+                "dependency_source": plan["dependencies"], "dependency_stamp": dependency_stamp,
+                "runtime": environment, "conditions": conditions}
     atomic_json(staging / "manifest.json", manifest)
     return manifest

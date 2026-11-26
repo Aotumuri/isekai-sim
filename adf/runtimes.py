@@ -8,13 +8,31 @@ import shutil
 import subprocess
 import sys
 
+from .snapshots import metadata
+
 NODE = (Path("/opt/homebrew/opt/node@24/bin/node"), Path("/opt/homebrew/bin/node"))
 CELLAR = Path("/opt/homebrew/Cellar")
 
 
-@lru_cache(maxsize=1)
+def node_binary():
+    return next((path.resolve() for path in NODE if path.is_file()), NODE[-1].resolve())
+
+
 def node_installation():
-    binary = next((path.resolve() for path in NODE if path.is_file()), NODE[-1].resolve())
+    binary = node_binary()
+    key = tuple(metadata(binary.stat()))
+    result = inspect_node(binary, key)
+    for library in result[1].values():
+        package = library.relative_to(CELLAR).parts[0]
+        alias = Path("/opt/homebrew/opt") / package
+        if alias.exists() and not library.is_relative_to(alias.resolve()):
+            inspect_node.cache_clear()
+            return inspect_node(binary, key)
+    return result
+
+
+@lru_cache(maxsize=4)
+def inspect_node(binary, binary_metadata):
     if not binary.is_file() or not binary.is_relative_to(CELLAR):
         raise ValueError("Homebrew Node を利用できません")
     seen = set()
@@ -102,3 +120,23 @@ def runtime_identity(kind):
         raise ValueError("Node の再現情報は分離コピーから生成してください")
     binary = runtime_files(kind)[0]
     return {"kind": kind, "version": sys.version.split()[0], "interpreter": str(binary), "sha256": file_sha(binary)}
+
+
+def runtime_stamp(kind):
+    if kind == "python":
+        binary, root = runtime_files(kind)
+        paths = [binary, root, root / "Python"]
+    else:
+        binary, files = node_installation()
+        paths = [binary, *files.values()]
+        # Homebrew resolves a library through its opt alias, which can switch
+        # versions while a process still retains an older Cellar path.
+        paths.extend(Path("/opt/homebrew/opt") / path.relative_to(CELLAR).parts[0]
+                     for path in files.values())
+    return {str(path): metadata(path.stat()) if path.exists() else None for path in sorted(set(paths))}
+
+
+def experiment_command(kind, program, script, dependencies, timeout):
+    command = runtime_command(kind, program, script, dependencies)
+    return ["/bin/sh", "-c", 'ulimit -f 32768 && ulimit -t "$1" && shift && exec "$@"',
+            "adf-experiment", str(timeout), *command]

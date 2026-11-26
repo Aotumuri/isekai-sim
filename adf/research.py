@@ -3,7 +3,7 @@
 import json
 
 from .codex import TOOL_VERSION
-from .runtimes import runtime_command
+from .runtimes import experiment_command
 from .snapshots import capture, hashes, options, relative
 
 def plain_text(value, limit):
@@ -152,9 +152,8 @@ class Research:
             raise ValueError("Supply one program or script and a timeout within scope.")
         plan = json.loads(run["scope"]).get("experiment") or options("python", [], "", [])
         script = None if inline else str(relative(args[key]))
-        command = runtime_command(plan["runtime"], args.get("program"), script, plan["dependencies"])
-        argv = ["/bin/sh", "-c", 'ulimit -f 32768 && ulimit -t "$1" && shift && exec "$@"',
-                "adf-experiment", str(args["timeout"]), *command]
+        argv = experiment_command(plan["runtime"], args.get("program"), script,
+                                  plan["dependencies"], args["timeout"])
         return {"name": args["name"], "argv": json.dumps(argv), "timeout": args["timeout"],
                 "research": run, "plan": plan, "script": script}
 

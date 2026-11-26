@@ -1,4 +1,5 @@
 import asyncio
+import os
 import json
 from pathlib import Path
 import subprocess
@@ -59,6 +60,21 @@ class Inputs(IsolatedAsyncioTestCase):
         self.assertEqual(len(usage["turns"]), 3)
         self.assertEqual(len(usage["experiment_evaluations"]), 2)
         self.assertEqual(usage["turns"][-1]["delta"]["totalTokens"], 17)
+        session = self.store.session(row["id"])
+        run = self.store.one("SELECT * FROM research_run WHERE session=?", (row["id"],))
+        self.assertEqual(await self.service.verified_job(session, run), job["id"])
+        with patch("adf.evidence.runtime_stamp", return_value={"changed runtime": True}):
+            self.assertIsNone(await self.service.verified_job(session, run))
+        with self.store.db:
+            self.store.db.execute("UPDATE research_experiment SET timeout=4")
+        self.assertIsNone(await self.service.verified_job(session, run))
+        with self.store.db:
+            self.store.db.execute("UPDATE research_experiment SET timeout=5")
+        previous = (libs / "number.py").stat()
+        (libs / "number.py").write_text("VALUE = 43")
+        os.utime(libs / "number.py", ns=(previous.st_atime_ns, previous.st_mtime_ns))
+        self.assertIsNone(await self.service.verified_job(session, run))
+
 
 
     async def test_self_report_is_insufficient_when_evidence_is_required(self):
