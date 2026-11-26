@@ -131,6 +131,17 @@ try {
   await evaluate("[...document.querySelectorAll('#operations button')].find(b => b.textContent === 'GitHub で照合').click()");
   await wait(body("確認済み"));
 
+  await click('nav [data-page="settings"]');
+  await click("#doctor");
+  await wait("document.querySelector('#maintenance-result').textContent.includes('core_running')");
+  await click('nav [data-page="work"]');
+  await click(".role-list button:first-child");
+  await click("#stop");
+  await click('nav [data-page="settings"]');
+  await wait("!document.querySelector('#prepare-update').disabled");
+  await click("#prepare-update");
+  await wait("document.querySelector('#maintenance-result').textContent.includes('update_mode')");
+
   await cli("template", "trial", '["/bin/sleep","3"]');
   await cli("send", "developer", "launch experiment", "--experiment", "trial");
   let waiting;

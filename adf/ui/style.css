@@ -38,6 +38,7 @@ button.danger { color: var(--alert); }
 textarea { resize: vertical; padding: .6rem; min-width: 0; }
 input, select { padding: .44rem; min-width: 0; }
 label { display: grid; gap: .3rem; font-size: .9rem; }
+label.checkbox { display: flex; align-items: center; gap: .45rem; }
 summary { cursor: pointer; font-weight: 650; }
 details[open] > form { padding-top: 1rem; }
 .top, .identity, .connection, .section-head, .actions, .mission { display: flex; align-items: center; gap: .6rem; }

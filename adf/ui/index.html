@@ -37,6 +37,16 @@
           </div>
           <button class="primary" type="submit">承認して開始</button>
         </form>
+        <details id="resume-options" class="panel" hidden><summary>研究の再開条件を確認</summary>
+          <form id="resume-plan" class="stack">
+            <label>再承認する範囲<textarea name="scope" rows="3"></textarea></label>
+            <label>変更後の合計トークン上限（変更時のみ。0 は無制限）
+              <input name="tokens" type="number" min="0" max="1000000">
+            </label>
+            <label class="checkbox"><input name="accept_issue_changes" type="checkbox">GitHub Issue の変更を確認した</label>
+            <button type="submit">この条件で研究を再開</button>
+          </form>
+        </details>
         <section class="panel chat">
           <div class="section-head">
             <div><h2 id="chat-role">会話</h2><p id="role-state"></p></div>
@@ -123,9 +133,12 @@
         </details>
         <div class="panel stack">
           <h2>保守</h2>
-          <button id="backup">バックアップ作成</button>
-          <button id="shutdown" class="danger">監督を停止</button>
-          <p>診断は端末で <code>python3 -m adf doctor</code>。更新前に停止し、端末で <code>python3 -m adf update</code> を実行してください。</p>
+          <div class="actions">
+            <button id="doctor">診断</button><button id="backup">バックアップ作成</button>
+            <button id="prepare-update">更新前の保全</button><button id="shutdown" class="danger">監督を停止</button>
+          </div>
+          <pre id="maintenance-result" hidden></pre>
+          <p>更新前の保全が完了したら監督を停止し、確認済みの更新を適用してください。</p>
         </div>
       </section>
     </main>

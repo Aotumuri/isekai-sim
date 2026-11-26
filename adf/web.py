@@ -8,7 +8,7 @@ import threading
 import webbrowser
 
 from .ipc import MAX_REQUEST, Client
-from .local import running
+from .local import diagnostics, running
 
 ASSETS = Path(__file__).with_name("ui")
 FILES = {"/": ("index.html", "text/html"), "/style.css": ("style.css", "text/css"),
@@ -17,7 +17,7 @@ ACTIONS = frozenset({
     "status", "history", "conversation", "send", "stop", "resume", "shutdown", "config", "config-text",
     "config-save", "issues", "tracker-issue", "tracker-draft", "tracker-review", "tracker-reconcile",
     "tracker-policy", "research-start", "research-resume", "research-preset", "log", "artifacts",
-    "experiment-inputs", "limits", "usage", "role", "backup",
+    "experiment-inputs", "limits", "usage", "role", "backup", "doctor", "update-preflight",
 })
 
 
@@ -106,6 +106,8 @@ class WebRequest(BaseHTTPRequestHandler):
             return self.result(400, error=str(error))
         action, args = data["action"], data["args"]
         try:
+            if action == "doctor":
+                return self.result(200, value=diagnostics(self.server.home.parent.parent))
             if not running(self.server.home):
                 if action == "status":
                     return self.result(200, value={"running": False})

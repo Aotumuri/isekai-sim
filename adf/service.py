@@ -203,6 +203,13 @@ class Service(Presets, Legacy, GitHubResearch, GitHub, GitReview, Evidence, Usag
             return save_config(self.store.home, args.get("content"))
         return backup(self.store.home)
 
+    async def update_preflight(self):
+        from .projects import git
+
+        root = self.project(self.local_project)["path"]
+        revision = (await git(root, "rev-parse", "HEAD")).decode().strip()
+        return {**self.maintenance("backup", {}), "revision": revision, "update_mode": "manual"}
+
     async def dispatch(self, action, args):
         operations = {
             "register": self.register, "archive": self.archive, "role": self.set_role,
@@ -224,6 +231,8 @@ class Service(Presets, Legacy, GitHubResearch, GitHub, GitReview, Evidence, Usag
                 raise ValueError("プロジェクト内 ADF は設定された GitHub Issues を使用します")
             if action == "config":
                 return self.local_config
+            if action == "update-preflight":
+                return await self.update_preflight()
             if action in {"config-text", "config-save", "backup"}:
                 return self.maintenance(action, args)
             if action == "ping":

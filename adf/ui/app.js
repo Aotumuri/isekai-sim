@@ -132,9 +132,12 @@ function renderStatus() {
   $("prompt").querySelector("button").disabled = !canSend || (!!developerResearch && status !== "running");
   $("resume").disabled = !connected || !["paused", "interrupted", "quota"].includes(status) ||
     (role === "developer" && run && ["completed", "blocked", "discovering"].includes(run.state));
+  $("resume-options").hidden = !developerResearch || $("resume").disabled;
   for (const id of ["stop", "interrupt"]) $(id).disabled = !connected || !active;
   $("open-plan").disabled = !connected || !state.mission?.trim();
   $("shutdown").disabled = !connected;
+  const busy = sessions.some(row => ["running", "idle", "waiting", "draining", "stopping", "quota"].includes(row.state));
+  for (const id of ["backup", "prepare-update"]) $(id).disabled = !connected || busy;
   replace("roles", roles.map(item => [item.name, sessions.find(row => row.role === item.name)?.state, role]), list =>
     list.map(([name, statusName, selected]) => {
       const button = element("button", undefined);
@@ -312,6 +315,14 @@ $("resume").onclick = () => execute(() => {
   return role === "developer" && run && !["completed", "blocked"].includes(run.state) ?
     api("research-resume") : api("resume", {role});
 }, $("resume"));
+form("resume-plan", async (values, node) => {
+  const args = {accept_issue_changes: values.accept_issue_changes === "on"};
+  if (values.scope.trim()) args.scope = values.scope;
+  if (values.tokens !== "") args.tokens = Number(values.tokens);
+  await api("research-resume", args);
+  node.reset();
+  $("resume-options").open = false;
+});
 $("load-issues").onclick = () => execute(async () => {
   const issues = await api("issues");
   $("issue-list").replaceChildren(...issues.map(item => action(`#${item.number} ${item.title} · ${item.state}`, async () => {
@@ -398,10 +409,12 @@ form("config", async values => {
   await api("config-save", values);
   notice("設定を保存しました。端末で python3 -m adf restart を実行すると反映されます。");
 });
-$("backup").onclick = () => execute(async () => {
-  const result = await api("backup");
-  notice("バックアップを保存しました。 " + result.backup);
-}, $("backup"));
+for (const [id, operation] of [["doctor", "doctor"], ["backup", "backup"], ["prepare-update", "update-preflight"]]) {
+  $(id).onclick = () => execute(async () => {
+    $("maintenance-result").textContent = JSON.stringify(await api(operation), null, 2);
+    $("maintenance-result").hidden = false;
+  }, $(id));
+}
 $("shutdown").onclick = () => execute(async () => {
   if (confirm("全ロールを停止し、監督を終了しますか？")) await api("shutdown");
 }, $("shutdown"));
