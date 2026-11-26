@@ -15,7 +15,7 @@ GUI の「研究」で対象 Issue 番号を指定する。ローカル課題を
 
 ```sh
 python3 -m adf tracker-policy 1 progress=allow checklist=ask comment=deny complete=ask proposal=ask
-python3 -m adf research-start 1 'この2課題の検証だけを許可' 101 102 --turns 6
+python3 -m adf research-start 1 'この2課題の検証だけを許可' 101 102 --turns 6 --tokens 250000
 python3 -m adf tracker-review OPERATION_ID --approve
 python3 -m adf research-resume 1
 ```
@@ -24,10 +24,41 @@ python3 -m adf research-resume 1
 
 GitHub のラベル変更でホストをまたぐ原子的な排他はできない。同じリポジトリを複数ホストで同時に自動実行する運用は未対応。既に送出した HTTP リクエストは停止で取り消せない。継続の前には停止世代を照合する。 [GitHub Issue 依存 API](https://docs.github.com/en/rest/issues/issue-dependencies)
 
+## 運用プリセットと研究予算
+
+「研究」→「運用プリセット」で候補と変更値を確認し、適用する。プリセットはプロジェクトごとに保存され、次回の研究開始フォームに反映される。開始時に上限を個別調整できる。「研究」には次回の設定と実行中の実効上限を表示する。
+
+| プリセット | ADF 研究上限 | 公式利用枠の回復 | GitHub 書き込み |
+| --- | --- | --- | --- |
+| Manual | 初期案は 8 ターン、4 実験。トークンは明示 | 手動再開 | 許可された操作も個別承認 |
+| Controlled | 初期案は 8 ターン、4 実験。有限のトークン予算を指定 | 手動または確認後自動 | 既存ポリシー |
+| Autonomous | 初期案はトークン、ターン、実験回数とも無制限 | 確認後自動 | 既存ポリシーで `allow` の操作のみ自動 |
+
+Manual の日常操作は「エージェント」からの指示を使う。「承認範囲で開始」を明示的に選ぶと、その範囲の研究は自律実行される。実験 1 回の時間上限はどのプリセットでも必要。ロール設定に別途指定した累計予算も引き続き適用される。プリセットはプロジェクトの許可、ロール権限、操作別の制約を変更しない。
+
+```sh
+# 確認してから、同じ設定に --apply を付けて保存する
+python3 -m adf research-preset 1 controlled --tokens 250000 --recovery confirmed
+python3 -m adf research-preset 1 controlled --tokens 250000 --recovery confirmed --apply
+python3 -m adf research-preset 1
+python3 -m adf research-start 1 '登録済みの課題だけ検証' 101 102
+
+# プロジェクトの保存値を変えず、この実行だけ各上限を無制限にする
+python3 -m adf research-start 1 '指定課題だけ検証' 101 --preset autonomous --tokens 0 --turns 0 --jobs 0 --timeout 120
+```
+
+保存値がない場合は開始時にトークン予算を明示するか、Autonomous を明示する。上限欄の `0` は無制限。公式利用枠の確認と観測トークンの記録は続く。回復時刻が取得できない場合や回復を確認できない場合は利用枠停止を維持する。追加クレジットへ自動移行しない。
+
+Autonomous では承認済み課題に着手できなければ「課題待機」となり、約 60 秒間隔でローカル状態または GitHub の状態を読み取りだけで確認する。課題待機と実験待機に推論は発生しない。全課題が完了すれば実行終了。停止要求や課題取得エラーでは課題待機を中断する。デーモン再起動後は明示的に「研究を再開」を選ぶ。承認した課題番号の外から新規課題を自動取得しない。
+
+観測トークンの予算はターン送信前の判定に使う。完了するターンの消費量を事前には確定できないため、実績が閾値を超える場合がある。直近の同種課題で、実験の開始と結果評価の両方の観測値を確認して余裕を足す。過去の 2 ターンでは評価だけで 58,250 トークン、開始と合わせて 96,027 トークンだった。うち 75,392 はキャッシュ済み入力。公式利用枠の残量は別に確認する。
+
+予算で止まったら「研究を再開」で使用済み分を含む新しい合計を指定する。CLI は `python3 -m adf research-resume PROJECT --tokens TOTAL`。有限の場合は現在の上限と使用済み分の両方を超える値を指定する。既存の制約を承認のうえで外す場合は `--tokens 0` を使う。評価用ターンの送信前に予算に達した実験は、再開後に同じスレッドで評価する。
+
 ## 実験環境とスナップショット
 
 ```sh
-python3 -m adf research-start 1 '承認したファイルの検証' 101 --runtime node --file test/experiment.ts --dependencies node_modules --evidence result.json
+python3 -m adf research-start 1 '承認したファイルの検証' 101 --tokens 250000 --runtime node --file test/experiment.ts --dependencies node_modules --evidence result.json
 python3 -m adf experiment-inputs JOB_ID
 python3 -m adf artifacts JOB_ID result.json
 python3 -m adf commit-preview 1
