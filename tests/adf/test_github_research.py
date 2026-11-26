@@ -43,6 +43,28 @@ class TestGitHubResearch(IsolatedAsyncioTestCase):
         self.assertEqual(row["turn_requests"], 2)
         self.assertEqual(self.service.status(self.project)["research_tasks"], [])
 
+    async def test_commit_required_does_not_close_issue_without_a_commit(self):
+        with self.store.db:
+            self.store.db.execute("UPDATE project SET github='fixture/project' WHERE id=?", (self.project,))
+        self.service.local_config = {"mission": "Verify the fixture.", "git": {"require_commit": True}}
+        self.service.set_tracker_policy(self.project, {"progress": "allow", "complete": "allow"})
+        issue = {"id": 1, "number": 1, "title": "NO_EXPERIMENT", "state": "open",
+                 "labels": [{"name": "status:ready"}]}
+
+        async def send(repo, kind, payload, key, actor):
+            self.assertEqual(kind, "progress")
+            issue["labels"] = [{"name": "status:in-progress"}]
+            return {"number": 1}
+
+        with (patch.object(self.service, "load_issue", AsyncMock(return_value=(issue, []))),
+              patch("adf.tracker.perform", AsyncMock(side_effect=send)) as submit):
+            await self.service.start_project_research(self.project, [1], "FIXTURE_RESEARCH", files=["fixture.txt"])
+            row = await self.state("developer", "paused")
+        submit.assert_awaited_once()
+        self.assertEqual(row["turn_requests"], 1)
+        self.assertEqual(issue["state"], "open")
+        self.assertEqual(self.service.status(self.project)["research_runs"][0]["state"], "paused")
+
     async def test_more_restrictive_repo_policy_applies_to_allow(self):
         self.store.db.execute("UPDATE project SET github='fixture/project' WHERE id=?", (self.project,))
         self.store.db.commit()

@@ -6,6 +6,14 @@ mission = ""
 [research]
 mode = "manual"
 
+# Optional. require_commit gates research completion and does not grant Git access.
+# [git]
+# require_commit = false
+# commit = "deny"
+# push = "deny"
+# pull_request = "deny"
+# destructive_history_operations = "deny"
+
 # Optional. If supplied, this section replaces the saved operation policy when edited.
 # [tracker]
 # proposal = "ask"

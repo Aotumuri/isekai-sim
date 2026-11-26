@@ -14,6 +14,22 @@ from .tracker_policy import policy_map
 
 INSTALLATION = Path(__file__).resolve().parent.parent
 PROJECT = 1
+GIT_OPERATIONS = ("commit", "push", "pull_request", "destructive_history_operations")
+
+
+def git_settings(data):
+    if not isinstance(data, dict) or set(data) - {*GIT_OPERATIONS, "require_commit"}:
+        raise ValueError("git テーブルの設定項目を確認してください")
+    policy = {name: data.get(name, "deny") for name in GIT_OPERATIONS}
+    for name, decision in policy.items():
+        if decision not in ("allow", "ask", "deny"):
+            raise ValueError(f"git.{name} は allow / ask / deny で指定してください")
+        if decision != "deny":
+            raise ValueError(f"git.{name}={decision} は現在の管理プロファイルでは強制できません")
+    required = data.get("require_commit", False)
+    if type(required) is not bool:
+        raise ValueError("git.require_commit は真偽値で指定してください")
+    return {**policy, "require_commit": required}
 
 
 def home_for(root):
@@ -29,7 +45,7 @@ def read_config(path):
     if path.stat().st_size > 65536:
         raise ValueError("運用設定が大きすぎます")
     data = tomllib.loads(path.read_text(encoding="utf-8"))
-    if set(data) - {"project", "research", "tracker"}:
+    if set(data) - {"project", "research", "tracker", "git"}:
         raise ValueError("運用 TOML のセクションを確認してください")
     project = data.get("project", {})
     research = data.get("research", {})
@@ -51,7 +67,8 @@ def read_config(path):
     preset = preset_config(mode, {key: value for key, value in research.items() if key != "mode"},
                            require_tokens=False)
     tracker = policy_map(data["tracker"]) if "tracker" in data else None
-    return {"name": name, "github": github, "mission": mission, "preset": preset, "tracker": tracker}
+    return {"name": name, "github": github, "mission": mission, "preset": preset, "tracker": tracker,
+            "git": git_settings(data.get("git", {}))}
 
 
 def setup(root, source=None, *, replace=False):

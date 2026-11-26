@@ -21,7 +21,7 @@ class Evidence:
         scope = json.loads(run["scope"])
         plan = scope.get("experiment") or {}
         artifacts = plan.get("artifacts", [])
-        if not artifacts:
+        if not artifacts and not plan.get("require_commit"):
             return None
         revision, _ = await checkpoint(row)
         overlay = hashes(capture(row["path"], plan["files"]))
@@ -54,21 +54,39 @@ class Evidence:
                 continue
         return None
 
+    async def completion_evidence(self, row, run, decision=None, *, optional_job=False):
+        scope = json.loads(run["scope"])
+        plan = scope.get("experiment") or {}
+        proof = None
+        if plan.get("require_commit"):
+            expected = decision.get("commit") if decision is not None else None
+            if decision is not None and not expected:
+                raise ValueError("The saved decision has no verified commit.")
+            proof = await self.verified_commit(row, scope, expected["revision"] if expected else None)
+        job = await self.verified_job(row, run) if proof or plan.get("artifacts") or optional_job else None
+        if (proof or plan.get("artifacts")) and not job:
+            raise ValueError("The current source has no successful experiment with all required artifacts.")
+        if proof:
+            recorded = self.store.one("SELECT revision FROM job WHERE id=?", (job,))
+            if recorded["revision"] != proof["revision"] or (await checkpoint(row))[0] != proof["revision"]:
+                raise ValueError("HEAD changed during commit and experiment verification.")
+        return proof, job
+
     async def finalize_local(self, row, turn):
         run = self.research_for(row)
         if not run:
             return
         plan = json.loads(run["scope"]).get("experiment") or {}
-        if (plan.get("artifacts") and run["decision_turn"] == turn
-                and json.loads(run["decision"])["outcome"] == "completed"):
+        if plan.get("require_commit") and run["decision_turn"] != turn:
+            self.pause_research(row, "コミットと実験の証拠を確認できません。差分と実験記録を確認して再開してください")
+            return
+        if run["decision_turn"] == turn and json.loads(run["decision"])["outcome"] == "completed":
             try:
-                verified = await self.verified_job(row, run)
-            except (OSError, ValueError, TimeoutError):
-                verified = None
-            if not self.visible(row["id"], row["generation"], ("idle",)):
+                await self.completion_evidence(row, run, json.loads(run["decision"]))
+            except (OSError, ValueError, TimeoutError) as error:
+                self.pause_research(row, str(error) if isinstance(error, ValueError) else type(error).__name__)
                 return
-            if not verified:
-                self.pause_github(row, "現在のソースに対応する実験・必須成果物を確認できません")
+            if not self.visible(row["id"], row["generation"], ("idle",)):
                 return
         self.advance_research(row, turn)
         self.release_inactive_legacy(row["id"])

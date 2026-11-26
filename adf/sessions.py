@@ -184,12 +184,9 @@ class Sessions:
                 row["discovery"] = True
             research = self.research_for(row)
             if research:
-                scope = json.loads(research["scope"])
-                if "commit_base" not in scope:
-                    scope["commit_base"] = revision
-                    with self.store.db:
-                        self.store.db.execute("UPDATE research_run SET scope=? WHERE session=?",
-                                              (json.dumps(scope), session))
+                await self.pin_commit_base(row, research, revision)
+                if not self.visible(session, generation, ("running",)):
+                    return
             budget_reason = self.research_budget_reason(row, research or discovery) if research or discovery else None
             if settings["budget"] and row["tokens"] >= settings["budget"]:
                 budget_reason = (f"ロールの累計予算に達しました ({row['tokens']:,}/{settings['budget']:,})。"

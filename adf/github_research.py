@@ -152,9 +152,7 @@ class GitHubResearch:
         issue, deps = await self.current_issue(row, run)
         if draft["kind"] == "complete":
             run_details = self.store.one("SELECT * FROM research_run WHERE session=?", (row["id"],))
-            plan = json.loads(run_details["scope"]).get("experiment") or {}
-            if plan.get("artifacts") and not await self.verified_job(row, run_details):
-                raise ValueError("現在のソースと必須成果物が承認時の実験に一致しません")
+            await self.completion_evidence(row, run_details, json.loads(run_details["decision"] or "{}"))
         latest = self.store.session(row["id"])
         latest_run = self.github_run(latest)
         allowed = {"ready"} if run["phase"] == "claim" else ACTIVE_STATUS
@@ -190,19 +188,9 @@ class GitHubResearch:
             return True
         result = {"approval": key} if force_review else await self.send_tracker(key, True, automatic=True)
         if "approval" in result:
-            self.pause_github(row, f"GitHub 操作の承認待ち: {key}")
+            self.pause_research(row, f"GitHub 操作の承認待ち: {key}")
             return False
         return True
-
-    def pause_github(self, row, reason):
-        latest = self.store.session(row["id"])
-        if latest["generation"] != row["generation"] or latest["state"] not in ("running", "idle"):
-            return
-        with self.store.db:
-            self.store.update_session(row["id"], state="paused")
-            self.store.db.execute("UPDATE research_run SET state='paused' WHERE session=?", (row["id"],))
-            self.store.event(row["id"], "github_pause", reason)
-        self.release_inactive_legacy(row["id"])
 
     async def before_github_turn(self, row):
         run = self.github_run(row)
@@ -236,11 +224,11 @@ class GitHubResearch:
         research = self.research_for(row)
         try:
             if not research or research["decision_turn"] != turn:
-                self.pause_github(row, "実験または根拠付きの課題判断が返されませんでした")
+                self.pause_research(row, "実験または根拠付きの課題判断が返されませんでした")
                 return
             decision = json.loads(research["decision"])
             if decision["outcome"] != "completed":
-                self.pause_github(row, decision["summary"])
+                self.pause_research(row, decision["summary"])
                 return
             issue, _ = await self.current_issue(row, run)
             if not self.visible(row["id"], row["generation"], ("idle",)):
@@ -248,15 +236,17 @@ class GitHubResearch:
             if any(match[2] == " " for line in (issue.get("body") or "").splitlines()
                    if (match := CHECKBOX.fullmatch(line))):
                 raise ValueError("GitHub の未完了チェック項目を確認してください")
+            _, verified = await self.completion_evidence(row, research, decision, optional_job=True)
+            if not self.visible(row["id"], row["generation"], ("idle",)):
+                return
             with self.store.db:
                 self.store.db.execute("UPDATE github_run SET phase='finish',operation=NULL WHERE session=?", (row["id"],))
             run = self.github_run(row)
-            verified = await self.verified_job(row, research)
             if await self.submit_research_operation(row, run, "complete", {"issue": run["issue"]},
                                                     force_review=not verified):
                 await self.next_github(row, research, run, decision["summary"])
         except Exception as error:
-            self.pause_github(row, str(error) if isinstance(error, ValueError) else type(error).__name__)
+            self.pause_research(row, str(error) if isinstance(error, ValueError) else type(error).__name__)
 
     async def next_github(self, row, research, run, summary):
         # Remote confirmation is authoritative; a successful mutation RPC alone is insufficient.
@@ -265,10 +255,16 @@ class GitHubResearch:
             raise ValueError("GitHub で完了状態を確認できません")
         scope = json.loads(research["scope"])
         selected, all_done = await self.select_issue(run["repository"], scope["ids"])
+        decision = json.loads(research["decision"] or "{}")
+        if (scope.get("experiment") or {}).get("require_commit"):
+            await self.completion_evidence(row, research, decision)
         if not self.visible(row["id"], row["generation"], ("idle", "paused")):
             return
         with self.store.db:
-            self.store.event(row["id"], "research_result", {"issue": run["issue"], "summary": summary})
+            result = {"issue": run["issue"], "summary": summary}
+            if "commit" in decision:
+                result["commit"] = decision["commit"]
+            self.store.event(row["id"], "research_result", result)
             if not selected and discovers(scope):
                 self.start_discovery(row, research, scope)
             elif all_done:
@@ -287,7 +283,7 @@ class GitHubResearch:
             elif not selected and autonomous(scope):
                 self.queue_research(row)
             else:
-                self.pause_github(row, "研究予算に到達、または承認範囲に着手可能な課題がありません")
+                self.pause_research(row, "研究予算に到達、または承認範囲に着手可能な課題がありません")
         self.release_inactive_legacy(row["id"])
 
     async def resume_project_research(self, project, accept_issue_changes=False, tokens=None, scope=None):
@@ -335,8 +331,11 @@ class GitHubResearch:
         changed = fingerprint(issue, deps) != remote["fingerprint"]
         scope = json.loads(current["scope"])
         if remote["phase"] == "finish" and not changed:
-            required = (scope.get("experiment") or {}).get("artifacts")
-            if not required or await self.verified_job(row, current):
+            try:
+                await self.completion_evidence(row, current, json.loads(current["decision"] or "{}"))
+            except ValueError:
+                pass
+            else:
                 if self.stop_epochs.get(project, 0) != epoch:
                     raise ValueError("再開確認中に停止が指定されました")
                 return await self.renew_completion(row, current, remote)
@@ -373,7 +372,7 @@ class GitHubResearch:
         try:
             await self.next_github(resumed, current, remote, json.loads(current["decision"])["summary"])
         except Exception as error:
-            self.pause_github(resumed, str(error) if isinstance(error, ValueError) else type(error).__name__)
+            self.pause_research(resumed, str(error) if isinstance(error, ValueError) else type(error).__name__)
             raise
         return session
 
@@ -392,6 +391,6 @@ class GitHubResearch:
             await self.submit_research_operation(current_row, self.github_run(current_row), "complete",
                                                  {"issue": remote["issue"]}, force_review=True)
         except Exception as error:
-            self.pause_github(current_row, str(error) if isinstance(error, ValueError) else type(error).__name__)
+            self.pause_research(current_row, str(error) if isinstance(error, ValueError) else type(error).__name__)
             raise
         return session
