@@ -13,10 +13,17 @@ Follow existing repository conventions and preserve behavior unless a task requi
 - Commit each completed, verified unit of work locally. Keep each feature, fix, or independent documentation change in a focused commit. Developer must commit completed changes before reporting completion, releasing ownership, or moving to another task.
 - Use Conventional Commits with a scope: `type(scope): summary`. Choose the type and scope that describe the change, such as `feat(tracker): sync issue checklists`, `fix(runner): preserve wake receipts`, or `docs(agents): define commit rules`.
 - Stage only the files needed for the commit. Check `git status --short` before ending the turn or handing off. If a commit cannot be made, keep this task's edits unstaged and record the blocker and next action. Preserve any staging that belongs to another task or person.
+- In ADF Desktop, the Developer provides verified changes for Desktop diff review and the human performs the commit.
 
 ## Autonomous research
 
 Use independent judgment. Evaluate proposals against evidence and project goals, record negative findings, and revisit settled decisions only when new evidence warrants it. Prefer controlled experiments with explicit baselines, success criteria, time budgets, and reproducible commands.
+
+### ADF Desktop
+
+Sessions launched by ADF Desktop use the Desktop role instructions and its `adf_*` tools. Desktop manages ownership, checkpoints, experiments, completion notifications, and GitHub approvals. Use its experiment tools and end the turn when an experiment is accepted. Keep the shared project and engineering policies above. Only the Desktop supervisor may access its private state. The legacy CLI procedures below apply only to standalone ADF sessions.
+
+### Standalone ADF
 
 - **Coordinator** is an independent human-facing session. Read [Coordinator instructions](agents/docs/roles/coordinator.md).
 - **Developer** is an independent research session and owns task selection, source changes, validation, state, and commits. Read [Developer instructions](agents/docs/roles/developer.md). Start with `python3 agents/tools/research.py status`; consult the [roadmap](agents/research/ROADMAP.md) and linked history as needed.
@@ -28,4 +35,6 @@ Follow [repository policy](agents/config.toml) and check lifecycle state before 
 
 Run long deterministic jobs using the [runner](agents/docs/runner.md). Persist the task, revision, jobs, and next action at a safe boundary. End the turn when only unfinished experiments remain. Recover from disk after a context reset, interruption, or thread replacement. Continue to valuable tasks within the authorized budget; document idle or blocked status when appropriate.
 
-Start with the [operating guide](agents/docs/OPERATIONS.md) for setup. Write human-facing documentation and reports in Japanese. Keep agent-only instructions in English.
+Start with the [operating guide](agents/docs/OPERATIONS.md) for standalone setup.
+
+Write human-facing documentation and reports in Japanese. Keep agent-only instructions in English.

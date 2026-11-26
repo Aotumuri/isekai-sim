@@ -92,8 +92,12 @@ def digest(data):
 
 def confirm_idle(data):
     control = data.get("control") or {}
-    if data["owner"] or control.get("mode") == "stopping" or any(job["state"] in ACTIVE_JOBS for job in data["jobs"]):
-        raise ValueError("旧 ADF の Developer を停止・解放し、実行中の実験を解消してください")
+    if data["owner"]:
+        raise ValueError("旧 ADF の Developer を停止し、所有権を解放してください")
+    if control.get("mode") == "stopping":
+        raise ValueError("旧 ADF は停止処理中です。停止を完了してください")
+    if any(job["state"] in ACTIVE_JOBS for job in data["jobs"]):
+        raise ValueError("旧 ADF に実行待ちまたは実行中の実験があります。実験の終了を確認してください")
 
 
 @contextlib.contextmanager
@@ -123,7 +127,7 @@ def legacy_lease(root):
         try:
             fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise ValueError("旧 ADF が状態を更新中です") from None
+            raise ValueError("旧 ADF または別の Desktop が共有ロックを保持しています") from None
         confirm_idle(inventory(root))
         yield
 

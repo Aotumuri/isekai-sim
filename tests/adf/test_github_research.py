@@ -171,9 +171,10 @@ class TestGitHubResearch(IsolatedAsyncioTestCase):
             await self.service.start_project_research(self.project, [1], "FIXTURE_RESEARCH")
             quota = await self.state("developer", "quota")
             self.assertEqual(quota["turn_requests"], 0)
+            self.assertIsNone(quota["thread"])
             await self.service.resume_project_research(self.project)
             paused = await self.state("developer", "paused")
-        self.assertEqual(paused["thread"], quota["thread"])
+        self.assertIsNotNone(paused["thread"])
         self.assertEqual(paused["turn_requests"], 1)
         send.assert_awaited_once()
 

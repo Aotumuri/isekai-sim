@@ -1,4 +1,5 @@
 import asyncio
+import fcntl
 import json
 from pathlib import Path
 import subprocess
@@ -8,7 +9,9 @@ import time
 import uuid
 from unittest.mock import patch
 
+from adf.codex import TOOL_VERSION
 from adf.ipc import Client, receive, write
+from adf.legacy import legacy_lease
 from adf.service import Service
 from adf.store import Store, private_dir
 
@@ -63,6 +66,64 @@ class OrchestratorTest(unittest.IsolatedAsyncioTestCase):
         self.service.set_template(self.project, "trial", ["/bin/sleep", duration], 10)
         await self.service.message(self.project, "developer", "launch experiment", experiment="trial")
         return await self.state("developer", "waiting")
+
+    async def test_desktop_resumes_with_current_contract(self):
+        runtime_path = self.path / "agents/runtime"
+        runtime_path.mkdir(parents=True)
+        (runtime_path / "control.json").write_text(json.dumps({"mode": "stopped"}))
+        (runtime_path / "jobs").mkdir()
+        job = runtime_path / "jobs/old"
+        job.mkdir()
+        (job / "manifest.json").write_text(json.dumps({"status": "succeeded"}))
+        session = await self.service.message(self.project, "developer", "hold")
+        await self.wait(lambda: self.store.session(session)["turn"])
+        await self.service.stop_role(self.project, "developer", immediate=True)
+        paused = await self.state("developer", "paused")
+        with self.store.db:
+            self.store.update_session(session, thread_tools=TOOL_VERSION - 1)
+        await self.service.resume_role(self.project, "developer", "Continue the saved task")
+        idle = await self.state("developer", "idle")
+        self.assertNotEqual(idle["thread"], paused["thread"])
+        self.assertEqual(idle["thread_tools"], TOOL_VERSION)
+        self.assertGreater(idle["tokens"], paused["tokens"])
+        waiting = await self.start_experiment()
+        self.assertEqual(waiting["thread"], idle["thread"])
+        await self.state("developer", "idle")
+        self.assertEqual(self.jobs()[0]["state"], "succeeded")
+        events = self.service.status(self.project)["events"]
+        self.assertTrue(any(e["kind"] == "thread_archive" for e in events))
+        with self.assertRaisesRegex(ValueError, "共有ロック"):
+            with legacy_lease(self.path):
+                self.fail("Desktop must hold the shared lease while idle")
+        await self.service.stop_role(self.project, "developer")
+        with legacy_lease(self.path):
+            pass
+
+    async def test_legacy_blockers_are_reported_before_opening_codex(self):
+        runtime_path = self.path / "agents/runtime"
+        job = runtime_path / "jobs/old"
+        job.mkdir(parents=True)
+        session_lock = runtime_path / "state.lock"
+        session_lock.touch()
+        control = runtime_path / "control.json"
+        manifest = job / "manifest.json"
+
+        async def blocked(reason):
+            await self.service.message(self.project, "developer", "hold")
+            await self.state("developer", "interrupted")
+            self.assertIsNone(self.service.runtime)
+            events = self.service.status(self.project)["events"]
+            last_error = next(e for e in reversed(events) if e["kind"] == "error")
+            self.assertIn(reason, str(last_error))
+
+        with session_lock.open("rb") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            await blocked("共有ロック")
+        control.write_text(json.dumps({"mode": "stopping"}))
+        await blocked("停止処理中")
+        control.write_text(json.dumps({"mode": "stopped"}))
+        manifest.write_text(json.dumps({"status": "running"}))
+        await blocked("実行待ちまたは実行中")
 
     async def test_model_catalog_does_not_start_a_turn(self):
         models = await self.service.dispatch("models", {})

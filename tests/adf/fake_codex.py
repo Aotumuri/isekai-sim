@@ -13,6 +13,7 @@ lock = threading.Lock()
 requests = {}
 jobs = {}
 turns = {}
+thread_tools = {}
 provider = "chatgpt"
 research_cycles = {}
 
@@ -32,6 +33,14 @@ def event(method, **params):
 
 def complete(thread, turn, status="completed", error=None):
     event("turn/completed", threadId=thread, turn={"id": turn, "status": status, "error": error})
+
+
+def call_tool(thread, turn, request, tool, arguments):
+    if thread in thread_tools:
+        assert tool in thread_tools[thread], f"Tool {tool} was not registered"
+    send({"id": request, "method": "item/tool/call", "params": {
+        "threadId": thread, "turnId": turn, "tool": tool, "callId": request, "arguments": arguments,
+    }})
 
 
 def begin(key, params):
@@ -57,16 +66,11 @@ def begin(key, params):
         else:
             tool, arguments = "adf_finish_research_task", {"outcome": "completed", "summary": "Verified fixture"}
         requests[request] = (thread, turn, 34 if "BUDGET_FIXTURE" in text else None)
-        send({"id": request, "method": "item/tool/call", "params": {
-            "threadId": thread, "turnId": turn, "tool": tool, "callId": request, "arguments": arguments,
-        }})
+        call_tool(thread, turn, request, tool, arguments)
     elif text.startswith("launch experiment"):
         request = f"call-{turn}"
         requests[request] = (thread, turn, None)
-        send({"id": request, "method": "item/tool/call", "params": {
-            "threadId": thread, "turnId": turn, "tool": "adf_start_experiment",
-            "callId": request, "arguments": {"template": "trial"},
-        }})
+        call_tool(thread, turn, request, "adf_start_experiment", {"template": "trial"})
     elif text == "quota":
         complete(thread, turn, "failed", {"codexErrorInfo": "usageLimitExceeded"})
     elif text != "hold":
@@ -114,7 +118,9 @@ for line in sys.stdin:
                               {"model": "hidden-fixture", "hidden": True}], "nextCursor": None})
     elif method == "thread/start":
         assert args["permissions"] in ("adf-reader", "adf-writer")
-        answer(key, {"thread": {"id": f"thread-{next(serial)}"}})
+        thread = f"thread-{next(serial)}"
+        thread_tools[thread] = {tool["name"] for tool in args.get("dynamicTools", [])}
+        answer(key, {"thread": {"id": thread}})
     elif method == "thread/resume":
         answer(key, {"thread": {"id": args["threadId"]}})
     elif method == "turn/start":

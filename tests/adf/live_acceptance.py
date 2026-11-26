@@ -17,18 +17,23 @@ async def check_permissions(runtime, root):
     outside = root / "canary"
     outside.write_text("canary")
     (source / ".env").write_text("canary")
+    legacy = source / "agents/runtime"
+    legacy.mkdir(parents=True)
+    (legacy / "state.lock").touch()
     for profile, expected in (("adf-reader", False), ("adf-writer", True)):
         # Use only synthetic files and test declared access with a trusted fixed command.
         result = await runtime.rpc("command/exec", {
             "command": ["/bin/sh", "-c",
-                        'test ! -r "$1" && test ! -r .env || exit 91; '
+                        'test ! -r "$1" && test ! -r .env && test ! -r agents/runtime/state.lock || exit 91; '
+                        'if (: >> agents/runtime/state.lock) 2>/dev/null; then exit 92; fi; '
                         'if (echo ok > probe) 2>/dev/null; then exit 0; else exit 1; fi',
                         "sh", str(outside)],
             "cwd": str(source), "permissionProfile": profile, "timeoutMs": 5000,
         })
         assert result["exitCode"] == (0 if expected else 1), (profile, result["exitCode"])
         assert (source / "probe").is_file() is expected
-    print("Permission canaries: outside read denied; reader write denied; writer write allowed", flush=True)
+    print("Permission canaries: private and legacy reads denied; legacy writes denied; "
+          "reader write denied; writer write allowed", flush=True)
 
 
 async def main(args):

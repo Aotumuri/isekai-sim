@@ -17,7 +17,8 @@ TOOL = "adf_start_experiment"
 RESEARCH_EXPERIMENT = "adf_research_experiment"
 RESEARCH_FINISH = "adf_finish_research_task"
 ARTIFACT_READ = "adf_read_experiment_output"
-TOOL_VERSION = 3
+# Bump when a saved thread's tools or operating instructions need replacement.
+TOOL_VERSION = 4
 
 
 def environment():
@@ -26,24 +27,27 @@ def environment():
     return {**{key: os.environ[key] for key in keys if key in os.environ}, "PATH": PATH}
 
 
-def profile_options():
+def profile_options(binary):
+    # The App Server re-executes Codex inside the profile to load AGENTS.md.
+    server_file = Path(binary).resolve()
     profiles = []
     for name, mode in (("adf-reader", "read"), ("adf-writer", "write"), ("adf-experiment", "write"), ("adf-node", "write")):
         rules = {".": mode, ".git": "read", ".agents": "read", ".codex": "read", ".aws": "read",
-                 ".env": "deny", "**/.env": "deny", "**/.env.*": "deny"}
+                 "agents/runtime": "deny", ".env": "deny", "**/.env": "deny", "**/.env.*": "deny"}
         paths = ", ".join(f"{json.dumps(path)}={json.dumps(access)}" for path, access in rules.items())
-        interpreter = ""
+        allowed_files = {server_file}
         if name in ("adf-experiment", "adf-node"):
             kind = "node" if name == "adf-node" else "python"
             try:
-                interpreter = "".join(f', {json.dumps(str(path))}="read"' for path in runtime_files(kind))
+                allowed_files.update(runtime_files(kind))
             except (OSError, ValueError, subprocess.SubprocessError):
                 if kind != "node":
                     raise
                 # Failure to inspect Node cannot disable the Python runtime.
                 continue
+        files = "".join(f', {json.dumps(str(path))}="read"' for path in sorted(allowed_files))
         profiles.append(f'{name}={{filesystem={{":root"="deny", ":minimal"="read", '
-                        f'":workspace_roots"={{{paths}}}{interpreter}}}, network={{enabled=false}}}}')
+                        f'":workspace_roots"={{{paths}}}{files}}}, network={{enabled=false}}}}')
     return "-c", "permissions={" + ", ".join(profiles) + "}", "-c", 'default_permissions="adf-reader"'
 
 
@@ -75,19 +79,20 @@ class Codex:
         self.life = None
 
     async def open(self):
+        binary = str(Path(self.binary).resolve(strict=True))
         life, self.life = os.pipe()
         try:
             self.process = await asyncio.create_subprocess_exec(
                 sys.executable, "-I", str(Path(__file__).with_name("runtime_host.py")),
                 str(life), str(-1 if self.lease is None else self.lease),
-                self.binary, "app-server", "--listen", "stdio://", "--strict-config",
+                binary, "app-server", "--listen", "stdio://", "--strict-config",
                 "-c", 'model_provider="openai"', "-c", 'forced_login_method="chatgpt"',
                 "-c", 'service_tier="default"',
                 "-c", 'mcp_servers={}', "-c", 'features.apps=false',
                 "-c", 'features.multi_agent=false', "-c", 'features.multi_agent_v2=false',
                 "-c", 'web_search="disabled"',
                 "-c", 'shell_environment_policy.inherit="none"',
-                *profile_options(),
+                *profile_options(binary),
                 "-c", f'shell_environment_policy.set.PATH="{PATH}"',
                 cwd=Path.home(), env=environment(), start_new_session=True,
                 pass_fds=(life,) if self.lease is None else (life, self.lease),
@@ -174,6 +179,18 @@ class Codex:
                   "permissions": profile(session["role"]), "runtimeWorkspaceRoots": [session["path"]],
                   "developerInstructions": instructions, "modelProvider": "openai",
                   "serviceTier": "default"}
+        root = Path(session["path"])
+        if (root / "agents/tools/research.py").is_file():
+            paths = [
+                str(root / f".agents/skills/{role}/SKILL.md")
+                for role in ("coordinator", "developer")
+            ]
+            effective = await self.rpc("config/read", {"cwd": str(root)})
+            skills = (effective["config"].get("skills") or {}).get("config", [])
+            params["config"] = {"skills.config": [
+                *(skill for skill in skills if skill.get("path") not in paths),
+                *({"path": path, "enabled": False} for path in paths),
+            ]}
         if settings["model"]:
             params["model"] = settings["model"]
         if session["thread"]:

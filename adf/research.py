@@ -3,7 +3,6 @@
 import asyncio
 import json
 
-from .codex import TOOL_VERSION
 from .runtimes import experiment_command
 from .snapshots import capture, hashes, options, relative
 
@@ -100,11 +99,6 @@ class Research:
         session = self.reserve(project, "developer", prompt, False, launch=False)
         row = self.store.session(session)
         with self.store.db:
-            # Older App Server threads persist their old dynamic-tool schema.
-            if row["thread"] and row["thread_tools"] < TOOL_VERSION:
-                self.live.pop(row["thread"], None)
-                self.store.event(session, "thread_archive", row["thread"])
-                self.store.update_session(session, thread=None, token_floor=row["tokens"])
             self.store.db.execute(
                 "INSERT OR REPLACE INTO research_run(session,generation,scope,task,state,job_limit,timeout,"
                 "turn_limit,token_limit,start_turns,start_tokens) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
