@@ -112,6 +112,43 @@ class TestGitHubResearch(IsolatedAsyncioTestCase):
         self.assertEqual([item["state"] for item in operations], ["pending", "expired"])
         self.assertEqual(row["turn_requests"], 0)
 
+    async def test_crash_expires_pending_claim_but_preserves_ambiguous_send(self):
+        with self.store.db:
+            self.store.db.execute("UPDATE project SET github='fixture/project' WHERE id=?", (self.project,))
+        self.service.set_tracker_policy(self.project, {"progress": "ask"})
+        issue = {"id": 1, "number": 1, "title": "Test", "body": "", "state": "open",
+                 "labels": [{"name": "status:ready"}]}
+        with (patch.object(self.service, "load_issue", AsyncMock(return_value=(issue, []))),
+              patch("adf.tracker.perform", AsyncMock()) as send):
+            await self.service.start_project_research(self.project, [1], "Inspect")
+            row = await self.state("developer", "paused")
+            old = self.service.status(self.project)["tracker_operations"][0]["id"]
+            home = self.store.home
+            self.store.db.close()
+            self.store = test_adf.Store(home)
+            self.service.store = self.store
+            self.store.recover()
+            recovered = self.store.session(row["id"])
+            self.assertEqual((recovered["state"], recovered["generation"], recovered["turn_requests"]),
+                             ("interrupted", row["generation"] + 1, 0))
+            with self.assertRaises(ValueError):
+                await self.service.review_tracker(old, True)
+            await self.service.resume_project_research(self.project)
+            await self.state("developer", "paused")
+            latest = self.service.status(self.project)["tracker_operations"]
+            self.assertEqual([entry["state"] for entry in latest], ["pending", "expired"])
+            self.assertNotEqual(latest[0]["id"], old)
+
+            # A sent request with unknown outcome must stay blocked across another restart.
+            with self.store.db:
+                self.store.db.execute("UPDATE tracker_operation SET state='sending' WHERE id=?", (latest[0]["id"],))
+            self.store.recover()
+            with self.assertRaisesRegex(ValueError, "送信結果"):
+                await self.service.resume_project_research(self.project)
+            self.assertEqual(self.service.status(self.project)["tracker_operations"][0]["state"], "sending")
+            send.assert_not_awaited()
+            self.assertEqual(self.store.session(row["id"])["turn_requests"], 0)
+
     async def test_quota_resume_does_not_repeat_confirmed_claim(self):
         self.store.db.execute("UPDATE project SET github='fixture/project' WHERE id=?", (self.project,))
         self.store.db.commit()

@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import re
 import time
+import uuid
 from urllib.parse import quote
 
 from .codex import environment
@@ -102,7 +103,17 @@ class GitHub(TrackerPolicy):
             (repository, issue))
 
     def draft_tracker(self, project, kind, payload):
-        return self.save_tracker_draft(project, kind, payload, "human")
+        key = self.save_tracker_draft(project, kind, payload, "human")
+        existing = self.store.one("SELECT * FROM tracker_operation WHERE id=?", (key,))
+        if existing["state"] == "unapplied":
+            latest = self.store.one(
+                "SELECT id,state FROM tracker_operation WHERE project=? AND repository=? AND kind=? "
+                "AND payload=? AND actor='human' ORDER BY created DESC LIMIT 1",
+                (project, existing["repository"], kind, existing["payload"]))
+            if latest and latest["state"] != "unapplied":
+                return latest["id"]
+            return self.save_tracker_draft(project, kind, payload, "human", nonce=uuid.uuid4().hex)
+        return key
 
     def save_tracker_draft(self, project, kind, payload, actor, *, nonce=""):
         row = self.project(project)
@@ -148,31 +159,58 @@ class GitHub(TrackerPolicy):
         if project["github"] != draft["repository"]:
             raise ValueError("登録リポジトリが変わりました。承認内容を見直してください")
         policy = self.tracker_allowed(project, draft["kind"])
+        payload = json.loads(draft["payload"])
+        guard = self.store.one("SELECT * FROM tracker_guard WHERE operation=?", (operation,))
         if automatic and policy != "allow":
             return {"approval": operation}
-        expected = None
-        if guard := self.store.one("SELECT * FROM tracker_guard WHERE operation=?", (operation,)):
-            expected = await self.check_tracker_guard(guard, draft)
-            draft = self.store.one("SELECT * FROM tracker_operation WHERE id=?", (operation,))
-            if draft["state"] != "pending":
+        expected = await self.check_tracker_guard(guard, draft) if guard else None
+        before = expected[0] if expected else None
+        if draft["kind"] == "checklist" and before is None:
+            before = await fetch_issue(draft["repository"], payload["issue"])
+            if before["state"] != "open":
+                raise ValueError("開いている Issue のチェックリストを指定してください")
+        if guard or before is not None:
+            fresh = self.store.one("SELECT state FROM tracker_operation WHERE id=?", (operation,))
+            if fresh["state"] != "pending":
                 raise ValueError("この操作は既に処理されています")
-            policy = self.tracker_allowed(self.project(draft["project"]), draft["kind"])
+            project = self.project(draft["project"])
+            if project["github"] != draft["repository"]:
+                raise ValueError("登録リポジトリが変わりました。承認内容を見直してください")
+            policy = self.tracker_allowed(project, draft["kind"])
             if automatic and policy != "allow":
                 return {"approval": operation}
-        payload = json.loads(draft["payload"])
         if payload.get("issue") is not None and self.unknown_tracker_operation(draft["repository"], payload["issue"]):
             raise ValueError("同じ Issue の送信結果が不明です。先に照合してください")
-        checklist_hash = self.checklist_expectation(draft, expected) if expected and draft["kind"] == "checklist" else None
+        checklist_hash = None
+        if draft["kind"] == "checklist":
+            if expected:
+                checklist_hash = self.checklist_expectation(draft, expected)
+            else:
+                after = dict(before, body=checklist(before.get("body") or "", payload["criterion"], payload["checked"]))
+                checklist_hash = standalone_checklist_hash(after)
         with self.store.db:
             self.store.db.execute("UPDATE tracker_operation SET state='sending' WHERE id=?", (operation,))
             if checklist_hash:
-                self.store.db.execute("INSERT INTO tracker_expectation VALUES (?,?)", (operation, checklist_hash))
+                self.store.db.execute("INSERT INTO tracker_expectation VALUES (?,?,?)",
+                                      (operation, checklist_hash, standalone_checklist_hash(before) if not guard else None))
         # The sending record and expected result survive timeout and daemon restart.
         args = (draft["repository"], draft["kind"], payload, operation, draft["actor"])
-        result = await (perform(*args, before=expected[0]) if checklist_hash else perform(*args))
-        change = await self.refresh_checklist_guard(guard, draft, checklist_hash) if checklist_hash else None
-        self.confirm_tracker(operation, result, change)
-        return result
+        self.tracker_sending.add(operation)
+        try:
+            result = await (perform(*args, before=before) if checklist_hash else perform(*args))
+            change = await self.confirm_checklist_result(draft, guard, checklist_hash) if checklist_hash else None
+            self.confirm_tracker(operation, result, change)
+            return result
+        finally:
+            self.tracker_sending.discard(operation)
+
+    async def confirm_checklist_result(self, draft, guard, expected):
+        if guard:
+            return await self.refresh_checklist_guard(guard, draft, expected)
+        issue = await fetch_issue(draft["repository"], json.loads(draft["payload"])["issue"])
+        if standalone_checklist_hash(issue) != expected:
+            raise ValueError("GitHub のチェックリスト更新結果が想定と一致しません")
+        return None
 
     def confirm_tracker(self, operation, result, change=None):
         with self.store.db:
@@ -188,21 +226,28 @@ class GitHub(TrackerPolicy):
                         "SELECT operation FROM tracker_guard WHERE session=? AND generation=? AND fingerprint=?)",
                         change[1:4])
 
-    async def reconcile_tracker(self, operation, accept_external_edit=False):
-        if not isinstance(operation, str) or type(accept_external_edit) is not bool:
-            raise ValueError("操作 ID を指定してください")
+    async def reconcile_tracker(self, operation, accept_external_edit=False, confirm_unapplied=False):
+        if (not isinstance(operation, str) or type(accept_external_edit) is not bool
+                or type(confirm_unapplied) is not bool or (accept_external_edit and confirm_unapplied)):
+            raise ValueError("操作 ID と照合方法を指定してください")
+        if operation in self.tracker_sending:
+            raise ValueError("送信処理が終了してから照合してください")
         draft = self.store.one("SELECT * FROM tracker_operation WHERE id=? AND state='sending'", (operation,))
         if not draft or draft["kind"] not in ("progress", "complete", "checklist"):
             raise ValueError("結果不明の進捗・完了・チェックリスト操作を指定してください")
         payload = json.loads(draft["payload"])
+        if confirm_unapplied:
+            return await self.confirm_unapplied_checklist(draft, payload)
         if draft["kind"] == "checklist":
             expected = self.store.one("SELECT fingerprint FROM tracker_expectation WHERE operation=?", (operation,))
             guard = self.store.one("SELECT * FROM tracker_guard WHERE operation=?", (operation,))
-            if not expected or not guard:
-                raise ValueError("照合に必要な更新前後の記録がありません")
+            if not expected and not accept_external_edit:
+                raise ValueError("旧形式の送信記録です。GitHub を確認して --accept-external-edit で照合してください")
             result = {"number": payload["issue"], "reconciled": True}
             try:
-                change = await self.refresh_checklist_guard(guard, draft, expected["fingerprint"])
+                if not expected:
+                    raise ValueError("照合用の期待値がありません")
+                change = await self.confirm_checklist_result(draft, guard, expected["fingerprint"])
             except ValueError:
                 if not accept_external_edit:
                     raise
@@ -232,6 +277,21 @@ class GitHub(TrackerPolicy):
         result = {"number": payload["issue"], "reconciled": True}
         self.confirm_tracker(operation, result)
         return result
+
+    async def confirm_unapplied_checklist(self, draft, payload):
+        expected = self.store.one("SELECT * FROM tracker_expectation WHERE operation=?", (draft["id"],))
+        if (draft["kind"] != "checklist" or not expected or not expected["before_fingerprint"]
+                or expected["before_fingerprint"] == expected["fingerprint"]):
+            raise ValueError("研究外のチェックリストで更新前の状態が記録された操作を指定してください")
+        issue = await fetch_issue(draft["repository"], payload["issue"])
+        if standalone_checklist_hash(issue) != expected["before_fingerprint"]:
+            raise ValueError("GitHub が更新前の状態と一致しません")
+        with self.store.db:
+            updated = self.store.db.execute("UPDATE tracker_operation SET state='unapplied' "
+                                            "WHERE id=? AND state='sending'", (draft["id"],))
+        if not updated.rowcount:
+            raise ValueError("この操作は既に照合されています")
+        return {"number": payload["issue"], "unapplied": True}
 
     async def tracker_tool(self, row, tool, args):
         try:
@@ -309,6 +369,11 @@ def checklist(body, criterion, checked):
     offset = len(match[1])
     lines[index] = lines[index][:offset] + ("x" if checked else " ") + lines[index][offset + 1:]
     return "".join(lines)
+
+
+def standalone_checklist_hash(issue):
+    fields = [issue.get(key) for key in ("id", "number", "title", "body", "state")]
+    return hashlib.sha256(json.dumps(fields, ensure_ascii=False).encode()).hexdigest()
 
 
 async def perform(repository, kind, payload, key, actor, *, before=None):

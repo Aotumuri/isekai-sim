@@ -43,6 +43,93 @@ class ChecklistRecovery(IsolatedAsyncioTestCase):
         self.issue["body"] = checklist(self.issue["body"], payload["criterion"], payload["checked"])
         return {"number": 4}
 
+    def human_check(self, criterion):
+        return self.service.draft_tracker(self.project, "checklist",
+                                          {"issue": 4, "criterion": criterion, "checked": True})
+
+    def restart_database(self):
+        home = self.store.home
+        self.store.db.close()
+        self.store = test_adf.Store(home)
+        self.service.store = self.store
+        self.store.recover()
+
+    async def test_human_lost_response_survives_restart_and_blocks_later_write(self):
+        self.pin()
+        sends = []
+
+        async def api(repository, method, endpoint, payload=None):
+            if method == "GET":
+                return deepcopy(self.issue)
+            sends.append(payload)
+            self.issue.update(payload)
+            if len(sends) == 1:
+                raise TimeoutError
+            return deepcopy(self.issue)
+
+        with patch("adf.tracker.gh_api", api):
+            first = self.human_check("First")
+            second = self.human_check("Second")
+            with self.assertRaises(TimeoutError):
+                await self.service.review_tracker(first, True)
+            self.restart_database()
+            with self.assertRaisesRegex(ValueError, "照合"):
+                await self.service.review_tracker(second, True)
+            await self.service.reconcile_tracker(first)
+            self.assertEqual(len(sends), 1)
+            await self.service.review_tracker(second, True)
+        self.assertEqual(len(sends), 2)
+        self.assertEqual(self.issue["body"], "- [x] First\n- [x] Second\n")
+
+    async def test_human_unapplied_requires_explicit_resolution_and_new_approval(self):
+        self.pin()
+        sends = []
+
+        async def api(repository, method, endpoint, payload=None):
+            if method == "GET":
+                return deepcopy(self.issue)
+            sends.append(payload)
+            if len(sends) == 1:
+                raise TimeoutError
+            self.issue.update(payload)
+            return deepcopy(self.issue)
+
+        with patch("adf.tracker.gh_api", api):
+            first = self.human_check("First")
+            with self.assertRaises(TimeoutError):
+                await self.service.review_tracker(first, True)
+            with self.assertRaises(ValueError):
+                await self.service.reconcile_tracker(first)
+            await self.service.reconcile_tracker(first, confirm_unapplied=True)
+            replacement = self.human_check("First")
+            self.assertNotEqual(first, replacement)
+            self.assertEqual(self.human_check("First"), replacement)
+            self.assertEqual(len(sends), 1)
+            await self.service.review_tracker(replacement, True)
+            self.assertEqual(self.human_check("First"), replacement)
+        self.assertEqual(len(sends), 2)
+
+    async def test_human_third_party_edit_requires_manual_reconciliation(self):
+        self.pin()
+        pinned = self.store.one("SELECT fingerprint FROM github_run")["fingerprint"]
+
+        async def api(repository, method, endpoint, payload=None):
+            if method == "PATCH":
+                self.issue.update(payload)
+                self.issue["body"] += "Third party edit\n"
+            return deepcopy(self.issue)
+
+        with patch("adf.tracker.gh_api", api):
+            first = self.human_check("First")
+            with self.assertRaisesRegex(ValueError, "想定"):
+                await self.service.review_tracker(first, True)
+            for options in ({}, {"confirm_unapplied": True}):
+                with self.assertRaises(ValueError):
+                    await self.service.reconcile_tracker(first, **options)
+            result = await self.service.reconcile_tracker(first, accept_external_edit=True)
+        self.assertTrue(result["external_edit"])
+        self.assertEqual(self.store.one("SELECT fingerprint FROM github_run")["fingerprint"], pinned)
+
     async def test_sequential_updates_keep_issue_current(self):
         self.pin()
         with (patch.object(self.service, "load_issue", self.read), patch("adf.tracker.perform", self.apply)):

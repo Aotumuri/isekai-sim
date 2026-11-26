@@ -30,6 +30,7 @@ class Service(Legacy, GitHubResearch, GitHub, GitReview, Evidence, Usage, Resear
         self.executing = set()
         self.cancelled_jobs = set()
         self.stop_epochs = {}
+        self.tracker_sending = set()
 
     async def register(self, path, name="", github=""):
         path, identity = await identify(Path(path).expanduser().resolve(strict=True))

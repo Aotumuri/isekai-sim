@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS tracker_guard (
     generation INTEGER NOT NULL, fingerprint TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS tracker_expectation (
-    operation TEXT PRIMARY KEY REFERENCES tracker_operation(id), fingerprint TEXT NOT NULL
+    operation TEXT PRIMARY KEY REFERENCES tracker_operation(id), fingerprint TEXT NOT NULL, before_fingerprint TEXT
 );
 CREATE TABLE IF NOT EXISTS turn_usage (
     session INTEGER NOT NULL REFERENCES session(id), thread TEXT NOT NULL, turn TEXT NOT NULL, sequence INTEGER,
@@ -137,15 +137,24 @@ class Store:
             for column in ("thread_tools", "token_floor"):
                 if column not in columns:
                     self.db.execute(f"ALTER TABLE session ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0")
+            columns = {row["name"] for row in self.all("PRAGMA table_info(tracker_expectation)")}
+            if "before_fingerprint" not in columns:
+                self.db.execute("ALTER TABLE tracker_expectation ADD COLUMN before_fingerprint TEXT")
             self.db.executemany("INSERT OR IGNORE INTO role(name) VALUES (?)", [(role,) for role in DEFAULTS])
 
     def recover(self):
         placeholders = ",".join("?" for _ in ACTIVE)
         with self.db:
-            for row in self.all(f"SELECT id FROM session WHERE state IN ({placeholders})", ACTIVE):
+            # A paused run can still hold an unconsumed, generation-bound
+            # approval. A restart invalidates that approval too.
+            affected = (f"state IN ({placeholders}) OR EXISTS (SELECT 1 FROM tracker_guard g "
+                        "JOIN tracker_operation o ON o.id=g.operation WHERE g.session=session.id "
+                        "AND g.generation=session.generation AND o.state='pending')")
+            for row in self.all(f"SELECT id FROM session WHERE {affected}", ACTIVE):
                 self.event(row["id"], "recovered", "前回の監督が終了しました。作業状態を確認して再開してください")
             self.db.execute(f"UPDATE session SET state='interrupted', generation=generation+1, turn=NULL "
-                            f"WHERE state IN ({placeholders})", ACTIVE)
+                            f"WHERE {affected}", ACTIVE)
+            self.expire_tracker_approvals()
             self.db.execute("UPDATE job SET state='interrupted', finished=? WHERE state='running'", (time.time(),))
             self.db.execute("UPDATE job SET wake='suppressed' WHERE wake IN ('pending','claimed')")
 
