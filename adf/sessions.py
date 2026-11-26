@@ -231,6 +231,7 @@ class Sessions:
         if row:
             with self.store.db:
                 self.store.update_session(session, state=state, turn=None, generation=generation + 1)
+                self.store.expire_tracker_approvals(session)
                 self.store.db.execute("UPDATE research_run SET state='paused' WHERE session=? AND state='active'",
                                       (session,))
                 self.store.event(session, "error", message)
@@ -268,6 +269,7 @@ class Sessions:
             if row["state"] == "paused" and self.github_run(row):
                 with self.store.db:
                     self.store.update_session(session, generation=row["generation"] + 1)
+                    self.store.expire_tracker_approvals(session)
                     self.store.event(session, "stop", "停止要求で保留中の承認を失効しました")
             return
         if row["state"] == "stopping" or (row["state"] == "draining" and not immediate):
@@ -275,6 +277,7 @@ class Sessions:
         with self.store.db:
             self.store.update_session(session, state="stopping" if immediate else "draining",
                                       generation=row["generation"] + 1)
+            self.store.expire_tracker_approvals(session)
             self.store.db.execute("UPDATE job SET wake='suppressed' WHERE session=? AND wake='pending'", (session,))
             self.store.db.execute("UPDATE research_run SET state='paused' WHERE session=? AND state='active'",
                                   (session,))
@@ -370,6 +373,7 @@ class Sessions:
                     self.background(self.quota(row))
                 else:
                     self.store.update_session(session, state="interrupted", generation=row["generation"] + 1)
+                    self.store.expire_tracker_approvals(session)
                     self.store.db.execute("UPDATE job SET wake='suppressed' WHERE session=? AND wake='pending'", (session,))
         if status == "completed" and state == "running":
             if job:

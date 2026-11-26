@@ -102,11 +102,11 @@ class GitHubResearch:
             self.store.db.execute("INSERT OR IGNORE INTO tracker_guard VALUES (?,?,?,?)",
                                   (operation, row["id"], row["generation"], run["fingerprint"]))
 
-    async def current_issue(self, row, run):
+    async def current_issue(self, row, run, *, accept_changes=False):
         if self.project(row["project"])["github"] != run["repository"]:
             raise ValueError("研究対象のリポジトリが変更されました")
         issue, deps = await self.load_issue(run["repository"], run["issue"])
-        if (fingerprint(issue, deps) != run["fingerprint"] or issue["state"] != "open"
+        if ((not accept_changes and fingerprint(issue, deps) != run["fingerprint"]) or issue["state"] != "open"
                 or issue.get("assignees") or not all(completed(dep) for dep in deps)):
             raise ValueError("GitHub の課題・依存・担当が変更されました。対象を再確認してください")
         return issue, deps
@@ -123,22 +123,28 @@ class GitHubResearch:
             if plan.get("artifacts") and not await self.verified_job(row, run_details):
                 raise ValueError("現在のソースと必須成果物が承認時の実験に一致しません")
         latest = self.store.session(row["id"])
+        latest_run = self.github_run(latest)
         allowed = {"ready"} if run["phase"] == "claim" else ACTIVE_STATUS
-        if latest["generation"] != row["generation"] or status(issue) not in allowed:
+        if latest_run != run or status(issue) not in allowed:
             raise ValueError("Issue の状態が変わりました")
         return issue, deps
 
-    async def refresh_checklist_guard(self, guard, draft, before):
+    def checklist_expectation(self, draft, before):
         payload = json.loads(draft["payload"])
         initial, deps = before
         expected = dict(initial, body=checklist(initial.get("body") or "", payload["criterion"], payload["checked"]))
-        expected_hash = fingerprint(expected, deps)
-        actual, current_deps = await self.load_issue(draft["repository"], payload["issue"])
-        if fingerprint(actual, current_deps) != expected_hash:
-            raise ValueError("チェックリスト送信後に Issue または依存関係が変更されました")
-        with self.store.db:
-            self.store.db.execute("UPDATE github_run SET fingerprint=? WHERE session=? AND generation=?",
-                                  (expected_hash, guard["session"], guard["generation"]))
+        return fingerprint(expected, deps)
+
+    async def refresh_checklist_guard(self, guard, draft, expected):
+        payload = json.loads(draft["payload"])
+        actual, deps = await self.load_issue(draft["repository"], payload["issue"])
+        if (fingerprint(actual, deps) != expected or actual["state"] != "open"
+                or actual.get("assignees") or status(actual) not in ACTIVE_STATUS
+                or not all(completed(dep) for dep in deps)):
+            raise ValueError("GitHub のチェックリスト更新結果が想定と一致しません")
+        # The operation can finish after Stop. Update only its original checkpoint.
+        return (expected, guard["session"], guard["generation"], guard["fingerprint"],
+                draft["repository"], payload["issue"])
 
     async def submit_research_operation(self, row, run, kind, payload, *, force_review=False):
         nonce = f"{row['id']}:{row['generation']}:{run['issue']}:{run['phase']}"
@@ -169,6 +175,8 @@ class GitHubResearch:
         run = self.github_run(row)
         if not run:
             return True
+        if self.unknown_tracker_operation(run["repository"], run["issue"]):
+            raise ValueError("GitHub への送信結果を照合してから再開してください")
         issue, _ = await self.current_issue(row, run)
         if not self.visible(row["id"], row["generation"], ("running",)):
             return False
@@ -178,6 +186,11 @@ class GitHubResearch:
             if not await self.submit_research_operation(row, run, "progress",
                                                         {"issue": run["issue"], "status": "in-progress", "priority": ""}):
                 return False
+            confirmed, _ = await self.current_issue(row, run)
+            if not self.visible(row["id"], row["generation"], ("running",)):
+                return False
+            if status(confirmed) != "in-progress":
+                raise ValueError("GitHub で着手を確認できません")
             with self.store.db:
                 self.store.db.execute("UPDATE github_run SET phase='work',operation=NULL WHERE session=? AND generation=?",
                                       (row["id"], row["generation"]))
@@ -214,8 +227,8 @@ class GitHubResearch:
 
     async def next_github(self, row, research, run, summary):
         # Remote confirmation is authoritative; a successful mutation RPC alone is insufficient.
-        issue = await fetch_issue(run["repository"], run["issue"])
-        if not completed(issue):
+        issue, deps = await self.load_issue(run["repository"], run["issue"])
+        if not completed(issue) or fingerprint(issue, deps) != run["fingerprint"]:
             raise ValueError("GitHub で完了状態を確認できません")
         scope = json.loads(research["scope"])
         selected, all_done = await self.select_issue(run["repository"], scope["ids"])
@@ -240,7 +253,9 @@ class GitHubResearch:
                 self.pause_github(row, "研究予算に到達、または承認範囲に着手可能な課題がありません")
         self.release_inactive_legacy(row["id"])
 
-    async def resume_project_research(self, project):
+    async def resume_project_research(self, project, accept_issue_changes=False):
+        if type(accept_issue_changes) is not bool:
+            raise ValueError("Issue の変更を確認した場合だけ承認してください")
         row = self.session_for(project, "developer")
         remote = self.store.one("SELECT * FROM github_run WHERE session=?", (row["id"],)) if row else None
         if not remote:
@@ -248,31 +263,74 @@ class GitHubResearch:
         current = self.store.one("SELECT * FROM research_run WHERE session=?", (row["id"],))
         if current["state"] == "completed" or row["state"] not in ("paused", "interrupted", "quota"):
             raise ValueError("再開可能な GitHub 研究実行がありません")
-        if remote["operation"]:
-            op = self.store.one("SELECT state FROM tracker_operation WHERE id=?", (remote["operation"],))
-            if op["state"] != "confirmed":
-                raise ValueError("GitHub 操作の承認と送信結果を確認してください")
-        if remote["phase"] == "finish":
-            await self.next_github(row, current, remote, json.loads(current["decision"])["summary"])
-            return row["id"]
+        op = self.store.one("SELECT state FROM tracker_operation WHERE id=?", (remote["operation"],))
+        op_state = op["state"] if op else None
+        if op_state == "pending" or self.unknown_tracker_operation(remote["repository"], remote["issue"]):
+            raise ValueError("GitHub 操作の承認と送信結果を確認してください")
+        if remote["phase"] == "finish" and op_state == "confirmed":
+            return await self.resume_confirmed_completion(row, current, remote)
         epoch = self.stop_epochs.get(project, 0)
-        issue, deps = await self.current_issue(row, remote)
-        if self.shutdown or self.stop_epochs.get(project, 0) != epoch:
-            raise ValueError("再開確認中に停止が指定されました")
-        progressed = remote["phase"] == "work" or bool(remote["operation"])
+        accepted = bool(accept_issue_changes and remote["phase"] != "claim")
+        issue, deps = await self.current_issue(row, remote, accept_changes=accepted)
+        if (self.shutdown or self.stop_epochs.get(project, 0) != epoch
+                or not self.visible(row["id"], row["generation"], ("paused", "interrupted", "quota"))):
+            raise ValueError("再開確認中に実行状態が変更されました")
+        progressed = remote["phase"] != "claim" or op_state == "confirmed"
         if status(issue) not in (ACTIVE_STATUS if progressed else {"ready"}):
             raise ValueError("GitHub Issue の進捗が変更されました")
+        changed = fingerprint(issue, deps) != remote["fingerprint"]
+        scope = json.loads(current["scope"])
+        if remote["phase"] == "finish" and not changed:
+            required = (scope.get("experiment") or {}).get("artifacts")
+            if not required or await self.verified_job(row, current):
+                if self.stop_epochs.get(project, 0) != epoch:
+                    raise ValueError("再開確認中に停止が指定されました")
+                return await self.renew_completion(row, current, remote)
         task = self.issue_task(project, remote["repository"], issue, deps)
         if self.research_limit(row, current) or self.uncertain_experiment(row, task, current):
             raise ValueError("残り予算または中断した実験を確認してください")
-        scope = json.loads(current["scope"])
+        if changed:
+            scope["evidence_after"] = row["turn_requests"]
         prompt = self.research_prompt(task, scope["instructions"], scope.get("experiment"))
         session = self.reserve(project, "developer", prompt, True, launch=False)
         generation = self.store.session(session)["generation"]
         with self.store.db:
-            self.store.db.execute("UPDATE research_run SET generation=?,state='active',decision=NULL,decision_turn=NULL "
-                                  "WHERE session=?", (generation, session))
-            self.store.db.execute("UPDATE github_run SET generation=?,phase=?,operation=NULL WHERE session=?",
-                                  (generation, "work" if progressed else "claim", session))
+            self.store.db.execute("UPDATE research_run SET generation=?,scope=?,state='active',decision=NULL,decision_turn=NULL "
+                                  "WHERE session=?", (generation, json.dumps(scope), session))
+            self.store.db.execute("UPDATE github_run SET generation=?,phase=?,operation=NULL,fingerprint=? WHERE session=?",
+                                  (generation, "work" if progressed else "claim", fingerprint(issue, deps), session))
         self.background(self.run_turn(session, generation, prompt, self.settings("developer"), resume=True))
+        return session
+
+    async def resume_confirmed_completion(self, row, current, remote):
+        session = self.reserve(row["project"], "developer", row["prompt"], True, launch=False)
+        resumed = self.store.session(session)
+        with self.store.db:
+            self.store.update_session(session, state="idle")
+            self.store.db.execute("UPDATE research_run SET generation=? WHERE session=?", (resumed["generation"], session))
+            self.store.db.execute("UPDATE github_run SET generation=? WHERE session=?", (resumed["generation"], session))
+        try:
+            await self.next_github(resumed, current, remote, json.loads(current["decision"])["summary"])
+        except Exception as error:
+            self.pause_github(resumed, str(error) if isinstance(error, ValueError) else type(error).__name__)
+            raise
+        return session
+
+    async def renew_completion(self, row, current, remote):
+        if not current["decision"]:
+            raise ValueError("保存済みの完了判断がありません")
+        session = self.reserve(row["project"], "developer", row["prompt"], True, launch=False)
+        current_row = self.store.session(session)
+        with self.store.db:
+            self.store.update_session(session, state="idle")
+            self.store.db.execute("UPDATE research_run SET generation=? WHERE session=?",
+                                  (current_row["generation"], session))
+            self.store.db.execute("UPDATE github_run SET generation=?,operation=NULL WHERE session=?",
+                                  (current_row["generation"], session))
+        try:
+            await self.submit_research_operation(current_row, self.github_run(current_row), "complete",
+                                                 {"issue": remote["issue"]}, force_review=True)
+        except Exception as error:
+            self.pause_github(current_row, str(error) if isinstance(error, ValueError) else type(error).__name__)
+            raise
         return session

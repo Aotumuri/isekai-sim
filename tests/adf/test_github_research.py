@@ -92,3 +92,84 @@ class TestGitHubResearch(IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(ValueError, "停止"):
                 await pending
         self.assertIsNone(self.service.session_for(self.project, "developer"))
+
+    async def test_stop_expires_and_resume_recreates_claim_approval(self):
+        self.store.db.execute("UPDATE project SET github='fixture/project' WHERE id=?", (self.project,))
+        self.store.db.commit()
+        self.service.set_tracker_policy(self.project, {"progress": "ask"})
+        issue = {"id": 1, "number": 1, "title": "Test", "body": "", "state": "open",
+                 "labels": [{"name": "status:ready"}]}
+        with patch.object(self.service, "load_issue", AsyncMock(return_value=(issue, []))):
+            await self.service.start_project_research(self.project, [1], "Inspect")
+            await self.state("developer", "paused")
+            old = self.service.status(self.project)["tracker_operations"][0]["id"]
+            await self.service.stop_role(self.project, "developer")
+            with self.assertRaises(ValueError):
+                await self.service.review_tracker(old, True)
+            await self.service.resume_project_research(self.project)
+            row = await self.state("developer", "paused")
+        operations = self.service.status(self.project)["tracker_operations"]
+        self.assertEqual([item["state"] for item in operations], ["pending", "expired"])
+        self.assertEqual(row["turn_requests"], 0)
+
+    async def test_quota_resume_does_not_repeat_confirmed_claim(self):
+        self.store.db.execute("UPDATE project SET github='fixture/project' WHERE id=?", (self.project,))
+        self.store.db.commit()
+        self.service.set_tracker_policy(self.project, {"progress": "allow", "complete": "ask"})
+        issue = {"id": 1, "number": 1, "title": "NO_EXPERIMENT", "body": "", "state": "open",
+                 "labels": [{"name": "status:ready"}]}
+        runtime = await self.service.connect()
+        rate_limit = AsyncMock(side_effect=[
+            {"rateLimits": {"primary": {"usedPercent": 100}}},
+            {"rateLimits": {"primary": {"usedPercent": 20}}},
+        ])
+
+        async def claim(repo, kind, payload, key, actor):
+            self.assertEqual(kind, "progress")
+            issue["labels"] = [{"name": "status:in-progress"}]
+            return {"number": 1}
+
+        with (patch.object(self.service, "load_issue", AsyncMock(return_value=(issue, []))),
+              patch.object(runtime, "limits", rate_limit), patch("adf.tracker.perform", AsyncMock(side_effect=claim)) as send):
+            await self.service.start_project_research(self.project, [1], "FIXTURE_RESEARCH")
+            quota = await self.state("developer", "quota")
+            self.assertEqual(quota["turn_requests"], 0)
+            await self.service.resume_project_research(self.project)
+            paused = await self.state("developer", "paused")
+        self.assertEqual(paused["thread"], quota["thread"])
+        self.assertEqual(paused["turn_requests"], 1)
+        send.assert_awaited_once()
+
+    async def test_recovered_confirmed_completion_can_continue_without_resend(self):
+        self.store.db.execute("UPDATE project SET github='fixture/project' WHERE id=?", (self.project,))
+        self.store.db.commit()
+        self.service.set_tracker_policy(self.project, {"progress": "allow", "complete": "ask"})
+        issues = {n: {"id": n, "number": n, "title": f"NO_EXPERIMENT {n}", "body": "", "state": "open",
+                      "labels": [{"name": "status:ready"}]} for n in (1, 2)}
+        sent = []
+
+        async def load(repo, number):
+            return issues[number], [issues[1]] if number == 2 else []
+
+        async def mutate(repo, kind, payload, key, actor):
+            number = payload["issue"]
+            sent.append((kind, number))
+            if kind == "complete":
+                issues[number].update(state="closed", state_reason="completed")
+            else:
+                issues[number]["labels"] = [{"name": "status:in-progress"}]
+            return {"number": number}
+
+        with (patch.object(self.service, "load_issue", load), patch("adf.tracker.perform", mutate)):
+            await self.service.start_project_research(self.project, [1, 2], "FIXTURE_RESEARCH")
+            row = await self.state("developer", "paused")
+            operation = self.service.github_run(row)["operation"]
+            await self.service.review_tracker(operation, True)
+            with self.store.db:
+                self.store.update_session(row["id"], state="idle")
+            self.store.recover()
+            self.assertEqual(self.store.session(row["id"])["state"], "interrupted")
+            await self.service.resume_project_research(self.project)
+            follow = await self.state("developer", "paused")
+        self.assertEqual(follow["turn_requests"], 2)
+        self.assertEqual(sent, [("progress", 1), ("complete", 1), ("progress", 2)])

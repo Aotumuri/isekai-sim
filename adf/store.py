@@ -88,6 +88,9 @@ CREATE TABLE IF NOT EXISTS tracker_guard (
     operation TEXT PRIMARY KEY REFERENCES tracker_operation(id), session INTEGER NOT NULL REFERENCES session(id),
     generation INTEGER NOT NULL, fingerprint TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS tracker_expectation (
+    operation TEXT PRIMARY KEY REFERENCES tracker_operation(id), fingerprint TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS turn_usage (
     session INTEGER NOT NULL REFERENCES session(id), thread TEXT NOT NULL, turn TEXT NOT NULL, sequence INTEGER,
     task INTEGER, job TEXT, quota TEXT, total TEXT, last TEXT, initial INTEGER NOT NULL DEFAULT 0,
@@ -145,6 +148,12 @@ class Store:
                             f"WHERE state IN ({placeholders})", ACTIVE)
             self.db.execute("UPDATE job SET state='interrupted', finished=? WHERE state='running'", (time.time(),))
             self.db.execute("UPDATE job SET wake='suppressed' WHERE wake IN ('pending','claimed')")
+
+    def expire_tracker_approvals(self, session=None):
+        self.db.execute(
+            "UPDATE tracker_operation SET state='expired' WHERE state='pending' AND id IN ("
+            "SELECT g.operation FROM tracker_guard g JOIN session s ON s.id=g.session "
+            "WHERE g.generation<>s.generation AND (? IS NULL OR s.id=?))", (session, session))
 
     def one(self, sql, args=()):
         row = self.db.execute(sql, args).fetchone()

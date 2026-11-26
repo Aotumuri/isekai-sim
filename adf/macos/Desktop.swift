@@ -466,7 +466,7 @@ final class Desktop: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc private func trackerReconcile() {
         let uncertain = records("tracker_operations").first { row in
-            (row["state"] as? String) == "sending" && ["progress", "complete"].contains(row["kind"] as? String ?? "")
+            (row["state"] as? String) == "sending" && ["progress", "complete", "checklist"].contains(row["kind"] as? String ?? "")
         }
         guard let fields = form("結果不明の GitHub 操作を読み取りで照合",
                                 [("操作 ID", uncertain?["id"] as? String ?? "")]), !fields[0].isEmpty else { return }
