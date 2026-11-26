@@ -1,104 +1,94 @@
-# ADF デスクトップ版
+# プロジェクト内 ADF
 
-ADF はローカルの Codex を起動し、Coordinator と Developer の対話、実験、停止と再開を管理する。画面、監督デーモン、Codex は別プロセスで動く。
+ADF は Git チェックアウトごとに専用の Core を起動します。CLI、Web、Codex Skills は同じロールと実行状態を参照します。GitHub Issues が課題の正本です。SQLite、実験、ログ、IPC とバックアップは `adf/runtime/` に保存します。公式 Codex の認証とスレッドは公式の保存先を使います。
 
-## インストールと起動
+## 旧環境を使っていた場合
 
-macOS 13 以降に Python 3.12 以上、Xcode Command Line Tools、Git、公式 Codex CLI を用意する。App Server の動作確認に使った Codex のバージョンは 0.172.0。GitHub 一覧を使う場合は `gh` と既存の認証が必要。端末で `python3 --version` と `codex --version` を確認し、信頼できるソースのリポジトリ直下から実行する。
+移行の前に、実行中の実験の終了を確認し、旧 Developer と Desktop の監督を停止します。
 
-```sh
-python_path=$(command -v python3)
-destination="$HOME/Applications/ADF-$(git rev-parse --short HEAD).app"
-bash adf/macos/build-app.sh "$destination" "$python_path"
-codesign --verify --strict "$destination"
-open "$destination"
-```
+1. Desktop の場合は旧アプリを開き、終了時に **安全に停止** を選びます。バックグラウンド継続を選んだ場合は監督が残ります。中央状態は移行完了まで保持してください。
+2. さらに旧 `agents/` 版を使っていた場合は、以下のコマンドを順に実行します。`status` の所有者を確認し、セッションが終了してから一致する ID で解放します。すでに停止している場合は停止コマンドを省略し、残った所有権だけを確認します。実験の正常終了を待てない場合は `control.py stop` で取消を要求し、`runner.py list` で終了を確認します。
 
-出力はリポジトリの外に置く。同じ出力先が使われている場合は、新しいファイル名を指定する。`python3 -m adf` またはアプリ内の `Contents/MacOS/adf` で CLI を利用できる。ビルドはローカル向けのアドホック署名を付ける。第三者に配布する署名・公証済みパッケージや自動更新は未提供。
+   ```sh
+   python3 agents/tools/research.py status
+   python3 agents/tools/control.py graceful "プロジェクト内 ADF へ移行"
+   python3 agents/tools/runner.py list
+   python3 agents/tools/control.py finalize "実験と記録を確認"
+   python3 agents/tools/research.py release '<表示された所有者ID>'
+   ```
 
-更新時は旧版を「安全に停止」で終了し、実験が終わって監督も停止したことを確認する。状態をバックアップしてから別名で最新版をビルドし、登録済みプロジェクト、プリセット、履歴を確認する。動作確認が済むまで旧アプリとバックアップを保持する。`status` は監督を起動できるため、停止の確認にはアクティビティモニタを使う。
+3. リポジトリのルートからプレビューします。利用していた方だけ実行できます。Desktop を取り込む場合は、最初にその移行を行い、新 Core の作成は後にします。
 
-状態はアプリと独立した `~/Library/Application Support/ADF` に保存される。バックアップは監督停止後にディレクトリ全体を所有者専用の保管先へコピーする。公式 Codex の認証・スレッド保存先と研究対象の Git 作業フォルダも保持する。
+   ```sh
+   python3 -m adf migrate desktop
+   python3 -m adf migrate legacy
+   ```
 
-サインインは公式 Codex で行い、ADF は既存の ChatGPT 認証を確認する。追加クレジットが利用可能と報告されたアカウント、有効な購読枠が取得できないアカウント、個人プラン以外はターンを開始しない。当該リクエストの正確な課金額や、開始後に他のクライアントが消費した枠は ADF から確定できない。
+4. プレビューの `conflicts` が空、移行元・移行先が停止中であることを確認し、表示された指紋を指定します。
 
-## 操作
+   ```sh
+   python3 -m adf migrate desktop --apply '<Desktop の fingerprint>'
+   python3 -m adf migrate legacy --apply '<旧 CLI の fingerprint>'
+   ```
 
-1. 「プロジェクトを登録」で Git 作業ディレクトリと任意の GitHub リポジトリ名を指定する。
-2. 「エージェント」でロールを選び、メッセージを入力して「開始 / 送信」を押す。進行中のターンへのメッセージは Codex の `turn/steer` で送る。
-3. 「ロール設定」で対象ロール、モデル、推論強度、追加指示、トークン予算、利用枠の回復方式を保存する。空のモデルと推論設定は Codex の既定値を使う。追加ロールの書き込み権限は Coordinator と同じ読み取り専用。
-4. 実験を許可するには「実験」でテンプレート名、引数配列、上限時間を登録する。Developer ロールで「許可する実験」からその名前を選び、メッセージを送信する。最新のコミットからスナップショットを作る。元の作業ツリーやローカルの `node_modules` は実験に渡らない。
-5. 実験の出力は一覧から該当実験を選んで確認する。「履歴と利用量」はターン要求の累計、通知されたトークン、明示的に取得した購読枠を表示する。上部の「利用枠を取得」で前回の取得時刻と公式使用率を確認できる。トークン予算は次のターンの開始を抑止する目安で、サービス側のハードキャップではない。
-6. 停止はロール単位で実行する。穏やかな停止は進行中のターンと実験を区切りまで待ち、次のターンを開始しない。即時停止はターンと ADF 管理下の実験を中断する。「再開」は保存したスレッドを開き、リポジトリの同一性と HEAD・インデックスを確認したうえで続行する。
-7. ウィンドウを閉じると、すべてのロールを安全に停止するか、監督をバックグラウンドに残すか選べる。前者は停止受付後に画面を閉じ、監督は実行が区切りに達してから終了する。後者では再起動した画面が同じ監督に接続する。
+Desktop は現在のチェックアウトに一致するプロジェクトだけを複製します。セッション、役割設定、予算、実験、成果物と照合中の操作を保持します。保留中だった承認と未配信の起床は失効します。既存のローカル DB やジョブとは自動合併しません。途中で停止した場合は同じ指紋で続行します。異なるパスや Git 実体は安全のため取り込めません。
 
-### CLI
+移行した Desktop の研究実行には現行 Mission が記録されていません。GitHub の実際の進捗と保存済みの範囲を確認した上で、`python3 -m adf research-resume --scope '<再承認する範囲>'` で引き継ぎます。
 
-アプリのバンドル内にある `adf` コマンドと `python3 -m adf` は同じ操作を受け付ける。
+旧 CLI の DB、JSON、実験とチェックポイントは参照用に `adf/runtime/migration/` に複製します。報告の `checkpoint` と成果物を確認して、管理セッションへの引き継ぎを記述してください。旧 CLI の所有権、起床、Codex スレッド ID は移行しません。Desktop の管理スレッド ID は保持しますが、公式 Codex で取得できない場合はチェックポイントを確認し、新しいメッセージで引き継ぎます。移行元は保持されます。
 
-```sh
-python3 -m adf register /path/to/project --github owner/repo
-python3 -m adf template 1 trial '["/bin/sleep","35"]' --timeout 46
-python3 -m adf send 1 coordinator '研究案を検討したい'
-python3 -m adf send 1 developer --experiment trial 'trial を開始し、結果を評価してください'
-python3 -m adf status 1
-python3 -m adf log JOB_ID
-python3 -m adf stop 1 developer --immediate
-python3 -m adf resume 1 developer '中断した実験の結果を確認してください'
-python3 -m adf shutdown
-```
+## 初回セットアップと操作
 
-## 障害復旧とデータ
-
-- 打ち切られた実験・ターンと送信が確認できない継続は、監督の再起動時に `interrupted` として記録する。ロールを選び、履歴、実験、現在のファイルを確認して明示的に再開する。古い実験完了によるターンは自動送信しない。
-- 状態・実験出力・会話はユーザー専用ディレクトリに保存する。DB は送り先を持つローカル操作用であり、バックアップは監督を停止してから行う。認証情報は公式クライアントに残す。指示や実験ログに秘密を入れない。ログの内容自体を検査して秘密を自動除去する機能はない。
-- アーカイブは一覧から登録を外す操作。ファイルや履歴は削除されない。同じディレクトリを登録し直せる。ディレクトリを移した後の登録・スレッド移行は未実装。
-- 既存の isekai-sim の Issue、研究報告、旧 Developer のチェックポイントは元のリポジトリに残る。旧 Developer の停止、所有権の解放、旧実験の終了を確認してから Desktop の Developer を開始する。共有ロックが残る場合は、旧 CLI の処理や稼働中の Desktop セッションを確認する。Desktop は Developer の稼働中、実験待機中や送信待ちも含めて共有ロックを保持する。
-- Desktop の起動・再開では旧 ADF のロールスキルを無効にする。Developer は Desktop の専用ツールを使う。承認済み実験は `adf_start_experiment` または `adf_research_experiment` で起動し、受付後はターンを終了する。Desktop が結果の評価を再開し、Developer は `adf_read_experiment_output` で結果を確認する。旧状態の参照は人間が「旧 ADF の取り込み」の手順で行う。
-- サンドボックスが Git メタデータへの書き込みを拒否する場合、ADF の Developer はコミットできない。現在の版は権限拡張を拒否するため、検証後に所有者がローカルでコミットする。
-- スナップショットは Git の通常ファイルに対応し、サブモジュールとシンボリックリンクを含む場合は実験を失敗として記録する。上限は 1 万ファイル、128 MiB。実験出力は最大 256 KiB、継続に渡す末尾は最大 2 KiB。実験コマンド自身の成果物はスナップショット内に残る。
-- 利用枠の自動回復は、公式状態で枯渇した枠とリセット時刻を取得できた場合にのみ、リセット後に一度確認する。回復が確認できなければ明示的な再開を待つ。
-
-[設計判断と受け入れ試験](DESIGN.md)
-
-## 自律研究
-
-「研究」で課題名、受け入れ条件、優先度、依存先を登録する。「承認範囲で開始」で対象課題、研究範囲、実験数、時間、ターン、観測トークンの上限を確認する。Developer はその範囲で Python 実験を設計できる。検証結果を返した課題に続いて、依存を満たした承認済み課題へ進む。根拠付き判断や実験が返らない場合は停止する。
+Python 3.11 以上、公式 Codex CLI の ChatGPT ログイン、GitHub CLI の対象リポジトリへのアクセスが必要です。運用設定は、同梱の例をコピーして編集できます。初期モードは Manual です。GitHub 操作の初期権限は禁止です。
 
 ```sh
-python3 -m adf task 1 '基準値を測定' '同じ条件で 2 回計算し、結果を比較する' --priority 1
-python3 -m adf task 1 '再現条件を整理' '測定結果と再現条件を記録する' --depends-on 1
-python3 -m adf research-start 1 '対象は測定と手順の記録' 1 2 --jobs 2 --timeout 60 --turns 4 --tokens 250000
-python3 -m adf artifacts JOB_ID
-python3 -m adf artifacts JOB_ID result.txt --offset 0 --size 4096
-python3 -m adf research-resume 1
+python3 -m adf init
+# adf/runtime/config.toml の github と mission を確認・編集する
+python3 -m adf doctor
+python3 -m adf start
+python3 -m adf gui
 ```
 
-保留中の課題は `task-reopen PROJECT TASK 新しい受け入れ条件` で再登録できる。停止後の再開は既存の承認範囲と予算を維持する。中断した実験の結果が不明な場合は、履歴を確認して新規実行として承認する。以前の運用指示やツール定義で作成された Desktop スレッドは、更新後の次回の送信・再開時に新しいスレッドへ切り替わる。旧 ID は履歴に残り、課題・実験の記録と累計利用量は引き継がれる。
+任意の TOML を使う場合は `init --file <設定ファイル>` を指定します。GUI 起動時はフロントエンドのビルドやインストールが不要です。GUI を閉じても研究は継続します。GUI の端末を閉じた場合は `gui` を再実行し、その起動時だけ有効な URL を開き直してください。
 
-## GitHub Issues の承認
+| 操作 | Web GUI | CLI |
+| --- | --- | --- |
+| Coordinator と相談 | Coordinator を選び、会話欄から送信 | `python3 -m adf send coordinator '相談したい研究方針'` |
+| Developer に手動の指示 | Developer を選び、会話欄から送信 | `python3 -m adf send developer '承認した作業'` |
+| GitHub の操作を許可 | 設定 → 詳細設定 → GitHub 操作の権限 | `python3 -m adf tracker-policy progress=ask checklist=ask proposal=ask comment=ask complete=ask` |
+| Developer の研究を開始 | 「研究を開始」で承認範囲・Issue・予算を入力 | `python3 -m adf research-start '承認済みの検証範囲' 123 --tokens 80000` |
+| 承認と送信結果を確認 | GitHub Issues → 操作履歴と承認 | `tracker-review <ID> --approve` / `tracker-reconcile <ID>` |
+| 研究を一時停止 | Developer の「停止」または「即時停止」 | `python3 -m adf stop developer [--immediate]` |
+| 研究を再開 | Developer の「再開」。条件が変わった場合は「研究の再開条件を確認」 | `python3 -m adf research-resume` |
+| 通常会話を続ける | 会話を送信 | `python3 -m adf send <ロール> '<メッセージ>'` |
+| 監督を停止 | 設定 → 監督を停止 | `python3 -m adf stop [--immediate]` |
 
-中央の操作ポリシーは既定で空。登録先に `agents/config.toml` があれば、そのリポジトリの許可も照合する。「承認待ち」で対象と正確な入力を確認し、「GitHub に送信」を選んだ操作だけを既存の GitHub CLI で送る。通信障害などで結果が不明な操作は GitHub 上の実際の状態を確認する。
+Issue 番号は実際に承認した課題に差し替えてください。最初に既存の分類、`status:ready`、依存関係を確認します。承認待ちで Developer を停止すると、その研究の承認は失効します。送信済みで結果不明の操作は GitHub で照合し、その結果を確認してから再開します。研究終了の根拠は GitHub または研究報告に残してください。
 
-```sh
-python3 -m adf tracker-policy 1 proposal comment progress checklist depends label complete
-python3 -m adf tracker-issue 1 123
-python3 -m adf tracker-draft 1 proposal '{"title":"仮説","body":"- [ ] 対照群を測定","priority":"P2"}'
-python3 -m adf tracker-review OPERATION_ID --approve
-```
+### 運用モード
 
-操作の入力は `proposal` が `title/body/priority`、`comment` が `issue/body`、`progress` が `issue/status/priority`、`depends` が `issue/blocked_by`、`label` が `issue/name/enabled`、`checklist` が `issue/criterion/checked`、`complete` が `issue`。ラベルは既存の GitHub ラベルを使う。`--decline` で却下できる。
+- **Manual** は Issue を一件ずつ指定し、GitHub 書き込みを人間が確認します。
+- **Controlled** は承認済み Issue の中から依存関係と優先度に従って進めます。
+- **Autonomous** は同じ明示範囲で、着手可能な課題が現れるまで推論なしで再確認できます。既定の観測トークン上限は 0 です。
+- **Research Autonomous** は承認範囲内で着手先がなくなったとき、先行結果と Issue を確認する読み取り専用の探索を一度実施できます。探索だけを許可する場合は Issue 番号を空欄にします。候補は一件まで下書きします。既定では人間が起票を承認します。`discovery_issue = "policy"` を明示し、実効の起票権限が `allow` の場合だけ Core が送信できます。起票後の着手には別に承認範囲と Issue を指定します。
 
-## 旧 ADF の取り込み
+`research-preset` で設定をプレビューでき、`--apply` で保存します。枠や権限は運用モードを変えても広がりません。観測トークンの 0 は ADF の予算にだけ適用されます。アカウントの公式利用枠と、トークン・ターン・実験の記録は別々に表示します。
 
-旧 Developer を停止して所有権を解放し、ジョブの終了を確認する。停止中に旧 `agents/runtime/` と研究記録を別の保管場所へバックアップする。`legacy-preview PROJECT` で JSON または SQLite の所有者、チェックポイントと実験履歴を確認する。`legacy-import PROJECT DIGEST` は確認した内容が変わっていない場合に、Desktop の私有領域に整合性検証済みの参照用スナップショットを作る。旧結果を参照し、必要な課題を新たに登録する。
+## 設定変更・バックアップ・更新
 
-[統合方針と今回の実測](PRODUCTION.md)
+Mission と通常の運用 TOML は、GUI の詳細設定、直接編集、停止中の `python3 -m adf config --file <ファイル>` で変更できます。`python3 -m adf restart` で反映します。再起動は研究を自動開始しません。ファイルのプリセット設定が前回から変わった場合、その設定を取り込みます。GUI・CLI のプリセット設定は次の研究実行に適用します。ロール設定は対象ロールを停止してから変更します。TOML の任意の `[tracker]` セクションは編集後の再起動で反映されます。GUI・CLI での GitHub 権限の変更は即時反映され、リポジトリの上限は `adf/policy.toml` で定義します。
 
-## 現行の実運用手順
+1. `python3 -m adf stop` を実行し、`status` が停止を示すまで待ちます。
+2. `python3 -m adf backup` で DB、設定、成果物と移行記録を保全します。`python3 -m adf update` も停止中に保全を行い、更新前のリビジョンを表示します。Web ではロールの停止後に「更新前の保全」を実行できます。
+3. 信頼できるローカル変更を人間が確認して適用します。更新元からの自動取得・適用は行いません。
+4. `python3 -m unittest discover -s tests/adf` と `python3 -m adf doctor` を実行し、`start` または `gui` で監督を起動します。必要な研究だけ明示的に再開します。
 
-GitHub の課題選択、操作別承認、オフライン実験環境、未コミットファイルの固定、差分確認と利用量内訳は[実運用手順](OPERATING_RESEARCH.md)を参照。
+更新に失敗した場合は監督を停止し、更新前の ADF ソースとバックアップを別の場所で照合します。復元作業まで現在の `adf/runtime/` とバックアップの両方を保全してください。監督が起動しない場合は `adf/runtime/supervisor.log` と `doctor` を人間が確認します。
 
-[信頼性の検証結果と ADF.app の手動受け入れ手順](ACCEPTANCE.md)
+## 権限と現時点の制約
 
-[独立 UI/UX レビューと実機受け入れ結果](UI_REVIEW.md)
+- 管理ロールは公式 Codex サンドボックスを使用します。Developer がソースを変更でき、Coordinator と追加ロールは読み取り専用です。ADF 本体、ロール定義、実行状態、認証、Git メタデータは保護されます。コミットは人間が差分・試験結果を確認し、通常の Git ツールで行います。push や PR の仲介は提供しません。
+- Web は `127.0.0.1` のプロジェクト別ポートで動き、起動 URL に含まれる接続情報が必要です。接続情報と実行時データのフォルダは共有しないでください。CLI とファイル IPC の信頼境界はローカル OS ユーザーです。
+- Skill の現在のスレッドでは相談と状態確認ができます。既存の外部スレッドを管理権限で引き継いだり、自動的に起床したりすることはできません。管理下で行う作業は専用セッションを開始してください。 [公式 App Server](https://learn.chatgpt.com/docs/app-server)
+- 原則は固定ソースからの Snapshot 実験です。待機中の監視と完了通知に推論を使いません。Core／Mac が停止した後は状態を確認して人間が再開します。送信結果が不明な操作は自動で再送しません。
+- 続きの実装と受け入れ条件は [設計とロードマップ](PROJECT_LOCAL.md) を参照してください。従来の説明と実測記録は Desktop 時代の資料です。 [旧 Desktop 受け入れ記録](ACCEPTANCE.md)

@@ -1,6 +1,0 @@
-#!/bin/bash
-set -euo pipefail
-resources=$(cd "$(dirname "$0")/../Resources" && pwd)
-IFS= read -r interpreter < "$resources/python-path"
-if [[ $# -eq 0 ]]; then set -- status; fi
-exec "$interpreter" -I "$resources/adf/launcher.py" "$@"
