@@ -19,9 +19,11 @@ def relative(text):
     if not isinstance(text, str) or "\0" in text or "\\" in text or len(text) > 400:
         raise ValueError("作業ツリー内の相対パスを指定してください")
     path = PurePosixPath(text)
-    if path.is_absolute() or not path.parts or any(
+    parts = tuple(part.lower() for part in path.parts)
+    if (parts[:2] in {("adf", "runtime"), ("agents", "runtime")}
+            or path.is_absolute() or not path.parts or any(
             p.lower() in {"..", ".git", ".codex", ".agents", ".aws", ".adf-artifacts", ".adf-site", ".adf-node"}
-            or p.lower().startswith(".env") for p in path.parts):
+            or p.lower().startswith(".env") for p in path.parts)):
         raise ValueError("保護対象または無効なパスです")
     return path
 

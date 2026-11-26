@@ -1,0 +1,14 @@
+[project]
+name = "isekai-sim"
+github = "Aotumuri/isekai-sim"
+mission = ""
+
+[research]
+mode = "manual"
+
+# Optional. If supplied, this section replaces the saved operation policy when edited.
+# [tracker]
+# proposal = "ask"
+# progress = "ask"
+# checklist = "ask"
+# complete = "ask"

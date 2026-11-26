@@ -21,14 +21,14 @@ def windows_report(limits):
 
 
 class Usage:
-    def associate_usage(self, row, thread, turn, sequence, task, job, limits, initial):
+    def associate_usage(self, row, thread, turn, sequence, task, job, limits, initial, model=None):
         with self.store.db:
             self.store.db.execute(
-                "INSERT INTO turn_usage(session,thread,turn,sequence,task,job,quota,initial) VALUES (?,?,?,?,?,?,?,?) "
+                "INSERT INTO turn_usage(session,thread,turn,sequence,task,job,quota,initial,model) VALUES (?,?,?,?,?,?,?,?,?) "
                 "ON CONFLICT(session,turn) DO UPDATE SET sequence=excluded.sequence,task=excluded.task,"
-                "job=excluded.job,quota=excluded.quota,initial=excluded.initial",
+                "job=excluded.job,quota=excluded.quota,initial=excluded.initial,model=excluded.model",
                 (row["id"], thread, turn, sequence, task, job,
-                 json.dumps(windows_report(limits)), int(initial)))
+                 json.dumps(windows_report(limits)), int(initial), model or None))
 
     def receive_usage(self, row, params):
         payload = params.get("tokenUsage", {})
@@ -54,6 +54,7 @@ class Usage:
             "ORDER BY u.sequence DESC LIMIT 200", (project,))
         prior = {}
         tasks = {}
+        models = {}
         for row in reversed(rows):
             thread = row["thread"]
             total = json.loads(row.pop("total") or "{}")
@@ -77,13 +78,25 @@ class Usage:
                                             "percentage_points": window["usedPercent"] - earlier["usedPercent"]})
             row.update(total=total, last_rpc=last, delta=delta, quota=quota, quota_change=quota_delta)
             prior[thread] = row
+            model_key = (row["role"], row["model"])
+            model = models.setdefault(model_key, {"role": row["role"], "configured_model": row["model"],
+                                                  "observed": {}, "turns": 0, "unknown": 0})
+            model["turns"] += 1
+            accumulate(model, delta)
             task_id = row["issue"] if row["issue"] is not None else row["task"]
             if task_id is not None:
                 key = ("issue" if row["issue"] is not None else "task", task_id)
                 group = tasks.setdefault(key, {"source": key[0], "task": task_id, "observed": {}, "unknown": 0})
-                if "totalTokens" not in delta:
-                    group["unknown"] += 1
-                for field, value in delta.items():
-                    group["observed"][field] = group["observed"].get(field, 0) + value
-        return {"turns": rows, "tasks": list(tasks.values()),
+                accumulate(group, delta)
+        experiments = self.store.all("SELECT s.role,count(*) AS jobs FROM job JOIN session s ON s.id=job.session "
+                                     "WHERE s.project=? GROUP BY s.role", (project,))
+        return {"turns": rows, "tasks": list(tasks.values()), "models": list(models.values()),
+                "experiment_counts": experiments,
                 "experiment_evaluations": [{"job": row["job"], "delta": row["delta"]} for row in rows if row["job"]]}
+
+
+def accumulate(group, delta):
+    if "totalTokens" not in delta:
+        group["unknown"] += 1
+    for field, value in delta.items():
+        group["observed"][field] = group["observed"].get(field, 0) + value

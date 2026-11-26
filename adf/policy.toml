@@ -1,0 +1,10 @@
+# Repository ceilings. The operator grants individual operations in runtime.
+[tracker]
+proposal = "allow"
+comment = "allow"
+progress = "allow"
+checklist = "allow"
+depends = "allow"
+label = "allow"
+complete = "allow"
+

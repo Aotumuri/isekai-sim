@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>ADF · 研究コンソール</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="identity"><span class="brand">ADF</span><span id="project">研究コンソール</span></div>
+    <div class="connection"><span id="connection" class="pill" role="status">接続中</span><button id="theme" type="button">配色</button></div>
+  </header>
+  <div id="notice" class="notice" role="alert" hidden></div>
+  <div class="layout">
+    <aside>
+      <nav aria-label="研究コンソール">
+        <button data-page="work" aria-current="page">研究と会話</button>
+        <button data-page="issues">GitHub Issues</button>
+        <button data-page="experiments">実験</button>
+        <button data-page="history">履歴と利用量</button>
+        <button data-page="settings">設定</button>
+      </nav>
+      <div id="roles" class="role-list" aria-label="ロール"></div>
+    </aside>
+    <main>
+      <section id="work" class="page">
+        <div class="panel mission"><div><h1>研究</h1><p id="mission"></p><p id="current"></p></div><button id="open-plan">研究を開始</button></div>
+        <form id="plan" class="panel stack" hidden>
+          <h2>承認する研究範囲</h2>
+          <label>範囲<textarea name="scope" rows="3" required></textarea></label>
+          <div class="fields">
+            <label>Issue 番号（空白区切り）<input name="issues" pattern="[0-9 ]+"></label>
+            <label>観測トークン上限（0 は無制限）<input name="tokens" type="number" min="0" max="1000000" required></label>
+          </div>
+          <button class="primary" type="submit">承認して開始</button>
+        </form>
+        <section class="panel chat">
+          <div class="section-head">
+            <div><h2 id="chat-role">会話</h2><p id="role-state"></p></div>
+            <div class="actions">
+              <button id="resume">再開</button><button id="stop">停止</button><button id="interrupt" class="danger">即時停止</button>
+            </div>
+          </div>
+          <div id="messages" class="messages" tabindex="0" aria-label="会話履歴">
+            <button id="older" hidden>前のメッセージ</button><div id="conversation"></div>
+          </div>
+          <form id="prompt" class="composer">
+            <label class="sr-only" for="message">メッセージ</label>
+            <textarea id="message" rows="3" placeholder="メッセージを入力…" required></textarea>
+            <button class="primary" type="submit">送信</button>
+          </form>
+        </section>
+      </section>
+      <section id="issues" class="page" hidden>
+        <div class="section-head"><h1>GitHub Issues</h1><button id="load-issues">取得</button></div>
+        <div id="issue-list" class="stack"></div><article id="issue-detail" class="panel" hidden></article>
+        <details class="panel"><summary>操作の下書き</summary>
+          <form id="draft" class="stack">
+            <label>操作 <select name="kind">
+              <option value="proposal">起票</option><option value="comment">コメント</option>
+              <option value="progress">進捗更新</option><option value="depends">依存関係</option><option value="label">ラベル</option><option value="checklist">チェック項目</option>
+              <option value="complete">完了</option>
+            </select></label>
+            <div id="draft-fields" class="stack"></div>
+            <button type="submit">承認待ちに追加</button>
+          </form>
+        </details>
+        <h2>操作履歴と承認</h2><div id="operations" class="stack"></div>
+      </section>
+      <section id="experiments" class="page" hidden>
+        <h1>実験</h1><div id="jobs" class="stack"></div><article id="output" class="panel" hidden></article>
+      </section>
+      <section id="history" class="page" hidden>
+        <div class="section-head"><h1>履歴と利用量</h1><div class="actions">
+          <button id="get-usage">観測使用量</button><button id="get-limits">公式利用枠を取得</button>
+        </div></div>
+        <pre id="usage" class="panel" hidden></pre><div id="events" class="stack"></div>
+      </section>
+      <section id="settings" class="page" hidden>
+        <h1>設定</h1>
+        <form id="mode" class="panel stack">
+          <h2>基本設定</h2>
+          <label>運用モード <select name="name">
+            <option value="manual">Manual</option><option value="controlled">Controlled</option>
+            <option value="autonomous">Autonomous</option><option value="research-autonomous">Research Autonomous</option>
+          </select></label>
+          <label>観測トークン上限（0 は無制限）<input name="tokens" type="number" min="0" required></label>
+          <label>着手可能な課題がないとき <select name="empty_queue">
+            <option value="">モードの既定値</option><option value="stop">停止</option>
+            <option value="wait">決定論的に再確認</option><option value="discover">次の研究候補を提案</option>
+          </select></label>
+          <label>研究候補の起票 <select name="discovery_issue">
+            <option value="ask">毎回承認</option><option value="policy">許可済みの起票だけ送信</option>
+          </select></label>
+          <button type="submit">基本設定を保存</button>
+        </form>
+        <details class="panel"><summary>詳細設定</summary>
+          <form id="role-settings" class="stack">
+            <h2>ロール設定</h2>
+            <label>ロール<input name="name" required pattern="[a-z][a-z0-9_\-]{0,39}"></label>
+            <div class="fields">
+              <label>モデル<input name="model"></label><label>推論強度<input name="effort"></label>
+              <label>観測トークン上限<input name="budget" type="number" min="0" value="0"></label>
+              <label>利用枠回復<select name="recovery"><option value="manual">手動</option><option value="confirmed">回復確認後に再開</option></select></label>
+            </div>
+            <label>追加指示<textarea name="instructions" rows="3"></textarea></label>
+            <button type="submit">ロール設定を保存</button>
+          </form>
+          <form id="policies" class="stack">
+            <h2>GitHub 操作の権限</h2>
+            <div id="policy-fields" class="fields"></div>
+            <button type="submit">権限を保存</button>
+          </form>
+          <form id="config" class="stack">
+            <h2>運用 TOML</h2>
+            <button id="load-config" type="button">現在のファイルを読み込む</button>
+            <label>設定ファイル<textarea name="content" spellcheck="false" rows="9" required></textarea></label>
+            <button type="submit">保存して次回起動に反映</button>
+          </form>
+        </details>
+        <div class="panel stack">
+          <h2>保守</h2>
+          <button id="backup">バックアップ作成</button>
+          <button id="shutdown" class="danger">監督を停止</button>
+          <p>診断は端末で <code>python3 -m adf doctor</code>。更新前に停止し、端末で <code>python3 -m adf update</code> を実行してください。</p>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

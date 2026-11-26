@@ -64,6 +64,9 @@ async def snapshot(path, revision, job):
         if (target.is_absolute() or not target.parts
                 or any(part.lower() in {".", "..", ".git"} for part in target.parts)):
             raise ValueError("Unsafe snapshot path")
+        parts = tuple(part.lower() for part in target.parts)
+        if parts[:2] in {("adf", "runtime"), ("agents", "runtime")}:
+            raise ValueError("Git に追跡された ADF の実行時データを確認してください")
         if kind != b"blob" or mode not in (b"100644", b"100755"):
             raise ValueError("Snapshots currently support regular tracked files only")
         total += int(size)

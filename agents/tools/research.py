@@ -254,6 +254,9 @@ def parse():
 
 def main():
     args = parse()
+    if args.action not in {"status", "release"}:
+        from storage import reject_legacy_launch
+        reject_legacy_launch()
     settings = config()
     backend = settings.get("tracker", {}).get("backend", "local")
     if backend not in ("local", "github"):

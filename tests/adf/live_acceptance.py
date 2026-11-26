@@ -20,19 +20,27 @@ async def check_permissions(runtime, root):
     legacy = source / "agents/runtime"
     legacy.mkdir(parents=True)
     (legacy / "state.lock").touch()
+    (source / "adf/runtime").mkdir(parents=True)
+    (source / "adf/runtime/config.toml").write_text("canary")
+    (source / "adf/launcher.py").write_text("canary")
+    (source / "AGENTS.md").write_text("canary")
     for profile, expected in (("adf-reader", False), ("adf-writer", True)):
         # Use only synthetic files and test declared access with a trusted fixed command.
         result = await runtime.rpc("command/exec", {
             "command": ["/bin/sh", "-c",
                         'test ! -r "$1" && test ! -r .env && test ! -r agents/runtime/state.lock || exit 91; '
+                        'test ! -r adf/runtime/config.toml && test -r adf/launcher.py || exit 93; '
                         'if (: >> agents/runtime/state.lock) 2>/dev/null; then exit 92; fi; '
+                        'if (: >> adf/runtime/config.toml) 2>/dev/null; then exit 94; fi; '
+                        'if (: >> adf/launcher.py) 2>/dev/null; then exit 95; fi; '
+                        'if (: >> AGENTS.md) 2>/dev/null; then exit 96; fi; '
                         'if (echo ok > probe) 2>/dev/null; then exit 0; else exit 1; fi',
                         "sh", str(outside)],
             "cwd": str(source), "permissionProfile": profile, "timeoutMs": 5000,
         })
         assert result["exitCode"] == (0 if expected else 1), (profile, result["exitCode"])
         assert (source / "probe").is_file() is expected
-    print("Permission canaries: private and legacy reads denied; legacy writes denied; "
+    print("Permission canaries: private runtime reads and ADF writes denied; "
           "reader write denied; writer write allowed", flush=True)
 
 
@@ -72,7 +80,7 @@ async def main(args):
                     assert job["waiting_requests"] == job["initial_requests"] == 1
                     assert job["waiting_tokens"] == job["initial_tokens"] > 0
                     assert row["turn_requests"] == 2
-                    assert any(e["kind"] == "assistant" for e in service.status(project)["events"])
+                    assert any(e["speaker"] == "agent" for e in service.conversation(project, "developer"))
                     print(f"turns={row['turn_requests']} wait_new_turns=0 "
                           f"wait_token_delta={job['waiting_tokens'] - job['initial_tokens']} "
                           f"wait_seconds={job['finished'] - job['waiting_since']:.2f}")

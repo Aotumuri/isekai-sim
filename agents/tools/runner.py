@@ -353,6 +353,9 @@ def main():
         split = cli.index("--")
         cli, separator, command = cli[:split], "--", cli[split + 1:]
     args = parser.parse_args(cli)
+    if args.action == "start" or (args.action == "recover" and args.relaunch_queued):
+        from storage import reject_legacy_launch
+        reject_legacy_launch()
     if separator and args.action != "start":
         parser.error("-- COMMAND is supported only by start")
     if args.action == "capabilities":

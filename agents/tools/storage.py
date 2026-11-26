@@ -14,6 +14,11 @@ RESEARCH = ROOT / "agents" / "research"
 RUNTIME = ROOT / "agents" / "runtime"
 
 
+def reject_legacy_launch():
+    if (ROOT / "adf/runtime/config.toml").is_file():
+        raise ValueError("Project-local ADF is configured. Use python3 -m adf.")
+
+
 def read(path):
     return json.loads(path.read_text(encoding="utf-8"))
 

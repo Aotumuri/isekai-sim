@@ -3,6 +3,7 @@
 import asyncio
 import json
 
+from .discovery import discovers
 from .runtimes import experiment_command
 from .snapshots import capture, hashes, options, relative
 
@@ -10,7 +11,8 @@ QUEUE_INTERVAL = 60
 
 
 def autonomous(scope):
-    return scope.get("preset", {}).get("name") == "autonomous"
+    preset = scope.get("preset", {})
+    return preset.get("empty_queue", "wait" if preset.get("name") == "autonomous" else "stop") == "wait"
 
 
 def plain_text(value, limit):
@@ -112,6 +114,9 @@ class Research:
                 self.store.event(session, "research_task", github["issue"] if github else task["id"])
         if task:
             self.background(self.run_turn(session, row["generation"], prompt, self.settings("developer")))
+        elif discovers(scope):
+            run = self.store.one("SELECT * FROM research_run WHERE session=?", (session,))
+            self.start_discovery(row, run, scope)
         else:
             self.queue_research(row)
         return session

@@ -1,13 +1,10 @@
 ---
 name: developer
-description: Start or explicitly resume the isekai-sim Developer primary session with the saved research checkpoint.
+description: Use the project-local ADF developer workflow from a Codex thread.
 ---
 
-Start the independent Developer role in this thread when the user explicitly invokes this skill.
+Read `AGENTS.md` and `adf/roles/developer.md`. Run `python3 -m adf skill developer` from the repository root to inspect the project-local Core without starting research.
 
-From the repository root, read `AGENTS.md`, `agents/docs/roles/developer.md`, and `agents/config.toml`. Inspect `python3 agents/tools/research.py status` and recover the relevant Git, tracker, and job context using the role guide.
-
-- A bare invocation does not lift a stop or take another thread's ownership. In a running lifecycle, establish the current thread's own ownership with the existing claim command before doing work. Stop if the claim fails.
-- On an explicit resume request, follow the role guide's recovery and resume procedure. Transfer ownership only after confirming that the previous Developer has ended. Continue the recovered work within its authorized scope.
-- Handle direct shutdown requests using the role guide. Treat wake notifications as events subject to the existing wake guard.
-- In GitHub mode, follow [the tracker guide](../../../agents/docs/tracker.md) to synchronize the opening issue checklist and status label at implementation start, experiment launch, verification after resumption, and completion. Check each item once its evidence is available. Keep an active job marked `status:experimenting` when ending the turn to wait for it. Use `github candidates` to review dependency-aware candidates after recovering any existing work. Follow the configured GitHub write policy. Obtain explicit approval for operations configured as `ask`.
+- If the user chooses this thread, help with discussion, repository inspection, or review. This thread is an external client and cannot acquire a managed session or automatically wake when an experiment ends.
+- If the user chooses managed execution, use the operator commands in `adf/README.md`. Start the appropriate role only on explicit user instruction and only if the official execution environment permits access to the project-local operator interface. For a bounded Developer research run, use `research-start` with the human-approved Mission, scope, issues, and budget. A bare skill invocation stays read-only.
+- In a Core-managed session, use the attached ADF tools. Do not use shell IPC, open SQLite, operate the legacy runner, attach an external Codex thread, or take another role's ownership.

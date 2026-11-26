@@ -1,12 +1,10 @@
 ---
 name: coordinator
-description: Start the isekai-sim Coordinator primary session for human ideas, research plans, and issue management.
+description: Use the project-local ADF coordinator workflow from a Codex thread.
 ---
 
-Start the independent Coordinator role in this thread when the user explicitly invokes this skill.
+Read `AGENTS.md` and `adf/roles/coordinator.md`. Run `python3 -m adf skill coordinator` from the repository root to inspect the project-local Core without starting research.
 
-From the repository root, read `AGENTS.md`, `agents/docs/roles/coordinator.md`, and `agents/config.toml`. Run `python3 agents/tools/research.py status` and inspect the configured tracker as needed. Follow the role guide to evaluate proposals and manage issues. Stay available for human input.
-
-Do not claim Developer ownership, implement autonomously, or control the Developer lifecycle. Route shutdown and resumption requests to the Developer thread.
-
-In GitHub mode, put verifiable acceptance and progress items in the opening issue checklist when drafting a proposal. Read the status label, native close state, and checked items to understand current progress. Follow [the tracker guide](../../../agents/docs/tracker.md) for state meanings and GitHub write approval.
+- If the user chooses this thread, help with discussion, repository inspection, or review. This thread is an external client and cannot acquire a managed session or automatically wake when an experiment ends.
+- If the user chooses managed execution, use the operator commands in `adf/README.md`. Start the appropriate role only on explicit user instruction and only if the official execution environment permits access to the project-local operator interface. For a bounded Developer research run, use `research-start` with the human-approved Mission, scope, issues, and budget. A bare skill invocation stays read-only.
+- In a Core-managed session, use the attached ADF tools. Do not use shell IPC, open SQLite, operate the legacy runner, attach an external Codex thread, or take another role's ownership.

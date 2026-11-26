@@ -121,6 +121,9 @@ def main():
                                                   "update_issue", "comment", "close_issue"))
     permission.add_argument("--approved", action="store_true")
     args = parser.parse_args()
+    if args.action in {"resume", "validate-wake"}:
+        from storage import reject_legacy_launch
+        reject_legacy_launch()
     with lock(LOCK):
         if args.action == "status":
             result = settle()

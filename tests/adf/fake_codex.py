@@ -50,7 +50,19 @@ def begin(key, params):
     text = params["input"][0]["text"]
     answer(key, {"turn": {"id": turn}})
     event("turn/started", threadId=thread, turn={"id": turn})
-    event("item/agentMessage/delta", threadId=thread, turnId=turn, delta="fixture output")
+    output = ("**fixture reply**\n\n```text\nverified\n```\n<img src=x onerror=alert(1)>" if "MARKDOWN_FIXTURE" in text
+              else "fixture output")
+    event("item/agentMessage/delta", threadId=thread, turnId=turn, itemId="response", delta=output)
+    if "ADF research discovery" in text:
+        assert params["permissions"] == "adf-reader"
+        request = f"discovery-{turn}"
+        requests[request] = (thread, turn, None)
+        call_tool(thread, turn, request, "adf_draft_github", {
+            "kind": "proposal",
+            "payload_json": json.dumps({"title": "Bounded fixture hypothesis", "body": "Measure and reproduce.",
+                                        "priority": "P2"}),
+        })
+        return
     event("thread/tokenUsage/updated", threadId=thread, turnId=turn, tokenUsage={"total": {"totalTokens": 17}})
     if "FIXTURE_RESEARCH" in text or (text.startswith("ADF experiment ") and thread in research_cycles):
         cycle = research_cycles.get(thread, 0)
@@ -110,6 +122,8 @@ for line in sys.stdin:
         complete(thread, turn)  # Replayed completion must not generate a second wake.
     elif method == "initialize":
         answer(key, {})
+    elif method == "config/read":
+        answer(key, {"config": {"skills": {"config": []}}})
     elif method == "account/read":
         answer(key, {"account": {"type": provider, "planType": "plus"}})
     elif method == "model/list":

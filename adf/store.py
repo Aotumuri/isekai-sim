@@ -8,6 +8,8 @@ from pathlib import Path
 import sqlite3
 import time
 
+DESKTOP_TRANSFER = ".desktop-transfer.json"
+
 ACTIVE = ("idle", "running", "waiting", "draining", "stopping", "quota")
 DEFAULTS = {
     "coordinator": "Discuss ideas and research priorities with the user. Inspect project and issue "
@@ -19,6 +21,9 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS project (
     id INTEGER PRIMARY KEY, name TEXT NOT NULL, path TEXT UNIQUE NOT NULL,
     identity TEXT NOT NULL, github TEXT NOT NULL DEFAULT '', archived INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS local_setting (
+    name TEXT PRIMARY KEY, value TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS research_preset (
     project INTEGER PRIMARY KEY REFERENCES project(id), settings TEXT NOT NULL
@@ -97,7 +102,12 @@ CREATE TABLE IF NOT EXISTS tracker_expectation (
 CREATE TABLE IF NOT EXISTS turn_usage (
     session INTEGER NOT NULL REFERENCES session(id), thread TEXT NOT NULL, turn TEXT NOT NULL, sequence INTEGER,
     task INTEGER, job TEXT, quota TEXT, total TEXT, last TEXT, initial INTEGER NOT NULL DEFAULT 0,
+    model TEXT,
     PRIMARY KEY(session,turn)
+);
+CREATE TABLE IF NOT EXISTS conversation (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, session INTEGER NOT NULL REFERENCES session(id),
+    speaker TEXT NOT NULL, item TEXT, text TEXT NOT NULL, UNIQUE(session, item)
 );
 CREATE TABLE IF NOT EXISTS event (
     id INTEGER PRIMARY KEY AUTOINCREMENT, session INTEGER REFERENCES session(id),
@@ -106,7 +116,7 @@ CREATE TABLE IF NOT EXISTS event (
 """
 
 
-def default_home():
+def desktop_home():
     return Path.home() / "Library/Application Support/ADF"
 
 
@@ -120,8 +130,12 @@ def private_dir(path):
 
 
 @contextlib.contextmanager
-def owner_lock(home):
-    with (home / "daemon.lock").open("a") as lock:
+def owner_lock(home, *, create=True):
+    flags = os.O_RDWR | os.O_NOFOLLOW
+    if create:
+        flags |= os.O_CREAT
+    fd = os.open(home / "daemon.lock", flags, 0o600)
+    with os.fdopen(fd, "rb+") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         yield lock
 
@@ -143,6 +157,9 @@ class Store:
             columns = {row["name"] for row in self.all("PRAGMA table_info(tracker_expectation)")}
             if "before_fingerprint" not in columns:
                 self.db.execute("ALTER TABLE tracker_expectation ADD COLUMN before_fingerprint TEXT")
+            columns = {row["name"] for row in self.all("PRAGMA table_info(turn_usage)")}
+            if "model" not in columns:
+                self.db.execute("ALTER TABLE turn_usage ADD COLUMN model TEXT")
             self.db.executemany("INSERT OR IGNORE INTO role(name) VALUES (?)", [(role,) for role in DEFAULTS])
 
     def recover(self):

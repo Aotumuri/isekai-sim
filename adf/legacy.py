@@ -33,8 +33,8 @@ def legacy_runtime(root):
     return root / "agents/runtime"
 
 
-def inventory(root):
-    runtime = legacy_runtime(root)
+def inventory(root, *, runtime=None):
+    runtime = runtime or legacy_runtime(root)
     if not (root / "agents").is_dir():
         return {"format": "none", "owner": None, "control": None, "checkpoint": None, "jobs": []}
     for directory in (root / "agents", runtime, runtime / "jobs"):
@@ -101,19 +101,19 @@ def confirm_idle(data):
 
 
 @contextlib.contextmanager
-def legacy_lease(root):
-    agents = root / "agents"
-    runtime = legacy_runtime(root)
+def legacy_lease(root, *, runtime=None):
+    runtime = runtime or legacy_runtime(root)
+    agents = runtime.parent
     if not (runtime.exists() or (agents / "tools/research.py").is_file()):
         yield
         return
     agents_fd = os.open(agents, DIR_FLAGS)
     try:
         try:
-            os.mkdir("runtime", mode=0o700, dir_fd=agents_fd)
+            os.mkdir(runtime.name, mode=0o700, dir_fd=agents_fd)
         except FileExistsError:
             pass
-        runtime_fd = os.open("runtime", DIR_FLAGS, dir_fd=agents_fd)
+        runtime_fd = os.open(runtime.name, DIR_FLAGS, dir_fd=agents_fd)
         try:
             lock = os.open("state.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
                            0o600, dir_fd=runtime_fd)
@@ -128,7 +128,7 @@ def legacy_lease(root):
             fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise ValueError("旧 ADF または別の Desktop が共有ロックを保持しています") from None
-        confirm_idle(inventory(root))
+        confirm_idle(inventory(root, runtime=runtime))
         yield
 
 

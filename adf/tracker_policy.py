@@ -52,6 +52,15 @@ class TrackerPolicy:
         central = policy_map(json.loads(policy["operations"])).get(kind, "deny") if policy else "deny"
         if project["archived"] or not project["github"] or central == "deny":
             return "deny"
+        if getattr(self, "local_project", None) is not None:
+            try:
+                page = read_result(Path(project["path"]) / "adf", "policy.toml", size=65536)
+            except FileNotFoundError:
+                return central
+            if page["next"] != page["total"]:
+                raise ValueError("リポジトリの権限方針が大きすぎます")
+            ceiling = policy_map(tomllib.loads(page["text"]).get("tracker", {})).get(kind, "deny")
+            return LEVELS[min(LEVELS.index(central), LEVELS.index(ceiling))]
         configured = project_tracker(project)
         if configured is None:
             return central

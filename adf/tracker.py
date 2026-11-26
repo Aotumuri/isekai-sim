@@ -179,6 +179,14 @@ class GitHub(TrackerPolicy):
             policy = self.tracker_allowed(project, draft["kind"])
             if automatic and (policy != "allow" or self.tracker_requires_review(draft, guard)):
                 return {"approval": operation}
+        if self.shutdown:
+            raise ValueError("監督の停止が指定されました。操作を送信していません")
+        if draft["kind"] == "proposal":
+            unresolved = self.store.all("SELECT payload FROM tracker_operation WHERE repository=? COLLATE NOCASE "
+                                        "AND kind='proposal' AND state='sending'", (draft["repository"],))
+            title = normalized_title(payload["title"])
+            if any(normalized_title(json.loads(row["payload"])["title"]) == title for row in unresolved):
+                raise ValueError("同じ件名の起票結果が不明です。先に GitHub で照合してください")
         if payload.get("issue") is not None and self.unknown_tracker_operation(draft["repository"], payload["issue"]):
             raise ValueError("同じ Issue の送信結果が不明です。先に照合してください")
         checklist_hash = None
@@ -233,11 +241,17 @@ class GitHub(TrackerPolicy):
         if operation in self.tracker_sending:
             raise ValueError("送信処理が終了してから照合してください")
         draft = self.store.one("SELECT * FROM tracker_operation WHERE id=? AND state='sending'", (operation,))
-        if not draft or draft["kind"] not in ("progress", "complete", "checklist"):
-            raise ValueError("結果不明の進捗・完了・チェックリスト操作を指定してください")
+        if not draft:
+            raise ValueError("結果不明の GitHub 操作を指定してください")
         payload = json.loads(draft["payload"])
+        if (confirm_unapplied or accept_external_edit) and draft["kind"] != "checklist":
+            raise ValueError("この照合方法はチェックリスト操作で使用してください")
         if confirm_unapplied:
             return await self.confirm_unapplied_checklist(draft, payload)
+        if draft["kind"] in {"proposal", "comment", "depends", "label"}:
+            result = await reconcile_reference(draft, payload)
+            self.confirm_tracker(operation, result)
+            return result
         if draft["kind"] == "checklist":
             expected = self.store.one("SELECT fingerprint FROM tracker_expectation WHERE operation=?", (operation,))
             guard = self.store.one("SELECT * FROM tracker_guard WHERE operation=?", (operation,))
@@ -302,6 +316,8 @@ class GitHub(TrackerPolicy):
                 kind = args["kind"]
                 payload = json.loads(args["payload_json"])
                 validate(kind, payload)
+                if discovery := self.discovery_run(row):
+                    return await self.discovery_draft(row, discovery, kind, payload)
                 if kind == "complete":
                     return False, "Use the research completion tool for completion, or request human review separately."
                 project = self.project(row["project"])
@@ -420,3 +436,28 @@ async def perform(repository, kind, payload, key, actor, *, before=None):
         for name in sorted(removed):
             await gh_api(repository, "DELETE", label_endpoint + "/" + quote(name, safe=""))
     return {"number": number_}
+
+
+async def reconcile_reference(draft, payload):
+    repository, kind, key = (draft[name] for name in ("repository", "kind", "id"))
+    issue = payload.get("issue")
+    if kind == "proposal":
+        rows = await gh_api(repository, "GET", "issues?state=all&per_page=100", paginate=True)
+        matches = [row["number"] for row in rows if "pull_request" not in row
+                   and f'"key": "adf-{key}"' in (row.get("body") or "")]
+        if len(matches) == 1:
+            return {"number": matches[0], "reconciled": True}
+    elif kind == "comment":
+        rows = await gh_api(repository, "GET", f"issues/{issue}/comments?per_page=100", paginate=True)
+        marker = f"<!-- adf-operation: {key} -->"
+        if sum(marker in (row.get("body") or "") for row in rows) == 1:
+            return {"number": issue, "reconciled": True}
+    elif kind == "depends":
+        rows = await gh_api(repository, "GET", f"issues/{issue}/dependencies/blocked_by?per_page=100", paginate=True)
+        if any(row["number"] == payload["blocked_by"] for row in rows):
+            return {"number": issue, "reconciled": True}
+    elif kind == "label":
+        row = await fetch_issue(repository, issue)
+        if (payload["name"] in {item["name"] for item in row.get("labels", [])}) == payload["enabled"]:
+            return {"number": issue, "reconciled": True}
+    raise ValueError("GitHub で操作結果を確認できません。対象の履歴を確認し、再送の前にもう一度照合してください")

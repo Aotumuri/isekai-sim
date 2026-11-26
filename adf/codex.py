@@ -33,7 +33,9 @@ def profile_options(binary):
     profiles = []
     for name, mode in (("adf-reader", "read"), ("adf-writer", "write"), ("adf-experiment", "write"), ("adf-node", "write")):
         rules = {".": mode, ".git": "read", ".agents": "read", ".codex": "read", ".aws": "read",
-                 "agents/runtime": "deny", ".env": "deny", "**/.env": "deny", "**/.env.*": "deny"}
+                 "adf": "read", "adf/runtime": "deny", "agents/runtime": "deny",
+                 "agents/tools": "read", "agents/config.toml": "read", "AGENTS.md": "read",
+                 ".env": "deny", "**/.env": "deny", "**/.env.*": "deny"}
         paths = ", ".join(f"{json.dumps(path)}={json.dumps(access)}" for path, access in rules.items())
         allowed_files = {server_file}
         if name in ("adf-experiment", "adf-node"):
@@ -176,11 +178,11 @@ class Codex:
     async def thread(self, session, settings, instructions):
         writable = session["role"] == "developer"
         params = {"cwd": session["path"], "approvalPolicy": "never",
-                  "permissions": profile(session["role"]), "runtimeWorkspaceRoots": [session["path"]],
+                  "permissions": profile("coordinator" if session.get("discovery") else session["role"]), "runtimeWorkspaceRoots": [session["path"]],
                   "developerInstructions": instructions, "modelProvider": "openai",
                   "serviceTier": "default"}
         root = Path(session["path"])
-        if (root / "agents/tools/research.py").is_file():
+        if (root / "adf/config.example.toml").is_file() or (root / "agents/tools/research.py").is_file():
             paths = [
                 str(root / f".agents/skills/{role}/SKILL.md")
                 for role in ("coordinator", "developer")
@@ -206,7 +208,7 @@ class Codex:
     async def start(self, session, settings, prompt):
         params = {"threadId": session["thread"], "input": text_input(prompt), "cwd": session["path"],
                   "approvalPolicy": "never", "serviceTier": "default",
-                  "permissions": profile(session["role"]), "runtimeWorkspaceRoots": [session["path"]],
+                  "permissions": profile("coordinator" if session.get("discovery") else session["role"]), "runtimeWorkspaceRoots": [session["path"]],
                   "multiAgentMode": "explicitRequestOnly"}
         if settings["model"]:
             params["model"] = settings["model"]

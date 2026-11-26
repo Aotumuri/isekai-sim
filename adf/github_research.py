@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 
+from .discovery import DISCOVERY_GUARD, discovers
 from .research import autonomous, plain_text
 from .tracker import CHECKBOX, checklist, fetch_issue, gh_api, number
 
@@ -27,6 +28,14 @@ def completed(issue):
 def fingerprint(issue, deps):
     payload = [issue["id"], issue["title"], issue.get("body"), sorted(item["id"] for item in deps)]
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
+
+
+def mission_scope(mission, scope):
+    if not mission.strip():
+        raise ValueError("config.toml に Mission を設定してください")
+    if not plain_text(scope, 3800):
+        raise ValueError("承認する研究範囲を 3800 文字以内で入力してください")
+    return f"Human-approved Mission:\n{mission}\n\nApproved run scope:\n{scope}"
 
 
 class GitHubResearch:
@@ -75,13 +84,26 @@ class GitHubResearch:
 
     async def start_project_research(self, project, tasks, scope, **limits):
         repo = self.project(project)
+        mission = (self.local_config or {}).get("mission")
+        if mission is not None:
+            if not repo["github"]:
+                raise ValueError("config.toml に GitHub リポジトリを設定してください")
+            scope = mission_scope(mission, scope)
         limits = self.research_settings(project, **limits)
         if not repo["github"]:
             return self.start_research(project, tasks, scope, **limits)
-        if not isinstance(tasks, list) or not 1 <= len(tasks) <= 20 or not plain_text(scope, 8000):
+        preset = limits.get("preset_settings") or {}
+        discovery = discovers({"preset": preset})
+        if (not isinstance(tasks, list) or not 0 <= len(tasks) <= 20 or
+                (not tasks and not discovery) or not plain_text(scope, 8000)):
             raise ValueError("承認する GitHub Issue 番号と研究範囲を指定してください")
         ids = list(dict.fromkeys(number(issue) for issue in tasks))
-        self.tracker_allowed(repo, "progress")
+        if self.local_config and preset.get("name") == "manual" and len(ids) != 1:
+            raise ValueError("Manual では Issue を一件ずつ承認してください")
+        if ids:
+            self.tracker_allowed(repo, "progress")
+        if discovery:
+            self.tracker_allowed(repo, "proposal")
         epoch = self.stop_epochs.get(project, 0)
         result, _ = await self.select_issue(repo["github"], ids)
         if self.shutdown or self.stop_epochs.get(project, 0) != epoch:
@@ -89,8 +111,10 @@ class GitHubResearch:
         if self.project(project)["github"] != repo["github"]:
             raise ValueError("課題取得中にリポジトリが変更されました")
         approved = {"ids": ids, "instructions": scope, "repository": repo["github"]}
+        if mission is not None:
+            approved["mission"] = mission
         if result is None:
-            if autonomous({"preset": limits.get("preset_settings") or {}}):
+            if discovery or autonomous({"preset": preset}):
                 return self.begin_research(project, None, approved, **limits)
             raise ValueError("承認範囲に着手可能な GitHub Issue がありません")
         issue, deps = result
@@ -119,6 +143,9 @@ class GitHubResearch:
 
     async def check_tracker_guard(self, guard, draft):
         row = self.store.session(guard["session"])
+        if (guard["fingerprint"] == DISCOVERY_GUARD and row["generation"] == guard["generation"]
+                and row["state"] in {"idle", "paused", "running"} and draft["kind"] == "proposal"):
+            return None
         run = self.github_run(row)
         if not run or row["generation"] != guard["generation"] or run["fingerprint"] != guard["fingerprint"]:
             raise ValueError("停止または研究範囲の変更により、この承認要求は失効しました")
@@ -242,7 +269,9 @@ class GitHubResearch:
             return
         with self.store.db:
             self.store.event(row["id"], "research_result", {"issue": run["issue"], "summary": summary})
-            if all_done:
+            if not selected and discovers(scope):
+                self.start_discovery(row, research, scope)
+            elif all_done:
                 self.store.db.execute("UPDATE research_run SET state='completed' WHERE session=?", (row["id"],))
                 self.store.update_session(row["id"], state="paused")
             elif selected and not self.research_limit(self.store.session(row["id"]), research):
@@ -261,13 +290,29 @@ class GitHubResearch:
                 self.pause_github(row, "研究予算に到達、または承認範囲に着手可能な課題がありません")
         self.release_inactive_legacy(row["id"])
 
-    async def resume_project_research(self, project, accept_issue_changes=False, tokens=None):
+    async def resume_project_research(self, project, accept_issue_changes=False, tokens=None, scope=None):
         if type(accept_issue_changes) is not bool:
             raise ValueError("Issue の変更を確認した場合だけ承認してください")
         row = self.session_for(project, "developer")
         current = self.store.one("SELECT * FROM research_run WHERE session=?", (row["id"],)) if row else None
-        current = self.extend_token_budget(row, current, tokens)
         remote = self.store.one("SELECT * FROM github_run WHERE session=?", (row["id"],)) if row else None
+        if not current:
+            raise ValueError("再開可能な研究実行がありません")
+        if current["state"] == "discovering":
+            raise ValueError("中断された探索は会話と承認を確認し、新たな範囲で開始してください")
+        approved = json.loads(current["scope"])
+        if self.local_config is not None:
+            mission = self.local_config["mission"]
+            if scope is not None and remote is not None:
+                approved.update(mission=mission, instructions=mission_scope(mission, scope))
+            elif approved.get("mission") != mission:
+                raise ValueError("Mission を確認し、research-resume --scope で承認範囲を明示してください")
+        if scope is not None and (not remote or self.local_config is None):
+            raise ValueError("範囲の再承認には、保存された GitHub Issue を確認してください")
+        current = self.extend_token_budget(row, current, tokens)
+        approved.update({key: value for key, value in json.loads(current["scope"]).items()
+                         if key == "preset"})
+        current = dict(current, scope=json.dumps(approved))
         if not remote:
             return self.resume_research(project)
         if current["state"] == "completed" or row["state"] not in ("paused", "interrupted", "quota"):
@@ -322,7 +367,8 @@ class GitHubResearch:
         resumed = self.store.session(session)
         with self.store.db:
             self.store.update_session(session, state="idle")
-            self.store.db.execute("UPDATE research_run SET generation=? WHERE session=?", (resumed["generation"], session))
+            self.store.db.execute("UPDATE research_run SET generation=?,scope=? WHERE session=?",
+                                  (resumed["generation"], current["scope"], session))
             self.store.db.execute("UPDATE github_run SET generation=? WHERE session=?", (resumed["generation"], session))
         try:
             await self.next_github(resumed, current, remote, json.loads(current["decision"])["summary"])
@@ -338,8 +384,8 @@ class GitHubResearch:
         current_row = self.store.session(session)
         with self.store.db:
             self.store.update_session(session, state="idle")
-            self.store.db.execute("UPDATE research_run SET generation=? WHERE session=?",
-                                  (current_row["generation"], session))
+            self.store.db.execute("UPDATE research_run SET generation=?,scope=? WHERE session=?",
+                                  (current_row["generation"], current["scope"], session))
             self.store.db.execute("UPDATE github_run SET generation=?,operation=NULL WHERE session=?",
                                   (current_row["generation"], session))
         try:
