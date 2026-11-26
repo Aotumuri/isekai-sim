@@ -89,3 +89,5 @@ python3 -m adf tracker-review OPERATION_ID --approve
 ## 現行の実運用手順
 
 GitHub の課題選択、操作別承認、オフライン実験環境、未コミットファイルの固定、差分確認と利用量内訳は[実運用手順](OPERATING_RESEARCH.md)を参照。
+
+[信頼性の検証結果と ADF.app の手動受け入れ手順](ACCEPTANCE.md)
