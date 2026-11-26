@@ -163,7 +163,7 @@ class Service(Presets, Legacy, GitHubResearch, GitHub, GitReview, Evidence, Usag
             "register": self.register, "archive": self.archive, "role": self.set_role,
             "template": self.set_template, "status": self.status, "log": self.read_log,
             "send": self.message, "stop": self.stop_role, "resume": self.resume_role,
-            "shutdown": self.stop_all, "issues": self.list_issues, "limits": self.get_limits,
+            "shutdown": self.stop_all, "issues": self.list_issues, "limits": self.get_limits, "models": self.list_models,
             "task": self.add_task, "task-reopen": self.reopen_task, "research-start": self.start_project_research, "research-resume": self.resume_project_research,
             "artifacts": self.artifacts, "experiment-inputs": self.experiment_inputs,
             "commit-preview": self.commit_preview, "usage": self.usage_report, "tracker-policy": self.set_tracker_policy,
@@ -175,6 +175,20 @@ class Service(Presets, Legacy, GitHubResearch, GitHub, GitReview, Evidence, Usag
             raise ValueError("未対応の操作です")
         result = operations[action](**args)
         return await result if asyncio.iscoroutine(result) else result
+
+    async def list_models(self):
+        runtime = await self.connect()
+        models, cursors = [], set()
+        cursor = None
+        while True:
+            page = await runtime.rpc("model/list", {"cursor": cursor, "limit": 100}, timeout=5)
+            models.extend(row for row in page["data"] if not row.get("hidden"))
+            cursor = page["nextCursor"]
+            if not cursor or cursor in cursors:
+                return models
+            cursors.add(cursor)
+            if len(cursors) >= 5:
+                return models
 
     async def list_issues(self, project):
         return await issues(self.project(project)["github"])

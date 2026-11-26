@@ -64,6 +64,12 @@ class OrchestratorTest(unittest.IsolatedAsyncioTestCase):
         await self.service.message(self.project, "developer", "launch experiment", experiment="trial")
         return await self.state("developer", "waiting")
 
+    async def test_model_catalog_does_not_start_a_turn(self):
+        models = await self.service.dispatch("models", {})
+        self.assertEqual([model["model"] for model in models], ["fixture-model"])
+        self.assertEqual(models[0]["supportedReasoningEfforts"], [{"reasoningEffort": "high"}])
+        self.assertEqual(self.service.status(self.project)["sessions"], [])
+
     async def test_experiment_wait_has_no_turn_requests_or_token_change_and_wakes_once(self):
         (self.path / "fixture.txt").write_text("working copy only\n")
         waiting = await self.start_experiment()

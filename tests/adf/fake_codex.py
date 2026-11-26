@@ -108,6 +108,10 @@ for line in sys.stdin:
         answer(key, {})
     elif method == "account/read":
         answer(key, {"account": {"type": provider, "planType": "plus"}})
+    elif method == "model/list":
+        answer(key, {"data": [{"model": "fixture-model", "hidden": False,
+                               "supportedReasoningEfforts": [{"reasoningEffort": "high"}]},
+                              {"model": "hidden-fixture", "hidden": True}], "nextCursor": None})
     elif method == "thread/start":
         assert args["permissions"] in ("adf-reader", "adf-writer")
         answer(key, {"thread": {"id": f"thread-{next(serial)}"}})

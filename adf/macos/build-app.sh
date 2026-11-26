@@ -25,9 +25,13 @@ cp "$source_dir/adf/macos/adf" "$stage/Contents/MacOS/"
 chmod +x "$stage/Contents/MacOS/adf"
 mkdir -p "$stage/cache"
 xcrun swiftc -module-cache-path "$stage/cache" -O -o "$stage/Contents/MacOS/ADFDesktop" \
-    "$source_dir/adf/macos/Desktop.swift" "$source_dir/adf/macos/Bridge.swift"
+    "$source_dir"/adf/macos/*.swift
 rm -rf "$stage/cache"
 printf '%s\n' "$interpreter" > "$stage/Contents/Resources/python-path"
+# Seal the completed local bundle, including its interpreter launcher.
+codesign --force --sign - "$stage/Contents/MacOS/adf"
+codesign --force --sign - "$stage"
+codesign --verify --strict "$stage"
 # BSD mv -h refuses to follow a destination symlink.
 mv -h -n "$stage" "$destination"
 [[ ! -d "$stage" ]]
