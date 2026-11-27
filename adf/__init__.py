@@ -1,1 +1,1 @@
-"""Standalone Autonomous Development Framework."""
+"""Repository-local execution and continuation for Codex CLI."""

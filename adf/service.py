@@ -1,295 +1,278 @@
-"""Validated host operations exposed to the human's desktop and CLI clients."""
+"""Repository-local request registration and execution."""
 
-import asyncio
+import hmac
 import json
 import os
 from pathlib import Path
-import re
 import shutil
-import sys
+import signal
+import sqlite3
+import time
+import traceback
+from uuid import uuid4
 
-from .codex import PATH, Codex, RuntimeError
-from .discovery import Discovery
-from .evidence import Evidence
-from .experiments import Experiments
-from .git_review import GitReview
-from .github_research import GitHubResearch
-from .legacy import Legacy
-from .presets import Presets
-from .projects import clean_name, identify, issues
-from .research import Research
-from .sessions import Sessions
-from .store import ACTIVE
-from .tracker import GitHub
-from .tracker_policy import policy_map
-from .usage import Usage
+from .ipc_support import atomic_json, is_id, read_request
+from .processes import codex_turn, experiment, lock, new_turn, receipt, token_hash
 
-
-class Service(Presets, Legacy, GitHubResearch, GitHub, GitReview, Evidence, Usage, Discovery, Research,
-              Experiments, Sessions):
-    def __init__(self, store, binary, runtime_factory=None, lease=None):
-        self.commit_root = None
-        super().__init__(store, runtime_factory or (
-            lambda *callbacks: Codex(binary, *callbacks, lease=lease, commit_root=self.commit_root)
-        ))
-        self.binary = binary
-        self.local_project = None
-        self.local_config = None
-        self.executing = set()
-        self.cancelled_jobs = set()
-        self.stop_epochs = {}
-        self.tracker_sending = set()
-
-    async def register(self, path, name="", github=""):
-        path, identity = await identify(Path(path).expanduser().resolve(strict=True))
-        protected = [
-            self.store.home, Path(__file__).resolve().parent, Path(sys.executable).resolve(),
-            Path(self.binary).resolve(), Path.home() / ".codex", Path.home() / ".config/gh",
-            *(Path(part).resolve() for part in PATH.split(":")),
-            *(Path(os.environ[key]).expanduser().resolve()
-              for key in ("CODEX_HOME", "CODEX_SQLITE_HOME") if key in os.environ),
-        ]
-        if any(item.is_relative_to(path) or path.is_relative_to(item) for item in protected):
-            raise ValueError("ADF の実行ファイル、認証情報、状態領域から独立したプロジェクトを選択してください")
-        if github and not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", github):
-            raise ValueError("GitHub リポジトリは owner/name で指定してください")
-        with self.store.db:
-            existing = self.store.one("SELECT * FROM project WHERE path=?", (str(path),))
-            if existing and existing["identity"] != identity:
-                raise ValueError("同じ場所に別の Git リポジトリが存在します")
-            for project in self.store.all("SELECT * FROM project WHERE archived=0 AND path<>?", (str(path),)):
-                other = Path(project["path"])
-                if path.is_relative_to(other) or other.is_relative_to(path):
-                    raise ValueError("入れ子のプロジェクトは登録できません")
-            self.store.db.execute("INSERT INTO project(name,path,identity,github) VALUES (?,?,?,?) "
-                                  "ON CONFLICT(path) DO UPDATE SET name=excluded.name,github=excluded.github,archived=0",
-                                  (name.strip() or path.name, str(path), identity, github))
-        return self.store.one("SELECT * FROM project WHERE path=?", (str(path),))
-
-    def project(self, project):
-        row = self.store.one("SELECT * FROM project WHERE id=?", (project,))
-        if not row:
-            raise ValueError("プロジェクトを選択してください")
-        return row
-
-    def archive(self, project):
-        self.project(project)
-        sessions = self.store.all("SELECT id,state FROM session WHERE project=?", (project,))
-        if any(row["state"] in ACTIVE or self.active_jobs(row["id"]) for row in sessions):
-            raise ValueError("すべてのロールを停止してからアーカイブしてください")
-        with self.store.db:
-            self.store.db.execute("UPDATE project SET archived=1 WHERE id=?", (project,))
-        return True
-
-    def set_role(self, name, instructions="", model="", effort="", recovery="manual", budget=0):
-        clean_name(name)
-        if any(row["state"] in ACTIVE for row in self.store.all("SELECT state FROM session WHERE role=?", (name,))):
-            raise ValueError("ロールを停止してから設定を変更してください")
-        if recovery not in {"manual", "confirmed"} or type(budget) is not int or budget < 0:
-            raise ValueError("利用枠の回復設定または予算が不正です")
-        if any(not isinstance(text, str) for text in (instructions, model, effort)):
-            raise ValueError("指示・モデル・推論設定は文字列で指定してください")
-        with self.store.db:
-            self.store.db.execute("INSERT INTO role VALUES (?,?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET "
-                                  "instructions=excluded.instructions,model=excluded.model,effort=excluded.effort,"
-                                  "recovery=excluded.recovery,budget=excluded.budget",
-                                  (name, instructions, model, effort, recovery, budget))
-        # New instructions are supplied on resume after reconnect to the runtime.
-        for row in self.store.all("SELECT thread FROM session WHERE role=?", (name,)):
-            self.live.pop(row["thread"], None)
-        return True
-
-    def set_template(self, project, name, argv, timeout):
-        self.project(project)
-        clean_name(name)
-        if (not isinstance(argv, list) or not argv or
-                any(not isinstance(arg, str) or "\0" in arg for arg in argv) or not argv[0]):
-            raise ValueError("実験のコマンドは空でない JSON 文字列配列で指定してください")
-        if type(timeout) is not int or not 1 <= timeout <= 86400:
-            raise ValueError("実験の上限時間は 1～86400 秒です")
-        with self.store.db:
-            self.store.db.execute("INSERT OR REPLACE INTO template VALUES (?,?,?,?)",
-                                  (project, name, json.dumps(argv), timeout))
-        return True
-
-    def status(self, project=None, after=0):
-        tracker = self.store.one("SELECT operations FROM tracker_policy WHERE project=?", (project,))
-        return {
-            "mission": (self.local_config or {}).get("mission", ""),
-            "research_preset": self.saved_preset(project),
-            "tracker_policy": policy_map(json.loads(tracker["operations"])) if tracker else {},
-            "legacy_imports": self.store.all("SELECT fingerprint,path FROM legacy_import WHERE project=?", (project,)),
-            "tracker_operations": self.store.all("SELECT * FROM tracker_operation WHERE project=? "
-                                                 "ORDER BY created DESC LIMIT 100", (project,)),
-            "research_tasks": self.store.all("SELECT * FROM research_task WHERE project=? AND id NOT IN (SELECT task FROM github_task) ORDER BY priority,id", (project,)),
-            "github_runs": self.store.all("SELECT github_run.* FROM github_run JOIN session "
-                                           "ON session.id=github_run.session WHERE project=?", (project,)),
-            "research_runs": self.store.all("SELECT research_run.* FROM research_run JOIN session "
-                                           "ON session.id=research_run.session WHERE project=?", (project,)),
-            "projects": self.store.all("SELECT * FROM project WHERE archived=0 ORDER BY id"),
-            "roles": self.store.all("SELECT * FROM role ORDER BY name"),
-            "sessions": self.store.all("SELECT id,project,role,state,thread,turn,revision,tokens,turn_requests "
-                                       "FROM session WHERE project=? ORDER BY role", (project,)),
-            "jobs": self.store.all("SELECT job.* FROM job JOIN session ON session.id=job.session "
-                                   "WHERE session.project=? ORDER BY started DESC LIMIT 100", (project,)),
-            "events": self.store.all("SELECT event.* FROM event LEFT JOIN session ON session.id=event.session "
-                                     "WHERE (session.project=? OR event.session IS NULL) AND event.id>? "
-                                     "ORDER BY event.id LIMIT 250", (project, after)),
-            "templates": self.store.all("SELECT * FROM template WHERE project=? ORDER BY name", (project,)),
-            "shutting_down": self.shutdown,
-        }
-
-    def history(self, project, after=0, before=None):
-        self.project(project)
-        if type(after) is not int or (before is not None and type(before) is not int):
-            raise ValueError("履歴の位置が不正です")
-        return list(reversed(self.store.all(
-            "SELECT event.*,session.role FROM event LEFT JOIN session ON session.id=event.session "
-            "WHERE (session.project=? OR event.session IS NULL) AND event.id>? "
-            "AND (? IS NULL OR event.id<?) ORDER BY event.id DESC LIMIT 200",
-            (project, after, before, before))))
-
-    def conversation(self, project, role, before=None):
-        self.project(project)
-        self.settings(role)
-        if before is not None and type(before) is not int:
-            raise ValueError("会話の位置が不正です")
-        return list(reversed(self.store.all(
-            "SELECT conversation.id,speaker,text FROM conversation JOIN session ON session.id=conversation.session "
-            "WHERE project=? AND role=? AND (? IS NULL OR conversation.id<?) "
-            "ORDER BY conversation.id DESC LIMIT 40", (project, role, before, before))))
-
-    def read_log(self, job):
-        if not self.store.one("SELECT id FROM job WHERE id=?", (job,)):
-            raise ValueError("実験を選択してください")
-        path = self.log_path(job)
-        return path.read_text(errors="replace") if path.is_file() else ""
-
-    async def stop_role(self, project, role, immediate=False):
-        self.project(project)
-        if role == "developer":
-            self.stop_epochs[project] = self.stop_epochs.get(project, 0) + 1
-        row = self.session_for(project, role)
-        if row:
-            await self.stop(row["id"], immediate)
-        return True
-
-    async def stop_all(self, immediate=False):
-        self.shutdown = True
-        for row in self.store.all("SELECT id FROM session"):
-            await self.stop(row["id"], immediate)
-        return True
-
-    async def resume_role(self, project, role, text=""):
-        row = self.session_for(project, role)
-        if not row:
-            raise ValueError("再開するセッションがありません")
-        if role == "developer" and self.store.one(
-                "SELECT 1 FROM research_run WHERE session=?",
-                (row["id"],)):
-            raise ValueError("研究の再開は research-resume で範囲と承認を照合してください。新しい相談はメッセージを送信してください")
-        return self.reserve(project, role, text or row["prompt"], True)
-
-    def maintenance(self, action, args):
-        from .local import read_config, save_config
-        from .maintenance import backup
-
-        config = self.store.home / "config.toml"
-        if action == "config-text":
-            read_config(config)
-            return config.read_text(encoding="utf-8")
-        if self.shutdown or self.executing or self.tracker_sending or any(
-                row["state"] in ACTIVE or self.active_jobs(row["id"])
-                for row in self.store.all("SELECT id,state FROM session")):
-            raise ValueError("先にロールを停止し、実験と送信の終了を確認してください")
-        if action == "config-save":
-            return save_config(self.store.home, args.get("content"))
-        return backup(self.store.home)
-
-    async def update_preflight(self):
-        from .projects import git
-
-        root = self.project(self.local_project)["path"]
-        revision = (await git(root, "rev-parse", "HEAD")).decode().strip()
-        return {**self.maintenance("backup", {}), "revision": revision, "update_mode": "manual"}
-
-    async def dispatch(self, action, args):
-        operations = {
-            "register": self.register, "archive": self.archive, "role": self.set_role,
-            "template": self.set_template, "status": self.status, "log": self.read_log,
-            "send": self.message, "stop": self.stop_role, "resume": self.resume_role,
-            "shutdown": self.stop_all, "issues": self.list_issues, "limits": self.get_limits, "models": self.list_models,
-            "task": self.add_task, "task-reopen": self.reopen_task, "research-start": self.start_project_research, "research-resume": self.resume_project_research,
-            "artifacts": self.artifacts, "experiment-inputs": self.experiment_inputs,
-            "commit-preview": self.commit_preview, "usage": self.usage_report, "tracker-policy": self.set_tracker_policy,
-            "tracker-draft": self.draft_tracker, "tracker-review": self.review_tracker, "tracker-reconcile": self.reconcile_tracker,
-            "tracker-issue": self.tracker_issue, "research-preset": self.research_preset,
-            "legacy-preview": self.legacy_preview, "legacy-import": self.legacy_import, "history": self.history, "conversation": self.conversation,
-        }
-        operations_project = {"template", "status", "send", "stop", "resume", "issues", "research-start",
-                              "research-resume", "commit-preview", "usage", "tracker-policy", "tracker-draft",
-                              "tracker-issue", "research-preset", "legacy-preview", "legacy-import", "history", "conversation"}
-        if self.local_project is not None:
-            if action in {"register", "archive", "task", "task-reopen"}:
-                raise ValueError("プロジェクト内 ADF は設定された GitHub Issues を使用します")
-            if action == "config":
-                return self.local_config
-            if action == "update-preflight":
-                return await self.update_preflight()
-            if action in {"config-text", "config-save", "backup"}:
-                return self.maintenance(action, args)
-            if action == "ping":
-                return {"running": True, "pid": os.getpid(), "project": self.project(self.local_project)}
-            if action in operations_project:
-                if args.get("project") not in (None, self.local_project):
-                    raise ValueError("このチェックアウトのプロジェクトを指定してください")
-                args = {**args, "project": self.local_project}
-        if self.shutdown and action in {
-                "send", "resume", "research-start", "research-resume", "tracker-review",
-                "tracker-draft", "tracker-policy", "role", "template"}:
-            raise ValueError("監督は停止処理中です")
-        if action not in operations:
-            raise ValueError("未対応の操作です")
-        result = operations[action](**args)
-        return await result if asyncio.iscoroutine(result) else result
-
-    async def list_models(self):
-        runtime = await self.connect()
-        models, cursors = [], set()
-        cursor = None
-        while True:
-            page = await runtime.rpc("model/list", {"cursor": cursor, "limit": 100}, timeout=5)
-            models.extend(row for row in page["data"] if not row.get("hidden"))
-            cursor = page["nextCursor"]
-            if not cursor or cursor in cursors:
-                return models
-            cursors.add(cursor)
-            if len(cursors) >= 5:
-                return models
-
-    async def list_issues(self, project):
-        return await issues(self.project(project)["github"])
-
-    def is_stopped(self):
-        return (self.shutdown and not self.dispatching and not self.executing
-                and not self.tracker_sending and not self.store.one(
-            "SELECT id FROM session WHERE state IN ('running','waiting','draining','stopping','quota','idle')"))
-
-    async def close(self):
-        if self.runtime:
-            await self.runtime.close()
-        if self.retiring:
-            await asyncio.shield(self.retiring)
-        for task in self.tasks.copy():
-            task.cancel()
-        await asyncio.gather(*self.tasks.copy(), return_exceptions=True)
-        for lease in self.legacy_leases.values():
-            lease.__exit__(None, None, None)
-        self.legacy_leases.clear()
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS jobs (
+    id TEXT PRIMARY KEY,
+    request TEXT NOT NULL,
+    state TEXT NOT NULL,
+    accepted_at REAL NOT NULL,
+    started_at REAL,
+    next_turn TEXT,
+    finished_at REAL,
+    experiment_result TEXT,
+    codex_result TEXT,
+    error TEXT
+)
+"""
 
 
-def runtime_path():
-    result = shutil.which("codex", path=PATH)
-    if not result:
-        raise RuntimeError("公式 Codex CLI をインストールしてください")
-    return str(Path(result).resolve())
+def repository():
+    root = Path(__file__).resolve().parent.parent
+    if not (root / ".git").exists():
+        raise ValueError("ADF must be installed at the root of a Git checkout")
+    return root
+
+
+def queue_path(root):
+    return root / "adf" / "queue"
+
+
+def initialize(root):
+    queue = queue_path(root)
+    queue.mkdir(mode=0o700, exist_ok=True)
+    for name in ("requests", "acks", "turns", "jobs"):
+        (queue / name).mkdir(mode=0o700, exist_ok=True)
+    return queue
+
+
+def codex_executable():
+    executable = shutil.which("codex")
+    if not executable:
+        raise ValueError("codex was not found on PATH")
+    return str(Path(executable).resolve())
+
+
+def require_command(argv):
+    if (not isinstance(argv, list) or not argv or not argv[0]
+            or any(not isinstance(arg, str) or "\0" in arg for arg in argv)):
+        raise ValueError("command must be a nonempty JSON argv array")
+    return tuple(argv)
+
+
+class Service:
+    def __init__(self, root, queue, codex, commands, daemon_lock):
+        self.root, self.queue, self.codex, self.commands = root, queue, codex, commands
+        self.db = sqlite3.connect(queue / "state.sqlite3")
+        self.db.row_factory = sqlite3.Row
+        self.db.execute(SCHEMA)
+        self.children = set()
+        self.daemon_lock = daemon_lock
+
+    def register(self, request):
+        if not isinstance(request, dict) or not is_id(request.get("turn")) or not is_id(request.get("thread")):
+            raise ValueError("expected ADF_TURN_ID and CODEX_THREAD_ID from the current Codex CLI execution")
+        job_id = request["turn"]
+        token = request.pop("token", None)
+        signature = self.queue / "turns" / job_id / "token-hash.json"
+        if (not isinstance(token, str) or not signature.is_file()
+                or not hmac.compare_digest(json.loads(signature.read_text()), token_hash(token))):
+            raise ValueError("invalid Codex execution token")
+        kind = request.get("kind")
+        if kind == "run_and_resume":
+            argv = require_command(request.get("argv"))
+            fields = {"turn", "thread", "kind", "argv"}
+        elif kind == "spawn" and isinstance(request.get("prompt"), str) and request["prompt"].strip():
+            fields = {"turn", "thread", "kind", "prompt"}
+        else:
+            raise ValueError("expected an operator-authorized command or a nonempty startup instruction")
+        if set(request) != fields:
+            raise ValueError("unexpected request fields")
+        encoded = json.dumps(request, sort_keys=True)
+        saved = self.db.execute("SELECT request FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        if saved:
+            if saved["request"] != encoded:
+                raise ValueError("this Codex execution already registered a different request")
+            return {"id": job_id}
+        if kind == "run_and_resume" and argv not in self.commands:
+            raise ValueError("expected an operator-authorized command")
+        if receipt(self.queue / "turns" / job_id) is not None:
+            raise ValueError("this request must be registered before the Codex execution ends")
+        with self.db:
+            self.db.execute(
+                "INSERT INTO jobs (id, request, state, accepted_at) VALUES (?, ?, 'waiting', ?)",
+                (job_id, encoded, time.time()),
+            )
+        return {"id": job_id}
+
+    def accept_requests(self):
+        inbox = os.open(self.queue / "requests", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            for name in sorted(os.listdir(inbox)):
+                if not name.endswith(".json") or not is_id(name[:-5]):
+                    continue
+                try:
+                    response = self.register(read_request(name, dir_fd=inbox))
+                except (OSError, ValueError, RecursionError) as exc:
+                    response = {"error": str(exc)}
+                atomic_json(self.queue / "acks" / name, response)
+                try:
+                    os.unlink(name, dir_fd=inbox)
+                except (FileNotFoundError, IsADirectoryError):
+                    pass
+        finally:
+            os.close(inbox)
+
+    def update(self, job_id, state, **fields):
+        columns = {"state": state, **fields}
+        with self.db:
+            self.db.execute(
+                "UPDATE jobs SET " + ", ".join(f"{column} = ?" for column in columns) + " WHERE id = ?",
+                (*columns.values(), job_id),
+            )
+
+    def finish(self, job_id, state, error=None, **fields):
+        self.update(job_id, state, finished_at=time.time(), error=error, **fields)
+
+    def advance(self, row):
+        job_id = row["id"]
+        request = json.loads(row["request"])
+        state = row["state"]
+        if state == "waiting":
+            result = receipt(self.queue / "turns" / job_id)
+            if result is None:
+                return
+            if result.get("exit_code") != 0 or result.get("thread_id") != request["thread"] or result.get("error"):
+                error = result.get("error") or "requesting Codex exited unsuccessfully or the thread did not match"
+                self.finish(job_id, "blocked", error)
+                return
+            self.update(job_id, "ready_experiment" if request["kind"] == "run_and_resume" else "ready_codex")
+        elif state == "experiment":
+            result = receipt(self.queue / "jobs" / job_id)
+            if result is None:
+                return
+            if "exit_code" not in result:
+                self.finish(job_id, "uncertain", result["error"])
+                return
+            self.update(job_id, "ready_codex", experiment_result=json.dumps(result))
+        elif state == "codex":
+            result = receipt(self.queue / "turns" / row["next_turn"])
+            if result is None:
+                return
+            error = result.get("error")
+            if request["kind"] == "spawn" and result.get("thread_id") == request["thread"]:
+                error = "fresh Codex invocation returned the requesting thread ID"
+            if "exit_code" not in result:
+                state = "uncertain"
+            elif error or result["exit_code"] != 0:
+                state = "continuation_failed"
+                error = error or f"Codex exited with code {result['exit_code']}"
+            else:
+                state = "done"
+            self.finish(job_id, state, error, codex_result=json.dumps(result))
+
+    def launch(self, row, control_lock):
+        job_id = row["id"]
+        request = json.loads(row["request"])
+        directory = self.queue / "jobs" / job_id
+        directory.mkdir(mode=0o700, exist_ok=True)
+        state = "experiment" if row["state"] == "ready_experiment" else "codex"
+        fields = {"started_at": row["started_at"] or time.time()}
+        if state == "experiment":
+            if tuple(request["argv"]) not in self.commands:
+                self.finish(job_id, "blocked", "experiment command is no longer authorized by the operator")
+                return
+            lease = lock(directory / "lock")
+        else:
+            fields["next_turn"] = str(uuid4())
+            turn, lease, token = new_turn(self.queue, fields["next_turn"])
+        if lease is None:
+            self.finish(job_id, "uncertain", "execution lease already held")
+            return
+
+        # Persist launch intent before forking. A missing receipt after a lost
+        # worker leaves an explicit uncertain state and never triggers a retry.
+        with lease:
+            self.update(job_id, state, **fields)
+            try:
+                pid = os.fork()
+            except OSError as exc:
+                self.finish(job_id, "launch_failed", str(exc))
+                return
+            if pid:
+                self.children.add(pid)
+                return
+            try:
+                self.daemon_lock.close()
+                control_lock.close()
+                signal.signal(signal.SIGINT, signal.SIG_IGN)
+                signal.signal(signal.SIGTERM, signal.SIG_DFL)
+                os.setsid()
+                with open(os.devnull, "rb") as stdin, (directory / "worker.log").open("ab") as log:
+                    os.dup2(stdin.fileno(), 0)
+                    os.dup2(log.fileno(), 1)
+                    os.dup2(log.fileno(), 2)
+                if state == "experiment":
+                    experiment(self.root, self.codex, request["argv"], directory)
+                else:
+                    self.continue_codex(row, request, directory, turn, token)
+            except Exception:
+                traceback.print_exc()
+            finally:
+                os._exit(0)
+
+    def continue_codex(self, row, request, directory, turn, token):
+        thread = None
+        if request["kind"] == "spawn":
+            prompt = request["prompt"]
+        else:
+            thread = request["thread"]
+            result = json.loads(row["experiment_result"])
+            log = (directory / "experiment.log").relative_to(self.root)
+            prompt = (
+                f"ADF experiment {row['id']} finished with exit code {result['exit_code']}. "
+                f"Log: {log}. Inspect the result and continue the current task."
+            )
+        with (directory / "codex.jsonl").open("ab", buffering=0) as output:
+            # Keep diagnostics with this invocation, including auth/startup failures.
+            with (directory / "codex.stderr.log").open("ab", buffering=0) as errors:
+                os.dup2(errors.fileno(), 2)
+                codex_turn(self.root, self.codex, turn, token, prompt, output, thread)
+
+    def step(self):
+        for pid in tuple(self.children):
+            if os.waitpid(pid, os.WNOHANG)[0]:
+                self.children.remove(pid)
+        self.accept_requests()
+        rows = self.db.execute("SELECT * FROM jobs WHERE state IN ('waiting', 'experiment', 'codex')").fetchall()
+        for row in rows:
+            self.advance(row)
+        with lock(self.queue / "control.lock", blocking=True) as control_lock:
+            if (self.queue / "paused").exists():
+                return
+            running = self.db.execute("SELECT 1 FROM jobs WHERE state IN ('experiment', 'codex')").fetchone()
+            if not running:
+                ready = self.db.execute(
+                    "SELECT * FROM jobs WHERE state IN ('ready_experiment', 'ready_codex') ORDER BY accepted_at LIMIT 1"
+                ).fetchone()
+                if ready:
+                    self.launch(ready, control_lock)
+
+
+def serve(root, commands):
+    queue = initialize(root)
+    daemon_lock = lock(queue / "service.lock")
+    if daemon_lock is None:
+        raise ValueError("ADF is already running for this checkout")
+    with daemon_lock:
+        service = Service(root, queue, codex_executable(), commands, daemon_lock)
+        print(f"ADF ready in {root}", flush=True)
+        try:
+            while True:
+                service.step()
+                time.sleep(0.2)
+        finally:
+            service.db.close()

@@ -1,10 +1,10 @@
 ---
 name: developer
-description: Use the project-local ADF developer workflow from a Codex thread.
+description: Implement and verify authorized development or research in isekai-sim.
 ---
 
-Read `AGENTS.md` and `adf/roles/developer.md`. Run `python3 -m adf skill developer` from the repository root to inspect the project-local Core without starting research.
+Read `AGENTS.md` and the relevant project documents. Work within the user's scope. Establish reproducible acceptance criteria, run focused checks, and record the evidence. Follow the repository's Git policy and report uncertainties.
 
-- If the user chooses this thread, help with discussion, repository inspection, or review. This thread is an external client and cannot acquire a managed session or automatically wake when an experiment ends.
-- If the user chooses managed execution, use the operator commands in `adf/README.md`. Start the appropriate role only on explicit user instruction and only if the official execution environment permits access to the project-local operator interface. For a bounded Developer research run, use `research-start` with the human-approved Mission, scope, issues, and budget. A bare skill invocation stays read-only.
-- In a Core-managed session, use the attached ADF tools. Do not use shell IPC, open SQLite, operate the legacy runner, attach an external Codex thread, or take another role's ownership.
+For a long-running experiment in an ADF-enabled Codex execution, follow `adf/README.md`. Submit the operator-authorized command, wait for the job ID, and end the current execution. Inspect the recorded result when the same thread resumes.
+
+After completing the current task, use ADF's `spawn` only when the user has authorized continued work and the next task requires an independent thread. Supply the startup instruction and end the execution after receiving the job ID.
