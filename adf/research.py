@@ -76,10 +76,11 @@ class Research:
                    if "external" in task else f"Task: {task['title']}\nAcceptance criteria: {task['criteria']}")
         plan = plan or {}
         commit = (
-            "Completion requires one scoped Conventional Commit after this task's starting HEAD, "
-            "and a successful experiment at that commit. This profile keeps Git metadata read-only. "
-            "If the commit is missing, report the verified changes and end the turn so the operator can "
-            "review, commit, and resume. " if plan.get("require_commit") else ""
+            "Completion requires one scoped Conventional Commit directly after this task's starting HEAD "
+            "and a successful experiment at that commit. When the managed Developer instructions authorize "
+            "commits, implement, check, and commit the approved files before starting the experiment. "
+            "With read-only Git metadata, report the verified changes and end the turn for operator review. "
+            if plan.get("require_commit") else ""
         )
         return (f"ADF authorized task #{task['id']}. User scope: {scope}\n{details}\n"
                 f"Experiment runtime: {plan.get('runtime', 'python')}; approved working files: {plan.get('files', [])}; "

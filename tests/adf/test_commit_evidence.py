@@ -10,8 +10,10 @@ from adf.local import GIT_OPERATIONS, git_settings
 class GitSettings(TestCase):
     def test_rejects_modes_the_runtime_cannot_enforce(self):
         self.assertEqual(git_settings({}), dict.fromkeys(GIT_OPERATIONS, "deny") | {"require_commit": False})
+        self.assertTrue(git_settings({"commit": "allow"})["require_commit"])
+        self.assertFalse(git_settings({"commit": "allow", "require_commit": False})["require_commit"])
         for operation in GIT_OPERATIONS:
-            for mode in ("allow", "ask"):
+            for mode in (("ask",) if operation == "commit" else ("allow", "ask")):
                 with self.subTest(operation=operation, mode=mode), self.assertRaisesRegex(ValueError, "強制"):
                     git_settings({operation: mode})
 

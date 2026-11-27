@@ -6,9 +6,9 @@ mission = ""
 [research]
 mode = "manual"
 
-# Optional. require_commit gates research completion and does not grant Git access.
+# Optional. Set commit = "allow" to permit local commits for the managed Developer.
+# require_commit defaults to true with "allow" and false with "deny".
 # [git]
-# require_commit = false
 # commit = "deny"
 # push = "deny"
 # pull_request = "deny"

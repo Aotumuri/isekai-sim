@@ -13,7 +13,8 @@ Follow existing repository conventions and preserve behavior unless a task requi
 - Commit each completed, verified unit of work locally. Keep each feature, fix, or independent documentation change in a focused commit. Developer must commit completed changes before reporting completion, releasing ownership, or moving to another task.
 - Use Conventional Commits with a scope: `type(scope): summary`. Choose the type and scope that describe the change, such as `feat(tracker): sync issue checklists`, `fix(runner): preserve wake receipts`, or `docs(agents): define commit rules`.
 - Stage only the files needed for the commit. Check `git status --short` before ending the turn or handing off. If a commit cannot be made, keep this task's edits unstaged and record the blocker and next action. Preserve any staging that belongs to another task or person.
-- In Core-managed ADF research, the Developer records verified changes for operator review. The human commits when the managed sandbox makes Git metadata read-only.
+- In Core-managed ADF research, the Developer commits verified, authorized changes only if the active managed instructions explicitly authorize Git writes. Otherwise the Developer records the result for operator review and the human commits.
+- A Core-managed Developer must never push, create a pull request, amend, rebase, reset, force-update or delete refs, or edit Git metadata directly. Inspect HEAD and the committed paths after each local commit.
 
 ## Autonomous research
 

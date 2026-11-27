@@ -24,9 +24,9 @@ def git_settings(data):
     for name, decision in policy.items():
         if decision not in ("allow", "ask", "deny"):
             raise ValueError(f"git.{name} は allow / ask / deny で指定してください")
-        if decision != "deny":
+        if decision != "deny" and (name, decision) != ("commit", "allow"):
             raise ValueError(f"git.{name}={decision} は現在の管理プロファイルでは強制できません")
-    required = data.get("require_commit", False)
+    required = data.get("require_commit", policy["commit"] == "allow")
     if type(required) is not bool:
         raise ValueError("git.require_commit は真偽値で指定してください")
     return {**policy, "require_commit": required}
@@ -124,11 +124,18 @@ def diagnostics(root):
 
 
 async def bind_project(service, root, config):
-    from .projects import identify
+    from .projects import git, identify
 
     path, identity = await identify(root)
     if path != root:
         raise ValueError("ADF はチェックアウトのルートに配置してください")
+    commit = config.get("git", {}).get("commit") == "allow"
+    if commit:
+        metadata = root / ".git"
+        actual = os.fsdecode(await git(root, "rev-parse", "--absolute-git-dir")).rstrip("\n")
+        common = os.fsdecode(await git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")).rstrip("\n")
+        if metadata.is_symlink() or not metadata.is_dir() or actual != str(metadata) or common != actual:
+            raise ValueError("自律コミットにはチェックアウト直下に実体の .git があるリポジトリを使用してください")
     store = service.store
     with store.db:
         rows = store.all("SELECT * FROM project")
@@ -157,3 +164,4 @@ async def bind_project(service, root, config):
         store.db.execute("INSERT OR REPLACE INTO local_setting VALUES ('config_tracker',?)", (tracker_json,))
     service.local_project = project
     service.local_config = config
+    service.commit_root = str(root) if commit else None

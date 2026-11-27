@@ -28,7 +28,10 @@ from .usage import Usage
 class Service(Presets, Legacy, GitHubResearch, GitHub, GitReview, Evidence, Usage, Discovery, Research,
               Experiments, Sessions):
     def __init__(self, store, binary, runtime_factory=None, lease=None):
-        super().__init__(store, runtime_factory or (lambda *callbacks: Codex(binary, *callbacks, lease=lease)))
+        self.commit_root = None
+        super().__init__(store, runtime_factory or (
+            lambda *callbacks: Codex(binary, *callbacks, lease=lease, commit_root=self.commit_root)
+        ))
         self.binary = binary
         self.local_project = None
         self.local_config = None

@@ -17,6 +17,9 @@ TOOL = "adf_start_experiment"
 RESEARCH_EXPERIMENT = "adf_research_experiment"
 RESEARCH_FINISH = "adf_finish_research_task"
 ARTIFACT_READ = "adf_read_experiment_output"
+COMMIT_PROFILE = "adf-commit"
+COMMIT_WRITES = ("AUTO_MERGE", "AUTO_MERGE.lock", "COMMIT_EDITMSG", "HEAD", "HEAD.lock",
+                 "index", "index.lock", "logs", "objects", "packed-refs.lock", "refs")
 # Bump when a saved thread's tools or operating instructions need replacement.
 TOOL_VERSION = 4
 
@@ -27,11 +30,14 @@ def environment():
     return {**{key: os.environ[key] for key in keys if key in os.environ}, "PATH": PATH}
 
 
-def profile_options(binary):
+def profile_options(binary, commit_root=None):
     # The App Server re-executes Codex inside the profile to load AGENTS.md.
     server_file = Path(binary).resolve()
     profiles = []
-    for name, mode in (("adf-reader", "read"), ("adf-writer", "write"), ("adf-experiment", "write"), ("adf-node", "write")):
+    modes = {"adf-reader": "read", "adf-writer": "write", "adf-experiment": "write", "adf-node": "write"}
+    if commit_root is not None:
+        modes[COMMIT_PROFILE] = "write"
+    for name, mode in modes.items():
         rules = {".": mode, ".git": "read", ".agents": "read", ".codex": "read", ".aws": "read",
                  "adf": "read", "adf/runtime": "deny", "agents/runtime": "deny",
                  "agents/tools": "read", "agents/config.toml": "read", "AGENTS.md": "read",
@@ -47,14 +53,21 @@ def profile_options(binary):
                     raise
                 # Failure to inspect Node cannot disable the Python runtime.
                 continue
-        files = "".join(f', {json.dumps(str(path))}="read"' for path in sorted(allowed_files))
+        absolute = {path: "read" for path in allowed_files}
+        if name == COMMIT_PROFILE:
+            metadata = Path(commit_root) / ".git"
+            absolute.update({metadata / child: "write" for child in COMMIT_WRITES})
+            absolute[metadata / "objects/info"] = "read"
+        files = "".join(f', {json.dumps(str(path))}="{absolute[path]}"' for path in sorted(absolute))
         profiles.append(f'{name}={{filesystem={{":root"="deny", ":minimal"="read", '
                         f'":workspace_roots"={{{paths}}}{files}}}, network={{enabled=false}}}}')
     return "-c", "permissions={" + ", ".join(profiles) + "}", "-c", 'default_permissions="adf-reader"'
 
 
-def profile(role):
-    return "adf-writer" if role == "developer" else "adf-reader"
+def profile(session, commit_root):
+    if session["role"] != "developer" or session.get("discovery"):
+        return "adf-reader"
+    return COMMIT_PROFILE if session["path"] == commit_root else "adf-writer"
 
 
 def text_input(text):
@@ -66,9 +79,10 @@ class RuntimeError(Exception):
 
 
 class Codex:
-    def __init__(self, binary, event, tool, disconnected, lease=None):
+    def __init__(self, binary, event, tool, disconnected, lease=None, commit_root=None):
         self.binary = binary
         self.lease = lease
+        self.commit_root = commit_root
         self.event = event
         self.tool = tool
         self.disconnected = disconnected
@@ -94,7 +108,7 @@ class Codex:
                 "-c", 'features.multi_agent=false', "-c", 'features.multi_agent_v2=false',
                 "-c", 'web_search="disabled"',
                 "-c", 'shell_environment_policy.inherit="none"',
-                *profile_options(binary),
+                *profile_options(binary, self.commit_root),
                 "-c", f'shell_environment_policy.set.PATH="{PATH}"',
                 cwd=Path.home(), env=environment(), start_new_session=True,
                 pass_fds=(life,) if self.lease is None else (life, self.lease),
@@ -178,7 +192,7 @@ class Codex:
     async def thread(self, session, settings, instructions):
         writable = session["role"] == "developer"
         params = {"cwd": session["path"], "approvalPolicy": "never",
-                  "permissions": profile("coordinator" if session.get("discovery") else session["role"]), "runtimeWorkspaceRoots": [session["path"]],
+                  "permissions": profile(session, self.commit_root), "runtimeWorkspaceRoots": [session["path"]],
                   "developerInstructions": instructions, "modelProvider": "openai",
                   "serviceTier": "default"}
         root = Path(session["path"])
@@ -208,7 +222,7 @@ class Codex:
     async def start(self, session, settings, prompt):
         params = {"threadId": session["thread"], "input": text_input(prompt), "cwd": session["path"],
                   "approvalPolicy": "never", "serviceTier": "default",
-                  "permissions": profile("coordinator" if session.get("discovery") else session["role"]), "runtimeWorkspaceRoots": [session["path"]],
+                  "permissions": profile(session, self.commit_root), "runtimeWorkspaceRoots": [session["path"]],
                   "multiAgentMode": "explicitRequestOnly"}
         if settings["model"]:
             params["model"] = settings["model"]

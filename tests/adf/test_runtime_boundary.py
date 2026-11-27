@@ -4,7 +4,7 @@ import tomllib
 import unittest
 from unittest.mock import AsyncMock
 
-from adf.codex import Codex, profile_options
+from adf.codex import COMMIT_PROFILE, Codex, profile_options
 
 
 class RuntimeProtocol(unittest.IsolatedAsyncioTestCase):
@@ -54,3 +54,37 @@ class RuntimeProtocol(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(method, "thread/resume")
         self.assertEqual(resume["config"], start["config"])
         self.assertNotIn("dynamicTools", resume)
+
+    async def test_commit_profile_is_selected_only_for_configured_developer_checkout(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            binary = root / "codex"
+            runtime = Codex(binary, None, None, None, commit_root=str(root))
+            default = tomllib.loads(profile_options(binary)[1])["permissions"]
+            enabled = tomllib.loads(profile_options(binary, root)[1])["permissions"]
+            self.assertNotIn(COMMIT_PROFILE, default)
+            self.assertEqual({name: enabled[name] for name in default}, default)
+            filesystem = enabled[COMMIT_PROFILE]["filesystem"]
+            self.assertEqual(filesystem[":workspace_roots"][".git"], "read")
+            self.assertEqual(filesystem[str(root / ".git/index.lock")], "write")
+            self.assertEqual(filesystem[str(root / ".git/objects/info")], "read")
+            self.assertNotIn(str(root / ".git/config"), filesystem)
+            self.assertFalse(enabled[COMMIT_PROFILE]["network"]["enabled"])
+
+            runtime.rpc = AsyncMock(return_value={"thread": {"id": "thread"}, "turn": {"id": "turn"}})
+            settings = {"model": "", "effort": ""}
+            row = {"role": "developer", "path": str(root), "thread": None}
+            await runtime.thread(row, settings, "")
+            self.assertEqual(runtime.rpc.await_args.args[1]["permissions"], COMMIT_PROFILE)
+            await runtime.thread({**row, "thread": "thread"}, settings, "")
+            self.assertEqual(runtime.rpc.await_args.args[1]["permissions"], COMMIT_PROFILE)
+            for changes, expected in (
+                ({}, COMMIT_PROFILE),
+                ({"role": "coordinator"}, "adf-reader"),
+                ({"discovery": True}, "adf-reader"),
+                ({"path": str(root / "other")}, "adf-writer"),
+            ):
+                await runtime.start({**row, "thread": "thread", **changes}, settings, "")
+                params = runtime.rpc.await_args.args[1]
+                self.assertEqual(params["permissions"], expected)
+                self.assertEqual(params["approvalPolicy"], "never")

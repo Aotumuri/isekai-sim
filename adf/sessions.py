@@ -124,9 +124,19 @@ class Sessions:
             "for an approved research run. End the turn immediately after an experiment is accepted. "
             "Core resumes the work and provides the experiment ID. Use adf_read_experiment_output "
             "for bounded results and adf_finish_research_task for an active task's verified outcome. "
-            "Do not start or monitor detached work by other means. Report verified changes for "
-            "diff review and human commit. "
+            "Do not start or monitor detached work by other means. "
         ) if row["role"] == "developer" else ""
+        if row["role"] == "developer":
+            extra += (
+                "The operator authorized local git add and git commit for this repository. "
+                "Inspect HEAD, status and staged changes before editing. Preserve prior user changes. "
+                "If the index already contains other work, preserve it and report the blocker. "
+                "After verification, stage only the approved files you changed, review the staged diff, "
+                "make a scoped Conventional Commit with normal hooks, and confirm the resulting HEAD and files. "
+                "If a commit errors, inspect HEAD and the index before retrying. "
+                if row["path"] == self.commit_root and not row.get("discovery") else
+                "Git metadata is read-only. Report verified changes for operator review and commit. "
+            )
         guide = Path(__file__).parent / "roles" / f"{row['role']}.md"
         role_definition = guide.read_text(encoding="utf-8") if guide.is_file() else default
         mission = (getattr(self, "local_config", None) or {}).get("mission", "")
