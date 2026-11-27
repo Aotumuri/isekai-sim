@@ -9,3 +9,6 @@ benchmark-results/
 # Local research execution and Python caches
 /agents/runtime/
 __pycache__/
+
+# Local ADF state protected by Codex workspace permissions
+/.codex/adf/

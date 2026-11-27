@@ -22,7 +22,7 @@ class LifecycleTest(unittest.TestCase):
         self.root = Path(temporary.name)
         (self.root / ".git").mkdir()
         shutil.copytree(SOURCE / "adf", self.root / "adf",
-                        ignore=shutil.ignore_patterns("runtime", "queue", "__pycache__"))
+                        ignore=shutil.ignore_patterns("runtime", "queue", "requests", "__pycache__"))
         fake = self.root / "codex"
         shutil.copyfile(HERE / "fake_codex.py", fake)
         fake.chmod(0o700)
@@ -48,11 +48,13 @@ class LifecycleTest(unittest.TestCase):
             child.send_signal(signal.SIGKILL)
         child.communicate(timeout=12)
 
-    def start(self):
-        daemon = self.process("start", "--allow-command", '["experiment"]',
-                              "--allow-command", '["quick"]', "--allow-command", '["lose-worker"]')
+    def start(self, *, enabled=True, profile="research"):
+        args = ["start", "--profile", profile]
+        if enabled:
+            args.append("--enable-experiments")
+        daemon = self.process(*args)
         self.addCleanup(self.stop, daemon)
-        self.wait_for(lambda: (self.root / "adf/queue/state.sqlite3").exists())
+        self.wait_for(lambda: (self.root / ".codex/adf/settings.json").exists())
         return daemon
 
     def wait_for(self, condition):
@@ -106,11 +108,11 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual(len(list(self.root.glob("context-*"))), 2)
         self.assertEqual(jobs[0]["experiment_result"]["exit_code"], 3)
         self.assertEqual(jobs[1]["experiment_result"]["exit_code"], 0)
-        self.assertEqual((self.root / "executions").read_text().splitlines(), ["experiment", "quick"])
+        self.assertEqual((self.root / "executions").read_text().splitlines(), ["experiment", "quick --seed 42"])
         for job in jobs[:2]:
-            log = self.root / "adf/queue/jobs" / job["id"] / "codex.jsonl"
+            log = self.root / ".codex/adf/jobs" / job["id"] / "codex.jsonl"
             self.assertIn('"original": "start"', log.read_text())
-        self.assertFalse((SOURCE / "adf/queue/jobs" / waiting["id"]).exists())
+        self.assertFalse((SOURCE / ".codex/adf/jobs" / waiting["id"]).exists())
 
     def start_and_recover_experiment(self):
         daemon = self.start()
@@ -127,8 +129,6 @@ class LifecycleTest(unittest.TestCase):
 
     def test_failed_continuation_and_uncertain_experiment_are_never_retried(self):
         daemon = self.start()
-        self.cli("session", "unauthorized")
-        self.assertEqual(self.jobs(), [])
         self.cli("session", "fail-continuation")
         self.wait_for(lambda: self.jobs()[0]["state"] == "continuation_failed")
         self.assertEqual(self.jobs()[0]["codex_result"]["exit_code"], 7)
@@ -138,6 +138,30 @@ class LifecycleTest(unittest.TestCase):
         self.start()
         self.assertEqual([job["state"] for job in self.jobs()], ["continuation_failed", "uncertain"])
         self.assertEqual((self.root / "executions").read_text().splitlines(), ["quick", "lose-worker"])
+
+    def test_explicit_scope_and_official_denial(self):
+        daemon = self.start(enabled=False)
+        self.cli("session", "unauthorized")
+        self.assertEqual(self.jobs(), [])
+        self.cli("session", "spawn only")
+        self.wait_for(lambda: self.jobs()[0]["state"] == "done")
+        self.assertEqual(self.jobs()[0]["request"]["kind"], "spawn")
+        self.stop(daemon)
+        self.start()
+        self.cli("session", "declined")
+        self.wait_for(lambda: self.jobs()[-1]["state"] == "done")
+        self.assertIsNone(self.jobs()[-1]["experiment_result"]["exit_code"])
+        self.assertFalse((self.root / "executions").exists())
+
+    def test_profile_change_blocks_previously_accepted_work(self):
+        daemon = self.start()
+        self.cli("pause")
+        self.cli("session", "lose-worker")
+        self.stop(daemon)
+        self.start(profile="different")
+        self.cli("unpause")
+        self.wait_for(lambda: self.jobs()[0]["state"] == "blocked")
+        self.assertFalse((self.root / "executions").exists())
 
 
 if __name__ == "__main__":

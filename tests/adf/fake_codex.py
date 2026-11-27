@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shlex
 import subprocess
 import sys
 import time
@@ -21,20 +22,30 @@ def request(*args):
 
 def run():
     args = sys.argv[1:]
-    if args[0] == "sandbox":
-        command = args[args.index("--") + 1:]
+    assert args[:4] == ["--profile", "research", "exec", "--json"]
+    if "--ephemeral" in args:
+        assert "ADF_TURN_ID" not in os.environ and "ADF_TURN_PROOF" not in os.environ
+        command = json.loads(sys.stdin.read().splitlines()[-1])["command"]
+        argv = shlex.split(command)
+        detail = {"id": "item_0", "type": "command_execution", "command": command,
+                  "status": "declined", "exit_code": None}
+        if argv[0] == "denied":
+            event("item.completed", item=detail)
+            return 0
         with Path("executions").open("a") as log:
-            log.write(command[0] + "\n")
-        print("experiment output", flush=True)
-        if command[0] == "lose-worker":
+            log.write(command + "\n")
+        if argv[0] == "lose-worker":
             os.kill(os.getppid(), signal.SIGKILL)
             return 0
-        if command[0] == "experiment":
+        if argv[0] == "experiment":
             while not Path("release-experiment").exists():
                 time.sleep(0.05)
-        return 3 if command[0] == "experiment" else 0
+        detail.update(status="completed", exit_code=3 if argv[0] == "experiment" else 0)
+        event("item.completed", item=detail)
+        return 0
 
     resume = "resume" in args
+    assert args[4:] == (["resume", args[5], "-"] if resume else ["-"])
     thread = args[args.index("resume") + 1] if resume else str(uuid4())
     os.environ["CODEX_THREAD_ID"] = thread
     event("thread.started", thread_id=thread)
@@ -44,11 +55,13 @@ def run():
     if resume:
         original = history.read_text()
         event("context", original=original, prompt=prompt)
-        if original == "fail-continuation":
+        if original == "declined":
+            assert "declined the requested command" in prompt
+        elif original == "fail-continuation":
             return 7
-        if not Path("second-request").exists():
+        elif not Path("second-request").exists():
             Path("second-request").touch()
-            request("run-and-resume", '["quick"]')
+            request("run-and-resume", '["quick", "--seed", "42"]')
         else:
             request("spawn", "fresh instruction")
     else:
@@ -67,6 +80,8 @@ def run():
             Path("source-accepted").touch()
             while not Path("release-source").exists():
                 time.sleep(0.05)
+        elif prompt == "spawn only":
+            request("spawn", "fresh without experiments")
         elif prompt == "fresh instruction":
             Path("fresh-running").touch()
             while not Path("release-fresh").exists():
@@ -75,12 +90,14 @@ def run():
             request("run-and-resume", '["quick"]')
         elif prompt == "lose-worker":
             request("run-and-resume", '["lose-worker"]')
+        elif prompt == "declined":
+            request("run-and-resume", '["denied"]')
         elif prompt == "unauthorized":
             failure = subprocess.run(
                 [sys.executable, "-m", "adf", "run-and-resume", '["unapproved"]'],
                 capture_output=True, text=True,
             )
-            assert failure.returncode == 1 and "operator-authorized" in failure.stderr
+            assert failure.returncode == 1 and "--enable-experiments" in failure.stderr
     event("turn.completed")
     return 0
 

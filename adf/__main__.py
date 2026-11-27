@@ -10,10 +10,10 @@ from uuid import uuid4
 
 from .ipc_support import MAX_REQUEST, atomic_json
 from .processes import codex_turn, lock, new_turn
-from .service import codex_executable, initialize, queue_path, repository, require_command, serve
+from .service import inbox_path, initialize, queue_path, repository, require_command, serve
 
 
-def submit(queue, payload):
+def submit(root, payload):
     payload.update(turn=os.environ.get("ADF_TURN_ID"), thread=os.environ.get("CODEX_THREAD_ID"),
                    token=os.environ.get("ADF_TURN_PROOF"))
     if not all(payload[key] for key in ("turn", "thread", "token")):
@@ -21,8 +21,8 @@ def submit(queue, payload):
     if len(json.dumps(payload).encode()) > MAX_REQUEST:
         raise ValueError("request too large")
     name = f"{uuid4()}.json"
-    atomic_json(queue / "requests" / name, payload)
-    ack = queue / "acks" / name
+    atomic_json(inbox_path(root) / name, payload)
+    ack = queue_path(root) / "acks" / name
     end = time.monotonic() + 10
     while time.monotonic() < end:
         if ack.exists():
@@ -56,7 +56,9 @@ def parse_args():
     parser = argparse.ArgumentParser(prog="python3 -m adf")
     commands = parser.add_subparsers(dest="operation", required=True)
     start = commands.add_parser("start", help="serve requests in the foreground")
-    start.add_argument("--allow-command", action="append", default=[], metavar="JSON_ARGV")
+    start.add_argument("--enable-experiments", action="store_true",
+                       help="authorize detached experiments under normal Codex tool policy")
+    start.add_argument("--profile", help="Codex config profile for all ADF executions")
     session = commands.add_parser("session", help="launch the initial Codex CLI independently")
     session.add_argument("prompt")
     run = commands.add_parser("run-and-resume", help="request an experiment followed by same-thread continuation")
@@ -75,19 +77,23 @@ def main():
     root = repository()
     queue = queue_path(root)
     if args.operation == "start":
-        serve(root, {require_command(json.loads(value)) for value in args.allow_command})
+        serve(root, args.profile, args.enable_experiments)
     elif args.operation == "session":
-        directory, lease, token = new_turn(initialize(root))
+        settings_path = queue / "settings.json"
+        if not settings_path.is_file():
+            raise ValueError("start ADF before launching a session")
+        settings = json.loads(settings_path.read_text())
+        directory, lease, token = new_turn(queue, settings)
         with lease:
-            result = codex_turn(root, codex_executable(), directory, token, args.prompt, sys.stdout.buffer)
+            result = codex_turn(root, settings, directory, token, args.prompt, sys.stdout.buffer)
         if result.get("error"):
             raise ValueError(result["error"])
         return result["exit_code"]
     elif args.operation == "run-and-resume":
         argv = require_command(json.loads(args.argv))
-        return submit(queue, {"kind": "run_and_resume", "argv": argv})
+        return submit(root, {"kind": "run_and_resume", "argv": argv})
     elif args.operation == "spawn":
-        return submit(queue, {"kind": "spawn", "prompt": args.prompt})
+        return submit(root, {"kind": "spawn", "prompt": args.prompt})
     elif args.operation == "status":
         status(queue, args.id)
     else:

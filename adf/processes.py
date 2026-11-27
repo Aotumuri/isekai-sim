@@ -42,35 +42,31 @@ def receipt(directory):
         return {"error": "process ended without a completion receipt"}
 
 
-def profile(root, *, inbox):
-    filesystem = {str(root / "adf"): "read", str(root / ".git"): "read",
-                  str(root / ".codex"): "read", str(root / ".agents"): "read"}
-    if inbox:
-        filesystem[str(root / "adf/queue/requests")] = "write"
-    return [
-        "-c", 'permissions.adf.extends=":workspace"',
-        "-c", 'permissions.adf.filesystem=' + toml_paths(filesystem),
-        "-c", "permissions.adf.network.enabled=false",
-        "-c", 'default_permissions="adf"',
-    ]
+def codex_args(settings):
+    args = [settings["codex"]]
+    if settings["profile"] is not None:
+        args += ["--profile", settings["profile"]]
+    return [*args, "exec", "--json"]
 
 
-def toml_paths(paths):
-    return "{ " + ", ".join(f"{json.dumps(key)} = {json.dumps(value)}"
-                             for key, value in paths.items()) + " }"
+def codex_home():
+    return str(Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex").resolve())
 
 
-def codex_environment(turn_id, token):
+def codex_environment(settings, turn_id=None, token=None):
     env = os.environ.copy()
     env.pop("CODEX_THREAD_ID", None)
-    env["ADF_TURN_ID"] = turn_id
-    env["ADF_TURN_PROOF"] = token
+    env.pop("ADF_TURN_ID", None)
+    env.pop("ADF_TURN_PROOF", None)
+    env["CODEX_HOME"] = settings["home"]
+    if turn_id is not None:
+        env["ADF_TURN_ID"] = turn_id
+        env["ADF_TURN_PROOF"] = token
     return env
 
 
-def codex_turn(root, codex, directory, token, prompt, output, thread=None):
-    args = [codex, "exec", *profile(root, inbox=True),
-            "-c", 'approval_policy="never"', "--json"]
+def codex_turn(root, settings, directory, token, prompt, output, thread=None):
+    args = codex_args(settings)
     if thread:
         args += ["resume", thread]
     args += ["-"]
@@ -82,7 +78,7 @@ def codex_turn(root, codex, directory, token, prompt, output, thread=None):
             source.seek(0)
             with subprocess.Popen(
                 args, cwd=root, stdin=source, stdout=subprocess.PIPE,
-                env=codex_environment(directory.name, token),
+                env=codex_environment(settings, directory.name, token),
             ) as child:
                 for line in child.stdout:
                     try:
@@ -104,7 +100,7 @@ def codex_turn(root, codex, directory, token, prompt, output, thread=None):
     return result
 
 
-def new_turn(queue, turn_id=None):
+def new_turn(queue, settings, turn_id=None):
     directory = queue / "turns" / (turn_id or str(uuid4()))
     token = secrets.token_hex(32)
     # Publish the directory only after its lease is held.
@@ -112,6 +108,7 @@ def new_turn(queue, turn_id=None):
         staging = Path(temp) / "turn"
         staging.mkdir(mode=0o700)
         atomic_json(staging / "token-hash.json", token_hash(token))
+        atomic_json(staging / "settings.json", settings)
         lease = lock(staging / "lock")
         try:
             staging.rename(directory)
@@ -123,20 +120,3 @@ def new_turn(queue, turn_id=None):
 
 def token_hash(token):
     return hashlib.sha256(token.encode()).hexdigest()
-
-
-def experiment(root, codex, argv, directory):
-    env = {key: os.environ[key] for key in ("PATH", "HOME", "CODEX_HOME", "TMPDIR", "LANG", "LC_ALL")
-           if key in os.environ}
-    with (directory / "experiment.log").open("ab", buffering=0) as log:
-        try:
-            outcome = subprocess.run(
-                [codex, "sandbox", "--include-managed-config", *profile(root, inbox=False),
-                 "-P", "adf", "--", *argv], cwd=root, env=env,
-                stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
-            )
-            result = {"exit_code": outcome.returncode}
-        except OSError as exc:
-            result = {"exit_code": None, "error": str(exc)}
-    result["finished_at"] = time.time()
-    atomic_json(directory / "result.json", result)
